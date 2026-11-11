@@ -27,6 +27,9 @@
     "functions": {
       "port": 5101
     },
+    "hosting": {
+      "port": 5102
+    },
     "hub": {
       "port": 4410
     },
@@ -38,5 +41,32 @@
       "port": 4100
     },
     "singleProjectMode": true
-  }
+  },
+  "hosting": [
+    {
+      "site": "pioneers-hub-api",
+      "public": "api-hosting",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "/.well-known/**",
+          "function": {
+            "functionId": "api",
+            "region": "europe-west4"
+          }
+        },
+        {
+          "source": "**",
+          "function": {
+            "functionId": "api",
+            "region": "europe-west4"
+          }
+        }
+      ]
+    }
+  ]
 }

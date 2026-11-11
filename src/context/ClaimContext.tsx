@@ -10,9 +10,9 @@ import { useAuth } from "@/context/AuthContext";
 // ----------------------------
 // Rattachement du compte (page /claim)
 // ----------------------------
-// Monte par app/(app)/claim/layout.tsx. Lit les batchs ouverts, les demandes
-// du compte, et les profils non reclames du batch choisi. Le choix du batch
-// est un etat d'ecran, garde ici pour que la liste suive.
+// Monte par app/(app)/claim/layout.tsx. Lit les batchs, les demandes du
+// compte (ancien parcours), et les profils non reclames du batch choisi. Le
+// choix du batch est un etat d'ecran, garde ici pour que la liste suive.
 
 type ClaimValue = {
   programsById: Map<string, WithId<Program>>;
@@ -38,7 +38,8 @@ export function ClaimProvider({ children }: { children: ReactNode }) {
     isAuthLoading ? undefined : firebaseUser ? queries.myClaimRequests(firebaseUser.uid) : null,
   );
   // Batch affiche : celui choisi, sinon celui d'une demande en attente, sinon le seul ouvert.
-  const openBatches = useMemo(() => batches.data.filter((b) => b.status !== "completed"), [batches.data]);
+  // Tous les batchs : un alumni reclame aussi son profil d'un batch termine.
+  const openBatches = batches.data;
   const pendingBatchId = requests.data.find((r) => r.status === "pending")?.batchId ?? null;
   const selectedBatchId = chosenBatchId ?? pendingBatchId ?? (openBatches.length === 1 ? openBatches[0].id : null);
   const unclaimed = useQueryListener(

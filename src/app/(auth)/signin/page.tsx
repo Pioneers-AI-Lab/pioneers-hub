@@ -1,74 +1,119 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Box, Button, Center, Stack, Text, Title } from "@mantine/core";
+import { Anchor, Button, Divider, Group, PasswordInput, Stack, Text, TextInput } from "@mantine/core";
 import { useAuth } from "@/context/AuthContext";
-import { paths } from "@/lib/paths";
+import { authErrorMessage, signInWithEmail } from "@/lib/auth";
+import { paths, safeNext, withNext } from "@/lib/paths";
+import { AuthCard } from "@/components/auth/AuthCard";
+import { PageLoader } from "@/components/ui/PageLoader";
 
-// Messages lisibles pour les erreurs de la fenetre Google les plus courantes.
-function readableError(err: { code?: string; message: string }): string | null {
-  if (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request") return null;
-  if (err.code === "auth/popup-blocked") return "Your browser blocked the sign-in window. Allow pop-ups for this site and try again.";
-  return err.message;
-}
-
-function SignInCard() {
+// ----------------------------
+// Connexion : Google, ou email et mot de passe (comme Trippple)
+// ----------------------------
+// UN SEUL VERROU pour toute la page, qui ne se relache que sur erreur : en cas
+// de succes, c'est la redirection qui termine l'action (lecon Trippple : un
+// bouton rearme avant la navigation laissait rejouer la connexion).
+function SignInForm() {
   const { firebaseUser, isLoading, signInWithGoogle } = useAuth();
   const router = useRouter();
-  // L'accueil decide ensuite : batch du fondateur, rattachement, ou programmes.
-  const next = useSearchParams().get("next") ?? paths.home();
+  const next = safeNext(useSearchParams().get("next"));
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState<"google" | "email" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, setIsPending] = useState(false);
 
-  // Deja connecte : on repart d'ou l'on venait.
+  // Connecte : l'accueil aiguille (batch, rattachement, confirmation d'email).
   useEffect(() => {
-    if (!isLoading && firebaseUser) router.replace(next);
+    if (!isLoading && firebaseUser) router.replace(next ?? paths.home());
   }, [isLoading, firebaseUser, next, router]);
 
+  const run = async (kind: "google" | "email", action: () => Promise<void>) => {
+    setError(null);
+    setBusy(kind);
+    try {
+      await action();
+    } catch (err) {
+      setError(authErrorMessage(err));
+      setBusy(null);
+    }
+  };
+
+  if (isLoading || firebaseUser) return <PageLoader />;
+
   return (
-    <Box w="100%" maw={400} px="md">
-      <Stack gap="lg">
-        <Stack gap={6}>
-          <Title order={1}>
-            Pioneers <Text span c="pioneers" inherit>Hub</Text>
-          </Title>
-          <Text c="dimmed">
-            Sign in with the Google account of the email you used for the onboarding form. Your profile is
-            linked automatically.
-          </Text>
+    <AuthCard
+      title="Sign in"
+      subtitle="Use the email of your onboarding form: your founder profile links itself."
+      footer={
+        <>
+          No account yet?{" "}
+          <Anchor component={Link} href={withNext(paths.register(), next)} inherit>
+            Create one
+          </Anchor>
+        </>
+      }
+    >
+      <Button size="md" fullWidth loading={busy === "google"} disabled={busy !== null} onClick={() => run("google", signInWithGoogle)}>
+        Continue with Google
+      </Button>
+
+      <Divider label="or with your email" labelPosition="center" />
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void run("email", () => signInWithEmail(email, password));
+        }}
+      >
+        <Stack gap="md">
+          <TextInput
+            label="Email"
+            type="email"
+            autoComplete="email"
+            inputMode="email"
+            required
+            disabled={busy !== null}
+            value={email}
+            onChange={(e) => setEmail(e.currentTarget.value)}
+          />
+          <Stack gap={6}>
+            <PasswordInput
+              label="Password"
+              autoComplete="current-password"
+              required
+              disabled={busy !== null}
+              value={password}
+              onChange={(e) => setPassword(e.currentTarget.value)}
+            />
+            <Group justify="flex-end">
+              <Anchor className="tap-link" component={Link} href={paths.forgotPassword()} size="sm" c="dimmed">
+                Forgot password?
+              </Anchor>
+            </Group>
+          </Stack>
+          <Button type="submit" size="md" fullWidth variant="default" loading={busy === "email"} disabled={busy !== null}>
+            Sign in
+          </Button>
         </Stack>
-        <Button
-          size="md"
-          fullWidth
-          loading={isLoading || isPending}
-          onClick={() => {
-            setError(null);
-            setIsPending(true);
-            signInWithGoogle()
-              .catch((err: { code?: string; message: string }) => setError(readableError(err)))
-              .finally(() => setIsPending(false));
-          }}
-        >
-          Continue with Google
-        </Button>
-        {error && (
-          <Text size="sm" c="red.4">
-            {error}
-          </Text>
-        )}
-      </Stack>
-    </Box>
+      </form>
+
+      {error && (
+        <Text size="sm" c="red.4" role="alert">
+          {error}
+        </Text>
+      )}
+    </AuthCard>
   );
 }
 
 export default function SignInPage() {
+  // `useSearchParams` suspend pendant le pre-rendu (cacheComponents).
   return (
-    <Center mih="100dvh">
-      {/* `useSearchParams` suspend pendant le pre-rendu (cacheComponents). */}
-      <Suspense>
-        <SignInCard />
-      </Suspense>
-    </Center>
+    <Suspense fallback={<PageLoader />}>
+      <SignInForm />
+    </Suspense>
   );
 }

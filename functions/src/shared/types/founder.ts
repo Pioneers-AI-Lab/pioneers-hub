@@ -112,6 +112,13 @@ export type FounderDirectory = {
   whatsapp: string | null;
   /** Copie de `people.linkedinUrl`. */
   linkedinUrl: string | null;
+  /**
+   * Copie de `people.phone` (decision du 11/11 : coordonnees visibles du
+   * batch, comme l'email et WhatsApp). Absent des documents plus anciens.
+   */
+  phone?: string | null;
+  /** Copie de `people.slackUserId` (lien direct vers un message Slack). Absent des documents plus anciens. */
+  slackUserId?: string | null;
   /** @source SP26 « Gender » */
   gender: string | null;
   /** @source SP26 « Nationality » */

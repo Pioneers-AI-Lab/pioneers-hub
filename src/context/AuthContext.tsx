@@ -29,6 +29,11 @@ type AuthValue = {
   isMembershipsLoading: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  /**
+   * Relit le compte et son jeton (apres la confirmation de l'email, faite dans
+   * un autre onglet) : `emailVerified` et le jeton lu par les regles a jour.
+   */
+  reloadUser: () => Promise<void>;
 };
 
 const [AuthContextProvider, useAuth] = createStrictContext<AuthValue>("Auth");
@@ -61,6 +66,8 @@ async function upsertUserDoc(firebaseUser: FirebaseUser) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   // `undefined` tant que Firebase Auth n'a pas repondu.
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null | undefined>(undefined);
+  // `reload()` modifie le compte EN PLACE : sans ce compteur, React ne verrait rien.
+  const [userVersion, setUserVersion] = useState(0);
 
   useEffect(
     () =>
@@ -102,8 +109,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await signInWithPopup(auth, googleProvider);
       },
       signOut: () => firebaseSignOut(auth),
+      reloadUser: async () => {
+        if (!auth.currentUser) return;
+        await auth.currentUser.reload();
+        await auth.currentUser.getIdToken(true);
+        setUserVersion((v) => v + 1);
+      },
     };
-  }, [firebaseUser, userDoc.data, userDoc.isLoading, viewer, memberships.data, memberships.isLoading]);
+    // `userVersion` : le meme objet compte, relu (voir plus haut).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firebaseUser, userDoc.data, userDoc.isLoading, viewer, memberships.data, memberships.isLoading, userVersion]);
 
   return <AuthContextProvider value={value}>{children}</AuthContextProvider>;
 }

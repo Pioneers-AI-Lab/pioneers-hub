@@ -12,6 +12,7 @@ import { ExternalLink, Field, FieldGrid } from "@/components/ui/Field";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { LinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
+import { MarketAnalysisSection, PitchEvaluations, StartupScoreSection, WeeklyUpdates } from "@/components/startup/StartupInsights";
 
 const STATUS_LABEL: Record<StartupStatus, string> = { active: "Active", dead: "Stopped", selection_day_no_go: "Selection Day No Go" };
 const yesNo = (v: boolean | null) => (v === true ? "Yes" : v === false ? "No" : null);
@@ -24,7 +25,7 @@ export default function StartupPage() {
 
   return (
     <Stack gap={0}>
-      <Anchor component={Link} href={paths.startups(program.id, batch.id)} size="sm" c="dimmed" mb="md" w="fit-content">
+      <Anchor component={Link} href={paths.startups(program.id, batch.id)} size="sm" c="dimmed" mb="md" w="fit-content" className="tap-link">
         All startups
       </Anchor>
       <Group gap="md" wrap="nowrap">
@@ -48,6 +49,8 @@ export default function StartupPage() {
           <ExternalLink href={startup.websiteUrl} />
         </Text>
       )}
+
+      <StartupScoreSection />
 
       <Section title="Team">
         {startup.members.length === 0 ? (
@@ -93,6 +96,10 @@ export default function StartupPage() {
           )}
         </Section>
       )}
+
+      <WeeklyUpdates />
+      <PitchEvaluations />
+      <MarketAnalysisSection />
 
       {internal && (
         <Section title="Internal" hint="Pioneers team and investment committee only.">

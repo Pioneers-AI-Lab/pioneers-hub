@@ -232,6 +232,14 @@ export type EventTeam = {
   name: string;
   /** @source SP26 « Team Members » */
   memberIds: string[];
+  /**
+   * Noms affiches sur la page publique (sans compte), dans l'ordre de
+   * `memberIds` : prenom + initiale (`publicShortName`, shared/access.ts), le
+   * nom complet d'un fondateur n'etant public qu'avec son consentement.
+   * Ecrits a la publication ; `null` avant, ou pour une equipe publiee avant
+   * l'existence de la page (absent des anciens documents).
+   */
+  memberNames?: string[] | null;
   roles: Partial<Record<string, TeamRole[]>>;
   /** Verrouillee : le generateur ne la modifie plus. */
   locked: boolean;

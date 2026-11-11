@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { Anchor, Button, Stack, Text, Title } from "@mantine/core";
 import { useAuth } from "@/context/AuthContext";
 import { autoClaimByEmail } from "@/lib/accounts";
+import { needsEmailVerification } from "@/lib/auth";
+import { VerifyEmailNotice } from "@/components/auth/VerifyEmailNotice";
 import { paths } from "@/lib/paths";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { LinkRow, RowList } from "@/components/ui/Rows";
@@ -16,6 +18,7 @@ import { LinkRow, RowList } from "@/components/ui/Rows";
 //   non connecte          presentation et connexion
 //   staff ou investor     les programmes
 //   fondateur d'un batch  son batch (de plusieurs : le choix)
+//   email non confirme    confirmation d'abord (compte cree par mot de passe)
 //   connecte sans profil  rattachement automatique par email, sinon /claim
 export default function HomePage() {
   const { firebaseUser, viewer, isLoading, memberships, isMembershipsLoading } = useAuth();
@@ -23,6 +26,9 @@ export default function HomePage() {
   const claimTried = useRef(false);
 
   const isTeam = viewer !== null && (viewer.roles.includes("staff") || viewer.roles.includes("investor"));
+  // Valeur simple : apres la confirmation de l'email, `firebaseUser` est le MEME
+  // objet (modifie sur place par `reload()`) et l'effet ne se relancerait pas.
+  const awaitsVerification = needsEmailVerification(firebaseUser);
 
   useEffect(() => {
     if (isLoading || isMembershipsLoading || !firebaseUser) return;
@@ -34,7 +40,7 @@ export default function HomePage() {
       router.replace(paths.batch(memberships[0].programId, memberships[0].batchId));
       return;
     }
-    if (memberships.length > 1 || claimTried.current) return;
+    if (memberships.length > 1 || claimTried.current || awaitsVerification) return;
     // Aucun profil rattache : on essaie l'email du compte, puis le choix du profil.
     claimTried.current = true;
     autoClaimByEmail(firebaseUser)
@@ -46,7 +52,7 @@ export default function HomePage() {
         console.error("auto claim failed", err);
         router.replace(paths.claim());
       });
-  }, [isLoading, isMembershipsLoading, firebaseUser, isTeam, memberships, router]);
+  }, [isLoading, isMembershipsLoading, firebaseUser, awaitsVerification, isTeam, memberships, router]);
 
   if (isLoading || isMembershipsLoading) return <PageLoader />;
 
@@ -63,12 +69,14 @@ export default function HomePage() {
         <Button component={Link} href={paths.signIn()} size="md" fullWidth maw={400}>
           Sign in
         </Button>
-        <Anchor component={Link} href={paths.programs()} size="sm" c="dimmed">
+        <Anchor className="tap-link" component={Link} href={paths.programs()} size="sm" c="dimmed">
           Browse programs
         </Anchor>
       </Stack>
     );
   }
+
+  if (awaitsVerification && !isTeam) return <VerifyEmailNotice />;
 
   if (memberships.length > 1) {
     return (

@@ -118,6 +118,7 @@ export default function EditMyProfilePage() {
           directory: {
             whatsapp: directory.whatsapp ?? null,
             linkedinUrl: directory.linkedinUrl ?? null,
+            phone: directory.phone ?? null,
             gender: directory.gender ?? null,
             nationality: directory.nationality ?? null,
             country: directory.country ?? null,
@@ -200,8 +201,9 @@ function EditForm({ initial, canWriteIdentity, degrees }: { initial: Draft; canW
         </Stack>
       </Section>
 
-      <Section title="Contact" hint={canWriteIdentity ? undefined : "Your account is not linked to your identity yet: ask the team to change WhatsApp or LinkedIn."}>
+      <Section title="Contact" hint={canWriteIdentity ? undefined : "Your account is not linked to your identity yet: ask the team to change your phone, WhatsApp or LinkedIn."}>
         <Stack>
+          <TextInput label="Phone" type="tel" disabled={!canWriteIdentity} value={dir.phone ?? ""} onChange={(e) => setD("phone", text(e.currentTarget.value))} />
           <TextInput label="WhatsApp" type="tel" disabled={!canWriteIdentity} value={dir.whatsapp ?? ""} onChange={(e) => setD("whatsapp", text(e.currentTarget.value))} />
           <TextInput label="LinkedIn" type="url" disabled={!canWriteIdentity} placeholder="https://linkedin.com/in/..." value={dir.linkedinUrl ?? ""} onChange={(e) => setD("linkedinUrl", text(e.currentTarget.value))} />
           <TextInput label="Country" value={dir.country ?? ""} onChange={(e) => setD("country", text(e.currentTarget.value))} />

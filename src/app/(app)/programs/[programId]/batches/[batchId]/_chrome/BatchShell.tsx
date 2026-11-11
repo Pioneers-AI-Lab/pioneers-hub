@@ -49,7 +49,7 @@ export function BatchShell({ children }: { children: ReactNode }) {
   return (
     <Box>
       <Group justify="space-between" gap="xs" mb="xs" wrap="nowrap">
-        <Anchor component={Link} href={base} c="dimmed" size="sm" underline="never" truncate>
+        <Anchor component={Link} href={base} c="dimmed" size="sm" underline="never" truncate className="tap-link" style={{ display: "block", lineHeight: "20px" }}>
           {program.name} · <Text span c="white" inherit fw={500}>{batch.name}</Text>
         </Anchor>
         {roleLabel && (

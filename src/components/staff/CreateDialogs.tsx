@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Group, Modal, Stack, TextInput, Textarea } from "@mantine/core";
+import { Button, Group, Stack, TextInput, Textarea } from "@mantine/core";
+import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { notifications } from "@mantine/notifications";
 import { createBatch, createProgram, slugify } from "@/lib/batchAdmin";
 import { paths } from "@/lib/paths";
@@ -41,7 +42,7 @@ export function CreateProgramButton() {
       <Button variant="default" onClick={() => setOpened(true)}>
         New program
       </Button>
-      <Modal opened={opened} onClose={() => setOpened(false)} title="New program">
+      <ResponsiveDialog opened={opened} onClose={() => setOpened(false)} title="New program">
         <Stack>
           <TextInput label="Name" placeholder="Pioneers Accelerator" value={name} onChange={(e) => setName(e.currentTarget.value)} data-autofocus />
           <TextInput label="Id (in the URL)" value={slug} onChange={(e) => setSlug(e.currentTarget.value)} />
@@ -55,7 +56,7 @@ export function CreateProgramButton() {
             </Button>
           </Group>
         </Stack>
-      </Modal>
+      </ResponsiveDialog>
     </>
   );
 }
@@ -88,7 +89,7 @@ export function CreateBatchButton({ programId }: { programId: string }) {
       <Button variant="default" onClick={() => setOpened(true)}>
         New batch
       </Button>
-      <Modal opened={opened} onClose={() => setOpened(false)} title="New batch">
+      <ResponsiveDialog opened={opened} onClose={() => setOpened(false)} title="New batch">
         <Stack>
           <TextInput label="Name" placeholder="Spring 2027" value={name} onChange={(e) => setName(e.currentTarget.value)} data-autofocus />
           <TextInput label="Id (in the URL)" value={slug} onChange={(e) => setSlug(e.currentTarget.value)} />
@@ -105,7 +106,7 @@ export function CreateBatchButton({ programId }: { programId: string }) {
             </Button>
           </Group>
         </Stack>
-      </Modal>
+      </ResponsiveDialog>
     </>
   );
 }

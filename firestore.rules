@@ -127,6 +127,13 @@ service cloud.firestore {
         .hasOnly(keys.concat(['updatedDateISOString']));
     }
 
+    // La personne `person` est celle du profil que ce compte reclame dans ce lot
+    // (son DERNIER profil : celui du batch le plus recent).
+    function claimsLastFounderOf(person) {
+      return person.founderIds.size() > 0
+        && getAfter(founderPath(person.founderIds[person.founderIds.size() - 1])).data.uid == request.auth.uid;
+    }
+
     // Une copie (`private/directory`) ecrite par le fondateur egale l'original
     // dans `people`, ecrit dans le meme lot.
     function copyMatches(personId, key) {
@@ -161,10 +168,10 @@ service cloud.firestore {
         || (signedIn() && resource.data.uid == request.auth.uid)
         || emailMatches(resource.data);
       allow write: if isStaff();
-      // Rattachement automatique par email.
+      // Rattachement : par email, ou en meme temps que le profil choisi dans la liste.
       allow update: if resource.data.uid == null
         && request.resource.data.uid == request.auth.uid
-        && emailMatches(resource.data)
+        && (emailMatches(resource.data) || claimsLastFounderOf(resource.data))
         && onlyChanges(['uid']);
       // Coordonnees modifiees par la personne (FOUNDER_SELF_EDITABLE.person).
       allow update: if signedIn() && resource.data.uid == request.auth.uid
@@ -196,7 +203,10 @@ service cloud.firestore {
       allow update: if isStaff();
       // Le compte demande un profil non reclame d'un batch dont il n'est pas
       // deja fondateur ; il peut changer de profil tant que ce n'est pas valide.
+      // Email VERIFIE : le staff valide en lisant cet email, il doit etre prouve.
       allow create, update: if signedIn()
+        && request.auth.token.email_verified == true
+        && request.resource.data.email == request.auth.token.email.lower()
         && requestId == request.resource.data.batchId + '_' + request.auth.uid
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.status == 'pending'
@@ -246,10 +256,14 @@ service cloud.firestore {
       // filtrer `uid == null`). Nom, photo, competences : la carte minimale.
       allow read: if signedIn() && resource.data.uid == null;
       allow write: if isStaff();
-      // Rattachement automatique : l'email du compte est celui de la personne.
+      // Rattachement (decision du 11/11, « comme Tricount ») : un compte a l'email
+      // VERIFIE reclame un profil non reclame, par email ou en le choisissant
+      // dans la liste, un seul par batch. Le staff voit chaque rattachement
+      // (Staff > Access) et peut delier.
       allow update: if resource.data.uid == null
         && request.resource.data.uid == request.auth.uid
-        && emailMatches(get(personPath(resource.data.personId)).data)
+        && request.auth.token.email_verified == true
+        && !isBatchMember(resource.data.batchId)
         && onlyChanges(['uid', 'claimedDateISOString']);
       // « Mon profil » (FOUNDER_SELF_EDITABLE.founder).
       allow update: if isViewerFounder(resource.data.batchId, founderId)
@@ -266,13 +280,14 @@ service cloud.firestore {
         allow update: if docId == 'directory'
           && isViewerFounder(founderData(founderId).batchId, founderId)
           && onlyChanges([
-            'whatsapp', 'linkedinUrl', 'gender', 'nationality', 'country', 'introduceYourself',
+            'whatsapp', 'linkedinUrl', 'phone', 'gender', 'nationality', 'country', 'introduceYourself',
             'education', 'degree', 'fieldOfStudy', 'yearsOfXP', 'notableCompanies', 'trackRecord',
             'interestedInWorkingOn', 'hasExistingProject', 'projectExplanation', 'hasExistingCoFounders',
             'openToJoinAnotherProject', 'mainStartup2025', 'lookingForCoFounder', 'coFounderTypeWanted',
             'coFounderSkillsWanted', 'industriesToExplore'])
           && copyMatches(founderData(founderId).personId, 'whatsapp')
-          && copyMatches(founderData(founderId).personId, 'linkedinUrl');
+          && copyMatches(founderData(founderId).personId, 'linkedinUrl')
+          && copyMatches(founderData(founderId).personId, 'phone');
         allow update: if docId == 'profile'
           && isViewerFounder(founderData(founderId).batchId, founderId)
           && onlyChanges(['housingSupport', 'tShirtSize']);
@@ -392,6 +407,15 @@ service cloud.firestore {
         || get(/databases/$(database)/documents/batches/$(resource.data.batchId))
             .data.settings.leaderboardVisibility == 'visible';
       allow write: if false;
+    }
+
+    // Requetes de groupe (fiche fondateur, fiche startup) : presences d'un
+    // fondateur sur toutes les seances, notes recues par une startup.
+    match /{path=**}/attendance/{founderId} {
+      allow read: if isInsider();
+    }
+    match /{path=**}/evaluations/{evaluationId} {
+      allow read: if isInsider();
     }
 
     // ---- Formulaires -------------------------------------------------------

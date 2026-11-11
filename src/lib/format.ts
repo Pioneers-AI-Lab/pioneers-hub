@@ -46,3 +46,23 @@ export const joinList = (values: readonly string[] | null | undefined, sep = ", 
   values && values.length > 0 ? values.join(sep) : "-";
 
 export const PROFILE_CATEGORY_LABEL = { technical: "Tech", business: "Business", hybrid: "Hybrid" } as const;
+
+/** Score sur 10 : `7.4`, `-` sans donnee. */
+export const score10 = (v: number | null | undefined) => (v === null || v === undefined ? "-" : v.toFixed(1));
+
+/** Part 0-1 -> `77%`. */
+export const percent = (v: number | null | undefined) => (v === null || v === undefined ? "-" : `${Math.round(v * 100)}%`);
+
+/** Montant en dollars, abrege : `$2.5B`, `$120M`, `$40K`. */
+export function money(v: number | null | undefined): string {
+  if (v === null || v === undefined) return "-";
+  const abs = Math.abs(v);
+  if (abs >= 1e9) return `$${(v / 1e9).toFixed(abs >= 1e10 ? 0 : 1)}B`;
+  if (abs >= 1e6) return `$${(v / 1e6).toFixed(abs >= 1e7 ? 0 : 1)}M`;
+  if (abs >= 1e3) return `$${(v / 1e3).toFixed(0)}K`;
+  return `$${v}`;
+}
+
+/** Nombre entier lisible : `12 400`. */
+export const integer = (v: number | null | undefined) =>
+  v === null || v === undefined ? "-" : Math.round(v).toLocaleString("en-US").replace(/,/g, " ");

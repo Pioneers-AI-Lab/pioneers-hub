@@ -59,6 +59,16 @@ export function LinkRow({ href, ...props }: RowProps & { href: string }) {
   );
 }
 
+/** Ligne cliquable vers un site externe (nouvel onglet). */
+export function ExternalLinkRow({ href, ...props }: RowProps & { href: string }) {
+  const url = /^https?:\/\//.test(href) ? href : `https://${href}`;
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="row">
+      <RowBody {...props} />
+    </a>
+  );
+}
+
 /** Ligne qui declenche une action. */
 export function ButtonRow({ onClick, disabled, ...props }: RowProps & { onClick: () => void; disabled?: boolean }) {
   return (

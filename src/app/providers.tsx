@@ -12,7 +12,8 @@ import { theme } from "@/theme";
 export function Providers({ children }: { children: ReactNode }) {
   return (
     <MantineProvider theme={theme} forceColorScheme="dark">
-      <Notifications position="top-right" />
+      {/* En haut au centre : lisible sur mobile, sans masquer l'avatar du compte. */}
+      <Notifications position="top-center" />
       <AuthProvider>{children}</AuthProvider>
     </MantineProvider>
   );

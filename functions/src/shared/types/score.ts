@@ -90,8 +90,6 @@ export const PROGRAM_PERFORMANCE_WEIGHTS: Record<FounderPillar, number> = {
   achievements: 1,
 };
 
-export type StartupWeightingKey = "dashboard" | "ic";
-
 /** Une composante de ponderation : la moyenne de ses sous-scores presents, avec son poids. */
 export type WeightingComponent = {
   label: string;
@@ -100,25 +98,21 @@ export type WeightingComponent = {
 };
 
 /**
- * Les deux ponderations du score startup, cote a cote (decision du 11/11).
- * IC : Team 40 %, Speed of execution 40 % (= moyenne d'Execution et de
- * Traction, a confirmer : SPECS §12 question 3), Market 20 %.
+ * Ponderation du score startup : la grille unique des evaluations (brief du
+ * 11/11, SPECS §4.9), pour que le score calcule se lise a cote des notes.
+ * Team 40 %, Speed of execution 40 % (= moyenne d'Execution et de Traction,
+ * a confirmer : SPECS §12 question 3), Market 20 %.
  * Gardee IMBRIQUEE, pas a plat (20 / 20) : si Traction manque, Speed of
  * execution vaut Execution et garde ses 40 %.
  */
-export const STARTUP_WEIGHTINGS: Record<StartupWeightingKey, WeightingComponent[]> = {
-  dashboard: [
-    { label: "Market", weight: 25, parts: ["market"] },
-    { label: "Team", weight: 25, parts: ["team"] },
-    { label: "Execution", weight: 25, parts: ["execution"] },
-    { label: "Traction", weight: 25, parts: ["traction"] },
-  ],
-  ic: [
-    { label: "Team", weight: 40, parts: ["team"] },
-    { label: "Speed of execution", weight: 40, parts: ["execution", "traction"] },
-    { label: "Market", weight: 20, parts: ["market"] },
-  ],
-};
+export const STARTUP_WEIGHTING: WeightingComponent[] = [
+  { label: "Team", weight: 40, parts: ["team"] },
+  { label: "Speed of execution", weight: 40, parts: ["execution", "traction"] },
+  { label: "Market", weight: 20, parts: ["market"] },
+];
+
+/** La grille en clair, pour l'interface : « Team 40, Speed of execution 40, Market 20 ». */
+export const STARTUP_WEIGHTING_HINT = STARTUP_WEIGHTING.map((c) => `${c.label} ${c.weight}`).join(", ");
 
 /** Program Performance : moyenne des piliers presents ; `null` si aucun. */
 export const programPerformance = (subScores: Record<FounderPillar, number | null>): number | null =>
@@ -129,16 +123,13 @@ export const baselineScore = (baseline: Record<BaselineCriterion, number | null>
   weightedMean(BASELINE_CRITERIA.map((criterion) => [baseline[criterion], BASELINE_WEIGHTS[criterion]] as const));
 
 /**
- * Score startup pour une ponderation. Une composante vaut la moyenne de ses
- * sous-scores presents ; une composante sans donnee est retiree et les autres
- * se partagent son poids. `null` si aucune donnee.
+ * Score startup. Une composante vaut la moyenne de ses sous-scores presents ;
+ * une composante sans donnee est retiree et les autres se partagent son
+ * poids. `null` si aucune donnee.
  */
-export const startupScore = (
-  subScores: Record<StartupSubScore, number | null>,
-  weighting: StartupWeightingKey,
-): number | null =>
+export const startupScore = (subScores: Record<StartupSubScore, number | null>): number | null =>
   weightedMean(
-    STARTUP_WEIGHTINGS[weighting].map(
+    STARTUP_WEIGHTING.map(
       (component) => [weightedMean(component.parts.map((part) => [subScores[part], 1] as const)), component.weight] as const,
     ),
   );

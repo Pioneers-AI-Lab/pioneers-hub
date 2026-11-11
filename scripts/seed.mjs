@@ -43,6 +43,8 @@ const accounts = [
   { uid: "gina-1", email: "gina-unclaimed@pioneers.test", displayName: "Gina Unclaimed", roles: [], investorAccess: null },
   // Compte sans profil, sans email connu : passe par une demande de rattachement.
   { uid: "stranger-1", email: "stranger@pioneers.test", displayName: "Stan Stranger", roles: [], investorAccess: null, noUserDoc: true },
+  // Compte cree par mot de passe, email pas encore confirme : ne peut rien reclamer.
+  { uid: "unverified-1", email: "unverified@pioneers.test", displayName: "Uma Unverified", roles: [], investorAccess: null, noUserDoc: true, unverified: true },
 ];
 
 await auth.importUsers(
@@ -50,8 +52,10 @@ await auth.importUsers(
     uid: a.uid,
     email: a.email,
     displayName: a.displayName,
-    emailVerified: true,
-    providerData: [{ uid: `google-${a.uid}`, email: a.email, displayName: a.displayName, providerId: "google.com" }],
+    emailVerified: !a.unverified,
+    providerData: a.unverified
+      ? [{ uid: a.email, email: a.email, displayName: a.displayName, providerId: "password" }]
+      : [{ uid: `google-${a.uid}`, email: a.email, displayName: a.displayName, providerId: "google.com" }],
   })),
 );
 
@@ -130,6 +134,8 @@ for (const f of founders) {
     email: `${f.id}@pioneers.test`,
     whatsapp: null,
     linkedinUrl: null,
+    phone: null,
+    slackUserId: null,
     gender: null,
     nationality: null,
     country: "France",

@@ -1,6 +1,6 @@
 import type { User as FirebaseUser } from "firebase/auth";
 import { arrayUnion, getDoc, getDocs, query, setDoc, where, writeBatch } from "firebase/firestore";
-import type { Batch, ClaimRequest, InvestorAccess, UserRole, WithId } from "@shared/types";
+import type { Batch, ClaimRequest, Founder, InvestorAccess, UserRole, WithId } from "@shared/types";
 import { db } from "@/lib/firebase";
 import { refs } from "@/lib/firestore/refs";
 
@@ -60,7 +60,41 @@ export async function autoClaimByEmail(firebaseUser: FirebaseUser): Promise<Clai
   return claimed;
 }
 
-/** « C'est moi » : demande de rattachement, validee par le staff. Remplace une demande en attente. */
+/**
+ * « C'est moi » (comme Tricount) : le compte reclame un profil non reclame,
+ * choisi dans la liste du batch. Acces immediat ; le staff voit le
+ * rattachement dans Staff > Access et peut delier.
+ * La personne est rattachee dans le meme lot ; si elle l'est deja a un autre
+ * compte (le compte ne peut pas le lire avant), on rattache le profil seul.
+ */
+export async function claimProfile(firebaseUser: FirebaseUser, founder: WithId<Founder>) {
+  const write = (withIdentity: boolean) => {
+    const now = nowISO();
+    const batch = writeBatch(db);
+    batch.set(refs.founder(founder.id), { uid: firebaseUser.uid, claimedDateISOString: now, updatedDateISOString: now }, { merge: true });
+    batch.set(refs.membership(founder.batchId, firebaseUser.uid), {
+      id: "",
+      programId: founder.programId,
+      batchId: founder.batchId,
+      uid: firebaseUser.uid,
+      founderId: founder.id,
+      createdDateISOString: now,
+    });
+    if (withIdentity) {
+      batch.set(refs.person(founder.personId), { uid: firebaseUser.uid, updatedDateISOString: now }, { merge: true });
+      batch.set(refs.user(firebaseUser.uid), { personId: founder.personId }, { merge: true });
+    }
+    return batch.commit();
+  };
+  try {
+    await write(true);
+  } catch (err) {
+    if ((err as { code?: string }).code !== "permission-denied") throw err;
+    await write(false);
+  }
+}
+
+/** Demande de rattachement validee par le staff (ancien parcours, garde pour les cas a trancher). */
 export async function requestClaim(firebaseUser: FirebaseUser, batch: WithId<Batch>, founderId: string) {
   await setDoc(refs.claimRequest(batch.id, firebaseUser.uid), {
     id: "",

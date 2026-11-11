@@ -34,7 +34,7 @@ export function ExternalLink({ href, children }: { href: string | null | undefin
   if (!href) return null;
   const url = /^https?:\/\//.test(href) ? href : `https://${href}`;
   return (
-    <a href={url} target="_blank" rel="noreferrer" style={{ color: "var(--mantine-color-pioneers-4)" }}>
+    <a href={url} target="_blank" rel="noreferrer" className="tap-link" style={{ color: "var(--mantine-color-pioneers-4)", overflowWrap: "anywhere" }}>
       {children ?? href.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
     </a>
   );

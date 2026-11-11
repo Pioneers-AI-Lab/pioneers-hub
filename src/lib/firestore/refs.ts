@@ -1,5 +1,6 @@
 import {
   collection,
+  collectionGroup,
   doc,
   limit,
   query,
@@ -11,13 +12,24 @@ import {
   type QueryDocumentSnapshot,
   type WhereFilterOp,
 } from "firebase/firestore";
-import { COL, docIds, docPaths } from "@shared/collections";
+import { COL, SUB, docIds, docPaths } from "@shared/collections";
 import type {
+  Attendance,
   Batch,
   BatchMembership,
+  BatchStats,
+  Checkin,
+  Evaluation,
+  FounderStats,
+  FounderWeek,
+  KpiSeries,
+  Score,
+  ScoreSignals,
   ClaimRequest,
   ClosedList,
+  EventTeam,
   Form,
+  FormVersion,
   Founder,
   FounderDirectory,
   FounderInternal,
@@ -63,6 +75,19 @@ const colRef = <T>(path: string, ...segments: string[]): CollectionReference<Wit
 const docRef = <T>(path: string, ...segments: string[]): DocumentReference<WithId<T>> =>
   doc(db, path, ...segments).withConverter(converter<T>());
 
+/** Un document lu par requete de groupe : on garde l'id de son parent (l'evenement). */
+export type WithParent<T> = WithId<T> & { parentId: string };
+
+/** Toutes les sous-collections de ce nom, quel que soit le parent (requetes de groupe). */
+const groupRef = <T>(name: string) =>
+  collectionGroup(db, name).withConverter<WithParent<T>, DocumentData>({
+    toFirestore: () => {
+      throw new Error("read only");
+    },
+    fromFirestore: (snapshot: QueryDocumentSnapshot) =>
+      ({ id: snapshot.id, parentId: snapshot.ref.parent.parent?.id ?? "", ...snapshot.data() }) as WithParent<T>,
+  });
+
 /** `where` dont le champ est verifie contre le type du document. */
 export const whereField = <T>(field: Extract<keyof T, string>, op: WhereFilterOp, value: unknown) =>
   where(field, op, value);
@@ -99,10 +124,27 @@ export const refs = {
 
   events: () => colRef<PioneersEvent>(COL.events),
   event: (eventId: string) => docRef<PioneersEvent>(COL.events, eventId),
+  batchStats: (batchId: string) => docRef<BatchStats>(COL.batchStats, batchId),
+  scores: () => colRef<Score>(COL.scores),
+  scoreSignals: (targetType: "founder" | "startup", targetId: string) =>
+    docRef<ScoreSignals>(COL.scoreSignals, docIds.score(targetType, targetId)),
+  founderStats: (founderId: string) => docRef<FounderStats>(COL.founderStats, founderId),
+  founderWeeks: () => colRef<FounderWeek>(COL.founderWeeks),
+  checkins: () => colRef<Checkin>(COL.checkins),
+  kpiSeries: (startupId: string) => docRef<KpiSeries>(COL.kpiSeries, startupId),
+  /** Presences de toutes les seances (requete de groupe). */
+  allAttendance: () => groupRef<Attendance>(SUB.attendance),
+  /** Notes de tous les evenements (requete de groupe). */
+  allEvaluations: () => groupRef<Evaluation>(SUB.evaluations),
   /** Appartenances datees aux equipes (`memberships`), a ne pas confondre avec `batchMemberships`. */
   teamMemberships: () => colRef<Membership>(COL.memberships),
   leaderboards: () => colRef<Leaderboard>(COL.leaderboards),
   forms: () => colRef<Form>(COL.forms),
+  form: (formId: string) => docRef<Form>(COL.forms, formId),
+  formVersion: (formId: string, version: number) => docRef<FormVersion>(COL.forms, formId, SUB.versions, String(version)),
+  eventTeams: (eventId: string) => colRef<EventTeam>(COL.events, eventId, SUB.teams),
+  eventTeam: (eventId: string, teamId: string) => docRef<EventTeam>(COL.events, eventId, SUB.teams, teamId),
+  teamMembership: (membershipId: string) => docRef<Membership>(COL.memberships, membershipId),
 } as const;
 
 /**
@@ -204,6 +246,78 @@ export const queries = {
   leaderboardsOfBatch: (batchId: string) => ({
     key: `leaderboards:batch=${batchId}`,
     query: query(refs.leaderboards(), whereField<Leaderboard>("batchId", "==", batchId)),
+  }),
+
+  /** Sous-scores du batch (fondateurs et startups) : staff et investors. */
+  scoresOfBatch: (batchId: string) => ({
+    key: `scores:batch=${batchId}`,
+    query: query(refs.scores(), whereField<Score>("batchId", "==", batchId)),
+  }),
+
+  /** Semaines d'un fondateur (formulaires de motivation et d'objectifs). */
+  weeksOfFounder: (batchId: string, founderId: string) => ({
+    key: `founderWeeks:batch=${batchId}:founder=${founderId}`,
+    query: query(
+      refs.founderWeeks(),
+      whereField<FounderWeek>("batchId", "==", batchId),
+      whereField<FounderWeek>("founderId", "==", founderId),
+    ),
+  }),
+
+  /** Presences d'un fondateur sur toutes les seances (staff et IC). */
+  attendanceOfFounder: (founderId: string) => ({
+    key: `attendance:founder=${founderId}`,
+    query: query(refs.allAttendance(), whereField<Attendance>("founderId", "==", founderId)),
+  }),
+
+  /**
+   * Updates du jeudi d'une startup. Un membre n'a droit qu'aux documents dont
+   * il fait partie : sa requete le dit (`memberIds` contient son profil).
+   */
+  checkinsOfStartup: (batchId: string, startupId: string, asMemberFounderId: string | null) => ({
+    key: `checkins:startup=${startupId}:as=${asMemberFounderId ?? "team"}`,
+    query: asMemberFounderId
+      ? query(
+          refs.checkins(),
+          whereField<Checkin>("batchId", "==", batchId),
+          whereField<Checkin>("startupId", "==", startupId),
+          whereField<Checkin>("memberIds", "array-contains", asMemberFounderId),
+        )
+      : query(
+          refs.checkins(),
+          whereField<Checkin>("batchId", "==", batchId),
+          whereField<Checkin>("startupId", "==", startupId),
+        ),
+  }),
+
+  /** Notes recues par une startup (pitchs), tous evenements (staff et IC). */
+  evaluationsOfTarget: (targetId: string) => ({
+    key: `evaluations:target=${targetId}`,
+    query: query(refs.allEvaluations(), whereField<Evaluation>("targetId", "==", targetId)),
+  }),
+
+  /** Tous les formulaires du batch, archives compris (outils staff). */
+  formsOfBatch: (batchId: string) => ({
+    key: `forms:batch=${batchId}`,
+    query: query(refs.forms(), whereField<Form>("batchId", "==", batchId)),
+  }),
+
+  /** Historique des equipes du batch (« qui a ete avec qui ») : staff et investors, ou fondateurs du batch. */
+  teamMembershipsOfBatch: (batchId: string) => ({
+    key: `memberships:batch=${batchId}`,
+    query: query(refs.teamMemberships(), whereField<Membership>("batchId", "==", batchId)),
+  }),
+
+  /** Equipes d'un evenement, publiees ou non : staff et investors IC seulement (regle `teams`). */
+  teamsOfEvent: (eventId: string) => ({
+    key: `teams:event=${eventId}`,
+    query: query(refs.eventTeams(eventId)),
+  }),
+
+  /** Equipes publiees d'un evenement : la regle `teams` exige ce filtre d'un visiteur sans role. */
+  publishedTeamsOfEvent: (eventId: string) => ({
+    key: `teams:event=${eventId}:published`,
+    query: query(refs.eventTeams(eventId), whereField<EventTeam>("publishedDateISOString", "!=", null)),
   }),
 
   openFormsOfBatch: (batchId: string) => ({

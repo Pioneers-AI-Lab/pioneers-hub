@@ -20,7 +20,7 @@ export function PageHeader({
   return (
     <Stack gap={6} mb="md">
       {back && (
-        <Anchor component={Link} href={back.href} size="sm" c="dimmed" w="fit-content">
+        <Anchor component={Link} href={back.href} size="sm" c="dimmed" w="fit-content" className="tap-link">
           {back.label}
         </Anchor>
       )}

@@ -2,7 +2,6 @@
 
 import { Avatar, Group, Stack, Text, Title } from "@mantine/core";
 import type { FounderStatus } from "@shared/types";
-import { useEvents } from "@/context/EventsContext";
 import { useFounder } from "@/context/FounderContext";
 import { useStartups } from "@/context/StartupsContext";
 import { useBatch } from "@/context/BatchContext";
@@ -11,9 +10,11 @@ import { PROFILE_CATEGORY_LABEL, formatDay } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { ExternalLink, Field, FieldGrid } from "@/components/ui/Field";
 import { PageLoader } from "@/components/ui/PageLoader";
-import { LinkRow, Row, RowList } from "@/components/ui/Rows";
+import { LinkRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 import { Tags } from "@/components/ui/Tags";
+import { QuickContacts } from "./QuickContacts";
+import { FounderAttendance, FounderNetwork, FounderPerformance, FounderTeams, FounderWeeks } from "./FounderInsights";
 
 const STATUS_LABEL: Record<FounderStatus, string> = {
   enrolled: "Enrolled",
@@ -24,9 +25,6 @@ const STATUS_LABEL: Record<FounderStatus, string> = {
 
 /** Liste lue : `null` si vide, pour que le champ soit masque. */
 const list = (values: readonly string[] | null | undefined) => (values && values.length > 0 ? values.join(", ") : null);
-
-/** `tech_lead` -> `Tech lead`. */
-const humanize = (v: string | null) => (v ? v.charAt(0).toUpperCase() + v.slice(1).replace(/_/g, " ") : null);
 
 const yesNo = (v: boolean | null | undefined) => (v === true ? "Yes" : v === false ? "No" : null);
 
@@ -40,9 +38,8 @@ const CO_FOUNDERS_LABEL = { in_batch: "In the batch", outside_batch: "Outside th
 export function FounderCard() {
   const { program } = useProgram();
   const { batch } = useBatch();
-  const { founder, directory, profile, internal, teamMemberships, canSeeDirectory, isDetailsLoading } = useFounder();
+  const { founder, directory, profile, internal, canSeeDirectory, isDetailsLoading } = useFounder();
   const { startupsById } = useStartups();
-  const { eventsById } = useEvents();
   const startup = founder.startupId ? startupsById.get(founder.startupId) : undefined;
   const category = founder.profileCategory ? PROFILE_CATEGORY_LABEL[founder.profileCategory] : null;
 
@@ -60,6 +57,9 @@ export function FounderCard() {
         </Stack>
       </Group>
 
+      {/* Contacts rapides : ce que l'annuaire du batch connait (fondateurs du batch, staff, investors). */}
+      {canSeeDirectory && directory && <QuickContacts directory={directory} />}
+
       {founder.trackRecordOneLiner && (
         <Text mt="md" c="dark.1">
           {founder.trackRecordOneLiner}
@@ -73,6 +73,8 @@ export function FounderCard() {
           </RowList>
         </Section>
       )}
+
+      <FounderPerformance />
 
       <Section title="Skills">
         <Stack gap="md">
@@ -103,12 +105,15 @@ export function FounderCard() {
           <Section title="Contact">
             <FieldGrid>
               <Field label="Email">
-                {directory.email ? <a href={`mailto:${directory.email}`} style={{ color: "var(--mantine-color-pioneers-4)" }}>{directory.email}</a> : null}
+                {directory.email ? <a href={`mailto:${directory.email}`} className="tap-link" style={{ color: "var(--mantine-color-pioneers-4)", overflowWrap: "anywhere" }}>{directory.email}</a> : null}
               </Field>
               <Field label="WhatsApp">
                 {directory.whatsapp ? <ExternalLink href={`https://wa.me/${directory.whatsapp.replace(/[^\d]/g, "")}`}>{directory.whatsapp}</ExternalLink> : null}
               </Field>
               <Field label="LinkedIn">{directory.linkedinUrl ? <ExternalLink href={directory.linkedinUrl} /> : null}</Field>
+              <Field label="Phone">
+                {directory.phone ? <a href={`tel:${directory.phone.replace(/[^\d+]/g, "")}`} className="tap-link" style={{ color: "var(--mantine-color-pioneers-4)" }}>{directory.phone}</a> : null}
+              </Field>
               <Field label="Based in">{[directory.country, directory.nationality && `${directory.nationality} national`].filter(Boolean).join(" · ")}</Field>
             </FieldGrid>
           </Section>
@@ -149,33 +154,10 @@ export function FounderCard() {
         </Section>
       )}
 
-      {canSeeDirectory && (
-        <Section title="Teams">
-          {teamMemberships.length === 0 ? (
-            <Empty>No team yet.</Empty>
-          ) : (
-            <RowList>
-              {teamMemberships.map((m) => {
-                const event = m.eventId ? eventsById.get(m.eventId) : undefined;
-                const isStartup = m.kind === "startup";
-                const title = isStartup ? (startupsById.get(m.teamId)?.name ?? "Startup") : (event?.name ?? "Event team");
-                const period =
-                  m.endDayString && m.endDayString !== m.startDayString
-                    ? `${formatDay(m.startDayString, true)} to ${formatDay(m.endDayString, true)}`
-                    : formatDay(m.startDayString, true);
-                return (
-                  <Row
-                    key={m.id}
-                    title={title}
-                    subtitle={[isStartup ? "Startup" : "Event team", isStartup ? m.role : humanize(m.role)].filter(Boolean).join(" · ")}
-                    meta={<Text size="sm" c="dimmed" className="num">{period}</Text>}
-                  />
-                );
-              })}
-            </RowList>
-          )}
-        </Section>
-      )}
+      <FounderTeams />
+      <FounderAttendance />
+      <FounderNetwork />
+      <FounderWeeks />
 
       {profile && [profile.age, profile.birthDayString, profile.tShirtSize, profile.housingSupport].some((v) => v !== null && v !== undefined) && (
         <Section title="Private" hint="Visible to you, the Pioneers team and the investment committee.">

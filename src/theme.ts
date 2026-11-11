@@ -4,8 +4,8 @@ import { createTheme, type MantineColorsTuple } from "@mantine/core";
 // Theme Pioneers (sombre, mobile d'abord)
 // ----------------------------
 // Charte : bleu `#0DB0F5` sur fond noir, reserve a l'action principale et a
-// l'element actif. Titres en Eina 04 (police a fournir par Pioneers, repli
-// systeme en attendant), TOUS les chiffres en IBM Plex Mono (`className="num"`).
+// l'element actif. Polices Mantine par defaut (decision du 11/11) ; les
+// chiffres en colonnes s'alignent avec `className="num"` (chiffres tabulaires).
 //
 // Regles d'interface (decision du 11/11) :
 // - minimaliste : du texte, des filets, peu de cadres ; pas d'icone sauf manque
@@ -49,7 +49,6 @@ export const theme = createTheme({
   primaryShade: 6,
   colors: { pioneers, dark },
   black: "#0A0A0C",
-  fontFamilyMonospace: "var(--font-plex-mono), ui-monospace, monospace",
   headings: {
     fontWeight: "600",
     sizes: {
@@ -62,15 +61,18 @@ export const theme = createTheme({
   cursorType: "pointer",
   defaultRadius: "md",
   components: {
-    Button: { defaultProps: { size: "sm", radius: "md" } },
+    // 42 px : une cible tactile confortable (44 px recommandes, 40 au minimum).
+    Button: { defaultProps: { size: "md", radius: "md" } },
     TextInput: inputDefaults,
     Textarea: inputDefaults,
     NumberInput: inputDefaults,
     Select: inputDefaults,
     MultiSelect: inputDefaults,
     TagsInput: inputDefaults,
-    PasswordInput: inputDefaults,
+    // Place pour l'oeil du mot de passe (40 px : `--psi-button-size-md`, globals.css).
+    PasswordInput: { defaultProps: { size: "md", rightSectionWidth: 44 } },
     SegmentedControl: { defaultProps: { radius: "md" } },
-    Modal: { defaultProps: { centered: true, radius: "md" } },
+    Modal: { defaultProps: { centered: true, radius: "md", closeButtonProps: { size: "xl" } } },
+    Drawer: { defaultProps: { closeButtonProps: { size: "xl" } } },
   },
 });

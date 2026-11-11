@@ -216,6 +216,7 @@ export async function applyImport(
           ...docs.founderDirectory,
           ...(personPatch.whatsapp ? { whatsapp: personPatch.whatsapp } : {}),
           ...(personPatch.linkedinUrl ? { linkedinUrl: personPatch.linkedinUrl } : {}),
+          ...(personPatch.phone ? { phone: personPatch.phone } : {}),
         });
         const profilePatch = fillEmpty(profile as Record<string, unknown> | undefined, docs.founderProfile);
         if (Object.keys(personPatch).length) writes.set(refs.person(personId), { ...personPatch, updatedDateISOString: now }, { merge: true });
@@ -231,6 +232,8 @@ export async function applyImport(
       let photoUrl = (docs.person.photoUrl as string | undefined) ?? null;
       let whatsapp = (docs.person.whatsapp as string | undefined) ?? null;
       let linkedinUrl = (docs.person.linkedinUrl as string | undefined) ?? null;
+      let phone = (docs.person.phone as string | undefined) ?? null;
+      let slackUserId: string | null = null;
       let name = displayName;
 
       if (row.action === "create") {
@@ -244,7 +247,7 @@ export async function applyImport(
           displayName,
           email,
           altEmails: [],
-          phone: (docs.person.phone as string | undefined) ?? null,
+          phone,
           whatsapp,
           linkedinUrl,
           photoUrl,
@@ -262,6 +265,8 @@ export async function applyImport(
         photoUrl = person?.photoUrl ?? photoUrl;
         whatsapp = person?.whatsapp ?? whatsapp;
         linkedinUrl = person?.linkedinUrl ?? linkedinUrl;
+        phone = person?.phone ?? phone;
+        slackUserId = person?.slackUserId ?? null;
         name = person?.displayName || name;
         writes.set(refs.person(personId!), { founderIds: arrayUnion(founderId), updatedDateISOString: now }, { merge: true });
         result.addedToBatch++;
@@ -296,6 +301,9 @@ export async function applyImport(
         ...docs.founderDirectory,
         whatsapp,
         linkedinUrl,
+        // Copies de `people` (PERSON_COPIES) : coordonnees visibles du batch.
+        phone,
+        slackUserId,
         id: "directory",
       } as WithId<FounderDirectory>);
       writes.set(refs.founderProfile(founderId), { ...emptyProfile(), ...docs.founderProfile, id: "profile" } as WithId<FounderProfile>);

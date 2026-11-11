@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Un build de verification (emulateurs) peut tourner a cote de `next dev` sans
+  // se marcher dessus : NEXT_DIST_DIR=.next-emu next build && next start.
+  distDir: process.env.NEXT_DIST_DIR ?? ".next",
   cacheComponents: true,
   partialPrefetching: true,
   experimental: {

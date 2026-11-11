@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+/.next-emu/
 /out/
 
 # production
@@ -45,3 +46,6 @@ next-env.d.ts
 # firebase
 *-debug.log
 .firebase/
+
+# verifications sur emulateurs decales (npm run check:api)
+.firebase-check.json

@@ -26,10 +26,11 @@ export async function saveMyProfile(founder: WithId<Founder>, patch: MyProfilePa
   if (Object.keys(patch.founder).length > 0) {
     batch.set(refs.founder(founder.id), { ...patch.founder, updatedDateISOString: now }, { merge: true });
   }
-  const { whatsapp, linkedinUrl, ...directory } = patch.directory;
+  const { whatsapp, linkedinUrl, phone, ...directory } = patch.directory;
   const identity = {
     ...(whatsapp !== undefined ? { whatsapp } : {}),
     ...(linkedinUrl !== undefined ? { linkedinUrl } : {}),
+    ...(phone !== undefined ? { phone } : {}),
   };
   const directoryPatch = canWriteIdentity ? { ...directory, ...identity } : directory;
   if (Object.keys(directoryPatch).length > 0) {

@@ -88,61 +88,83 @@ export type SubjectOwner = TargetKind;
  */
 type Subjects = Record<SubjectKey, string>;
 
+/**
+ * Cycle de vie d'un document, pour qui l'ecrit (API, import, formulaires) :
+ *   base      personne, fondateur, startup : doit exister, jamais cree par un champ
+ *   private   sous-document `private/*` : fusionne, cree au besoin
+ *   tracking  document de suivi (semaine, update, presence, soumission) : cree a la premiere ecriture
+ * `timestamped` : le document porte `updatedDateISOString`.
+ */
+export type DocLifecycle = "base" | "private" | "tracking";
+
 export const DOC_KINDS = {
-  person: { subjects: ["person"], owner: "founder", path: (s: Subjects) => docPaths.person(s.person) },
-  founder: { subjects: ["founder"], owner: "founder", path: (s: Subjects) => docPaths.founder(s.founder) },
-  founderDirectory: {
+  person: { lifecycle: "base", timestamped: true, subjects: ["person"], owner: "founder", path: (s: Subjects) => docPaths.person(s.person) },
+  founder: { lifecycle: "base", timestamped: true, subjects: ["founder"], owner: "founder", path: (s: Subjects) => docPaths.founder(s.founder) },
+  founderDirectory: { lifecycle: "private", timestamped: false,
     subjects: ["founder"],
     owner: "founder",
     path: (s: Subjects) => docPaths.founderDirectory(s.founder),
   },
-  founderProfile: { subjects: ["founder"], owner: "founder", path: (s: Subjects) => docPaths.founderProfile(s.founder) },
-  founderInternal: {
+  founderProfile: { lifecycle: "private", timestamped: false, subjects: ["founder"], owner: "founder", path: (s: Subjects) => docPaths.founderProfile(s.founder) },
+  founderInternal: { lifecycle: "private", timestamped: false,
     subjects: ["founder"],
     owner: "founder",
     path: (s: Subjects) => docPaths.founderInternal(s.founder),
   },
-  founderWeek: {
+  founderWeek: { lifecycle: "tracking", timestamped: true,
     subjects: ["founder", "week"],
     owner: "founder",
     path: (s: Subjects) => docPaths.founderWeek(s.founder, s.week),
   },
-  startup: { subjects: ["startup"], owner: "startup", path: (s: Subjects) => docPaths.startup(s.startup) },
-  startupProfile: { subjects: ["startup"], owner: "startup", path: (s: Subjects) => docPaths.startupProfile(s.startup) },
-  startupInternal: {
+  startup: { lifecycle: "base", timestamped: true, subjects: ["startup"], owner: "startup", path: (s: Subjects) => docPaths.startup(s.startup) },
+  startupProfile: { lifecycle: "private", timestamped: false, subjects: ["startup"], owner: "startup", path: (s: Subjects) => docPaths.startupProfile(s.startup) },
+  startupInternal: { lifecycle: "private", timestamped: false,
     subjects: ["startup"],
     owner: "startup",
     path: (s: Subjects) => docPaths.startupInternal(s.startup),
   },
-  checkin: {
+  checkin: { lifecycle: "tracking", timestamped: true,
     subjects: ["startup", "week", "founder"],
     owner: "startup",
     path: (s: Subjects) => docPaths.checkin(s.startup, s.week, s.founder),
   },
-  attendance: {
+  attendance: { lifecycle: "tracking", timestamped: false,
     subjects: ["event", "founder"],
     owner: "founder",
     path: (s: Subjects) => docPaths.attendance(s.event, s.founder),
   },
-  submission: { subjects: ["event", "team"], owner: "startup", path: (s: Subjects) => docPaths.submission(s.event, s.team) },
+  submission: { lifecycle: "tracking", timestamped: false, subjects: ["event", "team"], owner: "startup", path: (s: Subjects) => docPaths.submission(s.event, s.team) },
 } as const satisfies Record<
   DocKind,
-  { subjects: readonly SubjectKey[]; owner: SubjectOwner; path: (s: Subjects) => string }
+  {
+    lifecycle: DocLifecycle;
+    timestamped: boolean;
+    subjects: readonly SubjectKey[];
+    owner: SubjectOwner;
+    path: (s: Subjects) => string;
+  }
 >;
+
+/** Les documents de suivi, ceux qu'une ecriture cree a la demande. */
+export type TrackingDocKind = { [K in DocKind]: (typeof DOC_KINDS)[K]["lifecycle"] extends "tracking" ? K : never }[DocKind];
+
+/** Le nom de chaque sujet dans `ResolvedSubjects` (et dans les entrees de l'API). */
+export const SUBJECT_INPUT_KEY = {
+  person: "personId",
+  founder: "founderId",
+  startup: "startupId",
+  event: "eventId",
+  week: "weekStartDayString",
+  team: "teamId",
+} as const satisfies Record<SubjectKey, keyof ResolvedSubjects>;
 
 /** Chemin Firestore d'un document, ou les sujets qui manquent pour le trouver. */
 export function resolveDocPath(
   kind: DocKind,
   s: ResolvedSubjects,
 ): { ok: true; path: string } | { ok: false; missing: SubjectKey[] } {
-  const has: Partial<Record<SubjectKey, string>> = {
-    person: s.personId,
-    founder: s.founderId,
-    startup: s.startupId,
-    event: s.eventId,
-    week: s.weekStartDayString,
-    team: s.teamId,
-  };
+  const has: Partial<Record<SubjectKey, string>> = {};
+  for (const key of Object.keys(SUBJECT_INPUT_KEY) as SubjectKey[]) has[key] = s[SUBJECT_INPUT_KEY[key]];
   const missing = (DOC_KINDS[kind].subjects as readonly SubjectKey[]).filter((k) => !has[k]);
   if (missing.length > 0) return { ok: false, missing };
   return { ok: true, path: DOC_KINDS[kind].path(has as Subjects) };
@@ -169,12 +191,25 @@ type SystemField =
   | "markedDateISOString"
   | "submittedDateISOString";
 
-/** Champs du fondateur recopies depuis `people` par Cloud Functions : on ecrit l'original. */
-type CopiedField<K extends DocKind> = K extends "founder"
-  ? "name" | "photoUrl"
-  : K extends "founderDirectory"
-    ? "email" | "whatsapp" | "linkedinUrl"
-    : never;
+/**
+ * Champs du fondateur RECOPIES depuis `people` (copie -> original) : on ecrit
+ * l'original, et qui l'ecrit tient la copie a jour dans le meme lot. Les
+ * lecteurs du Profile Book ne lisent pas `people`. `name` suit `displayName`,
+ * lui-meme derive du prenom et du nom tant qu'il est celui par defaut.
+ */
+export const PERSON_COPIES = {
+  "founder.name": "displayName",
+  "founder.photoUrl": "photoUrl",
+  "founderDirectory.email": "email",
+  "founderDirectory.whatsapp": "whatsapp",
+  "founderDirectory.linkedinUrl": "linkedinUrl",
+  "founderDirectory.phone": "phone",
+  "founderDirectory.slackUserId": "slackUserId",
+} as const satisfies Record<string, keyof Person>;
+
+type CopiedField<K extends DocKind> = {
+  [P in keyof typeof PERSON_COPIES]: P extends `${K}.${infer F}` ? F : never;
+}[keyof typeof PERSON_COPIES];
 
 type WritableField<K extends DocKind> = Exclude<Extract<keyof DocKindMap[K], string>, SystemField | CopiedField<K>>;
 
@@ -197,8 +232,16 @@ export type ValueSpec =
   | { kind: "enum"; listKey: string | null; values: readonly string[] | null }
   | { kind: "enumMulti"; listKey: string | null; values: readonly string[] | null }
   | { kind: "founderRefs"; maxItems: number | null }
-  | { kind: "files" };
+  /** Une URL, ou une liste d'URL si `multiple`. */
+  | { kind: "files"; multiple: boolean };
 export type ValueKind = ValueSpec["kind"];
+
+/** La valeur est une liste (et vaut `[]` quand elle est vide, jamais `null`). */
+export const isListValue = (spec: ValueSpec): boolean =>
+  spec.kind === "textList" ||
+  spec.kind === "enumMulti" ||
+  spec.kind === "founderRefs" ||
+  (spec.kind === "files" && spec.multiple);
 
 /** Quels types de question peuvent alimenter quels types de valeur (verifie a l'enregistrement du formulaire). */
 export const INPUT_COMPATIBILITY: Record<FormFieldType, readonly ValueKind[]> = {
@@ -280,7 +323,7 @@ export const DB_FIELDS = {
   "person.phone": field("Phone", { kind: "phone" }, { expected: once() }),
   "person.whatsapp": field("WhatsApp", { kind: "phone" }, { expected: once() }),
   "person.linkedinUrl": field("LinkedIn", { kind: "url" }, { expected: once("required"), mcpFillable: true }),
-  "person.photoUrl": field("Photo", { kind: "files" }, { expected: once() }),
+  "person.photoUrl": field("Photo", { kind: "files", multiple: false }, { expected: once() }),
 
   // ---- Fondateur : carte et Profile Book ----
   /** @source SP26 « Profile Category » : propose a l'import, valide par le staff. */
@@ -363,7 +406,7 @@ export const DB_FIELDS = {
 
   // ---- Startup : carte et profil ----
   "startup.name": field("Startup name", text(80), { expected: once("required") }),
-  "startup.logoUrl": field("Logo", { kind: "files" }, { expected: once() }),
+  "startup.logoUrl": field("Logo", { kind: "files", multiple: false }, { expected: once() }),
   "startup.websiteUrl": field("Website", { kind: "url" }, { expected: once() }),
   "startup.ideaOneLine": field("One-liner", text(200), { expected: once("required"), mcpFillable: true }),
   "startup.vertical": field("Vertical", { kind: "enum", listKey: "industries", values: null }, {
@@ -416,7 +459,7 @@ export const DB_FIELDS = {
   "checkin.learned": field("What you learned from users", longText()),
   "checkin.achievement": field("Achievement of the week", longText()),
   "checkin.helpNeeded": field("How can we help", longText()),
-  "checkin.attachmentUrls": field("Documents", { kind: "files" }, { writePolicy: "merge_unique" }),
+  "checkin.attachmentUrls": field("Documents", { kind: "files", multiple: true }, { writePolicy: "merge_unique" }),
 
   // ---- Soumission d'equipe ----
   "submission.title": field("Title", text(120)),
@@ -471,7 +514,8 @@ export type SubjectSnapshot = {
   events: { eventId: string; eventKind: EventKind; docs: DocsByKind }[];
 };
 
-function isEmptyValue(value: unknown): boolean {
+/** Une valeur absente : `null`, chaine vide ou liste vide. La regle de `fill_empty` et des champs manquants. */
+export function isEmptyValue(value: unknown): boolean {
   return value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
 }
 

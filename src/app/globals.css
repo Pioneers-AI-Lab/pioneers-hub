@@ -1,6 +1,8 @@
 /* Les styles de base viennent de Mantine. Ici, seulement ce qu'il n'expose pas. */
 
 :root {
+  /* L'oeil du mot de passe (Mantine, 28 px par defaut) : cible tactile de 40 px. */
+  --psi-button-size-md: 40px;
   /* Hauteur de la barre d'onglets du bas (mobile), zone de securite comprise. */
   --tabbar-height: calc(56px + env(safe-area-inset-bottom));
 }
@@ -11,9 +13,8 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Tous les chiffres en IBM Plex Mono : poser `className="num"` sur un nombre. */
+/* Chiffres a chasse fixe (colonnes alignees), dans la police du theme. */
 .num {
-  font-family: var(--mantine-font-family-monospace);
   font-variant-numeric: tabular-nums;
 }
 
@@ -136,4 +137,125 @@ button.row {
   .savebar {
     bottom: 0;
   }
+}
+
+/* Fond anime des pages de connexion (AnimatedBackdrop). */
+.auth-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: #000 url("/auth-dots.png") center / cover no-repeat;
+}
+.auth-backdrop-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+.auth-backdrop-canvas[data-loaded="true"] {
+  opacity: 1;
+}
+.auth-backdrop-fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(0deg, #000 1%, rgba(0, 0, 0, 0) 35%);
+}
+.auth-page {
+  position: relative;
+  min-height: 100dvh;
+  background: #000;
+}
+.auth-shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding: calc(20px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
+}
+.auth-logo {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 44px;
+}
+.auth-logo img {
+  height: 26px;
+  width: auto;
+}
+.auth-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 0;
+}
+/* La carte du formulaire : assez opaque pour rester lisible sur la trame animee. */
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 24px;
+  border: 1px solid var(--mantine-color-dark-4);
+  border-radius: 16px;
+  background: rgba(10, 10, 12, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+@media (min-width: 48em) {
+  .auth-shell {
+    padding: 32px 40px;
+  }
+  .auth-logo img {
+    height: 30px;
+  }
+  .auth-card {
+    padding: 32px;
+  }
+}
+
+/* Graphiques : la donnee ne depend jamais du survol (mobile d'abord). Le survol
+   n'ajoute qu'un retour visuel, sur les ecrans qui survolent. */
+.map-country {
+  fill: transparent;
+  stroke: var(--mantine-color-pioneers-6);
+  stroke-opacity: 0.55;
+  cursor: pointer;
+  transition: fill 120ms ease;
+}
+.map-country[data-present="true"] {
+  fill: var(--mantine-color-pioneers-6);
+  stroke-opacity: 1;
+}
+.map-country[data-selected="true"] {
+  fill: var(--mantine-color-pioneers-3);
+}
+.map-country[data-selected="true"][data-present="false"] {
+  fill: var(--mantine-color-dark-5);
+}
+@media (hover: hover) {
+  .map-country:hover {
+    fill: var(--mantine-color-dark-5);
+  }
+  .map-country[data-present="true"]:hover {
+    fill: var(--mantine-color-pioneers-4);
+  }
+  .bubble:hover {
+    filter: brightness(1.25);
+  }
+}
+
+/* Lien isole (retour, email, LinkedIn, site) : la zone tactile atteint 40 px
+   sans changer la mise en page (marge negative = rembourrage ajoute). */
+/* Double classe : passe devant le style Mantine d'un lien `inherit` (classe + attribut). */
+.tap-link.tap-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  margin-block: -10px;
+  padding-block: 10px;
+  margin-inline: -6px;
+  padding-inline: 6px;
 }

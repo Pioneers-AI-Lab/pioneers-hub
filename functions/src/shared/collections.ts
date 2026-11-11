@@ -59,6 +59,16 @@ export const COL = {
   // Systeme
   lists: "lists",
   auditLogs: "auditLogs",
+  /** Apercus d'ecriture du MCP, en attente de confirmation (serveur seulement). */
+  writePlans: "writePlans",
+  /** Reponses rejouables de /v1 (`Idempotency-Key`, serveur seulement). */
+  idempotencyKeys: "idempotencyKeys",
+  /** Connecteur Claude (OAuth 2.1, serveur seulement) : clients, demandes, codes, autorisations, jetons. */
+  oauthClients: "oauthClients",
+  oauthRequests: "oauthRequests",
+  oauthCodes: "oauthCodes",
+  oauthGrants: "oauthGrants",
+  oauthTokens: "oauthTokens",
 } as const;
 
 export const SUB = {
@@ -139,5 +149,14 @@ export const docPaths = {
     `${COL.checkins}/${docIds.checkin(startupId, weekStartDayString, founderId)}`,
   attendance: (eventId: string, founderId: string) => `${COL.events}/${eventId}/${SUB.attendance}/${founderId}`,
   submission: (eventId: string, teamId: string) => `${COL.events}/${eventId}/${SUB.submissions}/${teamId}`,
+  event: (eventId: string) => `${COL.events}/${eventId}`,
+  team: (eventId: string, teamId: string) => `${COL.events}/${eventId}/${SUB.teams}/${teamId}`,
+} as const;
+
+/** Sous-collections d'un evenement lues par le serveur (jamais `peerRatings` ni `judges` : SPECS §4.8). */
+export const eventCollectionPaths = {
+  teams: (eventId: string) => `${COL.events}/${eventId}/${SUB.teams}`,
+  attendance: (eventId: string) => `${COL.events}/${eventId}/${SUB.attendance}`,
+  submissions: (eventId: string) => `${COL.events}/${eventId}/${SUB.submissions}`,
 } as const;
 

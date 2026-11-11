@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Box, Button, Code, Group, Modal, Select, Stack, Text } from "@mantine/core";
+import { Box, Button, Code, Group, SegmentedControl, Stack, Text } from "@mantine/core";
+import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { notifications } from "@mantine/notifications";
 import type { ClaimRequest, Founder, InvestorAccess, UserRole, WithId } from "@shared/types";
 import { useAuth } from "@/context/AuthContext";
@@ -20,9 +21,9 @@ import { Empty, Section } from "@/components/ui/Section";
 // ----------------------------
 // Acces (SPECS §3.2) : rattachements de comptes et roles de l'equipe
 // ----------------------------
-// - Demandes « c'est moi » a valider (le rattachement par email, lui, est
-//   automatique et ne passe pas ici).
-// - Profils rattaches : delier un compte.
+// - Profils rattaches, les plus recents d'abord : le staff voit chaque
+//   rattachement (par email ou par choix dans la liste) et delie une erreur.
+// - Demandes a valider : ancien parcours, affichees s'il en reste.
 // - Roles des comptes de l'equipe (staff, investors). Inviter par email
 //   demande le SDK admin : `npm run grant` en attendant la callable.
 
@@ -68,10 +69,9 @@ export default function AccessPage() {
     <>
       <PageHeader back={{ href: paths.staff(program.id, batch.id), label: "Staff" }} title="Access" />
 
-      <Section title={`Requests to confirm · ${pending.length}`} hint="Accounts whose email did not match a profile, and who picked one.">
-        {pending.length === 0 ? (
-          <Empty>No request waiting.</Empty>
-        ) : (
+      {pending.length > 0 && (
+      <Section title={`Requests to confirm · ${pending.length}`} hint="Requests made before profiles could be picked directly.">
+        {(
           <RowList>
             {pending.map((r) => {
               const founder = foundersById.get(r.founderId);
@@ -104,8 +104,12 @@ export default function AccessPage() {
           </RowList>
         )}
       </Section>
+      )}
 
-      <Section title={`Linked profiles · ${linked.length}`} hint={`${notLinked} profiles are not linked yet. They link themselves when the founder signs in with the onboarding email.`}>
+      <Section
+        title={`Linked profiles · ${linked.length}`}
+        hint={`Most recent first. ${notLinked} profiles are not linked yet: founders link them at sign-in, by email or by picking their name. Unlink any mistake.`}
+      >
         {linked.length === 0 ? (
           <Empty>No account linked yet.</Empty>
         ) : (
@@ -140,40 +144,41 @@ export default function AccessPage() {
           {team.map((u) => {
             const founder = founderOfUid.get(u.id);
             const choice = roleChoiceOf(u.roles, u.investorAccess);
+            const isMe = u.id === staffUid;
+            // Mobile d'abord : un selecteur a 4 choix sur toute la largeur (un toucher), pas de liste deroulante.
             return (
-              <Row
-                key={u.id}
-                title={u.id === staffUid ? "You" : (founder?.name ?? `Account ${u.id.slice(0, 6)}`)}
-                subtitle={`Last seen ${formatDay(u.lastSeenDateISOString.slice(0, 10))}`}
-                meta={
-                  <Select
-                    size="sm"
-                    w={150}
-                    aria-label="Role"
-                    disabled={u.id === staffUid || busy !== null}
-                    value={choice}
-                    allowDeselect={false}
-                    data={[
-                      { value: "staff", label: "Staff" },
-                      { value: "investor_ic", label: "Investor IC" },
-                      { value: "investor_portfolio", label: "Investor" },
-                      { value: "none", label: "No role" },
-                    ]}
-                    onChange={(v) => {
-                      const next = (v ?? "none") as RoleChoice;
-                      const roles: UserRole[] = next === "staff" ? ["staff"] : next === "none" ? [] : ["investor"];
-                      const access: InvestorAccess | null = next === "investor_ic" ? "ic" : next === "investor_portfolio" ? "portfolio" : null;
-                      void act(u.id, () => setUserRoles(u.id, roles, access), "Role updated");
-                    }}
-                  />
-                }
-              />
+              <Stack key={u.id} gap={8} py="sm" style={{ borderBottom: "1px solid var(--mantine-color-dark-4)" }}>
+                <Box>
+                  <Text fw={500}>{isMe ? "You" : (founder?.name ?? `Account ${u.id.slice(0, 6)}`)}</Text>
+                  <Text size="sm" c="dimmed">
+                    Last seen {formatDay(u.lastSeenDateISOString.slice(0, 10))}
+                  </Text>
+                </Box>
+                <SegmentedControl
+                  fullWidth
+                  aria-label="Role"
+                  disabled={isMe || busy !== null}
+                  value={choice}
+                  data={[
+                    { value: "staff", label: "Staff" },
+                    { value: "investor_ic", label: "IC" },
+                    { value: "investor_portfolio", label: "Portfolio" },
+                    { value: "none", label: "None" },
+                  ]}
+                  onChange={(v) => {
+                    const next = v as RoleChoice;
+                    const roles: UserRole[] = next === "staff" ? ["staff"] : next === "none" ? [] : ["investor"];
+                    const access: InvestorAccess | null = next === "investor_ic" ? "ic" : next === "investor_portfolio" ? "portfolio" : null;
+                    void act(u.id, () => setUserRoles(u.id, roles, access), "Role updated");
+                  }}
+                />
+              </Stack>
             );
           })}
         </RowList>
       </Section>
 
-      <Modal opened={toUnlink !== null} onClose={() => setToUnlink(null)} title="Unlink this account?">
+      <ResponsiveDialog opened={toUnlink !== null} onClose={() => setToUnlink(null)} title="Unlink this account?">
         <Stack>
           <Text>
             {toUnlink?.name} loses access to {batch.name} until the profile is linked again. The profile itself is kept.
@@ -194,7 +199,7 @@ export default function AccessPage() {
             </Button>
           </Group>
         </Stack>
-      </Modal>
+      </ResponsiveDialog>
     </>
   );
 }

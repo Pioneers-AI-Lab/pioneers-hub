@@ -1,12 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Mono } from "next/font/google";
 import { ColorSchemeScript, mantineHtmlProps } from "@mantine/core";
 import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
+import "@mantine/charts/styles.css";
 import "./globals.css";
 import { Providers } from "./providers";
-
-const plexMono = IBM_Plex_Mono({ variable: "--font-plex-mono", subsets: ["latin"], weight: ["400", "500", "600"] });
 
 export const metadata: Metadata = {
   title: "Pioneers Hub",
@@ -25,7 +23,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" {...mantineHtmlProps} className={plexMono.variable}>
+    <html lang="en" {...mantineHtmlProps}>
       <head>
         <ColorSchemeScript forceColorScheme="dark" />
       </head>

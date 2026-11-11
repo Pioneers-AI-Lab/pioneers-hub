@@ -32,6 +32,15 @@ export function viewerFromUser(uid: string, user: Pick<User, "roles" | "investor
 
 export const isStaffViewer = (viewer: Viewer | null): boolean => viewer?.roles.includes("staff") === true;
 
+/**
+ * Qui peut se servir de l'API et du connecteur Claude (MCP). v1 : le staff
+ * seulement (SPECS §4.8, assistant d'administration) : l'Admin SDK ignore
+ * firestore.rules, et ouvrir aux investors exige de filtrer chaque objet rendu
+ * par les fonctions de ce fichier. Lue par l'API ET par l'ecran de
+ * consentement OAuth : changer l'un change l'autre.
+ */
+export const canUseApi = (viewer: Viewer | null): boolean => isStaffViewer(viewer);
+
 export type BatchRole = "staff" | "investor_ic" | "investor_portfolio" | "founder" | "public";
 
 /**
@@ -102,7 +111,7 @@ export const canReadStartupProfile = (
 // trackRecord3Liners), le statut, le rattachement, et l'email (cle du
 // rattachement de compte).
 //
-// WhatsApp et LinkedIn vivent dans `people` et sont COPIES dans
+// WhatsApp, LinkedIn et le telephone vivent dans `people` et sont COPIES dans
 // `private/directory` : le fondateur ecrit les deux dans le meme lot, et la
 // regle verifie que la copie egale l'original.
 
@@ -111,6 +120,7 @@ export const FOUNDER_SELF_EDITABLE = {
   founderDirectory: [
     "whatsapp",
     "linkedinUrl",
+    "phone",
     "gender",
     "nationality",
     "country",
@@ -144,3 +154,19 @@ export const FOUNDER_SELF_EDITABLE = {
 /** Le visiteur est le fondateur `founderId` de ce batch (il peut modifier son profil). */
 export const isViewerFounder = (viewerFounderId: string | null, founderId: string): boolean =>
   viewerFounderId !== null && viewerFounderId === founderId;
+
+
+// ----------------------------
+// Nom affiche sans compte
+// ----------------------------
+// Le nom complet d'un fondateur n'est public qu'avec `publicProfileConsent`.
+// Une page publique qui doit nommer tout le monde (repartition d'une lunch
+// roulette) affiche le prenom et l'initiale du nom : assez pour se retrouver,
+// sans exposer l'identite complete.
+
+/** « Ada Lovelace » -> « Ada L. » ; un nom d'un seul mot reste tel quel. */
+export function publicShortName(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return parts[0] ?? "";
+  return `${parts[0]} ${parts[parts.length - 1].charAt(0).toUpperCase()}.`;
+}

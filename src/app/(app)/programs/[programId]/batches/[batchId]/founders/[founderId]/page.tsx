@@ -12,7 +12,7 @@ export default function FounderPage() {
   const { batch } = useBatch();
   return (
     <>
-      <Anchor component={Link} href={paths.founders(program.id, batch.id)} size="sm" c="dimmed" mb="md" display="inline-block">
+      <Anchor component={Link} href={paths.founders(program.id, batch.id)} size="sm" c="dimmed" mb="md" className="tap-link">
         All founders
       </Anchor>
       <FounderCard />

@@ -1,16 +1,42 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button, Center, Stack, Text, Title } from "@mantine/core";
+import { useAuth } from "@/context/AuthContext";
+import { paths } from "@/lib/paths";
+import { PageLoader } from "./PageLoader";
 
 const COPY = {
   not_found: { title: "Not found", body: "This page does not exist, or it has been archived." },
-  forbidden: { title: "Access restricted", body: "You do not have access to this page. Sign in, or ask the Pioneers team." },
+  forbidden: { title: "Access restricted", body: "You do not have access to this page. Ask the Pioneers team." },
   error: { title: "Something went wrong", body: "The data could not be loaded. Try again in a moment." },
 } as const;
 
 export type BlockedReason = keyof typeof COPY;
 
-/** Ce qu'un niveau affiche quand son document manque ou est refuse. La sortie vise le parent. */
+/**
+ * Ce qu'un niveau affiche quand son document manque ou est refuse. La sortie vise le parent.
+ *
+ * CONNEXION, UNE SEULE MECANIQUE POUR TOUTE L'APP : toute page refusee passe
+ * par ici (LevelGate, gardes staff et admin). Un visiteur NON CONNECTE qui
+ * tombe sur un refus est envoye a `/signin?next=<cette page>`, et la page de
+ * connexion (ou d'inscription) le ramene ensuite ici. Un visiteur connecte sans
+ * droit voit « Access restricted ».
+ */
 export function BlockedState({ reason, backHref }: { reason: BlockedReason; backHref: string }) {
+  const router = useRouter();
+  const { firebaseUser, isLoading } = useAuth();
+  const needsSignIn = reason === "forbidden" && !isLoading && !firebaseUser;
+
+  useEffect(() => {
+    if (needsSignIn) router.replace(paths.signIn(`${window.location.pathname}${window.location.search}`));
+  }, [needsSignIn, router]);
+
+  // Tant qu'on ne sait pas qui est le visiteur, un refus n'est pas encore un verdict.
+  if (reason === "forbidden" && (isLoading || needsSignIn)) return <PageLoader />;
+
   const { title, body } = COPY[reason];
   return (
     <Center mih={320} px="md">

@@ -12,6 +12,7 @@ import { deleteApp, initializeApp } from "firebase/app";
 import { connectAuthEmulator, getAuth, signInWithCustomToken } from "firebase/auth";
 import {
   collection,
+  collectionGroup,
   connectFirestoreEmulator,
   doc,
   getDoc,
@@ -27,6 +28,17 @@ import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/
 const PROJECT_ID = "demo-pioneers-hub";
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= "127.0.0.1:9199";
 initAdmin({ projectId: PROJECT_ID });
+
+// Adresses des emulateurs : celles que `firebase emulators:exec` fournit, sinon
+// les ports de firebase.json. Permet de verifier sur une suite neuve a ports
+// decales (.firebase-check.json) sans arreter les emulateurs de dev.
+const hostPort = (value, fallbackPort) => {
+  const [host, port] = (value ?? `127.0.0.1:${fallbackPort}`).split(":");
+  return { host, port: Number(port) };
+};
+const AUTH_EMU = hostPort(process.env.FIREBASE_AUTH_EMULATOR_HOST, 9199);
+const FIRESTORE_EMU = hostPort(process.env.FIRESTORE_EMULATOR_HOST, 8180);
+const FUNCTIONS_EMU = hostPort(process.env.FUNCTIONS_EMULATOR_HOST, 5101);
 
 let failures = 0;
 async function expectOk(label, fn) {
@@ -55,11 +67,11 @@ async function expectDenied(label, fn) {
 async function clientAs(uid) {
   const app = initializeApp({ projectId: PROJECT_ID, apiKey: "demo-key" }, `client-${uid ?? "public"}-${Date.now()}`);
   const auth = getAuth(app);
-  connectAuthEmulator(auth, "http://127.0.0.1:9199", { disableWarnings: true });
+  connectAuthEmulator(auth, `http://${AUTH_EMU.host}:${AUTH_EMU.port}`, { disableWarnings: true });
   const db = getFirestore(app);
-  connectFirestoreEmulator(db, "127.0.0.1", 8180);
+  connectFirestoreEmulator(db, FIRESTORE_EMU.host, FIRESTORE_EMU.port);
   const functions = getFunctions(app, "europe-west4");
-  connectFunctionsEmulator(functions, "127.0.0.1", 5101);
+  connectFunctionsEmulator(functions, FUNCTIONS_EMU.host, FUNCTIONS_EMU.port);
   if (uid) await signInWithCustomToken(auth, await getAdminAuth().createCustomToken(uid));
   return { app, db, functions };
 }
@@ -126,6 +138,9 @@ console.log("founder (ada, member of lumen)");
   await expectDenied("read startup internal record", () => read(doc(db, "startups/lumen/private/internal")));
   await expectDenied("read scores", () => read(doc(db, "scores/founder_ada-example")));
   await expectDenied("read notes", () => read(doc(db, "notes/demo-note")));
+  await expectDenied("query attendance across sessions", () =>
+    count(query(collectionGroup(db, "attendance"), where("founderId", "==", "ada-example"))),
+  );
   await expectOk("update her own last visit", () =>
     setDoc(doc(db, "users/ada-1"), { lastSeenDateISOString: new Date().toISOString() }, { merge: true }),
   );
@@ -164,6 +179,18 @@ console.log("founder (ada, member of lumen)");
     b.set(doc(db, "founders/ada-example/private/directory"), { whatsapp: "+33600000001" }, { merge: true });
     await b.commit();
   });
+  await expectDenied("edit the phone copy without the original", () =>
+    setDoc(doc(db, "founders/ada-example/private/directory"), { phone: "+33600000002" }, { merge: true }),
+  );
+  await expectOk("edit phone in identity and copy together", async () => {
+    const b = writeBatch(db);
+    b.set(doc(db, "people/person-ada-example"), { phone: "+33600000003", updatedDateISOString: new Date().toISOString() }, { merge: true });
+    b.set(doc(db, "founders/ada-example/private/directory"), { phone: "+33600000003" }, { merge: true });
+    await b.commit();
+  });
+  await expectDenied("set her own Slack id (staff only)", () =>
+    setDoc(doc(db, "founders/ada-example/private/directory"), { slackUserId: "U000" }, { merge: true }),
+  );
   await expectOk("edit her own T-shirt size", () =>
     setDoc(doc(db, "founders/ada-example/private/profile"), { tShirtSize: "M" }, { merge: true }),
   );
@@ -214,6 +241,9 @@ console.log("investor (portfolio access)");
   await expectDenied("read a founder identity", () => read(doc(db, "people/person-ben-sample")));
   await expectDenied("read a founder weekly tracking", () => read(doc(db, "founderWeeks/ben-sample_2026-11-16")));
   await expectDenied("read notes", () => read(doc(db, "notes/demo-note")));
+  await expectDenied("query attendance across sessions", () =>
+    count(query(collectionGroup(db, "attendance"), where("founderId", "==", "ada-example"))),
+  );
   await expectDenied("read mentors", () => read(doc(db, "mentors/mia-mentor")));
   await expectDenied("list weekly updates", () => count(weeklyResponses(db)));
   await deleteApp(app);
@@ -273,7 +303,6 @@ console.log("account claim by email (gina, unclaimed profile)");
   await expectDenied("find someone else's identity by email", () =>
     count(query(collection(db, "people"), where("email", "==", "eva-private@pioneers.test"))),
   );
-  await expectDenied("claim a profile with another email", () => claim("eva-private", "person-eva-private"));
   await expectOk("claim her own profile (founder + identity + membership + account)", () =>
     claim("gina-unclaimed", "person-gina-unclaimed"),
   );
@@ -304,18 +333,6 @@ console.log("claim request (stranger, chooses a profile)");
     count(query(collection(db, "founders"), where("batchId", "==", "fall-2026"), where("uid", "==", null))),
   );
   await expectDenied("read an unclaimed profile's directory", () => read(doc(db, "founders/eva-private/private/directory")));
-  await expectDenied("claim a profile directly", async () => {
-    const b = writeBatch(db);
-    b.set(doc(db, "founders/eva-private"), { uid: "stranger-1", claimedDateISOString: now, updatedDateISOString: now }, { merge: true });
-    b.set(doc(db, "batchMemberships/fall-2026_stranger-1"), {
-      programId: "accelerator",
-      batchId: "fall-2026",
-      uid: "stranger-1",
-      founderId: "eva-private",
-      createdDateISOString: now,
-    });
-    await b.commit();
-  });
   await expectDenied("request an already claimed profile", () => request("ada-example"));
   await expectDenied("request with status approved", () => request("eva-private", { status: "approved" }));
   await expectOk("request an unclaimed profile", () => request("eva-private"));
@@ -323,6 +340,46 @@ console.log("claim request (stranger, chooses a profile)");
   await expectOk("read own request", () => read(doc(db, "claimRequests/fall-2026_stranger-1")));
   await expectDenied("approve own request", () =>
     setDoc(doc(db, "claimRequests/fall-2026_stranger-1"), { status: "approved" }, { merge: true }),
+  );
+  const pick = (founderId) => {
+    const b = writeBatch(db);
+    b.set(doc(db, `founders/${founderId}`), { uid: "stranger-1", claimedDateISOString: now, updatedDateISOString: now }, { merge: true });
+    b.set(doc(db, `people/person-${founderId}`), { uid: "stranger-1", updatedDateISOString: now }, { merge: true });
+    b.set(doc(db, "batchMemberships/fall-2026_stranger-1"), {
+      programId: "accelerator",
+      batchId: "fall-2026",
+      uid: "stranger-1",
+      founderId,
+      createdDateISOString: now,
+    });
+    return b.commit();
+  };
+  await expectOk("pick a profile in the list (Tricount): founder + identity + membership", () => pick("eva-private"));
+  await expectOk("then read the batch directory", () => read(doc(db, "founders/ben-sample/private/directory")));
+  await expectDenied("pick a second profile in the same batch", () => pick("finn-private"));
+  await deleteApp(app);
+}
+
+// ---- Email non confirme -----------------------------------------------------
+console.log("unverified email (password account)");
+{
+  const { app, db } = await clientAs("unverified-1");
+  await expectDenied("pick a profile before confirming the email", () =>
+    setDoc(doc(db, "founders/finn-private"), { uid: "unverified-1", claimedDateISOString: new Date().toISOString() }, { merge: true }),
+  );
+  await expectDenied("request a profile before confirming the email", () =>
+    setDoc(doc(db, "claimRequests/fall-2026_unverified-1"), {
+      programId: "accelerator",
+      batchId: "fall-2026",
+      uid: "unverified-1",
+      founderId: "finn-private",
+      email: "unverified@pioneers.test",
+      displayName: "Uma Unverified",
+      status: "pending",
+      createdDateISOString: new Date().toISOString(),
+      decidedByUid: null,
+      decidedDateISOString: null,
+    }),
   );
   await deleteApp(app);
 }
@@ -339,6 +396,12 @@ console.log("staff");
     count(query(collection(db, "claimRequests"), where("status", "==", "pending"))),
   );
   await expectOk("list accounts", () => count(collection(db, "users")));
+  await expectOk("query a founder's attendance across sessions", () =>
+    count(query(collectionGroup(db, "attendance"), where("founderId", "==", "ada-example"))),
+  );
+  await expectOk("query the evaluations of a startup", () =>
+    count(query(collectionGroup(db, "evaluations"), where("targetId", "==", "lumen"))),
+  );
   await expectOk("callable health", async () => {
     const { data } = await httpsCallable(functions, "health")({});
     return `${data.region}, uid=${data.uid}`;
