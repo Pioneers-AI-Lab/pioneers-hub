@@ -1,0 +1,9 @@
+# Deploiement Netlify : chaque push sur `main` construit et publie le front.
+# Next.js est detecte automatiquement (adaptateur OpenNext de Netlify).
+# Les Cloud Functions (dossier functions/) ne sont PAS deployees ici.
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "24"

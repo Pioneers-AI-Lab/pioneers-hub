@@ -1,49 +1,139 @@
+/* Les styles de base viennent de Mantine. Ici, seulement ce qu'il n'expose pas. */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-html {
-  height: 100%;
-}
-
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
+  /* Hauteur de la barre d'onglets du bas (mobile), zone de securite comprise. */
+  --tabbar-height: calc(56px + env(safe-area-inset-bottom));
 }
 
 body {
-  min-height: 100%;
+  background: var(--mantine-color-body);
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tous les chiffres en IBM Plex Mono : poser `className="num"` sur un nombre. */
+.num {
+  font-family: var(--mantine-font-family-monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Une ligne de liste : toute la ligne est la cible tactile. */
+.row {
   display: flex;
-  flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-}
-
-a {
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--mantine-color-dark-4);
   color: inherit;
   text-decoration: none;
 }
+.row:last-child {
+  border-bottom: 0;
+}
+a.row:active,
+button.row:active {
+  background: var(--mantine-color-dark-5);
+}
+@media (hover: hover) {
+  a.row:hover,
+  button.row:hover {
+    background: var(--mantine-color-dark-6);
+  }
+}
+button.row {
+  width: 100%;
+  background: none;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
+/* Barre d'onglets du bas (mobile). */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  height: var(--tabbar-height);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: rgba(10, 10, 12, 0.92);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--mantine-color-dark-4);
+}
+.tabbar a {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mantine-color-dark-2);
+  text-decoration: none;
+  letter-spacing: 0.01em;
+}
+.tabbar a[data-active="true"] {
+  color: var(--mantine-color-pioneers-6);
+}
+
+/* Onglets du haut (tablette et ordinateur). */
+.toptabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--mantine-color-dark-4);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.toptabs a {
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--mantine-color-dark-2);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+.toptabs a[data-active="true"] {
+  color: var(--mantine-color-white);
+  border-bottom-color: var(--mantine-color-pioneers-6);
+}
+
+/* Le contenu d'un batch laisse la place a la barre du bas sur mobile. */
+.batch-content {
+  padding-bottom: calc(var(--tabbar-height) + 16px);
+}
+@media (min-width: 48em) {
+  .batch-content {
+    padding-bottom: 32px;
+  }
+}
+
+/* Etiquette de section : petite, en capitales, estompee. */
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dark-2);
+}
+
+/* Barre d'enregistrement collee au bas de l'ecran (au-dessus des onglets sur mobile). */
+.savebar {
+  position: sticky;
+  bottom: var(--tabbar-height);
+  z-index: 50;
+  padding: 12px 0;
+  margin-top: 24px;
+  background: linear-gradient(to top, var(--mantine-color-body) 70%, transparent);
+}
+@media (min-width: 48em) {
+  .savebar {
+    bottom: 0;
   }
 }

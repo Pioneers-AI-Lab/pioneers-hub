@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // JS compile des Cloud Functions (tsc) : on lint la source, pas la sortie.
+    "functions/lib/**",
   ]),
 ]);
 

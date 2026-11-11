@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "default": "demo-pioneers-hub",
+    "prod": "pioneers-3627c"
+  }
+}
