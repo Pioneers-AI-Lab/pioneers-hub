@@ -105,7 +105,7 @@ batch.set(db.doc(`batches/${BATCH_ID}`), {
     { key: "selection_day", label: "Selection Day", dayString: null },
     { key: "ic", label: "Investment Committee", dayString: "2027-02-25" },
   ],
-  settings: { leaderboardVisibility: "visible", slackChannelId: null },
+  settings: { leaderboardVisibility: "visible", slackChannelId: null, slackTeamId: null },
 });
 
 for (const f of founders) {

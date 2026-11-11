@@ -55,7 +55,7 @@ const docs = [
         { key: "ic", label: "Investment Committee", dayString: "2027-02-25" },
         { key: "demo_day", label: "Demo Day", dayString: null },
       ],
-      settings: { leaderboardVisibility: "visible", slackChannelId: null },
+      settings: { leaderboardVisibility: "visible", slackChannelId: null, slackTeamId: null },
     },
   ],
 ];

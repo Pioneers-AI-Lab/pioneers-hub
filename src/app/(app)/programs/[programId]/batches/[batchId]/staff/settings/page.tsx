@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Box, Button, SegmentedControl, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { isSlackChannelId, isSlackTeamId } from "@shared/slackLinks";
 import type { Batch, BatchStatus, LeaderboardVisibility } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useProgram } from "@/context/ProgramContext";
@@ -25,13 +26,21 @@ function SettingsForm({ batch }: { batch: Batch & { id: string } }) {
   const [visibility, setVisibility] = useState<LeaderboardVisibility>(batch.settings.leaderboardVisibility);
   const [endDay, setEndDay] = useState(batch.endDayString ?? "");
   const [milestones, setMilestones] = useState(batch.milestones);
+  const [slackTeamId, setSlackTeamId] = useState(batch.settings.slackTeamId ?? "");
+  const [slackChannelId, setSlackChannelId] = useState(batch.settings.slackChannelId ?? "");
+  const teamId = slackTeamId.trim().toUpperCase() || null;
+  const channelId = slackChannelId.trim().toUpperCase() || null;
+  const teamError = teamId && !isSlackTeamId(teamId) ? "A workspace ID starts with T, like T0123ABCD." : null;
+  const channelError = channelId && !isSlackChannelId(channelId) ? "A channel ID starts with C (or G), like C0123ABCD." : null;
   const [isSaving, setIsSaving] = useState(false);
 
   const dirty =
     status !== batch.status ||
     visibility !== batch.settings.leaderboardVisibility ||
     (endDay || null) !== batch.endDayString ||
-    JSON.stringify(milestones) !== JSON.stringify(batch.milestones);
+    JSON.stringify(milestones) !== JSON.stringify(batch.milestones) ||
+    teamId !== (batch.settings.slackTeamId ?? null) ||
+    channelId !== batch.settings.slackChannelId;
 
   const save = async () => {
     setIsSaving(true);
@@ -40,7 +49,7 @@ function SettingsForm({ batch }: { batch: Batch & { id: string } }) {
         status,
         endDayString: endDay || null,
         milestones,
-        settings: { ...batch.settings, leaderboardVisibility: visibility },
+        settings: { ...batch.settings, leaderboardVisibility: visibility, slackTeamId: teamId, slackChannelId: channelId },
       });
       notifications.show({ message: "Settings saved" });
     } catch (err) {
@@ -79,6 +88,16 @@ function SettingsForm({ batch }: { batch: Batch & { id: string } }) {
         />
       </Section>
 
+      <Section
+        title="Slack"
+        hint="Opens a direct message with a founder from their profile, and the batch channel from the batch home. Workspace ID: Slack, workspace settings. Channel ID: bottom of the channel details."
+      >
+        <Stack>
+          <TextInput label="Workspace ID" placeholder="T0123ABCD" value={slackTeamId} error={teamError} onChange={(e) => setSlackTeamId(e.currentTarget.value)} />
+          <TextInput label="Batch channel ID" placeholder="C0123ABCD" value={slackChannelId} error={channelError} onChange={(e) => setSlackChannelId(e.currentTarget.value)} />
+        </Stack>
+      </Section>
+
       <Section title="Dates">
         <Stack>
           <TextInput label="Start" type="date" value={batch.startDayString} disabled description="Set at creation." />
@@ -99,7 +118,7 @@ function SettingsForm({ batch }: { batch: Batch & { id: string } }) {
       </Section>
 
       <Box className="savebar">
-        <Button size="md" fullWidth disabled={!dirty} loading={isSaving} onClick={save}>
+        <Button size="md" fullWidth disabled={!dirty || teamError !== null || channelError !== null} loading={isSaving} onClick={save}>
           {dirty ? "Save settings" : "No changes"}
         </Button>
         {!dirty && (

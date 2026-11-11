@@ -1,8 +1,9 @@
 "use client";
 
-import type { ComponentType } from "react";
+import type { ComponentType, MouseEvent } from "react";
 import { Button, Group } from "@mantine/core";
 import { IconBrandLinkedin, IconBrandSlack, IconBrandWhatsapp, IconMail, IconPhone } from "@tabler/icons-react";
+import { slackDmUrl, slackDmWebUrl } from "@shared/slackLinks";
 import type { FounderDirectory } from "@shared/types";
 
 // ----------------------------
@@ -13,18 +14,47 @@ import type { FounderDirectory } from "@shared/types";
 // moyen renseigne, masquee sinon. Icones : exception assumee a la regle « pas
 // d'icone », la rangee doit tenir sur un ecran de telephone.
 
-type Contact = { key: string; label: string; href: string; icon: ComponentType<{ size?: number; stroke?: number }>; external: boolean };
+type Contact = {
+  key: string;
+  label: string;
+  /** Lien du bouton (ouvert tel quel, ou au clic droit / appui long). */
+  href: string;
+  icon: ComponentType<{ size?: number; stroke?: number }>;
+  external: boolean;
+  /** Lien d'application essaye d'abord au clic ; `href` sert de repli s'il ne s'ouvre pas. */
+  appHref?: string;
+};
+
+/**
+ * Essaie d'ouvrir l'application (`slack://`), puis, si la page n'a pas perdu
+ * le focus apres un court delai (application absente : rien ne se passe),
+ * ouvre le lien web dans l'onglet. Un nouvel onglet serait bloque : il ne
+ * viendrait plus d'un clic.
+ */
+function openAppOrWeb(event: MouseEvent<HTMLAnchorElement>, appHref: string, webHref: string) {
+  event.preventDefault();
+  let appOpened = false;
+  const onLeave = () => {
+    appOpened = true;
+  };
+  window.addEventListener("blur", onLeave, { once: true });
+  document.addEventListener("visibilitychange", onLeave, { once: true });
+  window.location.href = appHref;
+  window.setTimeout(() => {
+    window.removeEventListener("blur", onLeave);
+    document.removeEventListener("visibilitychange", onLeave);
+    if (!appOpened) window.location.href = webHref;
+  }, 1500);
+}
 
 const digits = (phone: string) => phone.replace(/[^\d+]/g, "");
 const withScheme = (url: string) => (/^https?:\/\//.test(url) ? url : `https://${url}`);
 
 /**
- * Lien Slack vers la conversation avec la personne : `app_redirect` ouvre
- * l'application (ou le navigateur) sur le DM, sans connaitre l'espace de travail.
+ * `slackTeamId` : l'espace Slack du batch. Sans lui, pas de bouton Slack : le
+ * lien documente vers un message prive exige l'espace ET le membre.
  */
-const slackHref = (userId: string) => `https://slack.com/app_redirect?channel=${encodeURIComponent(userId)}`;
-
-export function contactsOf(directory: Partial<FounderDirectory>): Contact[] {
+export function contactsOf(directory: Partial<FounderDirectory>, slackTeamId: string | null): Contact[] {
   const out: Contact[] = [];
   if (directory.linkedinUrl)
     out.push({ key: "linkedin", label: "LinkedIn", href: withScheme(directory.linkedinUrl), icon: IconBrandLinkedin, external: true });
@@ -38,21 +68,30 @@ export function contactsOf(directory: Partial<FounderDirectory>): Contact[] {
       external: true,
     });
   if (directory.phone) out.push({ key: "phone", label: "Call", href: `tel:${digits(directory.phone)}`, icon: IconPhone, external: false });
-  if (directory.slackUserId)
-    out.push({ key: "slack", label: "Slack", href: slackHref(directory.slackUserId), icon: IconBrandSlack, external: true });
+  // L'application Slack d'abord (lien documente `slack://`), le client web en repli.
+  if (directory.slackUserId && slackTeamId)
+    out.push({
+      key: "slack",
+      label: "Slack",
+      href: slackDmWebUrl(slackTeamId, directory.slackUserId),
+      appHref: slackDmUrl(slackTeamId, directory.slackUserId),
+      icon: IconBrandSlack,
+      external: true,
+    });
   return out;
 }
 
-export function QuickContacts({ directory }: { directory: Partial<FounderDirectory> }) {
-  const contacts = contactsOf(directory);
+export function QuickContacts({ directory, slackTeamId }: { directory: Partial<FounderDirectory>; slackTeamId: string | null }) {
+  const contacts = contactsOf(directory, slackTeamId);
   if (contacts.length === 0) return null;
   return (
     <Group gap="xs" mt="md">
-      {contacts.map(({ key, label, href, icon: Icon, external }) => (
+      {contacts.map(({ key, label, href, icon: Icon, external, appHref }) => (
         <Button
           key={key}
           component="a"
           href={href}
+          onClick={appHref ? (e: MouseEvent<HTMLAnchorElement>) => openAppOrWeb(e, appHref, href) : undefined}
           {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
           variant="default"
           size="sm"

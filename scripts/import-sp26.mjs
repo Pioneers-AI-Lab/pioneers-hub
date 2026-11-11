@@ -98,7 +98,7 @@ set(`batches/${BATCH_ID}`, {
     { key: "ic", label: "Investment Committee", dayString: null },
     { key: "demo_day", label: "Demo Day", dayString: null },
   ],
-  settings: { leaderboardVisibility: "visible", slackChannelId: null },
+  settings: { leaderboardVisibility: "visible", slackChannelId: null, slackTeamId: null },
 });
 
 // ---- Startups ----------------------------------------------------------------------

@@ -14,6 +14,7 @@ import { LinkRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 import { Tags } from "@/components/ui/Tags";
 import { QuickContacts } from "./QuickContacts";
+import { SlackMemberIdField } from "./SlackMemberIdField";
 import { FounderAttendance, FounderNetwork, FounderPerformance, FounderTeams, FounderWeeks } from "./FounderInsights";
 
 const STATUS_LABEL: Record<FounderStatus, string> = {
@@ -37,7 +38,7 @@ const CO_FOUNDERS_LABEL = { in_batch: "In the batch", outside_batch: "Outside th
  */
 export function FounderCard() {
   const { program } = useProgram();
-  const { batch } = useBatch();
+  const { batch, role } = useBatch();
   const { founder, directory, profile, internal, canSeeDirectory, isDetailsLoading } = useFounder();
   const { startupsById } = useStartups();
   const startup = founder.startupId ? startupsById.get(founder.startupId) : undefined;
@@ -58,7 +59,7 @@ export function FounderCard() {
       </Group>
 
       {/* Contacts rapides : ce que l'annuaire du batch connait (fondateurs du batch, staff, investors). */}
-      {canSeeDirectory && directory && <QuickContacts directory={directory} />}
+      {canSeeDirectory && directory && <QuickContacts directory={directory} slackTeamId={batch.settings.slackTeamId ?? null} />}
 
       {founder.trackRecordOneLiner && (
         <Text mt="md" c="dark.1">
@@ -121,6 +122,7 @@ export function FounderCard() {
               </Field>
               <Field label="Based in">{[directory.country, directory.nationality && `${directory.nationality} national`].filter(Boolean).join(" · ")}</Field>
             </FieldGrid>
+            {role === "staff" && <SlackMemberIdField key={directory.slackUserId ?? "none"} founder={founder} current={directory.slackUserId ?? null} />}
           </Section>
 
           <Section title="Background">

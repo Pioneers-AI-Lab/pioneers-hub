@@ -52,7 +52,7 @@ export async function createBatch(input: {
       label: MILESTONE_LABELS[key],
       dayString: key === "kickoff" ? input.startDayString : null,
     })),
-    settings: { leaderboardVisibility: "visible", slackChannelId: null },
+    settings: { leaderboardVisibility: "visible", slackChannelId: null, slackTeamId: null },
     archivedDateISOString: null,
   });
 }

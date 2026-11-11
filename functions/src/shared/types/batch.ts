@@ -30,6 +30,13 @@ export type BatchSettings = {
   leaderboardVisibility: LeaderboardVisibility;
   /** Channel general du batch (`#fall26-general`), cible des annonces. */
   slackChannelId: string | null;
+  /**
+   * Espace de travail Slack du batch (`T…`). Un batch n'est pas forcement dans
+   * le meme espace qu'un autre : c'est la « base » des liens Slack du batch,
+   * l'id du membre (`people.slackUserId`) en est le suffixe (shared/slackLinks.ts).
+   * Absent des batchs plus anciens.
+   */
+  slackTeamId?: string | null;
 };
 
 export type Batch = Timestamps &
