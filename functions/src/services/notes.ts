@@ -2,6 +2,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { z } from "zod";
 import { COL, docPaths } from "../shared/collections";
 import type { Founder, Note, NoteSource, Startup } from "../shared/types";
+import { isStaffViewer } from "../shared/access";
 import { notFound } from "../api/errors";
 import type { Operation } from "./operations";
 import { dayString, parisToday } from "./schemas";
@@ -30,6 +31,8 @@ export const AddNoteInput = z
 export const addNote: Operation<typeof AddNoteInput, { noteId: string }> = {
   name: "add_note",
   input: AddNoteInput,
+  // Notes internes : ecrites par le staff (regle `notes`).
+  allowed: (caller) => isStaffViewer(caller.viewer),
   async plan(tx, caller, input) {
     const db = getFirestore();
     const targetPath = input.targetType === "startup" ? docPaths.startup(input.targetId) : docPaths.founder(input.targetId);
@@ -38,15 +41,15 @@ export const addNote: Operation<typeof AddNoteInput, { noteId: string }> = {
     if (!target.exists) throw notFound(`${input.targetType}_not_found`, `No ${input.targetType} with id \`${input.targetId}\`.`, "targetId");
     if (event && !event.exists) throw notFound("event_not_found", `Event \`${input.eventId}\` does not exist.`, "eventId");
 
-    const attached =
-      input.targetType === "startup"
-        ? (({ programId, batchId, memberIds, name }: Startup) => ({ programId, batchId, founderIds: memberIds, startupId: input.targetId, targetName: name }))(
-            target.data() as Startup,
-          )
-        : (({ programId, batchId, startupId, name }: Founder) => ({ programId, batchId, founderIds: [input.targetId], startupId, targetName: name }))(
-            target.data() as Founder,
-          );
-    const { targetName, ...links } = attached;
+    const isStartup = input.targetType === "startup";
+    const data = target.data() as Startup & Founder;
+    const links = {
+      programId: data.programId,
+      batchId: data.batchId,
+      founderIds: isStartup ? data.memberIds : [input.targetId],
+      startupId: isStartup ? input.targetId : data.startupId,
+    };
+    const targetName = data.name;
 
     const note: Omit<Note, "createdDateISOString" | "updatedDateISOString"> = {
       ...links,

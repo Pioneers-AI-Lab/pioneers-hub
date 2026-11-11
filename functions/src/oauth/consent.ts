@@ -18,7 +18,7 @@ import { TTL, isExpired, isoIn, redirectWith } from "./store";
 // Qui peut accepter : `canUseApi` (shared/access.ts), la regle de l'API elle-meme.
 // Le refus est dit a l'ecran, avant tout clic.
 
-const CANNOT_USE = "Claude access to Pioneers Hub is open to staff accounts only for now.";
+const CANNOT_USE = "This account cannot connect Claude to Pioneers Hub.";
 
 function requestRef(requestId: string) {
   if (!requestId || requestId.includes("/")) throw new HttpsError("invalid-argument", "`requestId` is required.");

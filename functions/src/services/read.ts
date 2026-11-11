@@ -2,8 +2,19 @@ import { getFirestore, type DocumentSnapshot } from "firebase-admin/firestore";
 import { z } from "zod";
 import { COL, docPaths, eventCollectionPaths } from "../shared/collections";
 import { LIST_KEYS, type Batch, type ClosedList, type Founder, type Note, type PioneersEvent, type Program, type Startup } from "../shared/types";
+import {
+  canReadFounderCard,
+  canReadFounderDirectory,
+  canReadFounderProfile,
+  canReadPerson,
+  canReadStartupProfile,
+  canReadTeam,
+  isInsider,
+  isInsiderViewer,
+} from "../shared/access";
 import type { Caller } from "../api/caller";
-import { badRequest, notFound } from "../api/errors";
+import { badRequest, forbidden, notFound } from "../api/errors";
+import { founderIdIn, roleOf } from "../api/viewer";
 import { describeFields } from "./fields";
 
 // ----------------------------
@@ -22,8 +33,11 @@ import { describeFields } from "./fields";
 // jures), `apiKeys`, `writePlans`. Aucun chemin de ce fichier ne les nomme ;
 // les sous-collections d'evenement lues sont celles de `eventCollectionPaths`.
 //
-// v1 : appelants staff uniquement (api/caller.ts). Ouvrir aux investors =
-// filtrer chaque objet par shared/access.ts AVANT de l'ouvrir ici.
+// ⛔️ CHAQUE OBJET EST FILTRE PAR LES DROITS DE L'APPELANT, ici et nulle part
+// ailleurs : l'Admin SDK ignore firestore.rules, donc ce fichier en est le
+// miroir (shared/access.ts, les memes fonctions que le front). Un objet que le
+// role ne lit pas est INTROUVABLE (404, pas 403 : on ne revele pas qu'il
+// existe) ; un sous-document prive est simplement absent.
 
 type Doc<T> = T & { id: string };
 
@@ -118,6 +132,9 @@ export async function whoami(caller: Caller) {
   return {
     uid: caller.uid,
     roles: caller.viewer.roles,
+    investorAccess: caller.viewer.investorAccess ?? undefined,
+    /** Le profil fondateur du compte dans chaque batch (sa fiche : `get founder`). */
+    founderProfiles: [...caller.foundersByBatch].map(([batchId, founderId]) => ({ batchId, founderId })),
     programs: programs.docs.map((p) => ({
       id: p.id,
       name: p.get("name"),
@@ -128,7 +145,7 @@ export async function whoami(caller: Caller) {
   };
 }
 
-export async function listObjects(input: ListInput): Promise<{ object: string; items: unknown[] }> {
+export async function listObjects(caller: Caller, input: ListInput): Promise<{ object: string; items: unknown[] }> {
   const db = getFirestore();
   const { object } = input;
 
@@ -148,6 +165,8 @@ export async function listObjects(input: ListInput): Promise<{ object: string; i
   }
 
   if (object === "notes") {
+    // Notes internes : staff et investors IC (regle `notes`), quel que soit le batch.
+    if (!isInsiderViewer(caller.viewer)) throw forbidden("not_visible", "Internal notes are visible to staff and IC investors only.");
     if (!input.founderId && !input.startupId) {
       throw badRequest("missing_argument", "`founderId` or `startupId` is required to list `notes`.", "founderId");
     }
@@ -182,8 +201,12 @@ export async function listObjects(input: ListInput): Promise<{ object: string; i
     .map((d) => withId<{ name?: string; archivedDateISOString?: string | null } & Record<string, unknown>>(d))
     .filter((d) => input.includeArchived || !d.archivedDateISOString)
     .filter((d) => !search || fold(String(d.name ?? "")).includes(search));
-  if (spec.sort) docs.sort((a, b) => String(a[spec.sort!] ?? "").localeCompare(String(b[spec.sort!] ?? "")));
-  return { object, items: docs.map((d) => (spec.short as (x: unknown) => unknown)(d)) };
+  // Fondateurs : la carte n'est lue que par le batch, le staff, les investors,
+  // ou si elle est publique ou non reclamee (regle `founders`).
+  const role = object === "founders" ? roleOf(caller, input.batchId!) : null;
+  const visible = role ? docs.filter((d) => canReadFounderCard(role, d as unknown as Founder)) : docs;
+  if (spec.sort) visible.sort((a, b) => String(a[spec.sort!] ?? "").localeCompare(String(b[spec.sort!] ?? "")));
+  return { object, items: visible.map((d) => (spec.short as (x: unknown) => unknown)(d)) };
 }
 
 function required(snap: DocumentSnapshot, object: string, id: string) {
@@ -191,61 +214,76 @@ function required(snap: DocumentSnapshot, object: string, id: string) {
   return snap;
 }
 
-export async function getObject(input: GetInput): Promise<Record<string, unknown>> {
+/** Un sous-document lu seulement si le role le voit : sinon ni lu, ni rendu. */
+async function readIf(ok: boolean, path: string) {
+  return ok ? dataOf(await getFirestore().doc(path).get()) : undefined;
+}
+
+export async function getObject(caller: Caller, input: GetInput): Promise<Record<string, unknown>> {
   const db = getFirestore();
   const { object, id } = input;
+  const hidden = () => notFound(`${object}_not_found`, `No ${object} with id \`${id}\`.`, "id");
 
   switch (object) {
     case "program":
     case "batch":
-    case "note":
       return { object, ...withId(required(await db.doc(`${SIMPLE_GETS[object]}/${id}`).get(), object, id)) };
 
+    case "note": {
+      if (!isInsiderViewer(caller.viewer)) throw hidden();
+      return { object, ...withId(required(await db.doc(`${SIMPLE_GETS.note}/${id}`).get(), object, id)) };
+    }
+
     case "founder": {
-      const founder = required(await db.doc(docPaths.founder(id)).get(), object, id);
-      const [directory, profile, internal, stats, person] = await db.getAll(
-        db.doc(docPaths.founderDirectory(id)),
-        db.doc(docPaths.founderProfile(id)),
-        db.doc(docPaths.founderInternal(id)),
-        db.doc(`${COL.founderStats}/${id}`),
-        db.doc(docPaths.person((founder.data() as Founder).personId)),
-      );
-      return {
-        object,
-        ...withId(founder),
-        person: dataOf(person),
-        directory: dataOf(directory),
-        profile: dataOf(profile),
-        internal: dataOf(internal),
-        stats: dataOf(stats),
-      };
+      const founderSnap = required(await db.doc(docPaths.founder(id)).get(), object, id);
+      const founder = founderSnap.data() as Founder;
+      const role = roleOf(caller, founder.batchId);
+      if (!canReadFounderCard(role, founder)) throw hidden();
+      const insider = isInsider(role);
+      // La personne : lue pour l'insider ou si c'est le compte lui-meme (`founder.uid` est son rattachement).
+      const [person, directory, profile, internal, stats] = await Promise.all([
+        readIf(insider || founder.uid === caller.uid, docPaths.person(founder.personId)),
+        readIf(canReadFounderDirectory(role), docPaths.founderDirectory(id)),
+        readIf(canReadFounderProfile(role, founderIdIn(caller, founder.batchId), id), docPaths.founderProfile(id)),
+        readIf(insider, docPaths.founderInternal(id)),
+        readIf(insider, `${COL.founderStats}/${id}`),
+      ]);
+      const personVisible = person && canReadPerson(role, caller.uid, person as { uid: string | null });
+      return { object, ...withId(founderSnap), person: personVisible ? person : undefined, directory, profile, internal, stats };
     }
 
     case "startup": {
-      const [[startup, profile, internal], checkins] = await Promise.all([
-        db.getAll(db.doc(docPaths.startup(id)), db.doc(docPaths.startupProfile(id)), db.doc(docPaths.startupInternal(id))),
-        db.collection(COL.checkins).where("startupId", "==", id).get(),
+      // L'appartenance a l'equipe se decide sur la startup (`memberIds`) : elle se lit d'abord.
+      const startupSnap = required(await db.doc(docPaths.startup(id)).get(), object, id);
+      const startup = startupSnap.data() as Startup;
+      const role = roleOf(caller, startup.batchId);
+      const insideTeam = canReadStartupProfile(role, founderIdIn(caller, startup.batchId), startup);
+      const [profile, internal, checkins] = await Promise.all([
+        readIf(insideTeam, docPaths.startupProfile(id)),
+        readIf(isInsider(role), docPaths.startupInternal(id)),
+        insideTeam ? db.collection(COL.checkins).where("startupId", "==", id).get() : null,
       ]);
-      required(startup, object, id);
-      const recentCheckins = checkins.docs
+      const recentCheckins = checkins?.docs
         .map((d) => withId<{ weekStartDayString: string }>(d))
         .sort((a, b) => b.weekStartDayString.localeCompare(a.weekStartDayString))
         .slice(0, 8);
-      return { object, ...withId(startup), profile: dataOf(profile), internal: dataOf(internal), recentCheckins };
+      return { object, ...withId(startupSnap), profile, internal, recentCheckins };
     }
 
     case "event": {
+      const insider = isInsiderViewer(caller.viewer);
       const [event, teams, attendance, submissions] = await Promise.all([
         db.doc(docPaths.event(id)).get(),
         db.collection(eventCollectionPaths.teams(id)).get(),
-        db.collection(eventCollectionPaths.attendance(id)).get(),
+        insider ? db.collection(eventCollectionPaths.attendance(id)).get() : null,
         db.collection(eventCollectionPaths.submissions(id)).get(),
       ]);
+      const role = roleOf(caller, (required(event, object, id).data() as PioneersEvent).batchId);
       return {
         object,
-        ...withId(required(event, object, id)),
-        teams: teams.docs.map((d) => withId(d)),
-        attendance: attendance.docs.map((d) => ({ founderId: d.id, status: d.get("status") })),
+        ...withId(event),
+        teams: teams.docs.map((d) => withId<{ publishedDateISOString: string | null }>(d)).filter((t) => canReadTeam(role, t)),
+        attendance: attendance?.docs.map((d) => ({ founderId: d.id, status: d.get("status") })),
         submissions: submissions.docs.map((d) => withId(d)),
       };
     }

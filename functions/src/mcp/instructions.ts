@@ -8,7 +8,8 @@
 
 export const INSTRUCTIONS = [
   "You are connected to Pioneers Hub, the database of the Pioneers accelerator: programs, batches,",
-  "founders, startups, events, notes. You act with the rights of the staff member who connected you.",
+  "founders, startups, events, notes. You act with the rights of the person who connected you: you see and change",
+  "only what their role allows in the app (a founder changes their own profile; staff manage everything).",
   "",
   "# How you work",
   "- Ids are never names. Find them with `pioneers_list` (start with `pioneers_whoami`), and ask when",

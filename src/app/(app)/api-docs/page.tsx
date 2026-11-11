@@ -15,7 +15,7 @@ import { ExternalLink } from "@/components/ui/Field";
 // ----------------------------
 // API & MCP : brancher Claude, creer une cle, lire la reference
 // ----------------------------
-// Ouverte depuis le menu du compte (staff : `canUseApi`, garde du layout).
+// Ouverte depuis le menu du compte (tout compte connecte : `canUseApi`, garde du layout).
 // Le contenu suit ce que le serveur fait vraiment (functions/src/api, mcp,
 // oauth) ; la reference complete et a jour est la spec OpenAPI, generee depuis
 // les memes schemas que la validation.

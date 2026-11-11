@@ -2,13 +2,13 @@ import type { NextFunction, Request, Response } from "express";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { COL } from "../shared/collections";
-import { canUseApi, type Viewer } from "../shared/access";
+import { canUseApi } from "../shared/access";
 import type { ApiKey, AuditSource } from "../shared/types";
 import { ACCESS_PREFIX, resolveAccessToken } from "../oauth/store";
 import { secret, sha256 } from "./crypto";
 import { forbidden, unauthorized } from "./errors";
 import { touchLastUsed } from "./lastUsed";
-import { loadViewer } from "./viewer";
+import { loadAccount, type Account } from "./viewer";
 
 // ----------------------------
 // api - QUI appelle
@@ -23,11 +23,11 @@ import { loadViewer } from "./viewer";
 //
 // PAS DE PORTEES. Les droits sont ceux du ROLE (SPECS §4.7), relus a chaque
 // requete dans `users/{uid}` : retirer `staff` a quelqu'un coupe sa cle et son
-// connecteur a la requete suivante. Qui peut entrer : `canUseApi` (shared/access.ts).
+// connecteur a la requete suivante. Qui peut entrer : `canUseApi` (shared/access.ts) ;
+// ce que chacun voit et ecrit : `services/` applique shared/access.ts a chaque objet.
 
-export type Caller = {
+export type Caller = Account & {
   uid: string;
-  viewer: Viewer;
   /** Source inscrite au journal d'audit. */
   via: Extract<AuditSource, "api" | "mcp">;
   apiKeyId: string | null;
@@ -48,7 +48,7 @@ export function mintApiKey(): { key: string; prefix: string; keyHash: string } {
   return { key, prefix: key.slice(0, API_KEY_PREFIX.length + 4), keyHash: sha256(key) };
 }
 
-type Resolved = { uid: string; apiKeyId: string | null; viewer: Viewer };
+type Resolved = Account & { apiKeyId: string | null };
 
 async function callerFromApiKey(key: string): Promise<Resolved> {
   const found = await getFirestore().collection(COL.apiKeys).where("keyHash", "==", sha256(key)).limit(1).get();
@@ -57,7 +57,7 @@ async function callerFromApiKey(key: string): Promise<Resolved> {
   const apiKey = doc.data() as ApiKey;
   if (apiKey.revokedDateISOString) throw unauthorized("revoked_api_key", "This API key has been revoked.");
   touchLastUsed(doc.ref, apiKey.lastUsedDateISOString);
-  return { uid: apiKey.ownerUid, apiKeyId: doc.id, viewer: await loadViewer(apiKey.ownerUid) };
+  return { apiKeyId: doc.id, ...(await loadAccount(apiKey.ownerUid)) };
 }
 
 async function callerFromIdToken(token: string): Promise<Resolved> {
@@ -67,7 +67,7 @@ async function callerFromIdToken(token: string): Promise<Resolved> {
   } catch {
     throw unauthorized("invalid_token", "The bearer token is invalid or expired.");
   }
-  return { uid, apiKeyId: null, viewer: await loadViewer(uid) };
+  return { apiKeyId: null, ...(await loadAccount(uid)) };
 }
 
 async function callerFromOAuth(token: string, via: Caller["via"]): Promise<Resolved> {
@@ -90,14 +90,15 @@ async function resolveCaller(req: Request, via: Caller["via"]): Promise<Caller> 
   const token = bearerOf(req);
   if (!token) throw unauthorized("missing_credentials", "Send `Authorization: Bearer <API key or token>`.");
 
-  const { uid, apiKeyId, viewer } = token.startsWith(API_KEY_PREFIX)
+  const resolved = token.startsWith(API_KEY_PREFIX)
     ? await callerFromApiKey(token)
     : token.startsWith(ACCESS_PREFIX)
       ? await callerFromOAuth(token, via)
       : await callerFromIdToken(token);
 
-  if (!canUseApi(viewer)) throw forbidden("staff_only", "The Pioneers Hub API is open to staff accounts only for now.");
-  return { uid, viewer, via, apiKeyId };
+  // `canUseApi` : la politique d'acces, en un seul point (tout compte connecte aujourd'hui).
+  if (!canUseApi(resolved.viewer)) throw forbidden("not_allowed", "This account cannot use the Pioneers Hub API.");
+  return { ...resolved, uid: resolved.viewer.uid, via };
 }
 
 /** Middleware : pose `req.caller`. */

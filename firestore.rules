@@ -217,8 +217,10 @@ service cloud.firestore {
         && !isBatchMember(request.resource.data.batchId);
     }
 
+    // Cles d'API : chacun lit les siennes (page API & MCP, une requete doit
+    // filtrer `ownerUid == uid`), le staff toutes. Jamais la cle, seulement son empreinte.
     match /apiKeys/{keyId} {
-      allow read: if isStaff();
+      allow read: if isStaff() || (signedIn() && resource.data.ownerUid == request.auth.uid);
       allow write: if false; // callable (empreinte de la cle calculee cote serveur)
     }
 

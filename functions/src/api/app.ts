@@ -87,7 +87,7 @@ v1.get(
   route(async (req, res) => {
     const query = { ...req.query } as Record<string, unknown>;
     if (query.includeArchived !== undefined) query.includeArchived = query.includeArchived === "true";
-    res.json(await listObjects(ListInput.parse({ ...query, object: req.params.object })));
+    res.json(await listObjects(req.caller!, ListInput.parse({ ...query, object: req.params.object })));
   }),
 );
 
@@ -96,7 +96,7 @@ v1.get(
   route(async (req, res) => {
     const object = REST_OBJECTS[String(req.params.object) as keyof typeof REST_OBJECTS];
     if (!object) throw notFound("unknown_object", `No object type \`${req.params.object}\`. Types: ${Object.keys(REST_OBJECTS).join(", ")}.`);
-    res.json(await getObject(GetInput.parse({ object, id: req.params.id })));
+    res.json(await getObject(req.caller!, GetInput.parse({ object, id: req.params.id })));
   }),
 );
 

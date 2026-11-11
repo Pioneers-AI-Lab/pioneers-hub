@@ -33,13 +33,13 @@ export function viewerFromUser(uid: string, user: Pick<User, "roles" | "investor
 export const isStaffViewer = (viewer: Viewer | null): boolean => viewer?.roles.includes("staff") === true;
 
 /**
- * Qui peut se servir de l'API et du connecteur Claude (MCP). v1 : le staff
- * seulement (SPECS §4.8, assistant d'administration) : l'Admin SDK ignore
- * firestore.rules, et ouvrir aux investors exige de filtrer chaque objet rendu
- * par les fonctions de ce fichier. Lue par l'API ET par l'ecran de
- * consentement OAuth : changer l'un change l'autre.
+ * Qui peut se servir de l'API et du connecteur Claude (MCP) : tout compte
+ * connecte (decision du 11/11 : chacun pilote son compte). Ce que chacun y
+ * voit et ecrit, ce sont SES droits : l'API applique les fonctions de ce
+ * fichier a chaque objet rendu et a chaque ecriture, parce que l'Admin SDK
+ * ignore firestore.rules. Lue par l'API ET par l'ecran de consentement OAuth.
  */
-export const canUseApi = (viewer: Viewer | null): boolean => isStaffViewer(viewer);
+export const canUseApi = (viewer: Viewer | null): boolean => viewer !== null;
 
 export type BatchRole = "staff" | "investor_ic" | "investor_portfolio" | "founder" | "public";
 
@@ -78,6 +78,9 @@ export function roleInBatch(viewer: Viewer | null, viewerFounderId: string | nul
 
 /** Staff et investors IC. */
 export const isInsider = (role: BatchRole): boolean => role === "staff" || role === "investor_ic";
+
+/** Insider quel que soit le batch (staff, investor IC) : notes internes, presences, donnees internes. */
+export const isInsiderViewer = (viewer: Viewer | null): boolean => isInsider(roleInBatch(viewer, null));
 
 export const isInvestor = (role: BatchRole): boolean => role === "investor_ic" || role === "investor_portfolio";
 
@@ -150,6 +153,28 @@ export const FOUNDER_SELF_EDITABLE = {
   founderProfile: readonly (keyof FounderProfile)[];
   person: readonly (keyof Person)[];
 };
+
+/**
+ * La carte d'un fondateur (`founders/{id}`) : le batch, le staff et les investors ;
+ * sinon seulement si elle est publique (consentement) ou pas encore reclamee
+ * (liste « choisir mon profil »). Regle `founders` read.
+ */
+export const canReadFounderCard = (role: BatchRole, founder: Pick<Founder, "publicProfileConsent" | "uid">): boolean =>
+  role !== "public" || founder.publicProfileConsent === true || founder.uid === null;
+
+/** `people/{id}` : la personne elle-meme (compte rattache), le staff et les investors IC. */
+export const canReadPerson = (role: BatchRole, viewerUid: string | null, person: Pick<Person, "uid">): boolean =>
+  isInsider(role) || (viewerUid !== null && person.uid === viewerUid);
+
+/** Une equipe d'evenement n'est visible qu'une fois publiee, sauf pour les insiders. */
+export const canReadTeam = (role: BatchRole, team: { publishedDateISOString: string | null }): boolean =>
+  team.publishedDateISOString !== null || isInsider(role);
+
+/** Le champ `field` du document `kind` fait partie de « Mon profil » (`FOUNDER_SELF_EDITABLE`). */
+export function isSelfEditable(kind: string, field: string): boolean {
+  const fields = (FOUNDER_SELF_EDITABLE as Record<string, readonly string[]>)[kind];
+  return fields !== undefined && fields.includes(field);
+}
 
 /** Le visiteur est le fondateur `founderId` de ce batch (il peut modifier son profil). */
 export const isViewerFounder = (viewerFounderId: string | null, founderId: string): boolean =>

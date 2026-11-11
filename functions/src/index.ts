@@ -49,19 +49,20 @@ export const api = onRequest({ invoker: "public", timeoutSeconds: 60, memory: "5
 });
 
 // ----------------------------
-// Cles d'API (staff)
+// Cles d'API (tout compte connecte : `canUseApi`)
 // ----------------------------
+// Une cle agit avec les droits de son proprietaire (functions/src/services
+// filtre chaque objet). Chacun gere les siennes ; le staff peut en revoquer
+// n'importe laquelle.
 
-async function assertStaff(uid: string | undefined): Promise<string> {
+/** Tout compte connecte peut avoir des cles (`canUseApi`) : un compte Firebase suffit. */
+function assertSignedIn(uid: string | undefined): string {
   if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
-  if (!isStaffViewer(await loadViewer(uid))) {
-    throw new HttpsError("permission-denied", "Staff only.");
-  }
   return uid;
 }
 
 export const createApiKey = onCallTyped("createApiKey", async (request) => {
-  const uid = await assertStaff(request.auth?.uid);
+  const uid = assertSignedIn(request.auth?.uid);
   const name = String(request.data?.name ?? "").trim();
   if (!name || name.length > API_KEY_NAME_MAX) {
     throw new HttpsError("invalid-argument", `\`name\` is required (${API_KEY_NAME_MAX} characters max).`);
@@ -83,12 +84,14 @@ export const createApiKey = onCallTyped("createApiKey", async (request) => {
 });
 
 export const revokeApiKey = onCallTyped("revokeApiKey", async (request) => {
-  await assertStaff(request.auth?.uid);
+  const uid = assertSignedIn(request.auth?.uid);
   const keyId = String(request.data?.keyId ?? "");
   if (!keyId || keyId.includes("/")) throw new HttpsError("invalid-argument", "`keyId` is required.");
   const ref = getFirestore().doc(`${COL.apiKeys}/${keyId}`);
   const snap = await ref.get();
-  if (!snap.exists) throw new HttpsError("not-found", "No such API key.");
+  // Une cle d'autrui est introuvable, sauf pour le staff.
+  const mine = snap.exists && snap.get("ownerUid") === uid;
+  if (!snap.exists || (!mine && !isStaffViewer(await loadViewer(uid)))) throw new HttpsError("not-found", "No such API key.");
   if (!snap.get("revokedDateISOString")) await ref.update({ revokedDateISOString: new Date().toISOString() });
   return { ok: true as const };
 });

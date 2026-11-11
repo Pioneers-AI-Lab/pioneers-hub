@@ -15,8 +15,10 @@ const { getFirestore } = require("firebase-admin/firestore");
 const PROJECT = "demo-pioneers-hub";
 initializeApp({ projectId: PROJECT });
 const AUTH = process.env.FIREBASE_AUTH_EMULATOR_HOST;
-const FUNCS = `http://127.0.0.1:5301/${PROJECT}/europe-west4`;
-const HOSTING = "http://127.0.0.1:5302";
+// Ports decales (scripts/emulators-check-config.mjs) : +200, ou CHECK_PORT_OFFSET.
+const OFFSET = Number(process.env.CHECK_PORT_OFFSET ?? 200);
+const FUNCS = `http://127.0.0.1:${5101 + OFFSET}/${PROJECT}/europe-west4`;
+const HOSTING = `http://127.0.0.1:${5102 + OFFSET}`;
 let failures = 0;
 const check = (cond, label, extra) => {
   console.log(`${cond ? "ok  " : "FAIL"} ${label}${!cond && extra !== undefined ? " -> " + JSON.stringify(extra).slice(0, 600) : ""}`);
@@ -59,8 +61,8 @@ const call = async (key, name, args) => {
   check(typeof key === "string" && key.startsWith("ph_live_"), "createApiKey returns a ph_live_ key", created);
 
   const icToken = await idToken("ic-1");
-  const denied = await callable("createApiKey", icToken, { name: "x" });
-  check(denied.error?.status === "PERMISSION_DENIED", "createApiKey refused to an IC investor", denied);
+  const anonymous = await (await fetch(`${FUNCS}/createApiKey`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ data: { name: "x" } }) })).json();
+  check(anonymous.error?.status === "UNAUTHENTICATED", "createApiKey requires a signed-in account", anonymous);
 
   // /v1
   let r = await fetch(`${HOSTING}/v1/me`, { headers: { authorization: `Bearer ${key}` } });
@@ -70,7 +72,7 @@ const call = async (key, name, args) => {
   r = await fetch(`${HOSTING}/v1/me`);
   check(r.status === 401 && r.headers.get("www-authenticate"), "401 + WWW-Authenticate without credentials");
   r = await fetch(`${HOSTING}/v1/me`, { headers: { authorization: `Bearer ${icToken}` } });
-  check(r.status === 403, "403 for a non-staff ID token");
+  check(r.status === 200, "an IC investor's ID token works too (with its own rights)");
   r = await fetch(`${HOSTING}/v1/founders?batchId=fall-2026`, { headers: { authorization: `Bearer ${key}` } });
   const founders = (await r.json()).items;
   check(founders?.length > 0, `GET /v1/founders lists ${founders?.length} founders`);
@@ -201,6 +203,62 @@ const call = async (key, name, args) => {
     Object.keys(spec.paths ?? {}),
   );
 
+  // ---- Droits par role : chacun voit et ecrit ce que l'app lui permet ----
+  const keyFor = async (uid) => (await callable("createApiKey", await idToken(uid), { name: `${uid} check` })).result?.key;
+  const [adaKey, icKey, lpKey, strangerKey] = await Promise.all(["ada-1", "ic-1", "lp-1", "stranger-1"].map(keyFor));
+  check(adaKey && icKey && lpKey && strangerKey, "every signed-in account can create an API key (founder, investors, no role)");
+  const rest = async (k, path, init = {}) => {
+    const res = await fetch(`${HOSTING}${path}`, { ...init, headers: { authorization: `Bearer ${k}`, "content-type": "application/json", ...(init.headers ?? {}) } });
+    return { status: res.status, body: await res.json() };
+  };
+
+  // Fondateur (ada, membre de lumen)
+  const adaTools = (await mcp(adaKey, "tools/list", {})).body.result?.tools?.map((t) => t.name) ?? [];
+  check(adaTools.includes("pioneers_set_fields") && !adaTools.includes("pioneers_add_note"), `founder catalogue: ${adaTools.join(", ")}`);
+  let g = await rest(adaKey, "/v1/founders/ada-example");
+  check(g.status === 200 && "profile" in g.body && !("internal" in g.body) && g.body.person, "founder sees own profile and person, not internal", Object.keys(g.body));
+  g = await rest(adaKey, "/v1/founders/ben-sample");
+  check(g.status === 200 && "directory" in g.body && !("profile" in g.body) && !("internal" in g.body) && !("person" in g.body), "founder sees a batchmate's Profile Book only", Object.keys(g.body));
+  g = await rest(adaKey, "/v1/startups/lumen");
+  check("profile" in g.body && !("internal" in g.body), "founder sees own startup's profile, not its internal assessment", Object.keys(g.body));
+  g = await rest(adaKey, "/v1/notes?startupId=lumen");
+  check(g.status === 403, "founder cannot read internal notes");
+  t = await call(adaKey, "pioneers_add_note", { targetType: "startup", targetId: "lumen", body: "x" });
+  check(t.isError && /unknown_tool/.test(t.data), "add_note does not exist for a founder", t.data);
+  t = await call(adaKey, "pioneers_set_fields", { subjects: { founderId: "ada-example" }, values: { "founderDirectory.introduceYourself": "Hello from the API" } });
+  check(!t.isError && t.data.planId, "founder previews a change to own profile", t.data);
+  t = await call(adaKey, "pioneers_set_fields", { planId: t.data.planId });
+  check(!t.isError && t.data.applied, "founder writes own profile");
+  t = await call(adaKey, "pioneers_set_fields", { subjects: { founderId: "ben-sample" }, values: { "founderDirectory.introduceYourself": "x" } });
+  check(t.isError && /not_allowed/.test(t.data), "founder cannot write another founder's profile", t.data);
+  t = await call(adaKey, "pioneers_set_fields", { subjects: { startupId: "lumen" }, values: { "startupProfile.icp": "x" } });
+  check(t.isError && /not_allowed/.test(t.data), "founder cannot write staff fields (startup profile)", t.data);
+  t = await call(adaKey, "pioneers_set_fields", { subjects: { personId: "person-ada-example" }, values: { "person.phone": "+33 6 11 22 33 44" } });
+  check(!t.isError && t.data.planId, "founder may change own phone", t.data);
+  g = await rest(adaKey, "/v1/notes", { method: "POST", body: JSON.stringify({ targetType: "founder", targetId: "ada-example", body: "x" }) });
+  check(g.status === 403, "founder cannot add a note through /v1");
+
+  // Investor IC : tout en lecture, rien en ecriture
+  const icTools = (await mcp(icKey, "tools/list", {})).body.result?.tools?.map((t) => t.name) ?? [];
+  check(!icTools.includes("pioneers_set_fields") && !icTools.includes("pioneers_add_note"), `IC investor catalogue is read-only: ${icTools.join(", ")}`);
+  g = await rest(icKey, "/v1/founders/ada-example");
+  check("internal" in g.body && "profile" in g.body && "person" in g.body, "IC investor sees internal data", Object.keys(g.body));
+  check((await rest(icKey, "/v1/notes?startupId=lumen")).status === 200, "IC investor reads internal notes");
+
+  // Investor portfolio : annuaire et startups, ni notes ni donnees internes
+  g = await rest(lpKey, "/v1/founders/ada-example");
+  check("directory" in g.body && !("internal" in g.body) && !("profile" in g.body) && !("person" in g.body), "portfolio investor: directory only", Object.keys(g.body));
+  check((await rest(lpKey, "/v1/notes?startupId=lumen")).status === 403, "portfolio investor cannot read notes");
+
+  // Compte sans role : le public
+  g = await rest(strangerKey, "/v1/founders/ada-example");
+  check(g.status === 200 && !("directory" in g.body), "account without role: public card only", Object.keys(g.body));
+  g = await rest(strangerKey, "/v1/startups/lumen");
+  check(!("profile" in g.body), "account without role: no startup profile");
+
+  const otherRevoke = await callable("revokeApiKey", await idToken("ada-1"), { keyId: created.result.keyId });
+  check(otherRevoke.error?.status === "NOT_FOUND", "a founder cannot revoke someone else's key", otherRevoke);
+
   // ---- OAuth : le parcours du connecteur Claude ----
   r = await fetch(`${HOSTING}/mcp`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: "{}" });
   check(/resource_metadata=".*\/\.well-known\/oauth-protected-resource\/mcp"/.test(r.headers.get("www-authenticate") ?? ""), "401 points to the OAuth discovery");
@@ -234,9 +292,7 @@ const call = async (key, name, args) => {
   check(r.status === 302 && consentUrl.pathname === "/oauth/consent" && requestId, "authorize sends to the consent page", r.headers.get("location"));
 
   const icDescribe = await callable("oauthDescribeRequest", icToken, { requestId });
-  check(icDescribe.result?.canApprove === false, "consent: an IC investor cannot approve", icDescribe);
-  const icDecide = await callable("oauthDecide", icToken, { requestId, approve: true });
-  check(icDecide.error?.status === "PERMISSION_DENIED", "consent: approval refused to non-staff", icDecide);
+  check(icDescribe.result?.canApprove === true, "consent: any signed-in account can connect Claude (with its own rights)", icDescribe);
   const described = await callable("oauthDescribeRequest", staff, { requestId });
   check(described.result?.clientName === "Claude Code (check)" && described.result?.redirectHost === "127.0.0.1:33418", "consent describes the client", described);
   const decided = await callable("oauthDecide", staff, { requestId, approve: true });

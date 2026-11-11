@@ -36,6 +36,12 @@ export type OperationPlan<R> = {
 export type Operation<S extends z.ZodType = z.ZodType, R = unknown> = {
   name: string;
   input: S;
+  /**
+   * La porte grossiere : qui peut seulement tenter cette ecriture (le detail,
+   * champ par champ, est verifie dans `plan`). Lue par les trois manieres
+   * d'appeler ET par le catalogue MCP, qui n'affiche pas un outil refuse.
+   */
+  allowed(caller: Caller): boolean;
   // Syntaxe de METHODE, pas de propriete : ses parametres sont alors bivariants,
   // et une `Operation<typeof SetFieldsInput, ...>` se passe la ou l'on attend
   // une `Operation` sans cast.
@@ -61,6 +67,10 @@ const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value ?? null));
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PLAN_TTL_MS = 60 * 60 * 1000;
+
+function assertAllowed(op: Operation<z.ZodType, unknown>, caller: Caller) {
+  if (!op.allowed(caller)) throw forbidden("not_allowed", `Your account cannot use \`${op.name}\`.`);
+}
 
 function parseInput<S extends z.ZodType>(op: Operation<S>, raw: unknown): z.output<S> {
   const parsed = op.input.safeParse(raw);
@@ -97,6 +107,7 @@ export async function runOperation<S extends z.ZodType, R>(
   raw: unknown,
   options: { dryRun: boolean; idempotencyKey: string | null },
 ): Promise<RunResult<R>> {
+  assertAllowed(op, caller);
   const input = parseInput(op, raw);
   const db = getFirestore();
 
@@ -159,6 +170,7 @@ export async function previewPlan<S extends z.ZodType, R>(
   caller: Caller,
   raw: unknown,
 ): Promise<{ planId: string | null; preview: unknown }> {
+  assertAllowed(op, caller);
   const input = parseInput(op, raw);
   const db = getFirestore();
   const plan = await db.runTransaction((tx) => op.plan(tx, caller, input), { readOnly: true });
@@ -187,6 +199,7 @@ export async function applyPlan<S extends z.ZodType, R>(
   caller: Caller,
   planId: string,
 ): Promise<{ result: R | null; replayed: boolean }> {
+  assertAllowed(op, caller);
   const db = getFirestore();
   const ref = db.collection(COL.writePlans).doc(planId);
 

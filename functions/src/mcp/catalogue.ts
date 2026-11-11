@@ -28,8 +28,16 @@ type Tool = {
   description: string;
   schema: z.ZodType;
   annotations: Record<string, boolean>;
+  /**
+   * Le catalogue SUIT LES DROITS (lecon de Trippple) : un outil que le compte
+   * ne peut pas utiliser n'existe pas pour lui. Absent = visible de tous.
+   * Le catalogue n'est pas une securite : chaque service verifie a l'appel.
+   */
+  visibleTo?: (caller: Caller) => boolean;
   run: (caller: Caller, args: Record<string, unknown>) => Promise<unknown>;
 };
+
+
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false };
 // Une ecriture confirmee par `planId` se rejoue sans effet : le client peut le savoir.
@@ -41,9 +49,14 @@ const PLAN_ID = z.string().min(1).describe("Returned by the preview. Pass it ALO
  * Un outil d'ecriture en deux temps : sans `planId`, il previsualise ; avec
  * `planId` seul, il applique ce qui a ete montre.
  */
-function writeTool<S extends z.ZodObject>(op: Operation<S>, meta: { name: string; title: string; description: string }): Tool {
+function writeTool<S extends z.ZodObject>(
+  op: Operation<S>,
+  meta: { name: string; title: string; description: string },
+): Tool {
   return {
     ...meta,
+    // La porte de l'operation elle-meme : le catalogue ne peut pas diverger du service.
+    visibleTo: (caller) => op.allowed(caller),
     schema: op.input.partial().extend({ planId: PLAN_ID.optional() }),
     annotations: WRITE,
     async run(caller, args) {
@@ -81,18 +94,18 @@ const TOOLS: Tool[] = [
       "`lists` gives the accepted values of closed lists (skills, industries...).",
     schema: ListInput,
     annotations: READ_ONLY,
-    run: (_caller, args) => listObjects(ListInput.parse(args)),
+    run: (caller, args) => listObjects(caller, ListInput.parse(args)),
   },
   {
     name: "pioneers_get",
     title: "Get",
     description:
-      "Returns ONE object in full by id. A founder comes with their person, Profile Book, private profile, internal data " +
-      "and aggregated stats; a startup with its profile, internal assessment and recent weekly updates; an event with its " +
-      "teams, attendance and submissions.",
+      "Returns ONE object in full by id, with what YOUR role may see. A founder comes with their person, Profile Book, " +
+      "private profile, internal data and aggregated stats; a startup with its profile, internal assessment and recent " +
+      "weekly updates; an event with its teams, attendance and submissions. A missing part is one you cannot see.",
     schema: GetInput,
     annotations: READ_ONLY,
-    run: (_caller, args) => getObject(GetInput.parse(args)),
+    run: (caller, args) => getObject(caller, GetInput.parse(args)),
   },
   writeTool(setFields, {
     name: "pioneers_set_fields",
@@ -101,7 +114,7 @@ const TOOLS: Tool[] = [
       "Writes field values for a founder, startup, week, event or team: profile data, a weekly update (`checkin.*`), " +
       "attendance (`attendance.status`), a submission. Several fields of the same subjects in one call.\n\n" +
       "Each field has its rule: some are only written when empty, lists are merged without duplicates. Closed-list values " +
-      "may be given by key or label. Empty values are refused.",
+      "may be given by key or label. Empty values are refused. A founder changes only their own profile fields.",
   }),
   writeTool(addNote, {
     name: "pioneers_add_note",
@@ -112,11 +125,18 @@ const TOOLS: Tool[] = [
   }),
 ];
 
-export const BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
-
-/** Les declarations, telles que `tools/list` les rend : calculees une fois. */
-export const DECLARED = TOOLS.map((tool) => {
-  return { name: tool.name, title: tool.title, description: tool.description, inputSchema: toInputJsonSchema(tool.schema), annotations: tool.annotations };
+/** Une declaration, telle que `tools/list` la rend : calculee une fois par outil. */
+const declaration = (tool: Tool) => ({
+  name: tool.name,
+  title: tool.title,
+  description: tool.description,
+  inputSchema: toInputJsonSchema(tool.schema),
+  annotations: tool.annotations,
 });
 
-export const TOOL_NAMES = TOOLS.map((t) => t.name);
+export type DeclaredTool = Tool & { declaration: ReturnType<typeof declaration> };
+
+const DECLARED_TOOLS: DeclaredTool[] = TOOLS.map((tool) => ({ ...tool, declaration: declaration(tool) }));
+
+/** Les outils de cet appelant : le catalogue SUIT SES DROITS. */
+export const toolsFor = (caller: Caller): DeclaredTool[] => DECLARED_TOOLS.filter((t) => !t.visibleTo || t.visibleTo(caller));

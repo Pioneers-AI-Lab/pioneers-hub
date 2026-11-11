@@ -58,8 +58,10 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   `commit` qui ecrit) ; /v1 et le MCP ne font que les appeler. Audit (`auditLogs`) dans la meme transaction.
 - **Appelant** (`api/caller.ts`) : cle `ph_live_` (callables `createApiKey` / `revokeApiKey`, empreinte seule
   stockee), jeton OAuth `pha_` (connecteur Claude, /mcp seulement) ou ID token Firebase. Pas de portees : le role, relu a
-  chaque requete. **v1 : staff seulement** (l'Admin SDK ignore les regles ; ouvrir aux investors = filtrer
-  par `shared/access.ts`).
+  chaque requete, avec les rattachements (`api/viewer.ts#loadAccount`). **Tout compte connecte** (`canUseApi`) ;
+  l'Admin SDK ignorant les regles, `services/read.ts` filtre chaque objet et `services/fields.ts` chaque ecriture avec
+  `shared/access.ts` (miroir de firestore.rules) : un fondateur ne change que « Mon profil », un investor lit,
+  le staff fait tout. Le catalogue MCP suit le role (`visibleTo`). `check:api` verifie chaque role.
 - **Confirmation MCP** : un outil d'ecriture sans `planId` stocke un `writePlans` et rend l'apercu ; avec
   `planId` seul, il recalcule, refuse si l'apercu a change (`plan_stale`), ecrit. /v1 : `?dryRun=true` et
   `Idempotency-Key` (verifiee dans la transaction).

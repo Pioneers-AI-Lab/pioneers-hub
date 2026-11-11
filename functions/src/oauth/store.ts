@@ -1,11 +1,10 @@
 import { getFirestore } from "firebase-admin/firestore";
 import { COL } from "../shared/collections";
-import type { Viewer } from "../shared/access";
 import type { OAuthGrant, OAuthToken } from "../shared/types";
 import { sha256 } from "../api/crypto";
 import { MCP_URL } from "../api/config";
 import { touchLastUsed } from "../api/lastUsed";
-import { loadViewer } from "../api/viewer";
+import { loadAccount, type Account } from "../api/viewer";
 
 // ----------------------------
 // oauth - durees, regles communes, et lecture d'un jeton
@@ -43,16 +42,16 @@ export function redirectWith(redirectUri: string, state: string | null, params: 
  * Sur le chemin de CHAQUE requete /mcp (le transport est sans etat) : le jeton
  * d'abord (il nomme l'autorisation et le compte), puis les deux ensemble.
  */
-export async function resolveAccessToken(token: string): Promise<{ uid: string; viewer: Viewer } | null> {
+export async function resolveAccessToken(token: string): Promise<Account | null> {
   const db = getFirestore();
   const doc = (await db.doc(`${COL.oauthTokens}/${sha256(token)}`).get()).data() as OAuthToken | undefined;
   if (!doc || doc.kind !== "access" || isExpired(doc.expiresDateISOString) || !sameResource(doc.resource)) return null;
 
   const grantRef = db.doc(`${COL.oauthGrants}/${doc.grantId}`);
-  const [grantSnap, viewer] = await Promise.all([grantRef.get(), loadViewer(doc.uid)]);
+  const [grantSnap, account] = await Promise.all([grantRef.get(), loadAccount(doc.uid)]);
   const grant = grantSnap.data() as OAuthGrant | undefined;
   if (!grant || grant.revokedDateISOString) return null;
 
   touchLastUsed(grantRef, grant.lastUsedDateISOString);
-  return { uid: doc.uid, viewer };
+  return account;
 }

@@ -45,7 +45,7 @@ function build() {
       title: "Pioneers Hub API",
       version: "1",
       description:
-        "Read and fill the Pioneers batch database. Authenticate with a personal API key (`Authorization: Bearer ph_live_...`), created in Pioneers Hub > API & MCP. Rights are those of the key owner; v1 is open to staff accounts. Claude connects to the MCP server at `/mcp` (OAuth) instead.",
+        "Read and fill the Pioneers batch database. Authenticate with a personal API key (`Authorization: Bearer ph_live_...`), created in Pioneers Hub > API & MCP. Any Pioneers Hub account can create one; it acts with the rights of its owner (what they see and may change in the app). Claude connects to the MCP server at `/mcp` (OAuth) instead.",
     },
     servers: [{ url: PUBLIC_BASE_URL }],
     security: [{ apiKey: [] }],

@@ -409,5 +409,28 @@ console.log("staff");
   await deleteApp(app);
 }
 
+// ---- Cles d'API : chacun lit les siennes ---------------------------------------
+console.log("api keys (each account reads its own)");
+{
+  const { getFirestore: adminFirestore } = await import("firebase-admin/firestore");
+  const adb = adminFirestore();
+  const key = (ownerUid) => ({
+    ownerUid,
+    name: `${ownerUid} key`,
+    prefix: "ph_live_test",
+    keyHash: `hash-${ownerUid}`,
+    createdDateISOString: new Date().toISOString(),
+    lastUsedDateISOString: null,
+    revokedDateISOString: null,
+  });
+  await adb.doc("apiKeys/check-ada").set(key("ada-1"));
+  await adb.doc("apiKeys/check-staff").set(key("staff-1"));
+  const { app, db } = await clientAs("ada-1");
+  await expectOk("founder lists own API keys", () => count(query(collection(db, "apiKeys"), where("ownerUid", "==", "ada-1"))));
+  await expectDenied("founder reads another account's API key", () => read(doc(db, "apiKeys/check-staff")));
+  await expectDenied("founder lists all API keys", () => count(collection(db, "apiKeys")));
+  await deleteApp(app);
+}
+
 console.log(failures === 0 ? "\nall rules checks passed" : `\n${failures} rules check(s) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

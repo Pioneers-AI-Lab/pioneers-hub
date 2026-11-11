@@ -20,7 +20,10 @@ import {
   type ValueSpec,
 } from "../shared/fieldRegistry";
 import type { ClosedList, FormAnswer, Founder, Person, Startup } from "../shared/types";
-import { badRequest, notFound } from "../api/errors";
+import { isSelfEditable, isStaffViewer, isViewerFounder } from "../shared/access";
+import type { Caller } from "../api/caller";
+import { badRequest, forbidden, notFound } from "../api/errors";
+import { founderIdIn } from "../api/viewer";
 import type { Operation, OperationPlan } from "./operations";
 import { dayString } from "./schemas";
 
@@ -251,6 +254,29 @@ function diff(fields: FieldMeta[], values: Map<DbFieldKey, FormAnswer>, targets:
   return { changes, patches };
 }
 
+/**
+ * QUI ECRIT QUOI, miroir des regles `update` : le staff ecrit tout ; un
+ * fondateur ne change que les champs de « Mon profil » (`FOUNDER_SELF_EDITABLE`)
+ * de SA fiche et de SA personne. Le reste (updates, presences, startups) est
+ * ecrit par le staff, comme dans l'app. Deux temps : le champ (sans lecture),
+ * puis la propriete (une fois les documents lus).
+ */
+function assertSelfEditableFields(caller: Caller, fields: FieldMeta[]) {
+  if (isStaffViewer(caller.viewer)) return;
+  const staffOnly = fields.find(({ kind, field }) => !isSelfEditable(kind, field));
+  if (staffOnly) {
+    throw forbidden("not_allowed", `\`${staffOnly.key}\` is written by the Pioneers staff. You can change the fields of your own profile.`);
+  }
+}
+
+function assertOwnsSubjects(caller: Caller, fields: FieldMeta[], s: ResolvedSubjects, loaded: Loaded) {
+  if (isStaffViewer(caller.viewer)) return;
+  const ownsPerson = loaded.person !== null && loaded.person.uid === caller.uid;
+  const ownsFounder = loaded.founder !== null && isViewerFounder(founderIdIn(caller, loaded.founder.batchId), s.founderId ?? "");
+  const foreign = fields.find(({ kind }) => !(kind === "person" ? ownsPerson : ownsFounder));
+  if (foreign) throw forbidden("not_allowed", `You can only change your own profile, not this one (\`${foreign.key}\`).`);
+}
+
 /** Champs de structure d'un document de suivi cree par l'ecriture (le reste : valeurs par defaut du registre). */
 const TRACKING_BASE: Record<TrackingDocKind, (s: ResolvedSubjects, l: Loaded) => Record<string, unknown>> = {
   founderWeek: (s, l) => ({
@@ -291,6 +317,8 @@ export type SetFieldsResult = { written: number; unchanged: number; paths: strin
 export const setFields: Operation<typeof SetFieldsInput, SetFieldsResult> = {
   name: "set_fields",
   input: SetFieldsInput,
+  // Le staff, et les fondateurs (leur propre profil, verifie champ par champ).
+  allowed: (caller) => isStaffViewer(caller.viewer) || caller.foundersByBatch.size > 0,
   async plan(tx: Transaction, caller, input): Promise<OperationPlan<SetFieldsResult>> {
     const db = getFirestore();
     const s = input.subjects;
@@ -300,6 +328,7 @@ export const setFields: Operation<typeof SetFieldsInput, SetFieldsResult> = {
     const kinds = [...new Set(fields.map((f) => f.kind))];
     const pathByKind = resolvePaths(kinds, s);
     const values = parseValues(fields, input.values);
+    assertSelfEditableFields(caller, fields);
 
     // UNE lecture groupee : documents de base, listes fermees, fondateurs cites, documents cibles.
     const needs = new Set(kinds.flatMap((k) => DOC_KINDS[k].subjects as readonly SubjectKey[]));
@@ -335,6 +364,8 @@ export const setFields: Operation<typeof SetFieldsInput, SetFieldsResult> = {
     if (kinds.includes("attendance") && loaded.founder && loaded.eventBatchId && loaded.founder.batchId !== loaded.eventBatchId) {
       throw badRequest("wrong_batch", "This founder and this event belong to different batches.", "subjects.eventId");
     }
+
+    assertOwnsSubjects(caller, fields, s, loaded);
 
     const missingFounders = founderRefIds.filter((id) => !snaps.get(docPaths.founder(id))!.exists);
     if (missingFounders.length) throw notFound("founder_not_found", `Unknown founders: ${missingFounders.join(", ")}.`, "values");
