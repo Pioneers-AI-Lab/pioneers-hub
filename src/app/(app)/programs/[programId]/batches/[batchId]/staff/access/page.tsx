@@ -13,6 +13,7 @@ import { useStaff } from "@/context/StaffContext";
 import { approveClaim, rejectClaim, setUserRoles, unlinkFounder } from "@/lib/accounts";
 import { formatDay, formatDateTime } from "@/lib/format";
 import { paths } from "@/lib/paths";
+import { FounderLink } from "@/components/founder/FounderLink";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { Row, RowList } from "@/components/ui/Rows";
@@ -79,7 +80,8 @@ export default function AccessPage() {
                 <Stack key={r.id} gap="xs" py="sm" style={{ borderBottom: "1px solid var(--mantine-color-dark-4)" }}>
                   <Box>
                     <Text fw={500}>
-                      {r.displayName ?? r.email} <Text span c="dimmed" inherit>wants to be</Text> {founder?.name ?? "an unknown profile"}
+                      {r.displayName ?? r.email} <Text span c="dimmed" inherit>wants to be</Text>{" "}
+                      {founder ? <FounderLink founder={founder} /> : "an unknown profile"}
                     </Text>
                     <Text size="sm" c="dimmed">
                       {r.email} · {formatDateTime(r.createdDateISOString)}
@@ -118,7 +120,7 @@ export default function AccessPage() {
               <Row
                 key={f.id}
                 avatar={{ name: f.name, photoUrl: f.photoUrl }}
-                title={f.name}
+                title={<FounderLink founder={f} />}
                 subtitle={`Linked ${formatDay(f.claimedDateISOString?.slice(0, 10))}`}
                 meta={
                   <Button variant="subtle" color="gray" onClick={() => setToUnlink(f)}>
@@ -149,7 +151,7 @@ export default function AccessPage() {
             return (
               <Stack key={u.id} gap={8} py="sm" style={{ borderBottom: "1px solid var(--mantine-color-dark-4)" }}>
                 <Box>
-                  <Text fw={500}>{isMe ? "You" : (founder?.name ?? `Account ${u.id.slice(0, 6)}`)}</Text>
+                  <Text fw={500}>{isMe ? "You" : founder ? <FounderLink founder={founder} /> : `Account ${u.id.slice(0, 6)}`}</Text>
                   <Text size="sm" c="dimmed">
                     Last seen {formatDay(u.lastSeenDateISOString.slice(0, 10))}
                   </Text>

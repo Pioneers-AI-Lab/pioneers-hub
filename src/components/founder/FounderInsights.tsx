@@ -1,14 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
-import { Anchor, Box, Group, Stack, Text, UnstyledButton } from "@mantine/core";
+import { Box, Group, Stack, Text, UnstyledButton } from "@mantine/core";
 import { FOUNDER_PILLARS, type AttendanceStatus, type CommitmentStatus, type FounderPillar } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
 import { useEvents } from "@/context/EventsContext";
 import { useFounder } from "@/context/FounderContext";
-import { useFounders } from "@/context/FoundersContext";
 import { useLeaderboards } from "@/context/LeaderboardsContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
@@ -18,6 +16,7 @@ import { Field, FieldGrid } from "@/components/ui/Field";
 import { LinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 import { ScoreHeadline } from "@/components/insights/ScoreBar";
+import { useFounderLinks } from "./FounderLink";
 import { ChartCard } from "@/components/charts/ChartCard";
 import { ScoreBreakdown } from "@/components/charts/ScoreBreakdown";
 import { ScoreRadar } from "@/components/charts/ScoreRadar";
@@ -111,6 +110,7 @@ export function FounderTeams() {
             if (m.kind === "startup") {
               const startup = startupsById.get(m.teamId);
               const props = {
+                avatar: startup ? { name: startup.name, photoUrl: startup.logoUrl } : undefined,
                 title: startup?.name ?? "Startup",
                 subtitle: ["Startup", m.role].filter(Boolean).join(" · "),
                 meta: <Text size="sm" c="dimmed">Since {formatDay(m.startDayString, true)}</Text>,
@@ -122,27 +122,29 @@ export function FounderTeams() {
                 <Row key={m.id} {...props} />
               );
             }
-            const event = m.eventId ? eventsById.get(m.eventId) : undefined;
-            const board = m.eventId ? leaderboardsByEventId.get(m.eventId) : undefined;
-            const row = board?.rows.find((r) => r.targetId === m.teamId);
-            return (
-              <Row
-                key={m.id}
-                title={event?.name ?? "Event"}
-                subtitle={[row?.name, m.role ? m.role.replace(/_/g, " ") : null, formatDay(m.startDayString, true)].filter(Boolean).join(" · ")}
-                meta={
-                  row ? (
-                    <Stack gap={0} align="flex-end">
-                      <Text fw={600} className="num">
-                        {score10(row.score)}
-                      </Text>
-                      <Text size="xs" c={row.rank <= 3 ? "pioneers" : "dimmed"} className="num">
-                        #{row.rank} of {board!.rows.length}
-                      </Text>
-                    </Stack>
-                  ) : undefined
-                }
-              />
+            const { eventId } = m;
+            const event = eventId ? eventsById.get(eventId) : undefined;
+            const rows = eventId ? leaderboardsByEventId.get(eventId)?.rows : undefined;
+            const row = rows?.find((r) => r.targetId === m.teamId);
+            const props = {
+              title: event?.name ?? "Event",
+              subtitle: [row?.name, m.role ? m.role.replace(/_/g, " ") : null, formatDay(m.startDayString, true)].filter(Boolean).join(" · "),
+              meta: row ? (
+                <Stack gap={0} align="flex-end">
+                  <Text fw={600} className="num">
+                    {score10(row.score)}
+                  </Text>
+                  <Text size="xs" c={row.rank <= 3 ? "pioneers" : "dimmed"} className="num">
+                    #{row.rank} of {rows?.length}
+                  </Text>
+                </Stack>
+              ) : undefined,
+            };
+            // Classee : toute la ligne mene au classement de l'epreuve.
+            return row && eventId ? (
+              <LinkRow key={m.id} href={paths.leaderboard(program.id, batch.id, eventId)} {...props} />
+            ) : (
+              <Row key={m.id} {...props} />
             );
           })}
         </RowList>
@@ -236,30 +238,9 @@ export function FounderAttendance() {
 
 /** Reseau : interet recu, donne, reciproque ; « je travaille avec ». */
 export function FounderNetwork() {
-  const { program } = useProgram();
-  const { batch } = useBatch();
   const { stats } = useFounder();
-  const { foundersById } = useFounders();
+  const founderLinks = useFounderLinks();
   if (!stats) return null;
-
-  const names = (ids: string[]) =>
-    ids.length === 0
-      ? null
-      : ids.map((id, i) => {
-          const f = foundersById.get(id);
-          return (
-            <span key={id}>
-              {i > 0 ? ", " : ""}
-              {f ? (
-                <Anchor component={Link} href={paths.founder(program.id, batch.id, id)} inherit className="tap-link">
-                  {f.name}
-                </Anchor>
-              ) : (
-                "Founder"
-              )}
-            </span>
-          );
-        });
 
   return (
     <Section title="Network">
@@ -278,9 +259,9 @@ export function FounderNetwork() {
         </Field>
       </FieldGrid>
       <Stack gap="md" mt="xs">
-        <Field label="Mutual interest">{names(stats.interestMutual)}</Field>
-        <Field label="Working with">{names(stats.workingWithOutgoing)}</Field>
-        <Field label="Interested in them">{names(stats.interestIncoming)}</Field>
+        <Field label="Mutual interest">{founderLinks(stats.interestMutual)}</Field>
+        <Field label="Working with">{founderLinks(stats.workingWithOutgoing)}</Field>
+        <Field label="Interested in them">{founderLinks(stats.interestIncoming)}</Field>
       </Stack>
     </Section>
   );
@@ -296,15 +277,13 @@ const COMMITMENT_LABEL: Record<CommitmentStatus, string> = {
 /** Formulaires de motivation et d'objectifs, semaine par semaine. */
 export function FounderWeeks() {
   const { weeks, isSelf } = useFounder();
-  const { foundersById } = useFounders();
+  const founderLinks = useFounderLinks();
   if (weeks.length === 0) return null;
 
   return (
     <Section title="Weekly check-ins" hint={isSelf ? "Only you and the Pioneers team see these." : undefined}>
       <Stack gap="lg">
         {weeks.map((w) => {
-          const interested = w.interestedInFounderIds.map((id) => foundersById.get(id)?.name).filter(Boolean);
-          const workingWith = w.workingWithFounderIds.map((id) => foundersById.get(id)?.name).filter(Boolean);
           return (
             <Stack key={w.id} gap="xs" pb="md" style={{ borderBottom: "1px solid var(--mantine-color-dark-4)" }}>
               <Group justify="space-between" gap="xs">
@@ -319,8 +298,8 @@ export function FounderWeeks() {
               <Field label="Goal for the week">{w.goalForWeek}</Field>
               <Field label="Priority">{w.priorityForWeek}</Field>
               <Field label="Learnings">{w.learnings}</Field>
-              <Field label="Interested in">{interested.join(", ")}</Field>
-              <Field label="Working with">{workingWith.join(", ")}</Field>
+              <Field label="Interested in">{founderLinks(w.interestedInFounderIds)}</Field>
+              <Field label="Working with">{founderLinks(w.workingWithFounderIds)}</Field>
               <Field label="How it feels">{w.feelingForWeek}</Field>
               <Field label="Anything specific">{w.anythingSpecific}</Field>
             </Stack>

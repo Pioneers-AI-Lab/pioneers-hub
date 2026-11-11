@@ -1,11 +1,16 @@
 "use client";
 
-import { Group, SimpleGrid, Stack, Text } from "@mantine/core";
+import Link from "next/link";
+import { Anchor, Group, SimpleGrid, Stack, Text } from "@mantine/core";
 import { STARTUP_SUBSCORES, STARTUP_WEIGHTING_HINT, type MetricKey, type StartupSubScore } from "@shared/types";
+import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
 import { useEvents } from "@/context/EventsContext";
+import { useLeaderboards } from "@/context/LeaderboardsContext";
+import { useProgram } from "@/context/ProgramContext";
 import { useStartup } from "@/context/StartupContext";
 import { formatDay, integer, percent } from "@/lib/format";
+import { paths } from "@/lib/paths";
 import { Field } from "@/components/ui/Field";
 import { ExternalLinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Section } from "@/components/ui/Section";
@@ -106,14 +111,19 @@ export function WeeklyUpdates() {
 
 /** Notes des pitchs (staff et IC) : radar de la derniere seance, puis chaque seance critere par critere. */
 export function PitchEvaluations() {
-  const { evaluations } = useStartup();
+  const { program } = useProgram();
+  const { batch } = useBatch();
+  const { startup, evaluations } = useStartup();
   const { eventsById } = useEvents();
+  const { leaderboardsByEventId } = useLeaderboards();
   if (evaluations.length === 0) return null;
 
   const sessions = [...new Set(evaluations.map((e) => e.parentId))]
-    .map((eventId) => ({ event: eventsById.get(eventId), evals: evaluations.filter((e) => e.parentId === eventId) }))
-    .filter((s) => s.event)
-    .sort((a, b) => b.event!.startDateISOString.localeCompare(a.event!.startDateISOString));
+    .flatMap((eventId) => {
+      const event = eventsById.get(eventId);
+      return event ? [{ event, evals: evaluations.filter((e) => e.parentId === eventId) }] : [];
+    })
+    .sort((a, b) => b.event.startDateISOString.localeCompare(a.event.startDateISOString));
   const avg = (evals: typeof evaluations, key: string) => {
     const v = evals.map((e) => e.scores[key]).filter((x): x is number => typeof x === "number");
     return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
@@ -123,9 +133,9 @@ export function PitchEvaluations() {
   return (
     <Section title="Pitches" hint="Jury scores out of 5, per criterion.">
       {latest && (
-        <ChartCard title={`Latest · ${latest.event!.name}`}>
+        <ChartCard title={`Latest · ${latest.event.name}`}>
           <ScoreRadar
-            axes={latest.event!.criteria.map((c) => ({ label: c.label.split(/[ /]/)[0], value: avg(latest.evals, c.key) }))}
+            axes={latest.event.criteria.map((c) => ({ label: c.label.split(/[ /]/)[0], value: avg(latest.evals, c.key) }))}
             max={5}
             color="orange.5"
             h={200}
@@ -133,41 +143,54 @@ export function PitchEvaluations() {
         </ChartCard>
       )}
       <Stack gap="lg" mt="xs">
-        {sessions.map(({ event, evals }) => (
-          <Stack key={event!.id} gap="xs" pb="md" style={{ borderBottom: "1px solid var(--mantine-color-dark-4)" }}>
-            <Group justify="space-between" gap="xs">
-              <Text fw={600}>{event!.name}</Text>
-              <Text size="sm" c="dimmed">
-                {formatDay(event!.startDateISOString.slice(0, 10), true)}
-              </Text>
-            </Group>
-            <Stack gap={6}>
-              {event!.criteria.map((c) => {
-                const v = avg(evals, c.key);
-                return (
-                  <Group key={c.key} justify="space-between" gap="xs" wrap="nowrap">
-                    <Text size="sm" c="dimmed" truncate>
-                      {c.label}
-                    </Text>
-                    <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
-                      <RatingDots value={v} max={c.max} color="orange.5" />
-                      <Text size="xs" className="num" w={22} ta="right">
-                        {v === null ? "-" : v.toFixed(1)}
-                      </Text>
-                    </Group>
-                  </Group>
-                );
-              })}
-            </Stack>
-            {evals
-              .filter((e) => e.comment)
-              .map((e) => (
-                <Text key={e.id} size="sm" c="dark.1" style={{ whiteSpace: "pre-wrap" }}>
-                  {e.comment}
+        {sessions.map(({ event, evals }) => {
+          // Classee a cette seance : le rang mene au classement complet.
+          const board = leaderboardsByEventId.get(event.id);
+          const row = board?.rows.find((r) => r.targetId === startup.id);
+          return (
+            <Stack key={event.id} gap="xs" pb="md" style={{ borderBottom: "1px solid var(--mantine-color-dark-4)" }}>
+              <Group justify="space-between" gap="xs">
+                <Text fw={600}>{event.name}</Text>
+                <Text size="sm" c="dimmed">
+                  {row && (
+                    <>
+                      <Anchor component={Link} href={paths.leaderboard(program.id, batch.id, event.id)} inherit className="tap-link num">
+                        #{row.rank} of {board?.rows.length}
+                      </Anchor>
+                      {" · "}
+                    </>
+                  )}
+                  {formatDay(event.startDateISOString.slice(0, 10), true)}
                 </Text>
-              ))}
-          </Stack>
-        ))}
+              </Group>
+              <Stack gap={6}>
+                {event.criteria.map((c) => {
+                  const v = avg(evals, c.key);
+                  return (
+                    <Group key={c.key} justify="space-between" gap="xs" wrap="nowrap">
+                      <Text size="sm" c="dimmed" truncate>
+                        {c.label}
+                      </Text>
+                      <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
+                        <RatingDots value={v} max={c.max} color="orange.5" />
+                        <Text size="xs" className="num" w={22} ta="right">
+                          {v === null ? "-" : v.toFixed(1)}
+                        </Text>
+                      </Group>
+                    </Group>
+                  );
+                })}
+              </Stack>
+              {evals
+                .filter((e) => e.comment)
+                .map((e) => (
+                  <Text key={e.id} size="sm" c="dark.1" style={{ whiteSpace: "pre-wrap" }}>
+                    {e.comment}
+                  </Text>
+                ))}
+            </Stack>
+          );
+        })}
       </Stack>
     </Section>
   );

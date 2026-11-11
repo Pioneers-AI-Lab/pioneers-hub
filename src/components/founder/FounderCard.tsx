@@ -69,7 +69,12 @@ export function FounderCard() {
       {startup && (
         <Section title="Startup">
           <RowList>
-            <LinkRow href={paths.startup(program.id, batch.id, startup.id)} title={startup.name} subtitle={startup.ideaOneLine} />
+            <LinkRow
+              href={paths.startup(program.id, batch.id, startup.id)}
+              avatar={{ name: startup.name, photoUrl: startup.logoUrl }}
+              title={startup.name}
+              subtitle={startup.ideaOneLine}
+            />
           </RowList>
         </Section>
       )}

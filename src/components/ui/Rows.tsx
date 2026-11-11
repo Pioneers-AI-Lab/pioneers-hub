@@ -19,11 +19,14 @@ type RowProps = {
   meta?: ReactNode;
   /** Nom pour l'avatar a initiales ; `photoUrl` s'il y en a une. */
   avatar?: { name: string; photoUrl?: string | null };
+  /** Avant l'avatar (rang d'un classement, avatars d'une equipe). */
+  leading?: ReactNode;
 };
 
-function RowBody({ title, subtitle, meta, avatar }: RowProps) {
+function RowBody({ title, subtitle, meta, avatar, leading }: RowProps) {
   return (
     <>
+      {leading}
       {avatar && <Avatar src={avatar.photoUrl ?? null} name={avatar.name} color="initials" size={40} radius="xl" />}
       <Box style={{ flex: 1, minWidth: 0 }}>
         <Text fw={500} truncate>
@@ -69,10 +72,15 @@ export function ExternalLinkRow({ href, ...props }: RowProps & { href: string })
   );
 }
 
-/** Ligne qui declenche une action. */
-export function ButtonRow({ onClick, disabled, ...props }: RowProps & { onClick: () => void; disabled?: boolean }) {
+/** Ligne qui declenche une action ; `expanded` si elle deplie un contenu. */
+export function ButtonRow({
+  onClick,
+  disabled,
+  expanded,
+  ...props
+}: RowProps & { onClick: () => void; disabled?: boolean; expanded?: boolean }) {
   return (
-    <button type="button" className="row" onClick={onClick} disabled={disabled}>
+    <button type="button" className="row" onClick={onClick} disabled={disabled} aria-expanded={expanded}>
       <RowBody {...props} />
     </button>
   );

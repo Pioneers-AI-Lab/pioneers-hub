@@ -24,7 +24,9 @@ export const paths = {
   startups: (programId: string, batchId: string) => `${batchBase(programId, batchId)}/startups`,
   startup: (programId: string, batchId: string, startupId: string) =>
     `${batchBase(programId, batchId)}/startups/${startupId}`,
-  leaderboard: (programId: string, batchId: string) => `${batchBase(programId, batchId)}/leaderboard`,
+  /** `eventId` : ouvre le classement de cet evenement (ancre de sa section). */
+  leaderboard: (programId: string, batchId: string, eventId?: string) =>
+    `${batchBase(programId, batchId)}/leaderboard${eventId ? `#${encodeURIComponent(eventId)}` : ""}`,
   todo: (programId: string, batchId: string) => `${batchBase(programId, batchId)}/todo`,
   me: (programId: string, batchId: string) => `${batchBase(programId, batchId)}/me`,
   meEdit: (programId: string, batchId: string) => `${batchBase(programId, batchId)}/me/edit`,

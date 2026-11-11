@@ -1,26 +1,39 @@
 "use client";
 
-import { Box, Group, Stack, Text } from "@mantine/core";
-import { EVENT_KIND_FEATURES } from "@shared/types";
+import { useEffect, useState } from "react";
+import { Avatar, Stack, Text } from "@mantine/core";
+import { EVENT_KIND_FEATURES, type EvaluationTargetType, type LeaderboardRow } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useEvents } from "@/context/EventsContext";
+import { useFounders } from "@/context/FoundersContext";
 import { useLeaderboards } from "@/context/LeaderboardsContext";
 import { useProgram } from "@/context/ProgramContext";
-import { formatDay } from "@/lib/format";
+import { useStartups } from "@/context/StartupsContext";
+import { formatDay, score10 } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageLoader } from "@/components/ui/PageLoader";
+import { ButtonRow, LinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 
 // Scores du jury uniquement (les avis entre pairs n'y entrent jamais), sur 10.
+// Une ligne de pitch est une startup : elle mene a sa fiche. Une ligne d'epreuve
+// est une equipe d'un jour, sans page : elle deplie ses membres, chacun vers sa fiche.
 export default function LeaderboardPage() {
   const { program } = useProgram();
-  const { batch, viewerFounderId } = useBatch();
+  const { batch } = useBatch();
   const { events, isLoading: isEventsLoading } = useEvents();
   const { leaderboardsByEventId, isHidden, isLoading } = useLeaderboards();
 
   const ranked = events.filter((e) => EVENT_KIND_FEATURES[e.kind].leaderboard).reverse();
   const back = { href: paths.batch(program.id, batch.id), label: "Home" };
+  const isReady = !isLoading && !isEventsLoading;
+
+  // Arrivee par `paths.leaderboard(..., eventId)` : l'ancre n'existe qu'une fois les donnees la.
+  useEffect(() => {
+    if (!isReady || !window.location.hash) return;
+    document.getElementById(decodeURIComponent(window.location.hash.slice(1)))?.scrollIntoView();
+  }, [isReady]);
 
   if (isHidden) {
     return (
@@ -30,7 +43,7 @@ export default function LeaderboardPage() {
       </>
     );
   }
-  if (isLoading || isEventsLoading) return <PageLoader />;
+  if (!isReady) return <PageLoader />;
 
   return (
     <>
@@ -39,39 +52,95 @@ export default function LeaderboardPage() {
       {ranked.map((event) => {
         const board = leaderboardsByEventId.get(event.id);
         return (
-          <Section key={event.id} title={`${event.name} · ${formatDay(event.startDateISOString.slice(0, 10), true)}`}>
+          <Section key={event.id} id={event.id} title={`${event.name} · ${formatDay(event.startDateISOString.slice(0, 10), true)}`}>
             {!board || board.rows.length === 0 ? (
               <Empty>No scores yet.</Empty>
             ) : (
-              <Stack gap={0}>
+              <RowList>
                 {[...board.rows]
                   .sort((a, b) => a.rank - b.rank)
-                  .map((row) => {
-                    const isMine = viewerFounderId !== null && row.memberIds.includes(viewerFounderId);
-                    return (
-                      <Group key={row.targetId} className="row" wrap="nowrap" gap="md">
-                        <Text className="num" fw={600} w={28} c={row.rank <= 3 ? "pioneers" : "dimmed"}>
-                          {row.rank}
-                        </Text>
-                        <Box style={{ flex: 1, minWidth: 0 }}>
-                          <Text fw={500} truncate c={isMine ? "pioneers" : undefined}>
-                            {row.name}
-                          </Text>
-                          <Text size="xs" c="dimmed" className="num">
-                            {row.evaluationsCount} {row.evaluationsCount === 1 ? "review" : "reviews"}
-                          </Text>
-                        </Box>
-                        <Text className="num" fw={600} fz="lg">
-                          {row.score.toFixed(1)}
-                        </Text>
-                      </Group>
-                    );
-                  })}
-              </Stack>
+                  .map((row) => (
+                    <RankedRow key={row.targetId} row={row} target={EVENT_KIND_FEATURES[event.kind].evaluationTarget} />
+                  ))}
+              </RowList>
             )}
           </Section>
         );
       })}
+    </>
+  );
+}
+
+function RankedRow({ row, target }: { row: LeaderboardRow; target: EvaluationTargetType | null }) {
+  const { program } = useProgram();
+  const { batch, viewerFounderId } = useBatch();
+  const { startupsById } = useStartups();
+  const { foundersById } = useFounders();
+  const [isOpen, setIsOpen] = useState(false);
+
+  const isMine = viewerFounderId !== null && row.memberIds.includes(viewerFounderId);
+  const props = {
+    leading: (
+      <Text className="num" fw={600} w={24} c={row.rank <= 3 ? "pioneers" : "dimmed"} style={{ flexShrink: 0 }}>
+        {row.rank}
+      </Text>
+    ),
+    title: isMine ? <Text span c="pioneers" inherit>{row.name}</Text> : row.name,
+    subtitle: `${row.evaluationsCount} ${row.evaluationsCount === 1 ? "review" : "reviews"}`,
+    meta: (
+      <Text className="num" fw={600} fz="lg">
+        {score10(row.score)}
+      </Text>
+    ),
+  };
+
+  // Pitch : la cible est une startup du batch.
+  if (target === "startup") {
+    const startup = startupsById.get(row.targetId);
+    return startup ? (
+      <LinkRow
+        href={paths.startup(program.id, batch.id, startup.id)}
+        avatar={{ name: startup.name, photoUrl: startup.logoUrl }}
+        {...props}
+      />
+    ) : (
+      <Row {...props} />
+    );
+  }
+
+  // Equipe d'epreuve : les membres que le visiteur peut lire (profils publics pour un visiteur sans compte).
+  const members = row.memberIds.flatMap((id) => foundersById.get(id) ?? []);
+  if (members.length === 0) return <Row {...props} />;
+  return (
+    <>
+      <ButtonRow
+        onClick={() => setIsOpen((v) => !v)}
+        expanded={isOpen}
+        {...props}
+        leading={
+          <>
+            {props.leading}
+            <Avatar.Group spacing={14} style={{ flexShrink: 0 }}>
+              {members.slice(0, 3).map((f) => (
+                <Avatar key={f.id} src={f.photoUrl} name={f.name} color="initials" size={32} radius="xl" />
+              ))}
+            </Avatar.Group>
+          </>
+        }
+      />
+      {isOpen && (
+        <Stack gap={0} pl={36}>
+          {members.map((f) => (
+            <LinkRow
+              key={f.id}
+              href={paths.founder(program.id, batch.id, f.id)}
+              avatar={{ name: f.name, photoUrl: f.photoUrl }}
+              title={f.name}
+              subtitle={f.startupId ? startupsById.get(f.startupId)?.name : undefined}
+            />
+          ))}
+        </Stack>
+      )}
     </>
   );
 }
