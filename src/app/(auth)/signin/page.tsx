@@ -53,6 +53,10 @@ function SignInForm() {
           <Anchor component={Link} href={withNext(paths.register(), next)} inherit>
             Create one
           </Anchor>
+          {" · "}
+          <Anchor component={Link} href={paths.programs()} inherit c="dimmed">
+            Browse programs
+          </Anchor>
         </>
       }
     >

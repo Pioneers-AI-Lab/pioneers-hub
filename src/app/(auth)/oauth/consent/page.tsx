@@ -91,7 +91,7 @@ function Consent() {
       footer={
         <>
           Not you?{" "}
-          <Text component="button" type="button" inherit c="dimmed" td="underline" bg="none" bd={0} p={0} onClick={() => void signOut()}>
+          <Text component="button" type="button" inherit c="dimmed" td="underline" bg="none" bd={0} p={0} onClick={() => void signOut(paths.signIn(paths.oauthConsent(requestId)))}>
             Use another account
           </Text>
         </>

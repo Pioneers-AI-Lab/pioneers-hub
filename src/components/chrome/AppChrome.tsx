@@ -27,18 +27,18 @@ export function AppChrome({ children }: { children: ReactNode }) {
       >
         <Container size={760} px="md" h="100%">
           <Group h="100%" justify="space-between" wrap="nowrap">
+            {/* Logo Pioneers Hub (le meme que les pages de connexion) : symbole,
+                « pioneers » et « hub », version claire lisible sur noir. */}
             <Anchor
               component={Link}
               href={paths.home()}
+              aria-label="Pioneers Hub"
               underline="never"
-              c="white"
-              fw={700}
-              fz={15}
-              lts={0.2}
               h={44}
               style={{ display: "inline-flex", alignItems: "center" }}
             >
-              Pioneers <Text span c="pioneers" inherit ml={4}>Hub</Text>
+              {/* eslint-disable-next-line @next/next/no-img-element -- SVG statique, pas d'optimisation utile. */}
+              <img src="/logo-pioneers-hub.svg" alt="Pioneers Hub" width={136} height={22} style={{ display: "block" }} />
             </Anchor>
             {/* `usePathname` suspend au pre-rendu (cacheComponents) : frontiere locale. */}
             <Suspense>

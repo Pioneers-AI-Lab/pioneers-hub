@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut, type User as FirebaseUser } from "firebase/auth";
 import { getDoc, setDoc } from "firebase/firestore";
 import { viewerFromUser, type Viewer } from "@shared/access";
@@ -8,6 +9,7 @@ import type { BatchMembership, User, WithId } from "@shared/types";
 import { auth, googleProvider } from "@/lib/firebase";
 import { queries, refs } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
+import { paths } from "@/lib/paths";
 import { useDocListener, useQueryListener } from "@/hooks/useFirestoreListener";
 
 // ----------------------------
@@ -28,7 +30,11 @@ type AuthValue = {
   memberships: WithId<BatchMembership>[];
   isMembershipsLoading: boolean;
   signInWithGoogle: () => Promise<void>;
-  signOut: () => Promise<void>;
+  /**
+   * Deconnecte, puis renvoie vers la page de connexion (ou `redirectTo`,
+   * ex. la page de connexion avec un retour vers le consentement OAuth).
+   */
+  signOut: (redirectTo?: string) => Promise<void>;
   /**
    * Relit le compte et son jeton (apres la confirmation de l'email, faite dans
    * un autre onglet) : `emailVerified` et le jeton lu par les regles a jour.
@@ -64,6 +70,7 @@ async function upsertUserDoc(firebaseUser: FirebaseUser) {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   // `undefined` tant que Firebase Auth n'a pas repondu.
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null | undefined>(undefined);
   // `reload()` modifie le compte EN PLACE : sans ce compteur, React ne verrait rien.
@@ -108,7 +115,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInWithGoogle: async () => {
         await signInWithPopup(auth, googleProvider);
       },
-      signOut: () => firebaseSignOut(auth),
+      signOut: async (redirectTo = paths.signIn()) => {
+        await firebaseSignOut(auth);
+        router.replace(redirectTo);
+      },
       reloadUser: async () => {
         if (!auth.currentUser) return;
         await auth.currentUser.reload();
@@ -118,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     // `userVersion` : le meme objet compte, relu (voir plus haut).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firebaseUser, userDoc.data, userDoc.isLoading, viewer, memberships.data, memberships.isLoading, userVersion]);
+  }, [firebaseUser, userDoc.data, userDoc.isLoading, viewer, memberships.data, memberships.isLoading, userVersion, router]);
 
   return <AuthContextProvider value={value}>{children}</AuthContextProvider>;
 }

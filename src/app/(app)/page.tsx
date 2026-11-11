@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Anchor, Button, Stack, Text, Title } from "@mantine/core";
+import { Stack, Title } from "@mantine/core";
 import { useAuth } from "@/context/AuthContext";
 import { autoClaimByEmail } from "@/lib/accounts";
 import { needsEmailVerification } from "@/lib/auth";
@@ -15,7 +14,7 @@ import { LinkRow, RowList } from "@/components/ui/Rows";
 // ----------------------------
 // Accueil : aiguillage selon le visiteur
 // ----------------------------
-//   non connecte          presentation et connexion
+//   non connecte          la page de connexion (entree unique, meme ecran que /signin)
 //   staff ou investor     les programmes
 //   fondateur d'un batch  son batch (de plusieurs : le choix)
 //   email non confirme    confirmation d'abord (compte cree par mot de passe)
@@ -31,7 +30,12 @@ export default function HomePage() {
   const awaitsVerification = needsEmailVerification(firebaseUser);
 
   useEffect(() => {
-    if (isLoading || isMembershipsLoading || !firebaseUser) return;
+    if (isLoading) return;
+    if (!firebaseUser) {
+      router.replace(paths.signIn());
+      return;
+    }
+    if (isMembershipsLoading) return;
     if (isTeam) {
       router.replace(paths.programs());
       return;
@@ -54,27 +58,8 @@ export default function HomePage() {
       });
   }, [isLoading, isMembershipsLoading, firebaseUser, awaitsVerification, isTeam, memberships, router]);
 
-  if (isLoading || isMembershipsLoading) return <PageLoader />;
-
-  if (!firebaseUser) {
-    return (
-      <Stack gap="lg" py="xl">
-        <Stack gap={6}>
-          <Title order={1}>The batch, in one place.</Title>
-          <Text c="dimmed">
-            Founders, teams, startups and events of the Pioneers batches. Founders sign in with the email of
-            their onboarding form.
-          </Text>
-        </Stack>
-        <Button component={Link} href={paths.signIn()} size="md" fullWidth maw={400}>
-          Sign in
-        </Button>
-        <Anchor className="tap-link" component={Link} href={paths.programs()} size="sm" c="dimmed">
-          Browse programs
-        </Anchor>
-      </Stack>
-    );
-  }
+  // Non connecte : redirection vers /signin en cours.
+  if (isLoading || isMembershipsLoading || !firebaseUser) return <PageLoader />;
 
   if (awaitsVerification && !isTeam) return <VerifyEmailNotice />;
 
