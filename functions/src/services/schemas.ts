@@ -4,6 +4,13 @@ import { z } from "zod";
 // services - briques de schema partagees par les operations
 // ----------------------------
 
+/** Le JSON Schema d'ENTREE d'un contrat zod : celui des outils MCP et de la spec OpenAPI. */
+export function toInputJsonSchema(schema: z.ZodType): Record<string, unknown> {
+  const json = z.toJSONSchema(schema, { io: "input" }) as Record<string, unknown>;
+  delete json.$schema;
+  return json;
+}
+
 /** Jour calendaire `YYYY-MM-DD`, et un vrai jour (`2026-13-45` est refuse). */
 export const dayString = z
   .string()

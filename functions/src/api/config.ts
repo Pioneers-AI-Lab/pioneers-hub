@@ -9,10 +9,11 @@
 // Site Hosting `pioneers-hub-api` (firebase.json), reecrit vers la fonction
 // `api`. En emulateur : l'emulateur Hosting (port 5102), qui reecrit pareil.
 
+import { API_PUBLIC_URL } from "../shared/api";
+
 const isEmulator = process.env.FUNCTIONS_EMULATOR === "true";
 
-export const PUBLIC_BASE_URL =
-  process.env.PUBLIC_BASE_URL ?? (isEmulator ? "http://127.0.0.1:5102" : "https://pioneers-hub-api.web.app");
+export const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL ?? (isEmulator ? "http://127.0.0.1:5102" : API_PUBLIC_URL);
 
 /** Le front, ou vivra la page de consentement OAuth. */
 export const FRONTEND_BASE_URL =

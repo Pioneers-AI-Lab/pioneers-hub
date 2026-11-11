@@ -192,6 +192,15 @@ const call = async (key, name, args) => {
   const emptyRevoke = await callable("revokeApiKey", staff, { keyId: "" });
   check(emptyRevoke.error?.status === "INVALID_ARGUMENT", "revokeApiKey with an empty keyId is a clear refusal", emptyRevoke);
 
+  // OpenAPI : publique, tiree des contrats
+  r = await fetch(`${HOSTING}/v1/openapi.json`);
+  const spec = await r.json();
+  check(
+    r.status === 200 && spec.openapi === "3.1.0" && spec.paths["/v1/fields"]?.post?.requestBody?.content?.["application/json"]?.schema?.properties?.values,
+    "OpenAPI spec is public and generated from the contracts",
+    Object.keys(spec.paths ?? {}),
+  );
+
   // ---- OAuth : le parcours du connecteur Claude ----
   r = await fetch(`${HOSTING}/mcp`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: "{}" });
   check(/resource_metadata=".*\/\.well-known\/oauth-protected-resource\/mcp"/.test(r.headers.get("www-authenticate") ?? ""), "401 points to the OAuth discovery");

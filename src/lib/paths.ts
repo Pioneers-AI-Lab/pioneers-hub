@@ -44,6 +44,8 @@ export const paths = {
   adminChallengeTeamsEvent: (eventId: string) => `/admin/challenge-teams/${eventId}`,
   adminLunchRoulette: () => "/admin/lunch-roulette",
   adminLunchRouletteEvent: (eventId: string) => `/admin/lunch-roulette/${eventId}`,
+  /** Brancher Claude (MCP), cles d'API et reference de l'API (staff). */
+  apiDocs: () => "/api-docs",
 } as const;
 
 /** `?next=` interne uniquement (jamais une redirection vers un autre site). */

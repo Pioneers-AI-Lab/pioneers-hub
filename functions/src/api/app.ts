@@ -5,8 +5,9 @@ import { oauthRouter } from "../oauth/router";
 import { addNote } from "../services/notes";
 import { setFields } from "../services/fields";
 import { runOperation, type Operation } from "../services/operations";
-import { GET_OBJECTS, getObject, GetInput, listObjects, ListInput, whoami } from "../services/read";
+import { getObject, GetInput, listObjects, ListInput, REST_OBJECTS, whoami } from "../services/read";
 import { requireCaller } from "./caller";
+import { openApiDocument } from "./openapi";
 import { errorHandler, notFound, route } from "./errors";
 
 // ----------------------------
@@ -80,16 +81,7 @@ v1.get(
   }),
 );
 
-// `GET /v1/founders?batchId=...` : liste ; `GET /v1/founders/{id}` : un objet.
-const SINGULAR: Record<string, (typeof GET_OBJECTS)[number]> = {
-  programs: "program",
-  batches: "batch",
-  founders: "founder",
-  startups: "startup",
-  events: "event",
-  notes: "note",
-};
-
+// `GET /v1/founders?batchId=...` : liste ; `GET /v1/founders/{id}` : un objet (`REST_OBJECTS`).
 v1.get(
   "/:object",
   route(async (req, res) => {
@@ -102,12 +94,20 @@ v1.get(
 v1.get(
   "/:object/:id",
   route(async (req, res) => {
-    const object = SINGULAR[String(req.params.object)];
-    if (!object) throw notFound("unknown_object", `No object type \`${req.params.object}\`. Types: ${Object.keys(SINGULAR).join(", ")}.`);
+    const object = REST_OBJECTS[String(req.params.object) as keyof typeof REST_OBJECTS];
+    if (!object) throw notFound("unknown_object", `No object type \`${req.params.object}\`. Types: ${Object.keys(REST_OBJECTS).join(", ")}.`);
     res.json(await getObject(GetInput.parse({ object, id: req.params.id })));
   }),
 );
 
+// La spec est publique : on la lit pour savoir comment s'authentifier.
+// ⛔️ SEULE EXCEPTION a `no-store` : elle est la meme pour tous, sans
+// authentification, et ne change qu'a un deploiement (qui vide le CDN de
+// Hosting). Le CDN la sert sans reveiller la fonction.
+app.get("/v1/openapi.json", (_req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=300, s-maxage=3600");
+  res.json(openApiDocument());
+});
 app.use("/v1", v1);
 
 app.use((req, _res, next) => next(notFound("not_found", `No route \`${req.method} ${req.path}\`. MCP: POST /mcp. REST: /v1.`)));

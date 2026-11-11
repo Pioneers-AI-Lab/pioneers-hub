@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { COL, SUB, docIds, docPaths } from "@shared/collections";
 import type {
+  ApiKey,
   Attendance,
   Batch,
   BatchMembership,
@@ -94,6 +95,7 @@ export const whereField = <T>(field: Extract<keyof T, string>, op: WhereFilterOp
 
 export const refs = {
   users: () => colRef<User>(COL.users),
+  apiKeys: () => colRef<ApiKey>(COL.apiKeys),
   user: (uid: string) => docRef<User>(COL.users, uid),
   people: () => colRef<Person>(COL.people),
   person: (personId: string) => docRef<Person>(docPaths.person(personId)),
@@ -231,6 +233,12 @@ export const queries = {
 
   /** Tous les comptes (staff). */
   allUsers: () => ({ key: "users:all", query: query(refs.users(), limit(1000)) }),
+
+  /** Les cles d'API d'un compte (staff : regle `apiKeys`). L'empreinte est lue, jamais la cle. */
+  myApiKeys: (uid: string) => ({
+    key: `apiKeys:owner=${uid}`,
+    query: query(refs.apiKeys(), whereField<ApiKey>("ownerUid", "==", uid)),
+  }),
 
   /** Equipes successives d'un fondateur (hackathons, startup). */
   teamMembershipsOfFounder: (batchId: string, founderId: string) => ({

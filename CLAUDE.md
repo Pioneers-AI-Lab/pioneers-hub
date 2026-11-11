@@ -73,6 +73,10 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   revoque l'autorisation. Secrets stockes par empreinte. Qui peut accepter : `canUseApi` (shared/access.ts), la regle
   de l'API. Hosting a une reecriture explicite `/.well-known/**` (l'emulateur ne passe pas les chemins a point par `**`).
 - Adresse a donner a Claude : `https://pioneers-hub-api.web.app/mcp`.
+- Spec OpenAPI 3.1 publique `GET /v1/openapi.json` (`api/openapi.ts`), tiree des memes contrats zod ; seule reponse
+  cachee au CDN. Adresses publiques et longueur du nom de cle : `shared/api.ts`. Table des types REST : `REST_OBJECTS`.
+- Page `/api-docs` (menu du compte, `canUseApi`) : brancher Claude, creer / revoquer ses cles (`ApiKeysContext`),
+  reference de l'API. Le menu du compte a aussi « Me » (profil fondateur du dernier batch rattache).
 - Catalogue MCP : 5 outils (~1 200 jetons). Une capacite de plus = un type d'objet dans `list` / `get`
   avant un nouvel outil. Pas de valeur chiffree dans `mcp/instructions.ts`.
 - `MCP-Protocol-Version` inconnu : retire avant le transport (panne totale vecue chez Trippple).

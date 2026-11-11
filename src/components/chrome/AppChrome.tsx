@@ -5,7 +5,7 @@ import { Suspense, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { Anchor, AppShell, Avatar, Box, Button, Container, Drawer, Group, Menu, Stack, Text, UnstyledButton } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { isStaffViewer } from "@shared/access";
+import { canUseApi, isStaffViewer } from "@shared/access";
 import { useAuth } from "@/context/AuthContext";
 import { paths } from "@/lib/paths";
 import { BOTTOM_SHEET_STYLES, MOBILE_QUERY } from "@/components/ui/ResponsiveDialog";
@@ -63,7 +63,7 @@ type AccountLink = { label: string; href: string };
  * portee de pouce), un menu deroulant sur ordinateur (a la souris).
  */
 function ViewerMenu() {
-  const { viewer, firebaseUser, isLoading, signOut } = useAuth();
+  const { viewer, firebaseUser, isLoading, memberships, signOut } = useAuth();
   const pathname = usePathname();
   const isMobile = useMediaQuery(MOBILE_QUERY) ?? false;
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -80,9 +80,14 @@ function ViewerMenu() {
 
   const name = firebaseUser.displayName ?? firebaseUser.email ?? "Account";
   const isStaff = isStaffViewer(viewer);
+  // « Me » : le profil fondateur du dernier batch rattache (un compte peut etre
+  // fondateur de plusieurs batchs ; le plus recent est celui qu'on vit).
+  const latest = [...memberships].sort((a, b) => b.createdDateISOString.localeCompare(a.createdDateISOString))[0];
   const links: AccountLink[] = [
+    ...(latest ? [{ label: "Me", href: paths.me(latest.programId, latest.batchId) }] : []),
     { label: "Programs", href: paths.programs() },
     ...(isStaff ? [{ label: "Admin", href: paths.admin() }] : []),
+    ...(canUseApi(viewer) ? [{ label: "API & MCP", href: paths.apiDocs() }] : []),
   ];
   const avatar = <Avatar src={firebaseUser.photoURL} name={name} color="initials" size={32} radius="xl" />;
   const identity = (

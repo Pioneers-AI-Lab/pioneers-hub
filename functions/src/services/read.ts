@@ -78,6 +78,16 @@ const LIST_OBJECTS = [...(Object.keys(SIMPLE_LISTS) as (keyof typeof SIMPLE_LIST
 const SIMPLE_GETS = { program: COL.programs, batch: COL.batches, note: COL.notes } as const;
 export const GET_OBJECTS = [...(Object.keys(SIMPLE_GETS) as (keyof typeof SIMPLE_GETS)[]), "founder", "startup", "event"] as const;
 
+/** Le type d'objet de chaque URL REST (`/v1/founders/{id}` -> `founder`) : le routeur ET la spec OpenAPI le lisent. */
+export const REST_OBJECTS = {
+  programs: "program",
+  batches: "batch",
+  founders: "founder",
+  startups: "startup",
+  events: "event",
+  notes: "note",
+} as const satisfies Record<string, (typeof GET_OBJECTS)[number]>;
+
 export const ListInput = z
   .object({
     object: z.enum(LIST_OBJECTS),

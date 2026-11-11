@@ -5,6 +5,7 @@ import { applyPlan, previewPlan, type Operation } from "../services/operations";
 import { addNote } from "../services/notes";
 import { setFields } from "../services/fields";
 import { getObject, GetInput, listObjects, ListInput, whoami } from "../services/read";
+import { toInputJsonSchema } from "../services/schemas";
 
 // ----------------------------
 // mcp - LE catalogue
@@ -115,9 +116,7 @@ export const BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
 
 /** Les declarations, telles que `tools/list` les rend : calculees une fois. */
 export const DECLARED = TOOLS.map((tool) => {
-  const inputSchema = z.toJSONSchema(tool.schema, { io: "input" }) as Record<string, unknown>;
-  delete inputSchema.$schema;
-  return { name: tool.name, title: tool.title, description: tool.description, inputSchema, annotations: tool.annotations };
+  return { name: tool.name, title: tool.title, description: tool.description, inputSchema: toInputJsonSchema(tool.schema), annotations: tool.annotations };
 });
 
 export const TOOL_NAMES = TOOLS.map((t) => t.name);

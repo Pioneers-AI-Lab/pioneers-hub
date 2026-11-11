@@ -10,6 +10,7 @@ import { HttpsError, onCall, onRequest, type CallableRequest as FirebaseCallable
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { FUNCTIONS_REGION, type CallableName, type CallableRequest, type CallableResponse } from "./shared/callables";
+import { API_KEY_NAME_MAX } from "./shared/api";
 import { COL } from "./shared/collections";
 import { isStaffViewer } from "./shared/access";
 import type { ApiKey } from "./shared/types";
@@ -62,7 +63,9 @@ async function assertStaff(uid: string | undefined): Promise<string> {
 export const createApiKey = onCallTyped("createApiKey", async (request) => {
   const uid = await assertStaff(request.auth?.uid);
   const name = String(request.data?.name ?? "").trim();
-  if (!name || name.length > 80) throw new HttpsError("invalid-argument", "`name` is required (80 characters max).");
+  if (!name || name.length > API_KEY_NAME_MAX) {
+    throw new HttpsError("invalid-argument", `\`name\` is required (${API_KEY_NAME_MAX} characters max).`);
+  }
 
   const { key, prefix, keyHash } = mintApiKey();
   const ref = getFirestore().collection(COL.apiKeys).doc();
