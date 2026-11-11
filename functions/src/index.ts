@@ -17,6 +17,7 @@ import type { ApiKey } from "./shared/types";
 import { mintApiKey } from "./api/caller";
 import { loadViewer } from "./api/viewer";
 import { decideRequest, describeRequest } from "./oauth/consent";
+import * as accounts from "./services/accounts";
 
 initializeApp();
 setGlobalOptions({ region: FUNCTIONS_REGION, maxInstances: 10 });
@@ -54,6 +55,14 @@ export const api = onRequest({ invoker: "public", timeoutSeconds: 60, memory: "5
 // Une cle agit avec les droits de son proprietaire (functions/src/services
 // filtre chaque objet). Chacun gere les siennes ; le staff peut en revoquer
 // n'importe laquelle.
+
+async function assertStaff(uid: string | undefined): Promise<string> {
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+  if (!isStaffViewer(await loadViewer(uid))) {
+    throw new HttpsError("permission-denied", "Staff only.");
+  }
+  return uid;
+}
 
 /** Tout compte connecte peut avoir des cles (`canUseApi`) : un compte Firebase suffit. */
 function assertSignedIn(uid: string | undefined): string {
@@ -93,6 +102,36 @@ export const revokeApiKey = onCallTyped("revokeApiKey", async (request) => {
   const mine = snap.exists && snap.get("ownerUid") === uid;
   if (!snap.exists || (!mine && !isStaffViewer(await loadViewer(uid)))) throw new HttpsError("not-found", "No such API key.");
   if (!snap.get("revokedDateISOString")) await ref.update({ revokedDateISOString: new Date().toISOString() });
+  return { ok: true as const };
+});
+
+// ----------------------------
+// Comptes et droits (Admin > Access, staff)
+// ----------------------------
+
+export const listAccounts = onCallTyped("listAccounts", async (request) => {
+  await assertStaff(request.auth?.uid);
+  return { accounts: await accounts.listAccounts() };
+});
+
+export const setAccountAccess = onCallTyped("setAccountAccess", async (request) => {
+  const actorUid = await assertStaff(request.auth?.uid);
+  const uid = String(request.data?.uid ?? "");
+  if (!uid || uid.includes("/")) throw new HttpsError("invalid-argument", "`uid` is required.");
+  await accounts.setAccountAccess(actorUid, uid, accounts.parseAccess(request.data ?? {}));
+  return { ok: true as const };
+});
+
+export const inviteAccount = onCallTyped("inviteAccount", async (request) => {
+  const actorUid = await assertStaff(request.auth?.uid);
+  return accounts.inviteAccount(actorUid, String(request.data?.email ?? ""), accounts.parseAccess(request.data ?? {}));
+});
+
+export const setAccountDisabled = onCallTyped("setAccountDisabled", async (request) => {
+  const actorUid = await assertStaff(request.auth?.uid);
+  const uid = String(request.data?.uid ?? "");
+  if (!uid || uid.includes("/")) throw new HttpsError("invalid-argument", "`uid` is required.");
+  await accounts.setAccountDisabled(actorUid, uid, request.data?.disabled === true);
   return { ok: true as const };
 });
 

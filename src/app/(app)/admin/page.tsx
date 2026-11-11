@@ -18,6 +18,15 @@ export default function AdminHomePage() {
   return (
     <>
       <PageHeader title="Admin" subtitle="Staff tools. Only the Pioneers team sees this space." />
+      <Section title="Platform">
+        <RowList>
+          <LinkRow
+            href={paths.adminAccess()}
+            title="Access"
+            subtitle="Every account: invite, change roles, remove access, block sign-in"
+          />
+        </RowList>
+      </Section>
       <BatchPicker />
       <Section title={`Tools · ${batch.name}`}>
         <RowList>

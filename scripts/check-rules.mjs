@@ -409,6 +409,64 @@ console.log("staff");
   await deleteApp(app);
 }
 
+// ---- Admin > Access : callables des comptes (staff seulement) ----------------
+console.log("accounts (Admin > Access callables)");
+{
+  // Une callable refusee rend `functions/<code>` : on compare le code attendu.
+  const expectCallableError = async (label, code, fn) => {
+    try {
+      await fn();
+      failures++;
+      console.log(`  FAIL  ${label}: expected ${code}, got success`);
+    } catch (err) {
+      if (err.code === `functions/${code}`) console.log(`  ok    ${label} (${code})`);
+      else {
+        failures++;
+        console.log(`  FAIL  ${label}: expected ${code}, got ${err.code ?? err.message}`);
+      }
+    }
+  };
+  const staff = await clientAs("staff-1");
+  const asStaff = (name) => httpsCallable(staff.functions, name);
+  await expectOk("staff lists accounts", async () => {
+    const { data } = await asStaff("listAccounts")({});
+    const lp = data.accounts.find((a) => a.uid === "lp-1");
+    if (!lp || lp.investorAccess !== "portfolio") throw new Error("lp-1 missing or wrong access");
+    return `${data.accounts.length} accounts`;
+  });
+  await expectOk("staff changes an investor to IC, then back", async () => {
+    await asStaff("setAccountAccess")({ uid: "lp-1", roles: ["investor"], investorAccess: "ic" });
+    await asStaff("setAccountAccess")({ uid: "lp-1", roles: ["investor"], investorAccess: "portfolio" });
+  });
+  await expectOk("staff invites a new email as mentor", async () => {
+    const { data } = await asStaff("inviteAccount")({ email: "invited-check@pioneers.test", roles: ["mentor"], investorAccess: null });
+    return data.created ? "created" : "existing";
+  });
+  await expectCallableError("investor without access level", "invalid-argument", () =>
+    asStaff("setAccountAccess")({ uid: "lp-1", roles: ["investor"], investorAccess: null }),
+  );
+  await expectCallableError("staff removes own staff role", "failed-precondition", () =>
+    asStaff("setAccountAccess")({ uid: "staff-1", roles: [], investorAccess: null }),
+  );
+  await expectCallableError("staff blocks own account", "failed-precondition", () =>
+    asStaff("setAccountDisabled")({ uid: "staff-1", disabled: true }),
+  );
+  await expectOk("each change is in the audit log", async () => {
+    const { getFirestore: adminFirestore } = await import("firebase-admin/firestore");
+    const logs = await adminFirestore().collection("auditLogs").where("targetPath", "==", "users/lp-1").get();
+    if (logs.size < 2) throw new Error(`expected 2 audit lines, got ${logs.size}`);
+    return `${logs.size} lines`;
+  });
+  await deleteApp(staff.app);
+
+  const ada = await clientAs("ada-1");
+  await expectCallableError("founder lists accounts", "permission-denied", () => httpsCallable(ada.functions, "listAccounts")({}));
+  await expectCallableError("founder grants herself staff", "permission-denied", () =>
+    httpsCallable(ada.functions, "setAccountAccess")({ uid: "ada-1", roles: ["staff"], investorAccess: null }),
+  );
+  await deleteApp(ada.app);
+}
+
 // ---- Cles d'API : chacun lit les siennes ---------------------------------------
 console.log("api keys (each account reads its own)");
 {

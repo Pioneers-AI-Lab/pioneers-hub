@@ -1,8 +1,6 @@
 /* Les styles de base viennent de Mantine. Ici, seulement ce qu'il n'expose pas. */
 
 :root {
-  /* L'oeil du mot de passe (Mantine, 28 px par defaut) : cible tactile de 40 px. */
-  --psi-button-size-md: 40px;
   /* Hauteur de la barre d'onglets du bas (mobile), zone de securite comprise. */
   --tabbar-height: calc(56px + env(safe-area-inset-bottom));
 }
@@ -258,4 +256,10 @@ button.row {
   padding-block: 10px;
   margin-inline: -6px;
   padding-inline: 6px;
+}
+
+/* L'oeil du mot de passe (Mantine, 28 px par defaut) : cible tactile de 40 px.
+   La variable est posee sur la racine du champ : on la redefinit au meme endroit. */
+.mantine-PasswordInput-root.mantine-PasswordInput-root {
+  --psi-button-size-md: 40px;
 }

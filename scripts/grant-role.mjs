@@ -65,4 +65,15 @@ if (role === "none") {
   });
 }
 const after = (await ref.get()).data();
+// Meme trace que Admin > Access : qui (le script), quoi, sur quel compte, quand.
+await db.collection("auditLogs").add({
+  actorUid: "script:grant-role",
+  apiKeyId: null,
+  via: "function",
+  action: "account.grant",
+  targetPath: ref.path,
+  payload: { email, role, access: access ?? null, after: { roles: after.roles, investorAccess: after.investorAccess } },
+  idempotencyKey: null,
+  dateISOString: new Date().toISOString(),
+});
 console.log(`grant: ${email} -> roles [${after.roles.join(", ")}], investorAccess ${after.investorAccess}`);

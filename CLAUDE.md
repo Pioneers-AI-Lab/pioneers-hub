@@ -188,6 +188,11 @@ Regles :
 - Champs de saisie en 16 px (sinon iOS zoome) : taille `md` par defaut (theme.ts). Boutons
   d'action principaux `size="md"`, pleine largeur sur mobile ; enregistrement dans `.savebar`.
 - Verifier en 390 px de large : aucun debordement horizontal.
+- Cibles tactiles >= 40 px : boutons en `md` par defaut (theme), lien isole (retour, email,
+  site) avec `className="tap-link"`, ligne entiere cliquable plutot qu'un lien dans une ligne
+  (`LinkRow`, `ExternalLinkRow`). Choix courts : `SegmentedControl` plutot qu'un `Select`.
+- Fenetres : `ResponsiveDialog` (feuille du bas sur mobile, fenetre centree sinon), jamais
+  `Modal` directement. Menu du compte : feuille du bas sur mobile, menu deroulant sur ordinateur.
 - **Rien ne depend du survol.** Une information s'obtient au toucher (ou est affichee) ; le
   survol n'ajoute qu'un retour visuel, en CSS sous `@media (hover: hover)`. Pas de
   `onMouseEnter` qui change ce qui s'affiche.

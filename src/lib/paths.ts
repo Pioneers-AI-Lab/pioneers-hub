@@ -38,6 +38,7 @@ export const paths = {
   lunchRoulette: (eventId: string) => `/lunch-roulette/${eventId}`,
   /** Outils du staff, hors batch (le batch se choisit dans la page). */
   admin: () => "/admin",
+  adminAccess: () => "/admin/access",
   adminForms: () => "/admin/forms",
   adminForm: (formId: string) => `/admin/forms/${formId}`,
   adminChallengeTeams: () => "/admin/challenge-teams",
