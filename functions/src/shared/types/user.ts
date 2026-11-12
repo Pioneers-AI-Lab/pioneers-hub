@@ -27,6 +27,16 @@ export type UserRole = (typeof USER_ROLES)[number];
 export type InvestorAccess = "ic" | "portfolio";
 
 /**
+ * Reglages d'interface du compte, ecrits par le compte lui-meme (les regles
+ * l'autorisent : seuls `roles`, `investorAccess` et `personId` sont gardes).
+ * Suivent le compte d'un appareil a l'autre.
+ */
+export type UserPreferences = {
+  /** Dernier batch choisi dans un outil du staff (/admin), quel que soit l'outil. */
+  batchId: string | null;
+};
+
+/**
  * Le compte de connexion : UNIQUEMENT l'acces. Tout ce qui decrit la personne
  * (nom, emails, telephone, photo, Slack, fiches mentor et investor) vit dans
  * `people/{personId}`, une seule fois. L'email de connexion vient du jeton
@@ -42,6 +52,8 @@ export type User = {
   investorAccess: InvestorAccess | null;
   /** Signal d'activite bon marche (repris de flow). */
   loginCount: number;
+  /** Absent tant que le compte n'a rien choisi. */
+  preferences?: UserPreferences;
   createdDateISOString: DateISOString;
   lastSeenDateISOString: DateISOString;
 };

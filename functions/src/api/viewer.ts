@@ -1,5 +1,5 @@
 import { getFirestore } from "firebase-admin/firestore";
-import { COL } from "../shared/collections";
+import { COL, docPaths } from "../shared/collections";
 import { roleInBatch, viewerFromUser, type BatchRole, type Viewer } from "../shared/access";
 import type { BatchMembership, User } from "../shared/types";
 
@@ -28,6 +28,12 @@ export async function loadAccount(uid: string): Promise<Account> {
     }),
   );
   return { viewer, foundersByBatch };
+}
+
+/** Le profil fondateur d'un compte dans UN batch (un seul document lu), ou `null`. */
+export async function founderIdOf(uid: string, batchId: string): Promise<string | null> {
+  const snap = await getFirestore().doc(docPaths.membership(batchId, uid)).get();
+  return snap.exists ? (snap.data() as BatchMembership).founderId : null;
 }
 
 /** Le profil fondateur du compte dans ce batch, s'il en a un. */

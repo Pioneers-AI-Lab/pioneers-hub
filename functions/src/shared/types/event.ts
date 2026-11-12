@@ -40,6 +40,15 @@ import type { Archivable, BatchScoped, DateISOString, Timestamps } from "./commo
 export const EVENT_KINDS = ["team_challenge", "pitch", "matching", "session", "meeting"] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 
+/**
+ * Ce que note un jury dans cette mecanique : une equipe (hackathon) ou une
+ * startup (pitch). `null` : pas de jury ni de leaderboard du jury.
+ */
+export function juryTarget(kind: EventKind): "team" | "startup" | null {
+  const target = EVENT_KIND_FEATURES[kind].evaluationTarget;
+  return target === "team" || target === "startup" ? target : null;
+}
+
 /** Ce que chaque mecanique active. L'interface et l'API s'en servent ; la donnee ne depend que de ca. */
 export const EVENT_KIND_FEATURES: Record<
   EventKind,
@@ -220,7 +229,37 @@ export type PioneersEvent = BatchScoped &
     teamSize: { min: number; max: number } | null;
     /** Revelation programmee du leaderboard en salle. */
     leaderboardRevealDateISOString: DateISOString | null;
+    /**
+     * Ce qui classe le leaderboard : `null` = les notes du jury (par defaut) ;
+     * sinon la cle d'une de ses `metrics` (hackathons « Phone Agents » et
+     * « Agent Agency » : conversations, argent encaisse). Absent des anciens documents.
+     */
+    rankingMetricKey?: string | null;
+    /** Les choix prives que l'evenement recueille (`picks/{eventId}_{founderId}`), `null` sinon. Absent des anciens documents. */
+    picks?: EventPicks | null;
   };
+
+/**
+ * Une demande de choix (mutual picks, « qui t'a marque » d'un speed dating).
+ * Ouverte tant que `closesDateISOString` n'est pas passee (`null` : jusqu'a
+ * ce que le staff la ferme).
+ */
+export type EventPicks = {
+  question: string;
+  /** Nombre de choix au plus (top 3 le 23/11). */
+  max: number;
+  closesDateISOString: DateISOString | null;
+};
+
+/** Au plus 5 choix par demande. */
+export const PICKS_MAX = 5;
+
+/** La demande de choix de l'evenement, si elle est ouverte a cet instant. */
+export function openPicks(event: Pick<PioneersEvent, "picks" | "archivedDateISOString">, nowISO: string): EventPicks | null {
+  const picks = event.picks ?? null;
+  if (!picks || event.archivedDateISOString !== null) return null;
+  return picks.closesDateISOString === null || picks.closesDateISOString > nowISO ? picks : null;
+}
 
 // ---- teams/{teamId} ----------------------------------------------------------
 
@@ -282,8 +321,26 @@ export type Submission = {
   /** @source Fall 2026 « Build freeze » : URL du produit et fonctionnalites. */
   productUrl: string | null;
   links: SubmissionLink[];
+  /** Precisions libres de l'equipe (ex. le type de client du hackathon Agent Agency). */
+  notes: string | null;
   submittedDateISOString: DateISOString | null;
 };
+
+/** Une soumission vide : la base de ses deux ecrivains (Debrief, et formulaires / API via le registre). */
+export const emptySubmission = (teamId: string): Submission => ({
+  teamId,
+  title: null,
+  pitchOneLine: null,
+  videoUrl: null,
+  repoUrl: null,
+  slideUrl: null,
+  deliverables: {},
+  metrics: {},
+  productUrl: null,
+  links: [],
+  notes: null,
+  submittedDateISOString: null,
+});
 
 // ---- evaluations/{evaluatorId}_{targetId} ------------------------------------
 
@@ -336,6 +393,8 @@ export type Evaluation = {
 export type Judge = {
   name: string;
   email: string | null;
+  createdByUid: string;
+  createdDateISOString: DateISOString;
   /** Empreinte du jeton du lien ; le jeton en clair n'est jamais stocke. */
   tokenHash: string;
   /** Le lien expire le lendemain de l'evenement. */
@@ -345,11 +404,23 @@ export type Judge = {
   excludedTargetIds: string[];
 };
 
+/** L'etat du lien d'un jure a cet instant : le serveur le refuse s'il n'est pas `active`. */
+export function judgeLinkState(judge: Pick<Judge, "revokedDateISOString" | "expiresDateISOString">, nowISO: string) {
+  if (judge.revokedDateISOString !== null) return "revoked" as const;
+  return judge.expiresDateISOString < nowISO ? ("expired" as const) : ("active" as const);
+}
+
 // ---- attendance/{founderId} --------------------------------------------------
 
 /** @source SP26 « Founders (attendance) », une colonne par session. */
 export const ATTENDANCE_STATUSES = ["present", "late", "in_office", "absent"] as const;
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
+export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
+  present: "Present",
+  late: "Late",
+  in_office: "In office",
+  absent: "Absent",
+};
 
 export type Attendance = {
   founderId: string;
@@ -384,7 +455,7 @@ export type LeaderboardRow = {
   targetId: string;
   name: string;
   memberIds: string[];
-  /** Sur 10. */
+  /** Ce qui classe : la note du jury sur 10, ou la valeur de la metrique (`Leaderboard.metric`). */
   score: number;
   rank: number;
   /** Variation de rang par rapport a l'evenement precedent du meme type. */
@@ -400,6 +471,8 @@ export type LeaderboardRow = {
  */
 export type Leaderboard = BatchScoped & {
   eventId: string;
+  /** La metrique qui classe, `null` (ou absent) : les notes du jury. */
+  metric?: EventMetric | null;
   rows: LeaderboardRow[];
   computedDateISOString: DateISOString;
 };

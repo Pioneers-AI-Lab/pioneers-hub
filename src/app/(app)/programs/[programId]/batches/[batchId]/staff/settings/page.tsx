@@ -90,7 +90,7 @@ function SettingsForm({ batch }: { batch: Batch & { id: string } }) {
 
       <Section
         title="Slack"
-        hint="Opens a direct message with a founder from their profile, and the batch channel from the batch home. Workspace ID: Slack, workspace settings. Channel ID: bottom of the channel details."
+        hint="Opens the workspace from the batch home, and a direct message with a founder from their profile. Workspace ID: Slack, workspace settings. Channel ID: bottom of the channel details."
       >
         <Stack>
           <TextInput label="Workspace ID" placeholder="T0123ABCD" value={slackTeamId} error={teamError} onChange={(e) => setSlackTeamId(e.currentTarget.value)} />

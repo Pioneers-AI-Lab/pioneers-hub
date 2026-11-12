@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Anchor, Button, Divider, Stack, Text, Title } from "@mantine/core";
 import { IconBrandSlack } from "@tabler/icons-react";
-import { slackChannelUrl } from "@shared/slackLinks";
+import { slackWorkspaceUrl } from "@shared/slackLinks";
 import { STARTUP_WEIGHTING_HINT } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
@@ -39,10 +39,10 @@ export default function BatchHomePage() {
   const today = todayDayString();
   const nowISO = new Date().toISOString();
   const next = batch.milestones.find((m) => m.dayString && m.dayString >= today) ?? null;
-  // Canal Slack du batch : pour ceux qui en font partie (pas un visiteur public).
+  // Espace Slack du batch, pas un canal (le canal configure peut etre reserve au
+  // staff) : pour ceux qui en font partie, pas un visiteur public.
   const slackTeamId = batch.settings.slackTeamId ?? null;
-  const slackChannel =
-    role !== "public" && slackTeamId && batch.settings.slackChannelId ? slackChannelUrl(slackTeamId, batch.settings.slackChannelId) : null;
+  const slackWorkspace = role !== "public" && slackTeamId ? slackWorkspaceUrl(slackTeamId) : null;
   const upcoming = events.filter((e) => (e.endDateISOString ?? e.startDateISOString) >= nowISO).slice(0, 4);
 
   const topFounders = canSeeScores
@@ -67,10 +67,10 @@ export default function BatchHomePage() {
         {formatPeriod(batch.startDayString, batch.endDayString)}
         {batch.status === "completed" ? " · Completed" : ""}
       </Text>
-      {slackChannel && (
+      {slackWorkspace && (
         <Button
           component="a"
-          href={slackChannel}
+          href={slackWorkspace}
           target="_blank"
           rel="noreferrer"
           variant="default"
@@ -80,7 +80,7 @@ export default function BatchHomePage() {
           w="fit-content"
           leftSection={<IconBrandSlack size={16} stroke={1.75} />}
         >
-          Batch channel
+          Slack
         </Button>
       )}
 

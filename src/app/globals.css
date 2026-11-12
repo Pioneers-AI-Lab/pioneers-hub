@@ -31,12 +31,14 @@ body {
   border-bottom: 0;
 }
 a.row:active,
-button.row:active {
+button.row:active,
+.card-link:active {
   background: var(--mantine-color-dark-5);
 }
 @media (hover: hover) {
   a.row:hover,
-  button.row:hover {
+  button.row:hover,
+  .card-link:hover {
     background: var(--mantine-color-dark-6);
   }
 }
@@ -49,6 +51,57 @@ button.row {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+/* Une carte de grille (annuaire) : toute la carte est la cible tactile, la
+   photo en couverture bord a bord, le contenu en dessous. */
+.card-link {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--mantine-color-dark-4);
+  border-radius: var(--mantine-radius-md);
+  overflow: hidden;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (hover: hover) {
+  .card-link:hover {
+    border-color: var(--mantine-color-dark-3);
+  }
+}
+.card-cover {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  background: var(--mantine-color-dark-6);
+  border-bottom: 1px solid var(--mantine-color-dark-4);
+}
+.card-cover img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Portraits : le visage est dans le haut du cadre. */
+  object-position: center 25%;
+}
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+
+/* Deborde du conteneur de 760 px (AppChrome) pour qu'une grille tienne jusqu'a
+   3 colonnes : 1 120 px au plus (2 x 560), sans toucher les bords de l'ecran
+   (meme gouttiere que AppChrome). Les seuils de colonnes de la grille
+   (founders/page.tsx) supposent cette largeur. */
+.bleed-wide {
+  margin-inline: calc(50% - min(560px, 50vw - max(16px, env(safe-area-inset-left), env(safe-area-inset-right))));
 }
 
 /* Barre d'onglets du bas (mobile). */
@@ -190,6 +243,19 @@ button.row {
   align-items: center;
   justify-content: center;
   padding: 32px 0;
+}
+/* Formulaire public (/forms/[formId]) : le meme fond, assombri. Les questions
+   s'y lisent sans carte, la trame ne fait que bouger derriere. */
+.form-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: rgba(0, 0, 0, 0.62);
+  pointer-events: none;
+}
+.form-content {
+  position: relative;
+  z-index: 1;
 }
 /* La carte du formulaire : assez opaque pour rester lisible sur la trame animee. */
 .auth-card {

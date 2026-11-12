@@ -1,5 +1,6 @@
 import { addDoc, setDoc, type CollectionReference, type DocumentReference, type PartialWithFieldValue } from "firebase/firestore";
-import type { Timestamps, WithId } from "@shared/types";
+import type { Timestamps, User, UserPreferences, WithId } from "@shared/types";
+import { refs } from "@/lib/firestore/refs";
 
 // ----------------------------
 // Ecritures generiques
@@ -32,4 +33,9 @@ export async function createDoc<T extends Timestamps>(
   const now = nowISO();
   const created = await addDoc(ref, { ...data, createdDateISOString: now, updatedDateISOString: now, id: "" } as WithId<T>);
   return created.id;
+}
+
+/** Fusionne des reglages dans `users/{uid}.preferences` (le compte lui-meme). */
+export async function saveUserPreferences(uid: string, preferences: Partial<UserPreferences>) {
+  await setDoc(refs.user(uid), { preferences } as PartialWithFieldValue<WithId<User>>, { merge: true });
 }

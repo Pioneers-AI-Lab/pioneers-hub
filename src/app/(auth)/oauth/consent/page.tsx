@@ -6,6 +6,7 @@ import { Button, Stack, Text } from "@mantine/core";
 import type { CallableResponse } from "@shared/callables";
 import { useAuth } from "@/context/AuthContext";
 import { call } from "@/lib/firebase";
+import { errorMessage } from "@/lib/errors";
 import { paths } from "@/lib/paths";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { PageLoader } from "@/components/ui/PageLoader";
@@ -26,9 +27,7 @@ import { PageLoader } from "@/components/ui/PageLoader";
 
 type Described = CallableResponse<"oauthDescribeRequest">;
 
-function errorMessage(err: unknown): string {
-  return err instanceof Error && err.message ? err.message : "Something went wrong. Start the connection again from Claude.";
-}
+const consentError = (err: unknown) => errorMessage(err, "Something went wrong. Start the connection again from Claude.");
 
 function Consent() {
   const { firebaseUser, isLoading, signOut } = useAuth();
@@ -48,7 +47,7 @@ function Consent() {
     let alive = true;
     call("oauthDescribeRequest")({ requestId })
       .then(({ data }) => alive && setDescribed(data))
-      .catch((err) => alive && setError(errorMessage(err)));
+      .catch((err) => alive && setError(consentError(err)));
     return () => {
       alive = false;
     };
@@ -61,7 +60,7 @@ function Consent() {
       const { data } = await call("oauthDecide")({ requestId, approve });
       window.location.assign(data.redirectUrl);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(consentError(err));
       setBusy(null);
     }
   };

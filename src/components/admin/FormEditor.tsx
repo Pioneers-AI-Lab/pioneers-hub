@@ -17,8 +17,8 @@ import {
   TextInput,
   Textarea,
 } from "@mantine/core";
+import { useClipboard } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import dayjs from "dayjs";
 import { getFieldDef, parseDbField, type DbFieldKey, type DocKind } from "@shared/fieldRegistry";
 import {
   FORM_FIELD_TYPE_LABELS,
@@ -33,7 +33,7 @@ import {
 import type { Form, FormApproval, FormFieldType, FormIdentityCheck, FormKind, FormQuestion, PickerEntity, WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminForm } from "@/context/AdminFormContext";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, fromLocalInput, toLocalInput } from "@/lib/format";
 import { archiveForm, duplicateForm, saveForm, type FormDraft } from "@/lib/formsAdmin";
 import { paths } from "@/lib/paths";
 import {
@@ -45,6 +45,7 @@ import {
   parseWeeklyRule,
   weeklyRule,
 } from "@/components/admin/formLabels";
+import { FormResponses } from "@/components/admin/FormResponses";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ButtonRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
@@ -70,6 +71,7 @@ const DOC_KIND_LABELS: Record<DocKind, string> = {
   startupInternal: "Startup · internal",
   checkin: "Thursday update",
   attendance: "Attendance",
+  sessionRating: "Session rating",
   submission: "Team submission",
 };
 
@@ -81,8 +83,6 @@ const PICKER_ENTITIES: { value: PickerEntity; label: string }[] = [
   { value: "mentor", label: "Mentor" },
 ];
 
-const toLocal = (iso: string | null) => (iso ? dayjs(iso).format("YYYY-MM-DDTHH:mm") : "");
-const fromLocal = (value: string) => (value ? new Date(value).toISOString() : null);
 const newQuestionId = () => `q_${Math.random().toString(36).slice(2, 10)}`;
 
 const draftOf = (form: Form): FormDraft => ({
@@ -248,6 +248,10 @@ function Editor({ form }: { form: WithId<Form> }) {
         </Section>
       )}
 
+      <PublicLinkSection formId={form.id} isPublished={isPublished} />
+
+      {isPublished && <FormResponses />}
+
       <Section title="Form">
         <Stack>
           <TextInput label="Title" value={draft.title} onChange={(e) => set("title", e.currentTarget.value)} />
@@ -300,14 +304,14 @@ function Editor({ form }: { form: WithId<Form> }) {
           <TextInput
             label="Opens"
             type="datetime-local"
-            value={toLocal(draft.opensDateISOString)}
-            onChange={(e) => set("opensDateISOString", fromLocal(e.currentTarget.value))}
+            value={toLocalInput(draft.opensDateISOString)}
+            onChange={(e) => set("opensDateISOString", fromLocalInput(e.currentTarget.value))}
           />
           <TextInput
             label="Deadline"
             type="datetime-local"
-            value={toLocal(draft.deadlineDateISOString)}
-            onChange={(e) => set("deadlineDateISOString", fromLocal(e.currentTarget.value))}
+            value={toLocalInput(draft.deadlineDateISOString)}
+            onChange={(e) => set("deadlineDateISOString", fromLocalInput(e.currentTarget.value))}
           />
           <Group grow gap="xs" align="flex-end">
             <Select
@@ -394,9 +398,11 @@ function Editor({ form }: { form: WithId<Form> }) {
             </Button>
           </Group>
         )}
-        <Text size="xs" c="dimmed" ta="center" mt={6}>
-          The public answer page is not built yet: publishing opens the form in the founders&apos; To do.
-        </Text>
+        {!isPublished && (
+          <Text size="xs" c="dimmed" ta="center" mt={6}>
+            Publishing opens the public link and lists the form in the founders&apos; To do.
+          </Text>
+        )}
       </Box>
 
       {editing && (
@@ -595,5 +601,28 @@ function QuestionModal({
         )}
       </Stack>
     </Modal>
+  );
+}
+
+/** Le lien a partager (Slack) : la page publique, une question par ecran. Un brouillon s'y relit, sans prendre de reponse. */
+function PublicLinkSection({ formId, isPublished }: { formId: string; isPublished: boolean }) {
+  const clipboard = useClipboard({ timeout: 1500 });
+  const path = paths.form(formId);
+  return (
+    <Section
+      title="Public link"
+      hint={isPublished ? "Share it on Slack. No account is needed to answer." : "Preview the form as founders will see it. Publish it to collect answers."}
+    >
+      <Group gap="sm">
+        {isPublished && (
+          <Button size="md" onClick={() => clipboard.copy(`${window.location.origin}${path}`)}>
+            {clipboard.copied ? "Copied" : "Copy link"}
+          </Button>
+        )}
+        <Button component="a" href={path} target="_blank" rel="noreferrer" variant="default" size="md">
+          {isPublished ? "Open" : "Preview"}
+        </Button>
+      </Group>
+    </Section>
   );
 }

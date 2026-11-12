@@ -94,3 +94,12 @@ export function Row(props: RowProps) {
     </div>
   );
 }
+
+/** Le rang en tete de ligne (`leading`) : bleu dans le top 3, ou toujours (`highlight`). */
+export function RankNumber({ rank, highlight }: { rank: number; highlight?: boolean }) {
+  return (
+    <Text className="num" fw={600} w={24} c={highlight || rank <= 3 ? "pioneers" : "dimmed"} style={{ flexShrink: 0 }}>
+      {rank}
+    </Text>
+  );
+}

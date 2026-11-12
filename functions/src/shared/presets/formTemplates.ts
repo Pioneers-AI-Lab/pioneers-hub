@@ -146,8 +146,9 @@ export const FORM_TEMPLATES = {
     identityCheck: "select_name",
     needsEvent: true,
     questions: [
-      q("rating", { type: "rating", label: "How was this session?", required: true }),
-      q("takeaway", { type: "long_text", label: "Your main takeaway" }),
+      // La note et le retour vont dans `sessionRatings` (un par fondateur et par seance).
+      q("rating", { type: "rating", label: "How was this session?", required: true, dbField: "sessionRating.rating" }),
+      q("takeaway", { type: "long_text", label: "Your main takeaway", dbField: "sessionRating.comment" }),
       q("suggestions", { type: "long_text", label: "Suggestions for the speaker or the team" }),
     ],
   }),

@@ -1,5 +1,11 @@
+import { EventResultsAdmin } from "@/components/admin/EventResultsAdmin";
 import { TeamGenerator } from "@/components/admin/TeamGenerator";
 
 export default function LunchRouletteEventPage() {
-  return <TeamGenerator mode="matching" />;
+  return (
+    <>
+      <TeamGenerator mode="matching" />
+      <EventResultsAdmin />
+    </>
+  );
 }

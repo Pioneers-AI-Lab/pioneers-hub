@@ -368,7 +368,7 @@ service cloud.firestore {
       }
 
       // Notes du jury et presences : staff + investors IC. Les jures (sans
-      // compte) et les fondateurs ecriront via l'API.
+      // compte) ecrivent par callable (`submitJudgeScores`, lien prive).
       match /evaluations/{evaluationId} {
         allow read: if isInsider();
         allow write: if isStaff();
@@ -402,8 +402,9 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Visible de tous tant que le reglage du batch le permet ; masque pendant
-    // les mutual picks, sauf pour le staff et les investors.
+    // Visible de tous tant que le reglage du batch le permet (le staff le masque
+    // pendant les mutual picks), toujours pour le staff et les investors.
+    // Ecrit par le serveur seulement (services/leaderboards.ts).
     match /leaderboards/{eventId} {
       allow read: if isStaffOrInvestor()
         || get(/databases/$(database)/documents/batches/$(resource.data.batchId))

@@ -1,0 +1,374 @@
+/* ----------------------------
+   Formulaire public, une question par ecran
+   ----------------------------
+   Mecanique reprise du parcours de reservation de Trippple (BookingModal) :
+   des volets superposes, la question quittee s'efface dans le sens de la
+   lecture, la suivante apparait en cascade une fois la sortie finie. */
+
+.shell {
+  --step-duration: 300ms;
+  --step-shift: 64px;
+  --step-exit-ease: cubic-bezier(0.4, 0, 1, 1);
+  --step-enter-duration: 520ms;
+  --step-enter-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --step-stagger: 70ms;
+  /* On avance : la question sort par le haut, la suivante entre par le bas.
+     On revient : l'inverse. */
+  --exit-shift: calc(var(--step-shift) * -1);
+  --enter-shift: 18px;
+
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  padding: calc(16px + env(safe-area-inset-top)) 0 env(safe-area-inset-bottom);
+}
+
+.shell[data-direction="back"] {
+  --exit-shift: var(--step-shift);
+  --enter-shift: -18px;
+}
+
+/* Avancement, a fleur du bord haut de l'ecran. */
+.progress {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 2;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.bar {
+  display: block;
+  height: 100%;
+  background: var(--mantine-color-pioneers-filled);
+  transition: width var(--step-enter-duration) var(--step-enter-ease);
+}
+
+.header {
+  flex: none;
+  padding-inline: 16px;
+}
+
+/* La fenetre ouverte sur une etape de la pile : tout l'espace entre l'en-tete
+   et le pied. Les volets, detaches du flux, s'y superposent. */
+.viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding-inline: 16px;
+  /* Une liste longue (les noms du batch) defile dans son volet. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  opacity: 0;
+  /* Invisible ne veut pas dire absent : sans cela, un volet efface resterait
+     pose sur le suivant et en intercepterait les clics. */
+  pointer-events: none;
+  outline: none;
+}
+
+/* `margin-block: auto` centre une etape courte, et laisse defiler une longue
+   depuis son debut (un `justify-content: center` en couperait le haut). */
+.group {
+  width: 100%;
+  max-width: 680px;
+  margin: auto;
+  padding-block: 32px 48px;
+}
+
+.current {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* La question qu'on quitte s'efface en se deplacant, dans le sens de la
+   lecture (`--exit-shift`). `both` la laisse a son etat d'arrivee : elle ne
+   reapparait pas a la fin de sa sortie. */
+.leaving {
+  opacity: 1;
+  animation: stepOut var(--step-duration) var(--step-exit-ease) both;
+}
+
+@keyframes stepOut {
+  to {
+    opacity: 0;
+    transform: translateY(var(--exit-shift));
+  }
+}
+
+/* Cascade d'apparition : chaque enfant direct parait apres le precedent.
+   Le retard de depart vaut une sortie pleine : l'etape suivante est en place
+   des le changement, mais ses elements restent invisibles (`both` applique
+   l'etat de depart pendant l'attente) le temps que la precedente s'en aille.
+   A l'ouverture de la page, ce meme retard laisse le fond paraitre d'abord. */
+.current .cascade > * {
+  animation: cascadeIn var(--step-enter-duration) var(--step-enter-ease) both;
+  animation-delay: calc(var(--step-duration) + var(--cascade-i, 6) * var(--step-stagger));
+}
+
+.cascade > *:nth-child(1) { --cascade-i: 0; }
+.cascade > *:nth-child(2) { --cascade-i: 1; }
+.cascade > *:nth-child(3) { --cascade-i: 2; }
+.cascade > *:nth-child(4) { --cascade-i: 3; }
+.cascade > *:nth-child(5) { --cascade-i: 4; }
+.cascade > *:nth-child(6) { --cascade-i: 5; }
+
+@keyframes cascadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(var(--enter-shift));
+  }
+}
+
+/* ---- Texte ------------------------------------------------------------------ */
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--mantine-color-pioneers-filled);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 600;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.75rem, 1.2rem + 2.4vw, 2.75rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.question {
+  margin: 0;
+  font-size: clamp(1.25rem, 1rem + 1.2vw, 1.75rem);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.number {
+  margin-right: 10px;
+  color: var(--mantine-color-pioneers-filled);
+  font-size: 0.75em;
+  font-weight: 600;
+  vertical-align: 0.12em;
+}
+
+.required {
+  margin-left: 4px;
+  color: var(--mantine-color-dark-2);
+}
+
+.description {
+  margin: 10px 0 0;
+  color: var(--mantine-color-dark-1);
+  font-size: var(--mantine-font-size-md);
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.note {
+  margin: 16px 0 0;
+  color: var(--mantine-color-dark-2);
+  font-size: var(--mantine-font-size-sm);
+}
+
+.error {
+  margin: 12px 0 0;
+  color: var(--mantine-color-red-5);
+  font-size: var(--mantine-font-size-sm);
+}
+
+/* ---- Saisie --------------------------------------------------------------------- */
+
+/* Champ souligne, en grand : la reponse se tape comme on ecrit une ligne. */
+.lineInput {
+  margin-top: 28px;
+  padding: 8px 0;
+  height: auto;
+  min-height: 48px;
+  border: 0;
+  border-bottom: 1px solid var(--mantine-color-dark-3);
+  border-radius: 0;
+  background: transparent;
+  color: var(--mantine-color-white);
+  font-size: clamp(1.125rem, 1rem + 0.6vw, 1.5rem);
+  line-height: 1.4;
+  transition: border-color 150ms ease;
+}
+
+.lineInput::placeholder {
+  color: var(--mantine-color-dark-3);
+}
+
+.lineInput:focus {
+  border-bottom-color: var(--mantine-color-pioneers-filled);
+}
+
+.lineInput[data-error] {
+  border-bottom-color: var(--mantine-color-red-5);
+}
+
+.actions {
+  margin-top: 28px;
+}
+
+/* Le raccourci clavier ne sert qu'avec un clavier. */
+.hint {
+  color: var(--mantine-color-dark-2);
+  font-size: var(--mantine-font-size-xs);
+}
+
+@media (hover: none) {
+  .hint {
+    display: none;
+  }
+}
+
+/* Options : pleine largeur, texte a gauche, une lettre devant. */
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+/* Une longue liste defile sur place : le bouton reste a portee. */
+.scrollList {
+  max-height: min(46dvh, 420px);
+  margin-top: 16px;
+  padding-right: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Base commune d'une option et d'une case de note. */
+.option {
+  border: 1px solid var(--mantine-color-dark-4);
+  border-radius: var(--mantine-radius-md);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  font-size: var(--mantine-font-size-md);
+  text-align: left;
+}
+
+.key {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--mantine-color-dark-3);
+  border-radius: 4px;
+  color: var(--mantine-color-dark-1);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.choiceText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.choiceHint {
+  color: var(--mantine-color-dark-2);
+  font-size: var(--mantine-font-size-sm);
+}
+
+.selected {
+  border-color: var(--mantine-color-pioneers-filled);
+  background: rgba(13, 176, 245, 0.12);
+}
+
+.selected .key {
+  border-color: var(--mantine-color-pioneers-filled);
+  background: var(--mantine-color-pioneers-filled);
+  color: var(--mantine-color-black);
+}
+
+/* Note : une rangee de cases egales, 1 a 10 tient en 390 px. */
+.scale {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(30px, 1fr));
+  gap: 6px;
+  margin-top: 28px;
+}
+
+.scaleItem {
+  height: 52px;
+  padding: 0;
+  font-size: var(--mantine-font-size-lg);
+  font-weight: 600;
+}
+
+@media (hover: hover) {
+  .option:hover {
+    border-color: var(--mantine-color-dark-2);
+  }
+
+  .selected:hover {
+    border-color: var(--mantine-color-pioneers-filled);
+  }
+}
+
+.footer {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px 12px;
+}
+
+@media (min-width: 48em) {
+  .shell {
+    padding-top: 32px;
+  }
+
+  .header,
+  .slide {
+    padding-inline: 40px;
+  }
+
+  .footer {
+    padding: 12px 40px 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar {
+    transition: none;
+  }
+
+  /* Ni cascade ni sortie : la question change, sans mise en scene. */
+  .leaving,
+  .current .cascade > * {
+    animation: none;
+  }
+
+  .leaving {
+    opacity: 0;
+  }
+}

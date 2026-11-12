@@ -102,6 +102,12 @@ export type MetricKey = (typeof METRIC_KEYS)[number];
  */
 export const COMMITMENT_STATUSES = ["committed", "on_a_project", "testing_relationships", "what_am_i_doing_here"] as const;
 export type CommitmentStatus = (typeof COMMITMENT_STATUSES)[number];
+export const COMMITMENT_STATUS_LABELS: Record<CommitmentStatus, string> = {
+  committed: "Committed to a startup",
+  on_a_project: "On a project, not committed",
+  testing_relationships: "Testing relationships",
+  what_am_i_doing_here: "What am I doing here?",
+};
 
 export type FormQuestion = {
   /** Stable pour toute la vie de la question. Un changement de type = un nouvel id. */

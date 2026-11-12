@@ -3,28 +3,36 @@
 import Link from "next/link";
 import { Button, Stack, Text } from "@mantine/core";
 import dayjs from "dayjs";
+import { openPicks } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
+import { useChallengeTasks } from "@/context/ChallengeTasksContext";
+import { useMyPicks } from "@/context/MyPicksContext";
 import { useEvents } from "@/context/EventsContext";
 import { useFounder } from "@/context/FounderContext";
 import { useOpenForms } from "@/context/OpenFormsContext";
 import { useProgram } from "@/context/ProgramContext";
 import { missingProfileFields } from "@/lib/completeness";
+import { debriefStatus } from "@/lib/debrief";
+import { picksSubtitle } from "@/lib/picks";
 import { formatDateTime } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageLoader } from "@/components/ui/PageLoader";
-import { Row, RowList } from "@/components/ui/Rows";
+import { LinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 import { EVENT_KIND_LABEL } from "@/components/event/eventLabels";
 
 // « A faire » (SPECS §3.1) : ce qui manque a mon profil, les formulaires
-// ouverts et leur echeance, ce qui arrive cette semaine.
+// ouverts et leur echeance, le Debrief des hackathons, ce qui arrive cette semaine.
 export default function TodoPage() {
   const { program } = useProgram();
   const { batch } = useBatch();
   const { founder, directory, profile, isDetailsLoading } = useFounder();
   const { forms, isLoading: isFormsLoading } = useOpenForms();
   const { events } = useEvents();
+  // Le Debrief (callable, plus lente a froid) et les choix ne bloquent pas la page : leur section attend.
+  const { tasks, isLoading: isTasksLoading } = useChallengeTasks();
+  const { picksByEventId, isLoading: isPicksLoading } = useMyPicks();
 
   if (isDetailsLoading || isFormsLoading) return <PageLoader />;
 
@@ -35,7 +43,20 @@ export default function TodoPage() {
     const start = dayjs(e.startDateISOString);
     return start.isAfter(now.subtract(2, "hour")) && start.isBefore(now.add(7, "day"));
   });
-  const nothing = missing.length === 0 && forms.length === 0 && thisWeek.length === 0;
+  const debriefs = tasks.map((t) => ({ task: t, ...debriefStatus(t) }));
+  const nowISO = now.toISOString();
+  const picksToGive = events.flatMap((e) => {
+    const picks = openPicks(e, nowISO);
+    return picks ? [{ event: e, picks, given: picksByEventId.get(e.id) ?? null }] : [];
+  });
+  const nothing =
+    !isTasksLoading &&
+    !isPicksLoading &&
+    missing.length === 0 &&
+    forms.length === 0 &&
+    thisWeek.length === 0 &&
+    debriefs.every((d) => d.done) &&
+    picksToGive.length === 0;
 
   return (
     <>
@@ -59,11 +80,12 @@ export default function TodoPage() {
       )}
 
       {forms.length > 0 && (
-        <Section title="Forms" hint="Open them from the link the team shares on Slack.">
+        <Section title="Forms">
           <RowList>
             {forms.map((f) => (
-              <Row
+              <LinkRow
                 key={f.id}
+                href={paths.form(f.id)}
                 title={f.title}
                 subtitle={f.description ?? undefined}
                 meta={
@@ -72,6 +94,48 @@ export default function TodoPage() {
                       Due {formatDateTime(f.deadlineDateISOString)}
                     </Text>
                   ) : undefined
+                }
+              />
+            ))}
+          </RowList>
+        </Section>
+      )}
+
+      {!isPicksLoading && picksToGive.length > 0 && (
+        <Section title="Picks" hint="Private: only the Pioneers team sees your choices.">
+          <RowList>
+            {picksToGive.map(({ event, picks, given }) => (
+              <LinkRow
+                key={event.id}
+                href={paths.picks(program.id, batch.id, event.id)}
+                title={picks.question}
+                subtitle={picksSubtitle(event.name, picks)}
+                meta={
+                  <Text size="sm" c={given ? "dimmed" : "pioneers"}>
+                    {given ? `${given.pickedFounderIds.length} picked` : `Top ${picks.max}`}
+                  </Text>
+                }
+              />
+            ))}
+          </RowList>
+        </Section>
+      )}
+
+      {debriefs.length > 0 && (
+        <Section title="Hackathons" hint="Your team's results and a word on each teammate, after every hackathon.">
+          <RowList>
+            {debriefs.map(({ task, toRate, resultsMissing, done }) => (
+              <LinkRow
+                key={task.eventId}
+                href={paths.debrief(program.id, batch.id, task.eventId)}
+                title={task.eventName}
+                subtitle={task.team.name}
+                meta={
+                  <Text size="sm" c={done ? "dimmed" : "pioneers"}>
+                    {done
+                      ? "Done"
+                      : [resultsMissing && "Results", toRate > 0 && `${toRate} to rate`].filter(Boolean).join(" · ")}
+                  </Text>
                 }
               />
             ))}

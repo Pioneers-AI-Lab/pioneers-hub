@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Box, Stack, Text, TextInput } from "@mantine/core";
 import type { EventTeam, WithId } from "@shared/types";
 import { usePublicRoulette } from "@/context/PublicRouletteContext";
-import { PROFILE_CATEGORY_LABEL, formatDateTime } from "@/lib/format";
+import { PROFILE_CATEGORY_LABEL, formatDateTime, searchKey } from "@/lib/format";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LinkRow, RowList } from "@/components/ui/Rows";
 import { paths } from "@/lib/paths";
@@ -16,14 +16,6 @@ import { Empty, Section } from "@/components/ui/Section";
 // limite de ce que le visiteur peut lire (PublicRouletteContext), et un lien
 // vers sa fiche. Fiche privee et visiteur sans compte : la fiche le renvoie a
 // la connexion, puis le ramene (BlockedState).
-
-/** Minuscules, sans accents : « Chloé » se trouve en tapant « chloe ». */
-const normalize = (value: string) =>
-  value
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .trim();
 
 type Member = { id: string; name: string; photoUrl: string | null; context: string | null };
 
@@ -44,11 +36,11 @@ export default function PublicLunchRoulettePage() {
   const { event, tables, viewerFounderId } = usePublicRoulette();
   const membersOf = useMembers();
   const [search, setSearch] = useState("");
-  const q = normalize(search);
+  const q = searchKey(search);
 
   const mine = viewerFounderId ? (tables.find((t) => t.memberIds.includes(viewerFounderId)) ?? null) : null;
   const ordered = mine ? [mine, ...tables.filter((t) => t !== mine)] : tables;
-  const matches = (m: Member) => q.length > 0 && normalize(m.name).includes(q);
+  const matches = (m: Member) => q.length > 0 && searchKey(m.name).includes(q);
   const visible = q ? ordered.filter((t) => membersOf(t).some(matches)) : ordered;
   const hasNames = tables.some((t) => membersOf(t).some((m) => m.name !== "Founder"));
 

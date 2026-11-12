@@ -1,0 +1,1991 @@
+{
+  "_doc": "Evenements du batch Fall 2026 (Pioneers Accelerator), a importer plus tard dans `events` (pas encore en base). Champs alignes sur `PioneersEvent` (functions/src/shared/types/event.ts) ; les heures `startTime`/`endTime` sont en heure de Paris (UTC+1), `startDateISOString` en UTC. `criteria` et les metriques par defaut viennent du modele (`templateKey`, presets/eventTemplates.ts) ; `metrics` ici remplace celles du modele quand il est renseigne. Champs non importes : `key`, `dayString`, `endDayString`, `startTime`, `endTime`, `dateHint`, `schedule`, `dataToCollect`, `source`. `dataToCollect.status` : ok = stocke et saisissable ; partial = stocke en texte libre ; missing_capture = la base sait stocker, pas encore d'outil de saisie ; missing_structure = pas de place dans la base.",
+  "programId": "accelerator",
+  "batchId": "fall-2026",
+  "sources": [
+    "Notion « Fall 2026 · Station F, Paris → San Francisco »",
+    "Notion « Pioneers FAQ »",
+    "email des 5 hackathons (11/11/2026)",
+    "brief « Pioneers batch data » de Maxime (11/11/2026)"
+  ],
+  "phases": [
+    {
+      "name": "Find",
+      "from": "2026-11-16",
+      "to": "2026-11-27",
+      "weeks": "1-2"
+    },
+    {
+      "name": "Build",
+      "from": "2026-11-30",
+      "to": "2026-12-17",
+      "weeks": "3-5"
+    },
+    {
+      "name": "Christmas break",
+      "from": "2026-12-18",
+      "to": "2027-01-03",
+      "weeks": null
+    },
+    {
+      "name": "Sprint",
+      "from": "2027-01-04",
+      "to": "2027-02-25",
+      "weeks": "6-13"
+    },
+    {
+      "name": "Scale (San Francisco, Demo Day 100+ investors)",
+      "from": "2027-03-01",
+      "to": "2027-04-30",
+      "weeks": null,
+      "outOfScope": true
+    }
+  ],
+  "recurringForms": [
+    {
+      "key": "weekly-update",
+      "template": "weekly_update",
+      "when": "chaque jeudi, du 3 dec. 2026 au 25 fev. 2027 (hors pause)",
+      "target": "checkins + metricSnapshots"
+    },
+    {
+      "key": "weekly-feedback",
+      "template": "weekly_feedback",
+      "when": "fin des semaines 1 et 2 (anonyme)",
+      "target": "formResponses"
+    },
+    {
+      "key": "exit",
+      "template": "exit",
+      "when": "fin de phase 1",
+      "target": "formResponses"
+    }
+  ],
+  "events": [
+    {
+      "key": "fa26-station-f-onboarding",
+      "name": "Station F onboarding",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": "Badge collection (photo ID, HAL onboarding done)",
+      "dayString": "2026-11-16",
+      "endDayString": null,
+      "startTime": "09:30",
+      "endTime": "10:30",
+      "startDateISOString": "2026-11-16T08:30:00.000Z",
+      "endDateISOString": "2026-11-16T09:30:00.000Z",
+      "dateHint": null,
+      "location": "Station F, main entrance reception",
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Presence des la premiere heure",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        }
+      ],
+      "source": "Notion Fall 2026, brief"
+    },
+    {
+      "key": "fa26-kickoff",
+      "name": "Pioneers Fall 2026 kick-off",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": "Mission brief",
+      "dayString": "2026-11-16",
+      "endDayString": null,
+      "startTime": "10:30",
+      "endTime": null,
+      "startDateISOString": "2026-11-16T09:30:00.000Z",
+      "endDateISOString": null,
+      "dateHint": null,
+      "location": "Creativity Room",
+      "programWeek": "Week 1",
+      "isMilestone": true,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        }
+      ],
+      "source": "Notion Fall 2026"
+    },
+    {
+      "key": "fa26-twin-launch",
+      "name": "Twin launch",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-16",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "lun. 16 nov., heure a confirmer",
+      "location": null,
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Twin",
+          "role": "guest",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Compte Twin de chaque fondateur",
+          "target": "a creer (champ compte Twin)",
+          "capture": "integration Twin",
+          "status": "missing_structure"
+        },
+        {
+          "what": "Usage Twin tout le batch : agents crees, executions, outils connectes, credits",
+          "target": "metricSnapshots (source twin)",
+          "capture": "integration Twin",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-founder-introductions",
+      "name": "Founder introductions",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-16",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "lun. 16 nov., heure a confirmer",
+      "location": null,
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Presentation de chaque fondateur",
+          "target": "founders/{id}/private/directory.introduceYourself",
+          "capture": "formulaire",
+          "status": "ok"
+        },
+        {
+          "what": "Qui chacun veut rencontrer",
+          "target": "founderWeeks.interestedInFounderIds",
+          "capture": "formulaire",
+          "status": "ok"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-lunch-roulette-11-16",
+      "name": "Lunch roulette",
+      "kind": "matching",
+      "templateKey": "lunch_roulette",
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-16",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "midi, heure a confirmer",
+      "location": null,
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-lunch-roulette-11-17",
+      "name": "Lunch roulette",
+      "kind": "matching",
+      "templateKey": "lunch_roulette",
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-17",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "midi, heure a confirmer",
+      "location": null,
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-lunch-roulette-11-18",
+      "name": "Lunch roulette",
+      "kind": "matching",
+      "templateKey": "lunch_roulette",
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-18",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "midi, heure a confirmer",
+      "location": null,
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-lunch-roulette-11-19",
+      "name": "Lunch roulette",
+      "kind": "matching",
+      "templateKey": "lunch_roulette",
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-19",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "midi, heure a confirmer",
+      "location": null,
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-lunch-roulette-11-20",
+      "name": "Lunch roulette",
+      "kind": "matching",
+      "templateKey": "lunch_roulette",
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-20",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "midi, heure a confirmer",
+      "location": null,
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-lunch-roulette-11-23",
+      "name": "Lunch roulette",
+      "kind": "matching",
+      "templateKey": "lunch_roulette",
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-23",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "midi, heure a confirmer",
+      "location": null,
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-lunch-roulette-11-24",
+      "name": "Lunch roulette",
+      "kind": "matching",
+      "templateKey": "lunch_roulette",
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-24",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "midi, heure a confirmer",
+      "location": null,
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-lunch-roulette-11-25",
+      "name": "Lunch roulette",
+      "kind": "matching",
+      "templateKey": "lunch_roulette",
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-25",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "midi, heure a confirmer",
+      "location": null,
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-lunch-roulette-11-26",
+      "name": "Lunch roulette",
+      "kind": "matching",
+      "templateKey": "lunch_roulette",
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-26",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "midi, heure a confirmer",
+      "location": null,
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-lunch-roulette-11-27",
+      "name": "Lunch roulette",
+      "kind": "matching",
+      "templateKey": "lunch_roulette",
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-27",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "midi, heure a confirmer",
+      "location": null,
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-speed-dating",
+      "name": "Founder speed dating",
+      "kind": "matching",
+      "templateKey": "speed_dating",
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-17",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "mar. 17 nov., heure a confirmer",
+      "location": null,
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Qui a rencontre qui",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        },
+        {
+          "what": "« Who stood out » : un choix par fondateur",
+          "target": "a creer (pick avec contexte)",
+          "capture": "fondateur",
+          "status": "missing_structure"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-hackathon-1-pain-hunters",
+      "name": "Hackathon 1: Pain Hunters",
+      "kind": "team_challenge",
+      "templateKey": "hackathon",
+      "stage": null,
+      "topic": "Find a real pain with evidence (10+ posts or reviews from Reddit, X, LinkedIn, G2, Trustpilot) and build a list of potential customers.",
+      "dayString": "2026-11-18",
+      "endDayString": null,
+      "startTime": "09:30",
+      "endTime": "12:00",
+      "startDateISOString": "2026-11-18T08:30:00.000Z",
+      "endDateISOString": "2026-11-18T11:00:00.000Z",
+      "dateHint": null,
+      "location": null,
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Twin",
+          "role": "guest",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": [
+        {
+          "key": "evidencePosts",
+          "label": "Evidence posts or reviews collected",
+          "unit": null
+        },
+        {
+          "key": "potentialCustomers",
+          "label": "Potential customers listed",
+          "unit": null
+        },
+        {
+          "key": "painLibraryEntries",
+          "label": "Entries in the shared pain library",
+          "unit": null
+        }
+      ],
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Equipes et appartenances datees",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        },
+        {
+          "what": "Compteurs : preuves, clients potentiels, entrees de la pain library",
+          "target": "submissions/{teamId}.metrics + metricSnapshots",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Liens : sources des preuves, liste des 30 clients potentiels",
+          "target": "submissions/{teamId}.links",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
+          "target": "events/{id}/peerRatings",
+          "capture": "fondateur",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Retro d'equipe",
+          "target": "formResponses (exercise_feedback)",
+          "capture": "formulaire",
+          "status": "ok"
+        }
+      ],
+      "source": "email, brief"
+    },
+    {
+      "key": "fa26-hackathon-2-phone-agents",
+      "name": "Hackathon 2: Phone Agents",
+      "kind": "team_challenge",
+      "templateKey": "hackathon",
+      "stage": null,
+      "topic": "Build a voice agent that calls businesses to test the pain and book meetings. Winner: most real conversations and meetings booked.",
+      "dayString": "2026-11-19",
+      "endDayString": null,
+      "startTime": "14:00",
+      "endTime": "16:30",
+      "startDateISOString": "2026-11-19T13:00:00.000Z",
+      "endDateISOString": "2026-11-19T15:30:00.000Z",
+      "dateHint": null,
+      "location": null,
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Twin",
+          "role": "guest",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": [
+        {
+          "key": "callsMade",
+          "label": "Calls made",
+          "unit": null
+        },
+        {
+          "key": "realConversations",
+          "label": "Real conversations",
+          "unit": null
+        },
+        {
+          "key": "meetingsBooked",
+          "label": "Meetings booked",
+          "unit": null
+        }
+      ],
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Equipes et appartenances datees",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        },
+        {
+          "what": "Compteurs : appels, vraies conversations, rendez-vous",
+          "target": "submissions/{teamId}.metrics + metricSnapshots",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Transcripts d'appels",
+          "target": "submissions/{teamId}.links",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Gagnant : le plus de conversations et de rendez-vous",
+          "target": "classement par metrique",
+          "capture": "calcul",
+          "status": "missing_structure"
+        },
+        {
+          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
+          "target": "events/{id}/peerRatings",
+          "capture": "fondateur",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "email, brief"
+    },
+    {
+      "key": "fa26-hackathon-3-distribution-machine",
+      "name": "Hackathon 3: Distribution Machine",
+      "kind": "team_challenge",
+      "templateKey": "hackathon",
+      "stage": null,
+      "topic": "Take a landing page from zero to signups in two hours with X and LinkedIn posts, an SEO article and ad creatives.",
+      "dayString": "2026-11-20",
+      "endDayString": null,
+      "startTime": "09:30",
+      "endTime": "12:00",
+      "startDateISOString": "2026-11-20T08:30:00.000Z",
+      "endDateISOString": "2026-11-20T11:00:00.000Z",
+      "dateHint": null,
+      "location": null,
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Twin",
+          "role": "guest",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": [
+        {
+          "key": "signups",
+          "label": "Signups",
+          "unit": null
+        },
+        {
+          "key": "postsPublished",
+          "label": "X and LinkedIn posts published",
+          "unit": null
+        },
+        {
+          "key": "seoArticles",
+          "label": "SEO articles published",
+          "unit": null
+        },
+        {
+          "key": "adCreatives",
+          "label": "Ad creatives",
+          "unit": null
+        },
+        {
+          "key": "conversionRate",
+          "label": "Conversion rate",
+          "unit": "%"
+        }
+      ],
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Equipes et appartenances datees",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        },
+        {
+          "what": "Compteurs : inscriptions, posts, articles SEO, creatives, taux de conversion",
+          "target": "submissions/{teamId}.metrics + metricSnapshots",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Liens : landing page, posts, article, creatives",
+          "target": "submissions/{teamId}.links / productUrl",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
+          "target": "events/{id}/peerRatings",
+          "capture": "fondateur",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "email, brief"
+    },
+    {
+      "key": "fa26-week-1-retro",
+      "name": "Week 1 retro",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-20",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "ven. 20 nov., heure a confirmer",
+      "location": null,
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Feedback anonyme de la semaine 1",
+          "target": "formResponses (weekly_feedback, anonyme)",
+          "capture": "formulaire",
+          "status": "ok"
+        },
+        {
+          "what": "Tous les avis entre pairs de la semaine, en un lieu",
+          "target": "events/*/peerRatings",
+          "capture": "lecture staff",
+          "status": "ok"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-hackathon-4-agent-agency",
+      "name": "Hackathon 4: Agent Agency",
+      "kind": "team_challenge",
+      "templateKey": "hackathon",
+      "stage": null,
+      "topic": "Build an agent for a real business and get paid within four hours. Winner: most money collected.",
+      "dayString": "2026-11-23",
+      "endDayString": null,
+      "startTime": "14:00",
+      "endTime": "18:00",
+      "startDateISOString": "2026-11-23T13:00:00.000Z",
+      "endDateISOString": "2026-11-23T17:00:00.000Z",
+      "dateHint": null,
+      "location": null,
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Twin",
+          "role": "guest",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": [
+        {
+          "key": "moneyCollected",
+          "label": "Money collected",
+          "unit": "EUR"
+        },
+        {
+          "key": "signedCommitments",
+          "label": "Signed commitments",
+          "unit": null
+        }
+      ],
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Equipes et appartenances datees",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        },
+        {
+          "what": "Argent encaisse, engagements signes",
+          "target": "submissions/{teamId}.metrics + metricSnapshots",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Type de client",
+          "target": "submissions/{teamId} (champ texte a creer)",
+          "capture": "equipe",
+          "status": "missing_structure"
+        },
+        {
+          "what": "Gagnant : le plus d'argent encaisse",
+          "target": "classement par metrique",
+          "capture": "calcul",
+          "status": "missing_structure"
+        },
+        {
+          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
+          "target": "events/{id}/peerRatings",
+          "capture": "fondateur",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Debrief : top 3 des personnes avec qui construire",
+          "target": "picks/{batchId}_{founderId}",
+          "capture": "fondateur",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "email, brief"
+    },
+    {
+      "key": "fa26-hackathon-5-zero-to-first-customer",
+      "name": "Hackathon 5: Zero to First Customer",
+      "kind": "team_challenge",
+      "templateKey": "hackathon",
+      "stage": null,
+      "topic": "Three days: teams build an agent-powered product and land a first customer. Demos on Monday 30 November at 10:00.",
+      "dayString": "2026-11-25",
+      "endDayString": "2026-11-30",
+      "startTime": null,
+      "endTime": "12:00",
+      "startDateISOString": null,
+      "endDateISOString": "2026-11-30T11:00:00.000Z",
+      "dateHint": null,
+      "location": null,
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Twin",
+          "role": "guest",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": [
+        {
+          "key": "users",
+          "label": "Users",
+          "unit": null
+        },
+        {
+          "key": "revenue",
+          "label": "Revenue",
+          "unit": "EUR"
+        },
+        {
+          "key": "usage",
+          "label": "Usage (key action count)",
+          "unit": null
+        },
+        {
+          "key": "firstCustomers",
+          "label": "Paying or signed customers",
+          "unit": null
+        }
+      ],
+      "schedule": [
+        {
+          "dayString": "2026-11-25",
+          "time": null,
+          "what": "Kickoff : equipes finales issues des choix reciproques, probleme choisi, plan d'une page"
+        },
+        {
+          "dayString": "2026-11-25",
+          "time": null,
+          "what": "Check-in 1 : avancement et blocages par equipe"
+        },
+        {
+          "dayString": "2026-11-26",
+          "time": null,
+          "what": "Check-in 2 : avancement et blocages par equipe"
+        },
+        {
+          "dayString": "2026-11-27",
+          "time": null,
+          "what": "Build freeze : URL du produit, fonctionnalites"
+        },
+        {
+          "dayString": "2026-11-30",
+          "time": "09:00",
+          "what": "Releve des chiffres : utilisateurs, revenu, usage"
+        },
+        {
+          "dayString": "2026-11-30",
+          "time": "10:00",
+          "what": "Demos et resultats, notes du jury"
+        }
+      ],
+      "dataToCollect": [
+        {
+          "what": "Equipes finales (startups)",
+          "target": "startups + memberships",
+          "capture": "generateur / fondateurs",
+          "status": "ok"
+        },
+        {
+          "what": "Probleme choisi, plan d'une page",
+          "target": "startups/{id}/private/profile.problem (+ lien du plan)",
+          "capture": "formulaire",
+          "status": "ok"
+        },
+        {
+          "what": "Check-ins : avancement et blocages (x2)",
+          "target": "formResponses",
+          "capture": "formulaire",
+          "status": "partial"
+        },
+        {
+          "what": "URL du produit, fonctionnalites",
+          "target": "submissions/{teamId}.productUrl",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Utilisateurs, revenu, usage au lundi 9:00",
+          "target": "submissions/{teamId}.metrics + metricSnapshots",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Notes du jury aux demos",
+          "target": "events/{id}/evaluations",
+          "capture": "jury (lien prive)",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
+          "target": "events/{id}/peerRatings",
+          "capture": "fondateur",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "email, brief"
+    },
+    {
+      "key": "fa26-talk-bruno-aziza",
+      "name": "Talk: Bruno Aziza",
+      "kind": "session",
+      "templateKey": "masterclass",
+      "stage": null,
+      "topic": null,
+      "dayString": null,
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "semaines 1-2, date a confirmer",
+      "location": null,
+      "programWeek": null,
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Bruno Aziza",
+          "role": "speaker",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-talk-hugo-manoukian",
+      "name": "Talk: Hugo Manoukian",
+      "kind": "session",
+      "templateKey": "masterclass",
+      "stage": null,
+      "topic": null,
+      "dayString": null,
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "semaines 1-2, date a confirmer",
+      "location": null,
+      "programWeek": null,
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Hugo Manoukian",
+          "role": "speaker",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-talk-benoit-miegeville",
+      "name": "Talk: Benoit Miegeville",
+      "kind": "session",
+      "templateKey": "masterclass",
+      "stage": null,
+      "topic": null,
+      "dayString": null,
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "semaines 1-2, date a confirmer",
+      "location": null,
+      "programWeek": null,
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Benoit Miegeville",
+          "role": "speaker",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-talk-alexis-robert",
+      "name": "Talk: Alexis Robert",
+      "kind": "session",
+      "templateKey": "masterclass",
+      "stage": null,
+      "topic": null,
+      "dayString": null,
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "semaines 1-2, date a confirmer",
+      "location": null,
+      "programWeek": null,
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Alexis Robert",
+          "role": "speaker",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-talk-cyril",
+      "name": "Talk: Cyril",
+      "kind": "session",
+      "templateKey": "masterclass",
+      "stage": null,
+      "topic": null,
+      "dayString": null,
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "semaines 1-2, date a confirmer",
+      "location": null,
+      "programWeek": null,
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Cyril",
+          "role": "speaker",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-talk-clement-revillion",
+      "name": "Talk: Clement Revillion",
+      "kind": "session",
+      "templateKey": "masterclass",
+      "stage": null,
+      "topic": null,
+      "dayString": null,
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "semaines 1-2, date a confirmer",
+      "location": null,
+      "programWeek": null,
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Clement Revillion",
+          "role": "speaker",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-masterclass-pitching",
+      "name": "Masterclass: pitching",
+      "kind": "session",
+      "templateKey": "masterclass",
+      "stage": null,
+      "topic": null,
+      "dayString": null,
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "semaines 1-2, date a confirmer",
+      "location": null,
+      "programWeek": null,
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-customer-day",
+      "name": "Customer day",
+      "kind": "team_challenge",
+      "templateKey": "customer_day",
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-12-01",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "mar. 1 dec., heure a confirmer",
+      "location": null,
+      "programWeek": "Week 3",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": [
+        {
+          "key": "conversations",
+          "label": "Customer conversations",
+          "unit": null
+        }
+      ],
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Conversations par equipe",
+          "target": "submissions/{teamId}.metrics + metricSnapshots",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Apprentissages (postes sur Slack), ce que chaque equipe change",
+          "target": "formResponses",
+          "capture": "formulaire",
+          "status": "partial"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-google-deepmind-workshop",
+      "name": "Google DeepMind workshop: building with Gemini",
+      "kind": "session",
+      "templateKey": "masterclass",
+      "stage": null,
+      "topic": null,
+      "dayString": null,
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "2 ou 3 dec.",
+      "location": null,
+      "programWeek": null,
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Google DeepMind",
+          "role": "speaker",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief, FAQ"
+    },
+    {
+      "key": "fa26-being-vc-backable",
+      "name": "Being VC-backable",
+      "kind": "session",
+      "templateKey": "masterclass",
+      "stage": null,
+      "topic": null,
+      "dayString": null,
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "2 ou 3 dec.",
+      "location": null,
+      "programWeek": null,
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-pitch-day-1",
+      "name": "Pitch Day #1",
+      "kind": "pitch",
+      "templateKey": "pitch_day",
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-12-04",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "ven. 4 dec., heure a confirmer",
+      "location": null,
+      "programWeek": "Week 3",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Notes sur la grille unique (team, speed, market)",
+          "target": "events/{id}/evaluations",
+          "capture": "jury / staff",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-group-office-hours-1",
+      "name": "Group office hours",
+      "kind": "meeting",
+      "templateKey": "office_hours",
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-12-11",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "ven. 11 dec., heure a confirmer",
+      "location": null,
+      "programWeek": "Week 4",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Notes du staff",
+          "target": "notes",
+          "capture": "staff / Claude",
+          "status": "ok"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-on-demand-office-hours",
+      "name": "On-demand office hours",
+      "kind": "meeting",
+      "templateKey": "office_hours",
+      "stage": null,
+      "topic": null,
+      "dayString": null,
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "semaines 4-5, a la demande",
+      "location": null,
+      "programWeek": null,
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Qui demande de l'aide, sur quoi",
+          "target": "formResponses (demande d'office hours)",
+          "capture": "formulaire",
+          "status": "partial"
+        },
+        {
+          "what": "Notes de rendez-vous (Granola)",
+          "target": "notes",
+          "capture": "staff / Claude",
+          "status": "ok"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-traction-sprint",
+      "name": "48-hour traction sprint",
+      "kind": "team_challenge",
+      "templateKey": "traction_sprint",
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-12-14",
+      "endDayString": "2026-12-16",
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "14-16 dec.",
+      "location": null,
+      "programWeek": "Week 5",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": [],
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Une metrique choisie par equipe, valeur avant et apres",
+          "target": "metricSnapshots (phase before / after)",
+          "capture": "equipe",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief"
+    },
+    {
+      "key": "fa26-selection-day",
+      "name": "Selection Day",
+      "kind": "pitch",
+      "templateKey": "selection_day",
+      "stage": "selection_day",
+      "topic": null,
+      "dayString": "2026-12-17",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "jeu. 17 dec., heure a confirmer",
+      "location": null,
+      "programWeek": "Week 5",
+      "isMilestone": true,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Inscription : objectifs, produit, techno, dossier Drive",
+          "target": "startups/{id}/private/profile",
+          "capture": "formulaire (selection_day_registration)",
+          "status": "ok"
+        },
+        {
+          "what": "Notes du jury (team, execution, market) et go / no-go",
+          "target": "events/{id}/evaluations",
+          "capture": "jury (lien prive)",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "Notion Fall 2026, brief"
+    },
+    {
+      "key": "fa26-demo-day-1",
+      "name": "Demo day 1",
+      "kind": "pitch",
+      "templateKey": "demo_day",
+      "stage": null,
+      "topic": null,
+      "dayString": "2027-01-15",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "heure a confirmer",
+      "location": null,
+      "programWeek": "Week 7",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Notes de progression sur la grille unique",
+          "target": "events/{id}/evaluations",
+          "capture": "staff / investors",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief, FAQ"
+    },
+    {
+      "key": "fa26-demo-day-2",
+      "name": "Demo day 2",
+      "kind": "pitch",
+      "templateKey": "demo_day",
+      "stage": null,
+      "topic": null,
+      "dayString": "2027-01-29",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "heure a confirmer",
+      "location": null,
+      "programWeek": "Week 9",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Notes de progression sur la grille unique",
+          "target": "events/{id}/evaluations",
+          "capture": "staff / investors",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief, FAQ"
+    },
+    {
+      "key": "fa26-demo-day-3",
+      "name": "Demo day 3",
+      "kind": "pitch",
+      "templateKey": "demo_day",
+      "stage": null,
+      "topic": null,
+      "dayString": "2027-02-12",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "heure a confirmer",
+      "location": null,
+      "programWeek": "Week 11",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Notes de progression sur la grille unique",
+          "target": "events/{id}/evaluations",
+          "capture": "staff / investors",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief, FAQ"
+    },
+    {
+      "key": "fa26-mentor-launch",
+      "name": "Mentor programme launch",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": null,
+      "dayString": "2027-01-20",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "a partir du 20 janv.",
+      "location": null,
+      "programWeek": "Week 8",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Souhaits de mentors par startup",
+          "target": "startupMentorPicks",
+          "capture": "startup",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Matchs mentor-startup",
+          "target": "mentorships",
+          "capture": "staff",
+          "status": "ok"
+        },
+        {
+          "what": "Rendez-vous et notes dans les deux sens",
+          "target": "events (mentor_session) + evaluations",
+          "capture": "mentor / startup",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief, FAQ"
+    },
+    {
+      "key": "fa26-vp-office-hours",
+      "name": "Venture partner office hours",
+      "kind": "meeting",
+      "templateKey": "office_hours",
+      "stage": null,
+      "topic": null,
+      "dayString": null,
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "phase de sprint",
+      "location": null,
+      "programWeek": null,
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Hugo Manoukian",
+          "role": "investor",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        },
+        {
+          "name": "Bruno Aziza",
+          "role": "investor",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        },
+        {
+          "name": "Salomon Aiach",
+          "role": "investor",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Notes",
+          "target": "notes",
+          "capture": "staff / Claude",
+          "status": "ok"
+        }
+      ],
+      "source": "FAQ"
+    },
+    {
+      "key": "fa26-legal-tax-office-hours",
+      "name": "Legal and tax office hours",
+      "kind": "meeting",
+      "templateKey": "expert_office_hours",
+      "stage": null,
+      "topic": null,
+      "dayString": null,
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "phase de sprint",
+      "location": null,
+      "programWeek": null,
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Notes",
+          "target": "notes",
+          "capture": "staff / Claude",
+          "status": "ok"
+        }
+      ],
+      "source": "FAQ"
+    },
+    {
+      "key": "fa26-bold-office-hours",
+      "name": "Bold open office hours",
+      "kind": "meeting",
+      "templateKey": "expert_office_hours",
+      "stage": null,
+      "topic": null,
+      "dayString": null,
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "sur place, recurrent",
+      "location": null,
+      "programWeek": null,
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Bold",
+          "role": "guest",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Notes",
+          "target": "notes",
+          "capture": "staff / Claude",
+          "status": "ok"
+        }
+      ],
+      "source": "FAQ"
+    },
+    {
+      "key": "fa26-pre-ic",
+      "name": "Pre-IC",
+      "kind": "pitch",
+      "templateKey": "pre_ic",
+      "stage": "pre_ic",
+      "topic": null,
+      "dayString": "2027-02-18",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "jeu. 18 fev., heure a confirmer",
+      "location": null,
+      "programWeek": "Week 12",
+      "isMilestone": true,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Dossier : date de formation, utilisateurs, revenu, techno, mentors",
+          "target": "startups/{id}/private/profile + checkins",
+          "capture": "formulaire (pre_ic_registration)",
+          "status": "ok"
+        },
+        {
+          "what": "Pilotes payants, pipeline",
+          "target": "metricSnapshots (cles paidPilots, pipeline)",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Grille unique + « would you invest? » + probabilite de pari",
+          "target": "events/{id}/evaluations",
+          "capture": "staff / invites",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "brief, FAQ"
+    },
+    {
+      "key": "fa26-ic",
+      "name": "Investment Committee",
+      "kind": "pitch",
+      "templateKey": "ic",
+      "stage": "ic",
+      "topic": null,
+      "dayString": "2027-02-25",
+      "endDayString": null,
+      "startTime": null,
+      "endTime": null,
+      "startDateISOString": null,
+      "endDateISOString": null,
+      "dateHint": "jeu. 25 fev., heure a confirmer",
+      "location": null,
+      "programWeek": "Week 13",
+      "isMilestone": true,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Notes, go / no-go, decision finale",
+          "target": "events/{id}/evaluations",
+          "capture": "investors IC",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "Notion Fall 2026, FAQ"
+    }
+  ]
+}

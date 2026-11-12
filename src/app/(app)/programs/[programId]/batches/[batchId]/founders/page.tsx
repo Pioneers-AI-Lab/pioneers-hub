@@ -1,15 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { SegmentedControl, Stack, Text, TextInput } from "@mantine/core";
+import { Group, SegmentedControl, SimpleGrid, Stack, Text, TextInput } from "@mantine/core";
 import type { ProfileCategory } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
+import { useFounderDirectories, type FoundersView } from "@/context/FounderDirectoriesContext";
 import { useFounders } from "@/context/FoundersContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
 import { PROFILE_CATEGORY_LABEL, score10 } from "@/lib/format";
 import { paths } from "@/lib/paths";
+import { FounderGridCard } from "@/components/founder/FounderGridCard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { LinkRow, RowList } from "@/components/ui/Rows";
@@ -28,6 +30,8 @@ export default function FoundersPage() {
   // Staff et investors : classement par Program Performance (comme le dashboard).
   const [sort, setSort] = useState<"score" | "name">("score");
   const byScore = canSeeScores && sort === "score";
+  // Grille : la galerie du Profile Book (1 a 3 cartes par ligne selon la largeur).
+  const { view, setView, directoriesById, isLoading: isGridLoading } = useFounderDirectories();
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -41,6 +45,21 @@ export default function FoundersPage() {
   }, [founders, search, filter, byScore, founderPerformance]);
 
   if (isLoading) return <PageLoader />;
+
+  /** Score (staff, investors) ou compte non rattache (staff), a droite de la ligne ou de la carte. */
+  const metaOf = (founderId: string, uid: string | null) => {
+    if (canSeeScores) {
+      const score = founderPerformance(founderId);
+      return (
+        <Text fw={600} className="num" c={score === null ? "dimmed" : undefined}>
+          {score10(score)}
+        </Text>
+      );
+    }
+    if (role === "staff" && !uid) return <Text size="xs" c="dimmed">Not linked</Text>;
+    return undefined;
+  };
+  const startupNameOf = (startupId: string | null) => (startupId && startupsById.get(startupId)?.name) || null;
 
   return (
     <>
@@ -68,25 +87,53 @@ export default function FoundersPage() {
             { value: "hybrid", label: "Hybrid" },
           ]}
         />
-        {canSeeScores && (
+        <Group gap="xs">
+          {canSeeScores && (
+            <SegmentedControl
+              size="xs"
+              value={sort}
+              onChange={(v) => setSort(v as "score" | "name")}
+              data={[
+                { value: "score", label: "By score" },
+                { value: "name", label: "By name" },
+              ]}
+            />
+          )}
           <SegmentedControl
             size="xs"
-            w="fit-content"
-            value={sort}
-            onChange={(v) => setSort(v as "score" | "name")}
+            ml="auto"
+            value={view}
+            onChange={(v) => setView(v as FoundersView)}
             data={[
-              { value: "score", label: "By score" },
-              { value: "name", label: "By name" },
+              { value: "list", label: "List" },
+              { value: "grid", label: "Grid" },
             ]}
           />
-        )}
+        </Group>
       </Stack>
       {visible.length === 0 ? (
         <Empty>{founders.length === 0 ? "No founder yet." : "No founder matches."}</Empty>
+      ) : view === "grid" && isGridLoading ? (
+        <PageLoader />
+      ) : view === "grid" ? (
+        <div className="bleed-wide">
+          <SimpleGrid type="container" cols={{ base: 1, "540px": 2, "840px": 3 }} spacing="md" verticalSpacing="md" mt="xs">
+            {visible.map((f) => (
+              <FounderGridCard
+                key={f.id}
+                href={paths.founder(program.id, batch.id, f.id)}
+                founder={f}
+                directory={directoriesById.get(f.id)}
+                startupName={startupNameOf(f.startupId)}
+                meta={metaOf(f.id, f.uid)}
+              />
+            ))}
+          </SimpleGrid>
+        </div>
       ) : (
         <RowList>
           {visible.map((f) => {
-            const startup = f.startupId ? startupsById.get(f.startupId)?.name : null;
+            const startup = startupNameOf(f.startupId);
             const category = f.profileCategory ? PROFILE_CATEGORY_LABEL[f.profileCategory] : null;
             const context = [category, startup ?? f.rolesICouldTake.slice(0, 2).join(", ")].filter(Boolean).join(" · ");
             return (
@@ -96,15 +143,7 @@ export default function FoundersPage() {
                 avatar={{ name: f.name, photoUrl: f.photoUrl }}
                 title={f.name}
                 subtitle={context || undefined}
-                meta={
-                  canSeeScores ? (
-                    <Text fw={600} className="num" c={founderPerformance(f.id) === null ? "dimmed" : undefined}>
-                      {score10(founderPerformance(f.id))}
-                    </Text>
-                  ) : role === "staff" && !f.uid ? (
-                    <Text size="xs" c="dimmed">Not linked</Text>
-                  ) : undefined
-                }
+                meta={metaOf(f.id, f.uid)}
               />
             );
           })}

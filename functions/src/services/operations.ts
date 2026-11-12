@@ -63,7 +63,7 @@ function stableStringify(value: unknown): string {
 }
 
 /** Copie JSON pure : Firestore refuse les `undefined`. */
-const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value ?? null));
+export const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value ?? null));
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PLAN_TTL_MS = 60 * 60 * 1000;

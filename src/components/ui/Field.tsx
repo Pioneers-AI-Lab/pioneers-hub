@@ -7,13 +7,24 @@ const isEmpty = (v: ReactNode) => v === null || v === undefined || v === "" || (
  * Un libelle et sa valeur. Sur une fiche, un champ vide est MASQUE (une colonne
  * de « - » ne dit rien sur mobile) ; `showEmpty` l'affiche avec `-`.
  */
-export function Field({ label, children, showEmpty = false }: { label: string; children: ReactNode; showEmpty?: boolean }) {
+export function Field({
+  label,
+  children,
+  showEmpty = false,
+  lines,
+}: {
+  label: string;
+  children: ReactNode;
+  showEmpty?: boolean;
+  /** Coupe la valeur apres ce nombre de lignes (cartes de grille). */
+  lines?: number;
+}) {
   if (isEmpty(children) && !showEmpty) return null;
   return (
     <Stack gap={2}>
       <span className="label">{label}</span>
       {/* `div` : la valeur peut etre un bloc (etiquettes, liens). */}
-      <Text component="div" size="sm" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+      <Text component="div" size="sm" lineClamp={lines} style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
         {isEmpty(children) ? "-" : children}
       </Text>
     </Stack>

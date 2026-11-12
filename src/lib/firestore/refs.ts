@@ -21,6 +21,7 @@ import type {
   BatchStats,
   Checkin,
   Evaluation,
+  Judge,
   FounderStats,
   FounderWeek,
   KpiSeries,
@@ -30,6 +31,7 @@ import type {
   ClosedList,
   EventTeam,
   Form,
+  FormResponse,
   FormVersion,
   Founder,
   FounderDirectory,
@@ -38,6 +40,7 @@ import type {
   Leaderboard,
   ListKey,
   Membership,
+  Picks,
   Person,
   PioneersEvent,
   Program,
@@ -141,11 +144,19 @@ export const refs = {
   /** Appartenances datees aux equipes (`memberships`), a ne pas confondre avec `batchMemberships`. */
   teamMemberships: () => colRef<Membership>(COL.memberships),
   leaderboards: () => colRef<Leaderboard>(COL.leaderboards),
+  /** Staff et l'auteur (regle `picks`). */
+  picks: () => colRef<Picks>(COL.picks),
   forms: () => colRef<Form>(COL.forms),
   form: (formId: string) => docRef<Form>(COL.forms, formId),
   formVersion: (formId: string, version: number) => docRef<FormVersion>(COL.forms, formId, SUB.versions, String(version)),
   eventTeams: (eventId: string) => colRef<EventTeam>(COL.events, eventId, SUB.teams),
+  /** Presences d'une seance : staff et investors IC (regle `attendance`). */
+  eventAttendance: (eventId: string) => colRef<Attendance>(COL.events, eventId, SUB.attendance),
+  /** Staff et investors IC, sauf le feedback entre pairs (regle `formResponses`). */
+  formResponses: () => colRef<FormResponse>(COL.formResponses),
   eventTeam: (eventId: string, teamId: string) => docRef<EventTeam>(COL.events, eventId, SUB.teams, teamId),
+  /** Staff seulement (regle `judges`). */
+  eventJudges: (eventId: string) => colRef<Judge>(COL.events, eventId, SUB.judges),
   teamMembership: (membershipId: string) => docRef<Membership>(COL.memberships, membershipId),
 } as const;
 
@@ -316,6 +327,12 @@ export const queries = {
     query: query(refs.teamMemberships(), whereField<Membership>("batchId", "==", batchId)),
   }),
 
+  /** Jures d'un evenement : staff seulement (regle `judges`). */
+  judgesOfEvent: (eventId: string) => ({
+    key: `judges:event=${eventId}`,
+    query: query(refs.eventJudges(eventId)),
+  }),
+
   /** Equipes d'un evenement, publiees ou non : staff et investors IC seulement (regle `teams`). */
   teamsOfEvent: (eventId: string) => ({
     key: `teams:event=${eventId}`,
@@ -326,6 +343,30 @@ export const queries = {
   publishedTeamsOfEvent: (eventId: string) => ({
     key: `teams:event=${eventId}:published`,
     query: query(refs.eventTeams(eventId), whereField<EventTeam>("publishedDateISOString", "!=", null)),
+  }),
+
+  /** Mes choix dans ce batch : la regle `picks` exige ces deux filtres d'un fondateur. */
+  myPicks: (batchId: string, founderId: string) => ({
+    key: `picks:batch=${batchId}:founder=${founderId}`,
+    query: query(refs.picks(), whereField<Picks>("batchId", "==", batchId), whereField<Picks>("founderId", "==", founderId)),
+  }),
+
+  /** Tous les choix d'un evenement (staff). */
+  picksOfEvent: (eventId: string) => ({
+    key: `picks:event=${eventId}`,
+    query: query(refs.picks(), whereField<Picks>("eventId", "==", eventId)),
+  }),
+
+  /** Reponses d'un formulaire (staff). */
+  responsesOfForm: (formId: string) => ({
+    key: `formResponses:form=${formId}`,
+    query: query(refs.formResponses(), whereField<FormResponse>("formId", "==", formId)),
+  }),
+
+  /** Presences d'une seance (staff) : qui etait la, pour les relances d'un feedback. */
+  attendanceOfEvent: (eventId: string) => ({
+    key: `attendance:event=${eventId}`,
+    query: query(refs.eventAttendance(eventId)),
   }),
 
   openFormsOfBatch: (batchId: string) => ({

@@ -8,6 +8,7 @@
 
 import { initializeApp as initAdmin } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
+import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { deleteApp, initializeApp } from "firebase/app";
 import { connectAuthEmulator, getAuth, signInWithCustomToken } from "firebase/auth";
 import {
@@ -410,22 +411,23 @@ console.log("staff");
 }
 
 // ---- Admin > Access : callables des comptes (staff seulement) ----------------
+// Une callable refusee rend `functions/<code>` : on compare le code attendu.
+const expectCallableError = async (label, code, fn) => {
+  try {
+    await fn();
+    failures++;
+    console.log(`  FAIL  ${label}: expected ${code}, got success`);
+  } catch (err) {
+    if (err.code === `functions/${code}`) console.log(`  ok    ${label} (${code})`);
+    else {
+      failures++;
+      console.log(`  FAIL  ${label}: expected ${code}, got ${err.code ?? err.message}`);
+    }
+  }
+};
+
 console.log("accounts (Admin > Access callables)");
 {
-  // Une callable refusee rend `functions/<code>` : on compare le code attendu.
-  const expectCallableError = async (label, code, fn) => {
-    try {
-      await fn();
-      failures++;
-      console.log(`  FAIL  ${label}: expected ${code}, got success`);
-    } catch (err) {
-      if (err.code === `functions/${code}`) console.log(`  ok    ${label} (${code})`);
-      else {
-        failures++;
-        console.log(`  FAIL  ${label}: expected ${code}, got ${err.code ?? err.message}`);
-      }
-    }
-  };
   const staff = await clientAs("staff-1");
   const asStaff = (name) => httpsCallable(staff.functions, name);
   await expectOk("staff lists accounts", async () => {
@@ -452,8 +454,7 @@ console.log("accounts (Admin > Access callables)");
     asStaff("setAccountDisabled")({ uid: "staff-1", disabled: true }),
   );
   await expectOk("each change is in the audit log", async () => {
-    const { getFirestore: adminFirestore } = await import("firebase-admin/firestore");
-    const logs = await adminFirestore().collection("auditLogs").where("targetPath", "==", "users/lp-1").get();
+    const logs = await getAdminFirestore().collection("auditLogs").where("targetPath", "==", "users/lp-1").get();
     if (logs.size < 2) throw new Error(`expected 2 audit lines, got ${logs.size}`);
     return `${logs.size} lines`;
   });
@@ -467,11 +468,271 @@ console.log("accounts (Admin > Access callables)");
   await deleteApp(ada.app);
 }
 
+// ---- Debrief d'un hackathon : avis entre pairs et resultats d'equipe -----------
+console.log("hackathon debrief (callables)");
+{
+  const adb = getAdminFirestore();
+  const EVENT = "demo-hackathon-1";
+  const rate = (fns, rateeFounderId, rating, comment = null) =>
+    httpsCallable(fns, "submitPeerRatings")({ eventId: EVENT, ratings: [{ rateeFounderId, rating, comment }] });
+  const results = (fns, teamId, metrics, extra = {}) =>
+    httpsCallable(fns, "submitTeamResults")({ eventId: EVENT, teamId, metrics, links: [], productUrl: null, notes: null, ...extra });
+  const snapshotsOf = (metric) =>
+    adb.collection("metricSnapshots").where("eventId", "==", EVENT).where("metric", "==", metric).get();
+
+  const ada = await clientAs("ada-1");
+  const tasksOf = async (fns) => (await httpsCallable(fns, "myChallengeTasks")({ batchId: "fall-2026" })).data.tasks;
+  await expectOk("founder sees her hackathon and teammate", async () => {
+    const tasks = await tasksOf(ada.functions);
+    const task = tasks.find((t) => t.eventId === EVENT);
+    if (task?.team.id !== "team-a" || task.team.teammateIds.join() !== "chloe-demo") throw new Error("team-a / chloe-demo missing");
+    return `${tasks.length} task(s)`;
+  });
+  await expectOk("founder rates her teammate", async () => {
+    const { data } = await rate(ada.functions, "chloe-demo", 4, "  Ships fast.  ");
+    const saved = (await adb.doc(`events/${EVENT}/peerRatings/ada-example_chloe-demo`).get()).data();
+    if (data.saved !== 1 || saved?.rating !== 4 || saved.comment !== "Ships fast." || saved.teamId !== "team-a") {
+      throw new Error("rating not stored as sent");
+    }
+  });
+  await expectOk("her rating comes back in her tasks", async () => {
+    const task = (await tasksOf(ada.functions)).find((t) => t.eventId === EVENT);
+    if (task?.myRatings["chloe-demo"]?.rating !== 4) throw new Error("not returned");
+  });
+  await expectCallableError("founder rates someone outside her team", "invalid-argument", () => rate(ada.functions, "ben-sample", 5));
+  await expectCallableError("founder rates herself", "invalid-argument", () => rate(ada.functions, "ada-example", 5));
+  await expectCallableError("rating out of 1-5", "invalid-argument", () => rate(ada.functions, "chloe-demo", 9));
+  await expectOk("founder re-reads a rating she gave", () => read(doc(ada.db, `events/${EVENT}/peerRatings/ada-example_chloe-demo`)));
+  await adb.doc(`events/${EVENT}/peerRatings/chloe-demo_ada-example`).set({
+    programId: "accelerator",
+    batchId: "fall-2026",
+    raterFounderId: "chloe-demo",
+    rateeFounderId: "ada-example",
+    teamId: "team-a",
+    rating: 5,
+    comment: null,
+    submittedDateISOString: new Date().toISOString(),
+  });
+  await expectDenied("founder reads a rating she received", () =>
+    read(doc(ada.db, `events/${EVENT}/peerRatings/chloe-demo_ada-example`)),
+  );
+  await expectOk("founder saves team results, one snapshot per metric", async () => {
+    await results(ada.functions, "team-a", { callsMade: 42, meetingsBooked: 3 }, {
+      links: [{ label: "Call log", url: "example.com/calls" }],
+      productUrl: "https://example.com",
+      notes: "SMB bakeries.",
+    });
+    const sub = (await adb.doc(`events/${EVENT}/submissions/team-a`).get()).data();
+    if (sub?.metrics.callsMade !== 42 || sub.links[0].url !== "https://example.com/calls") throw new Error("submission wrong");
+    const snaps = await adb.collection("metricSnapshots").where("eventId", "==", EVENT).get();
+    const calls = snaps.docs.map((d) => d.data()).find((m) => m.metric === "callsMade");
+    if (snaps.size !== 2 || calls?.value !== 42 || calls.source !== "self_reported") throw new Error(`${snaps.size} snapshots`);
+    return `${snaps.size} snapshots`;
+  });
+  await expectCallableError("unknown metric key", "invalid-argument", () => results(ada.functions, "team-a", { revenue: 10 }));
+  await expectCallableError("founder enters another team's results", "permission-denied", () => results(ada.functions, "team-b", {}));
+  await deleteApp(ada.app);
+
+  const lp = await clientAs("lp-1");
+  await expectOk("investor has no hackathon tasks", async () => {
+    const tasks = await tasksOf(lp.functions);
+    if (tasks.length !== 0) throw new Error(`${tasks.length} tasks`);
+  });
+  await expectCallableError("investor rates a founder", "permission-denied", () => rate(lp.functions, "chloe-demo", 3));
+  await deleteApp(lp.app);
+
+  const staff = await clientAs("staff-1");
+  await expectOk("staff enters a team's results (source staff)", async () => {
+    await results(staff.functions, "team-a", { callsMade: 40 });
+    const snap = await snapshotsOf("callsMade");
+    const m = snap.docs[0]?.data();
+    if (snap.size !== 1 || m.value !== 40 || m.source !== "staff") throw new Error("staff snapshot wrong");
+  });
+  await deleteApp(staff.app);
+}
+
+// ---- Leaderboard : classe par le jury ou par une metrique ----------------------
+console.log("leaderboard ranking (callables)");
+{
+  const EVENT = "demo-hackathon-1";
+  const board = async () => (await getAdminFirestore().doc(`leaderboards/${EVENT}`).get()).data();
+  const rank = (fns, metricKey) => httpsCallable(fns, "setEventRanking")({ eventId: EVENT, metricKey });
+  const staff = await clientAs("staff-1");
+  await expectOk("staff ranks the hackathon by calls made", async () => {
+    await rank(staff.functions, "callsMade");
+    const b = await board();
+    if (b?.metric?.key !== "callsMade" || b.rows[0]?.targetId !== "team-a" || b.rows[0].score !== 40) {
+      throw new Error(JSON.stringify(b?.rows));
+    }
+    return `${b.rows.length} row(s)`;
+  });
+  await expectCallableError("unknown ranking metric", "invalid-argument", () => rank(staff.functions, "revenue"));
+  await expectOk("staff ranks by jury scores again", async () => {
+    await rank(staff.functions, null);
+    const b = await board();
+    if (b?.metric !== null) throw new Error("metric still set");
+  });
+  await deleteApp(staff.app);
+  const ada = await clientAs("ada-1");
+  await expectCallableError("founder changes the ranking", "permission-denied", () => rank(ada.functions, "callsMade"));
+  await deleteApp(ada.app);
+}
+
+// ---- Jury par lien prive -------------------------------------------------------
+console.log("jury link (callables)");
+{
+  const adb = getAdminFirestore();
+  const EVENT = "demo-hackathon-2";
+  const staff = await clientAs("staff-1");
+  const asStaff = (name) => httpsCallable(staff.functions, name);
+  let judge = null;
+  await expectOk("staff creates a judge link (own team excluded)", async () => {
+    const { data } = await asStaff("createJudge")({ eventId: EVENT, name: "Jane Juror", email: null, excludedTargetIds: ["team-c"] });
+    judge = { eventId: EVENT, judgeId: data.judgeId, key: data.key };
+    const stored = (await adb.doc(`events/${EVENT}/judges/${data.judgeId}`).get()).data();
+    if (!stored?.tokenHash || JSON.stringify(stored).includes(data.key)) throw new Error("secret stored in clear");
+  });
+  const pub = await clientAs(null);
+  const asPublic = (name) => httpsCallable(pub.functions, name);
+  await expectOk("judge opens the sheet without an account", async () => {
+    const { data } = await asPublic("getJudgeSheet")(judge);
+    if (data.targets.map((t) => t.id).join() !== "team-d" || !data.canEdit) throw new Error(JSON.stringify(data.targets));
+    if (!data.targets[0].members.includes("Chloe D.")) throw new Error(`members: ${data.targets[0].members}`);
+  });
+  await expectCallableError("wrong secret", "permission-denied", () => asPublic("getJudgeSheet")({ ...judge, key: "nope" }));
+  await expectCallableError("judge scores an excluded team", "invalid-argument", () =>
+    asPublic("submitJudgeScores")({ ...judge, targetId: "team-c", scores: { execution: 5, pitch: 5 }, comment: null }),
+  );
+  await expectCallableError("score out of the grid", "invalid-argument", () =>
+    asPublic("submitJudgeScores")({ ...judge, targetId: "team-d", scores: { execution: 9, pitch: 3 }, comment: null }),
+  );
+  await expectOk("judge scores a team, the leaderboard follows", async () => {
+    await asPublic("submitJudgeScores")({ ...judge, targetId: "team-d", scores: { execution: 5, pitch: 3 }, comment: "Clear." });
+    const row = (await adb.doc(`leaderboards/${EVENT}`).get()).data()?.rows[0];
+    // (5-1)/4*10 = 10 (poids 2), (3-1)/4*10 = 5 (poids 1) : 25/3.
+    if (row?.targetId !== "team-d" || Math.abs(row.score - 25 / 3) > 1e-9) throw new Error(JSON.stringify(row));
+    return row.score.toFixed(2);
+  });
+  await expectOk("a correction is logged before / after", async () => {
+    await asPublic("submitJudgeScores")({ ...judge, targetId: "team-d", scores: { execution: 4, pitch: 3 }, comment: null });
+    const logs = await adb.collection("auditLogs").where("actorUid", "==", `judge:${judge.judgeId}`).get();
+    if (logs.size !== 2 || !logs.docs.some((d) => d.data().action === "evaluation.update")) throw new Error(`${logs.size} lines`);
+  });
+  await expectOk("staff revokes the link", () => asStaff("revokeJudge")({ eventId: EVENT, judgeId: judge.judgeId }));
+  await expectCallableError("revoked link", "permission-denied", () => asPublic("getJudgeSheet")(judge));
+  await deleteApp(pub.app);
+  await deleteApp(staff.app);
+
+  const ada = await clientAs("ada-1");
+  await expectCallableError("founder creates a judge", "permission-denied", () =>
+    httpsCallable(ada.functions, "createJudge")({ eventId: EVENT, name: "Me", email: null, excludedTargetIds: [] }),
+  );
+  await expectDenied("founder reads the judges", () => read(doc(ada.db, `events/${EVENT}/judges/${judge.judgeId}`)));
+  await deleteApp(ada.app);
+}
+
+// ---- Choix prives d'un evenement (mutual picks, speed dating) ------------------
+console.log("picks (callables)");
+{
+  const adb = getAdminFirestore();
+  const EVENT = "demo-hackathon-2";
+  const staff = await clientAs("staff-1");
+  const setPicks = (picks) => httpsCallable(staff.functions, "setEventPicks")({ eventId: EVENT, picks });
+  await expectOk("staff opens the mutual picks (top 2)", () =>
+    setPicks({ question: "Who would you like to start a company with?", max: 2, closesDateISOString: null }),
+  );
+  const ada = await clientAs("ada-1");
+  const pick = (fns, ids) => httpsCallable(fns, "submitPicks")({ eventId: EVENT, pickedFounderIds: ids });
+  await expectOk("founder ranks her picks", async () => {
+    await pick(ada.functions, ["chloe-demo", "ben-sample"]);
+    const saved = (await adb.doc(`picks/${EVENT}_ada-example`).get()).data();
+    if (saved?.pickedFounderIds.join() !== "chloe-demo,ben-sample") throw new Error("not stored in order");
+  });
+  await expectOk("founder reads her own picks", () =>
+    count(query(collection(ada.db, "picks"), where("batchId", "==", "fall-2026"), where("founderId", "==", "ada-example"))),
+  );
+  await adb.doc(`picks/${EVENT}_chloe-demo`).set({
+    programId: "accelerator",
+    batchId: "fall-2026",
+    eventId: EVENT,
+    founderId: "chloe-demo",
+    pickedFounderIds: ["ada-example"],
+    submittedDateISOString: new Date().toISOString(),
+  });
+  await expectDenied("founder reads someone else's picks", () => read(doc(ada.db, `picks/${EVENT}_chloe-demo`)));
+  await expectCallableError("founder picks herself", "invalid-argument", () => pick(ada.functions, ["ada-example"]));
+  await expectCallableError("more picks than allowed", "invalid-argument", () =>
+    pick(ada.functions, ["chloe-demo", "ben-sample", "dan-placeholder"]),
+  );
+  await expectCallableError("pick outside the batch", "invalid-argument", () => pick(ada.functions, ["nobody-here"]));
+  const lp = await clientAs("lp-1");
+  await expectCallableError("investor submits picks", "permission-denied", () => pick(lp.functions, ["chloe-demo"]));
+  await deleteApp(lp.app);
+  await expectCallableError("founder opens picks", "permission-denied", () =>
+    httpsCallable(ada.functions, "setEventPicks")({ eventId: EVENT, picks: null }),
+  );
+  await expectOk("staff closes the picks", () => setPicks(null));
+  await expectCallableError("picks after closing", "failed-precondition", () => pick(ada.functions, ["chloe-demo"]));
+  await deleteApp(ada.app);
+  await deleteApp(staff.app);
+}
+
+// ---- Note de seance : le formulaire « Session feedback » ecrit `sessionRatings` -----
+console.log("session rating (form -> sessionRatings)");
+{
+  const adb = getAdminFirestore();
+  // Le modele tel que le staff le cree (questions COPIEES), rattache a la masterclass.
+  const { FORM_TEMPLATES } = await import("../functions/lib/shared/presets/formTemplates.js");
+  const { deriveAttachments } = await import("../functions/lib/shared/formRules.js");
+  const template = FORM_TEMPLATES.session_feedback;
+  const stamp = new Date().toISOString();
+  await adb.doc("forms/check-session-feedback").set({
+    programId: "accelerator",
+    batchId: "fall-2026",
+    createdDateISOString: stamp,
+    updatedDateISOString: stamp,
+    archivedDateISOString: null,
+    kind: template.kind,
+    title: template.title,
+    description: null,
+    version: 1,
+    questions: template.questions,
+    attachments: deriveAttachments(template.questions),
+    approval: "none",
+    identityCheck: "select_name",
+    eventId: "demo-masterclass",
+    status: "open",
+    opensDateISOString: stamp,
+    deadlineDateISOString: null,
+    recurrenceRule: null,
+  });
+  const pub = await clientAs(null);
+  await expectOk("a founder rates the session from the form", async () => {
+    const { data } = await httpsCallable(pub.functions, "submitFormResponse")({
+      formId: "check-session-feedback",
+      version: 1,
+      submissionId: "check-session-rating-0001",
+      respondentFounderId: "chloe-demo",
+      answers: { rating: 4, takeaway: "Price on value, not on cost." },
+    });
+    const rating = (await adb.doc("sessionRatings/demo-masterclass_chloe-demo").get()).data();
+    if (rating?.rating !== 4 || rating.comment !== "Price on value, not on cost." || rating.batchId !== "fall-2026") {
+      throw new Error(`${data.status}: ${JSON.stringify(rating)}`);
+    }
+    return data.status;
+  });
+  await deleteApp(pub.app);
+  const ada = await clientAs("ada-1");
+  await expectDenied("founder reads someone else's session rating", () =>
+    read(doc(ada.db, "sessionRatings/demo-masterclass_chloe-demo")),
+  );
+  await deleteApp(ada.app);
+}
+
 // ---- Cles d'API : chacun lit les siennes ---------------------------------------
 console.log("api keys (each account reads its own)");
 {
-  const { getFirestore: adminFirestore } = await import("firebase-admin/firestore");
-  const adb = adminFirestore();
+  const adb = getAdminFirestore();
   const key = (ownerUid) => ({
     ownerUid,
     name: `${ownerUid} key`,

@@ -3,7 +3,8 @@ import { getAuth, type UserRecord } from "firebase-admin/auth";
 import { getFirestore, type Transaction } from "firebase-admin/firestore";
 import { COL } from "../shared/collections";
 import type { AccountAccess, AccountRow } from "../shared/callables";
-import { USER_ROLES, type AuditLog, type BatchMembership, type User, type UserRole } from "../shared/types";
+import { USER_ROLES, type BatchMembership, type User, type UserRole } from "../shared/types";
+import { writeUiAudit } from "./audit";
 
 // ----------------------------
 // services - les comptes (Admin > Access)
@@ -16,30 +17,6 @@ import { USER_ROLES, type AuditLog, type BatchMembership, type User, type UserRo
 // propre compte, et il reste toujours au moins un compte staff.
 
 const db = () => getFirestore();
-
-/** Ligne d'audit : dans la transaction `tx` si elle est fournie, sinon ecrite seule. */
-function audit(
-  tx: Transaction | null,
-  actorUid: string,
-  action: string,
-  targetPath: string,
-  payload: Record<string, unknown>,
-): Promise<unknown> {
-  const log: AuditLog = {
-    actorUid,
-    apiKeyId: null,
-    via: "ui",
-    action,
-    targetPath,
-    payload,
-    idempotencyKey: null,
-    dateISOString: new Date().toISOString(),
-  };
-  const ref = db().collection(COL.auditLogs).doc();
-  if (!tx) return ref.create(log);
-  tx.create(ref, log);
-  return Promise.resolve();
-}
 
 /** Valide et normalise des droits recus du client. */
 export function parseAccess(input: { roles?: unknown; investorAccess?: unknown }): AccountAccess {
@@ -123,7 +100,7 @@ export async function setAccountAccess(actorUid: string, uid: string, access: Ac
     await assertKeepsStaff(tx, actorUid, uid, Boolean(before?.roles.includes("staff")) && !access.roles.includes("staff"));
     if (before) tx.update(ref, { ...access });
     else tx.create(ref, newUserDoc(new Date().toISOString(), access));
-    audit(tx, actorUid, "account.setAccess", ref.path, {
+    writeUiAudit(tx, actorUid, "account.setAccess", ref.path, {
       before: before ? { roles: before.roles, investorAccess: before.investorAccess } : null,
       after: access,
     });
@@ -148,7 +125,7 @@ export async function inviteAccount(actorUid: string, rawEmail: string, access: 
     await assertKeepsStaff(tx, actorUid, user.uid, Boolean(before?.roles.includes("staff")) && !access.roles.includes("staff"));
     if (before) tx.update(ref, { ...access });
     else tx.create(ref, newUserDoc(new Date().toISOString(), access));
-    audit(tx, actorUid, "account.invite", ref.path, { email, created, after: access });
+    writeUiAudit(tx, actorUid, "account.invite", ref.path, { email, created, after: access });
   });
   return { uid: user.uid, created };
 }
@@ -162,5 +139,5 @@ export async function setAccountDisabled(actorUid: string, uid: string, disabled
     });
   // Bloque : les sessions en cours tombent au prochain rafraichissement du jeton.
   if (disabled) await getAuth().revokeRefreshTokens(uid);
-  await audit(null, actorUid, disabled ? "account.disable" : "account.enable", `${COL.users}/${uid}`, { disabled });
+  await writeUiAudit(null, actorUid, disabled ? "account.disable" : "account.enable", `${COL.users}/${uid}`, { disabled });
 }

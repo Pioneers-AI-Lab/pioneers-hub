@@ -414,11 +414,51 @@ event("demo-hackathon-1", {
   status: "completed",
   evaluationTargetType: "team",
   teamSize: { min: 2, max: 3 },
+  metrics: [
+    { key: "callsMade", label: "Calls made", unit: null },
+    { key: "meetingsBooked", label: "Meetings booked", unit: null },
+  ],
 });
+// Hackathon en cours, avec sa grille : le jury par lien prive (check-rules).
+event("demo-hackathon-2", {
+  kind: "team_challenge",
+  name: "Hackathon 2: Demo Calls",
+  startDateISOString: inDays(-1, 9),
+  status: "live",
+  evaluationTargetType: "team",
+  teamSize: { min: 2, max: 2 },
+  criteria: [
+    { key: "execution", label: "Execution", min: 1, max: 5, weight: 2 },
+    { key: "pitch", label: "Pitch", min: 1, max: 5, weight: 1 },
+  ],
+  metrics: [{ key: "realConversations", label: "Real conversations", unit: null }],
+});
+for (const [id, name, memberIds] of [
+  ["team-c", "Team Demo C", ["ada-example", "ben-sample"]],
+  ["team-d", "Team Demo D", ["chloe-demo", "dan-placeholder"]],
+]) {
+  batch.set(db.doc(`events/demo-hackathon-2/teams/${id}`), {
+    name,
+    memberIds,
+    memberNames: null,
+    roles: {},
+    locked: true,
+    publishedDateISOString: now,
+    startupId: null,
+  });
+}
 event("demo-masterclass", { kind: "session", name: "Masterclass: Demo pricing", startDateISOString: inDays(2, 14), status: "scheduled" });
 batch.set(db.doc("events/demo-hackathon-1/teams/team-a"), {
   name: "Team Demo A",
   memberIds: ["ada-example", "chloe-demo"],
+  roles: {},
+  locked: true,
+  publishedDateISOString: now,
+  startupId: null,
+});
+batch.set(db.doc("events/demo-hackathon-1/teams/team-b"), {
+  name: "Team Demo B",
+  memberIds: ["ben-sample", "dan-placeholder"],
   roles: {},
   locked: true,
   publishedDateISOString: now,

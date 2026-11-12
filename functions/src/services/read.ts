@@ -15,6 +15,7 @@ import {
 import type { Caller } from "../api/caller";
 import { badRequest, forbidden, notFound } from "../api/errors";
 import { founderIdIn, roleOf } from "../api/viewer";
+import { searchKey } from "../shared/text";
 import { describeFields } from "./fields";
 
 // ----------------------------
@@ -118,8 +119,6 @@ export type ListInput = z.output<typeof ListInput>;
 export const GetInput = z.object({ object: z.enum(GET_OBJECTS), id: z.string().min(1) }).strict();
 export type GetInput = z.output<typeof GetInput>;
 
-const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-
 const withId = <T = Record<string, unknown>>(snap: DocumentSnapshot) => ({ id: snap.id, ...snap.data() }) as Doc<T>;
 
 const dataOf = (snap: DocumentSnapshot) => (snap.exists ? (snap.data() ?? null) : null);
@@ -152,7 +151,7 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
   if (object === "fields") return { object, items: describeFields() };
 
   if (object === "lists") {
-    const snaps = await db.getAll(...LIST_KEYS.map((k) => db.doc(`${COL.lists}/${k}`)));
+    const snaps = await db.getAll(...LIST_KEYS.map((k) => db.doc(docPaths.list(k))));
     return {
       object,
       items: snaps
@@ -196,11 +195,11 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
     if (!value) throw badRequest("missing_argument", `\`${spec.by}\` is required to list \`${object}\`.`, spec.by);
     query = query.where(spec.by, "==", value);
   }
-  const search = input.search ? fold(input.search) : null;
+  const search = input.search ? searchKey(input.search) : null;
   const docs = (await query.get()).docs
     .map((d) => withId<{ name?: string; archivedDateISOString?: string | null } & Record<string, unknown>>(d))
     .filter((d) => input.includeArchived || !d.archivedDateISOString)
-    .filter((d) => !search || fold(String(d.name ?? "")).includes(search));
+    .filter((d) => !search || searchKey(String(d.name ?? "")).includes(search));
   // Fondateurs : la carte n'est lue que par le batch, le staff, les investors,
   // ou si elle est publique ou non reclamee (regle `founders`).
   const role = object === "founders" ? roleOf(caller, input.batchId!) : null;

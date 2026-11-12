@@ -28,8 +28,8 @@ import { loadAccount, type Account } from "./viewer";
 
 export type Caller = Account & {
   uid: string;
-  /** Source inscrite au journal d'audit. */
-  via: Extract<AuditSource, "api" | "mcp">;
+  /** Source inscrite au journal d'audit. `function` : une ecriture faite par le serveur pour un tiers (reponse de formulaire). */
+  via: Extract<AuditSource, "api" | "mcp" | "function">;
   apiKeyId: string | null;
 };
 

@@ -2,21 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { Avatar, Stack, Text } from "@mantine/core";
-import { EVENT_KIND_FEATURES, type EvaluationTargetType, type LeaderboardRow } from "@shared/types";
+import { EVENT_KIND_FEATURES, type EvaluationTargetType, type EventMetric, type LeaderboardRow } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useEvents } from "@/context/EventsContext";
 import { useFounders } from "@/context/FoundersContext";
 import { useLeaderboards } from "@/context/LeaderboardsContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
-import { formatDay, score10 } from "@/lib/format";
+import { formatDay, metricValue, score10 } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageLoader } from "@/components/ui/PageLoader";
-import { ButtonRow, LinkRow, Row, RowList } from "@/components/ui/Rows";
+import { ButtonRow, LinkRow, RankNumber, Row, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 
-// Scores du jury uniquement (les avis entre pairs n'y entrent jamais), sur 10.
+// Scores du jury (les avis entre pairs n'y entrent jamais), sur 10 ; ou, si
+// l'evenement le choisit, la valeur d'une de ses metriques (`Leaderboard.metric`).
 // Une ligne de pitch est une startup : elle mene a sa fiche. Une ligne d'epreuve
 // est une equipe d'un jour, sans page : elle deplie ses membres, chacun vers sa fiche.
 export default function LeaderboardPage() {
@@ -47,12 +48,17 @@ export default function LeaderboardPage() {
 
   return (
     <>
-      <PageHeader back={back} title="Leaderboard" subtitle="Jury scores out of 10" />
+      <PageHeader back={back} title="Leaderboard" subtitle="Jury scores out of 10, unless the event ranks by one of its numbers" />
       {ranked.length === 0 && <Empty>No scored event yet.</Empty>}
       {ranked.map((event) => {
         const board = leaderboardsByEventId.get(event.id);
         return (
-          <Section key={event.id} id={event.id} title={`${event.name} · ${formatDay(event.startDateISOString.slice(0, 10), true)}`}>
+          <Section
+            key={event.id}
+            id={event.id}
+            title={`${event.name} · ${formatDay(event.startDateISOString.slice(0, 10), true)}`}
+            hint={board?.metric ? `Ranked by ${board.metric.label.toLowerCase()}` : undefined}
+          >
             {!board || board.rows.length === 0 ? (
               <Empty>No scores yet.</Empty>
             ) : (
@@ -60,7 +66,12 @@ export default function LeaderboardPage() {
                 {[...board.rows]
                   .sort((a, b) => a.rank - b.rank)
                   .map((row) => (
-                    <RankedRow key={row.targetId} row={row} target={EVENT_KIND_FEATURES[event.kind].evaluationTarget} />
+                    <RankedRow
+                      key={row.targetId}
+                      row={row}
+                      metric={board.metric ?? null}
+                      target={EVENT_KIND_FEATURES[event.kind].evaluationTarget}
+                    />
                   ))}
               </RowList>
             )}
@@ -71,7 +82,7 @@ export default function LeaderboardPage() {
   );
 }
 
-function RankedRow({ row, target }: { row: LeaderboardRow; target: EvaluationTargetType | null }) {
+function RankedRow({ row, metric, target }: { row: LeaderboardRow; metric: EventMetric | null; target: EvaluationTargetType | null }) {
   const { program } = useProgram();
   const { batch, viewerFounderId } = useBatch();
   const { startupsById } = useStartups();
@@ -80,16 +91,12 @@ function RankedRow({ row, target }: { row: LeaderboardRow; target: EvaluationTar
 
   const isMine = viewerFounderId !== null && row.memberIds.includes(viewerFounderId);
   const props = {
-    leading: (
-      <Text className="num" fw={600} w={24} c={row.rank <= 3 ? "pioneers" : "dimmed"} style={{ flexShrink: 0 }}>
-        {row.rank}
-      </Text>
-    ),
+    leading: <RankNumber rank={row.rank} />,
     title: isMine ? <Text span c="pioneers" inherit>{row.name}</Text> : row.name,
-    subtitle: `${row.evaluationsCount} ${row.evaluationsCount === 1 ? "review" : "reviews"}`,
+    subtitle: metric ? metric.label : `${row.evaluationsCount} ${row.evaluationsCount === 1 ? "review" : "reviews"}`,
     meta: (
       <Text className="num" fw={600} fz="lg">
-        {score10(row.score)}
+        {metric ? metricValue(metric, row.score) : score10(row.score)}
       </Text>
     ),
   };

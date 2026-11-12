@@ -1,12 +1,14 @@
 import { getFirestore, type DocumentSnapshot, type Transaction } from "firebase-admin/firestore";
 import { z } from "zod";
-import { COL, docPaths } from "../shared/collections";
+import { docPaths } from "../shared/collections";
 import {
   DB_FIELDS,
   DOC_KINDS,
+  enumOptions,
   getFieldDef,
   isEmptyValue,
   isListValue,
+  listKeyOf,
   parseDbField,
   PERSON_COPIES,
   resolveDocPath,
@@ -19,11 +21,12 @@ import {
   type TrackingDocKind,
   type ValueSpec,
 } from "../shared/fieldRegistry";
-import type { ClosedList, FormAnswer, Founder, Person, Startup } from "../shared/types";
+import { emptySubmission, type ClosedList, type FormAnswer, type Founder, type Person, type Startup } from "../shared/types";
 import { isSelfEditable, isStaffViewer, isViewerFounder } from "../shared/access";
 import type { Caller } from "../api/caller";
-import { badRequest, forbidden, notFound } from "../api/errors";
+import { ApiError, badRequest, forbidden, notFound } from "../api/errors";
 import { founderIdIn } from "../api/viewer";
+import { normalizeHttpUrl } from "../shared/text";
 import type { Operation, OperationPlan } from "./operations";
 import { dayString } from "./schemas";
 
@@ -81,7 +84,8 @@ export type SetFieldsInput = z.output<typeof SetFieldsInput>;
 
 // ---- Le registre, lu une fois au chargement ---------------------------------------
 
-const httpUrl = z.url({ protocol: /^https?$/ });
+// « linkedin.com/in/ada » est complete en `https://...` avant validation (shared/text.ts).
+const httpUrl = z.preprocess((v) => (typeof v === "string" ? (normalizeHttpUrl(v) ?? v) : v), z.url({ protocol: /^https?$/ }));
 const notEmpty = "empty values are not written";
 
 function valueSchema(spec: ValueSpec): z.ZodType {
@@ -153,7 +157,7 @@ const PERSON_FIELDS_WITH_COPIES = new Set<string>([...PERSON_COPY_ENTRIES.map((c
 
 type Loaded = { person: Person | null; founder: Founder | null; startup: Startup | null; eventBatchId: string | null };
 
-type FieldChange = { dbField: DbFieldKey; before: unknown; after: unknown; status: "write" | "unchanged"; reason?: string };
+export type FieldChange = { dbField: DbFieldKey; before: unknown; after: unknown; status: "write" | "unchanged"; reason?: string };
 
 /** 0. Chaque adresse existe dans le registre ; sinon, les plus proches. */
 function knownFields(values: Record<string, unknown>): FieldMeta[] {
@@ -170,34 +174,27 @@ function knownFields(values: Record<string, unknown>): FieldMeta[] {
   });
 }
 
-/** 1. Le chemin de chaque document, ou l'id qui manque pour le trouver. */
-function resolvePaths(kinds: DocKind[], s: ResolvedSubjects): Map<DocKind, string> {
-  const paths = new Map<DocKind, string>();
-  for (const kind of kinds) {
-    const resolved = resolveDocPath(kind, s);
-    if (!resolved.ok) {
-      const names = resolved.missing.map((m) => SUBJECT_INPUT_KEY[m]);
-      throw badRequest("missing_subject", `Fields of \`${kind}\` need \`subjects.${names.join("`, `subjects.")}\`.`, `subjects.${names[0]}`);
-    }
-    paths.set(kind, resolved.path);
-  }
-  if (s.weekStartDayString && new Date(`${s.weekStartDayString}T00:00:00Z`).getUTCDay() !== 1) {
-    throw badRequest("invalid_week", "`weekStartDayString` must be the Monday of the week.", "subjects.weekStartDayString");
-  }
-  return paths;
+/** 1. Le chemin d'un document, ou l'id qui manque pour le trouver. */
+function resolvePath(kind: DocKind, s: ResolvedSubjects): string {
+  const resolved = resolveDocPath(kind, s);
+  if (resolved.ok) return resolved.path;
+  const names = resolved.missing.map((m) => SUBJECT_INPUT_KEY[m]);
+  throw badRequest("missing_subject", `Fields of \`${kind}\` need \`subjects.${names.join("`, `subjects.")}\`.`, `subjects.${names[0]}`);
 }
 
-/** 2. Les valeurs, validees par le registre (sans lecture). */
-function parseValues(fields: FieldMeta[], raw: Record<string, unknown>): Map<DbFieldKey, FormAnswer> {
-  const values = new Map<DbFieldKey, FormAnswer>();
-  for (const { key, schema } of fields) {
-    const parsed = schema.safeParse(raw[key]);
-    if (!parsed.success) {
-      throw badRequest("invalid_value", `\`${key}\`: ${parsed.error.issues[0]?.message ?? "invalid value"}`, `values.${key}`);
-    }
-    values.set(key, parsed.data as FormAnswer);
+function assertMonday(day: string) {
+  if (new Date(`${day}T00:00:00Z`).getUTCDay() !== 1) {
+    throw badRequest("invalid_week", "`weekStartDayString` must be the Monday of the week.", "subjects.weekStartDayString");
   }
-  return values;
+}
+
+/** 2. Une valeur, validee par le registre (sans lecture). */
+function parseValue({ key, schema }: FieldMeta, raw: unknown): FormAnswer {
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) {
+    throw badRequest("invalid_value", `\`${key}\`: ${parsed.error.issues[0]?.message ?? "invalid value"}`, `values.${key}`);
+  }
+  return parsed.data as FormAnswer;
 }
 
 /** Les documents de base que les sujets nomment, et leur refus s'ils n'existent pas. */
@@ -209,28 +206,27 @@ const BASE_DOCS: { subject: SubjectKey; path: (s: ResolvedSubjects) => string | 
   { subject: "team", path: (s) => (s.eventId && s.teamId ? docPaths.team(s.eventId, s.teamId) : null), code: "team_not_found", label: "Team" },
 ];
 
-/** 3. Les listes fermees : une valeur se reconnait par sa cle ou son libelle, sans casse. */
-function normalizeEnums(fields: FieldMeta[], values: Map<DbFieldKey, FormAnswer>, lists: Map<string, ClosedList>) {
-  for (const { key, def } of fields) {
-    const spec = def.value;
-    if (spec.kind !== "enum" && spec.kind !== "enumMulti") continue;
-    const allowed = spec.listKey
-      ? (lists.get(spec.listKey)?.items ?? []).filter((i) => !i.archived).map((i) => ({ value: i.value, label: i.label }))
-      : (spec.values ?? []).map((v) => ({ value: v, label: v }));
-    const normalize = (raw: string) => {
-      const lower = raw.toLowerCase();
-      const hit = allowed.find((a) => a.value.toLowerCase() === lower || a.label.toLowerCase() === lower);
-      if (hit) return hit.value;
-      const sample = allowed.slice(0, 15).map((a) => a.value).join(", ");
-      throw badRequest("invalid_value", `\`${key}\`: unknown value "${raw}". Accepted: ${sample}${allowed.length > 15 ? ", ..." : ""}.`, `values.${key}`);
-    };
-    const v = values.get(key);
-    values.set(key, Array.isArray(v) ? [...new Set(v.map(normalize))] : normalize(v as string));
-  }
+/** 3. Une valeur de liste (fermee ou fixe) se reconnait par sa cle ou son libelle, sans casse. */
+function normalizeEnum({ key, def }: FieldMeta, value: FormAnswer, lists: Map<string, ClosedList>): FormAnswer {
+  const allowed = enumOptions(def.value, lists);
+  if (!allowed) return value;
+  const normalize = (raw: string) => {
+    const lower = raw.toLowerCase();
+    const hit = allowed.find((a) => a.value.toLowerCase() === lower || a.label.toLowerCase() === lower);
+    if (hit) return hit.value;
+    const sample = allowed.slice(0, 15).map((a) => a.value).join(", ");
+    throw badRequest("invalid_value", `\`${key}\`: unknown value "${raw}". Accepted: ${sample}${allowed.length > 15 ? ", ..." : ""}.`, `values.${key}`);
+  };
+  return Array.isArray(value) ? [...new Set(value.map(normalize))] : normalize(value as string);
 }
 
 /** 4. Ce qui change, champ par champ, selon la regle d'ecriture du registre. */
-function diff(fields: FieldMeta[], values: Map<DbFieldKey, FormAnswer>, targets: Map<DocKind, DocumentSnapshot>) {
+function diff(
+  fields: FieldMeta[],
+  values: Map<DbFieldKey, FormAnswer>,
+  targets: Map<DocKind, DocumentSnapshot>,
+  hold: ((change: FieldChange) => boolean) | undefined,
+) {
   const changes: FieldChange[] = [];
   const patches = new Map<DocKind, Record<string, unknown>>();
   for (const { key, kind, field, def } of fields) {
@@ -248,8 +244,9 @@ function diff(fields: FieldMeta[], values: Map<DbFieldKey, FormAnswer>, targets:
     }
     if (!reason && JSON.stringify(current ?? null) === JSON.stringify(after ?? null)) reason = "same value";
 
-    changes.push({ dbField: key, before: current ?? null, after, status: reason ? "unchanged" : "write", ...(reason ? { reason } : {}) });
-    if (!reason) patches.set(kind, { ...patches.get(kind), [field]: after });
+    const change: FieldChange = { dbField: key, before: current ?? null, after, status: reason ? "unchanged" : "write", ...(reason ? { reason } : {}) };
+    changes.push(change);
+    if (!reason && !hold?.(change)) patches.set(kind, { ...patches.get(kind), [field]: after });
   }
   return { changes, patches };
 }
@@ -295,7 +292,16 @@ const TRACKING_BASE: Record<TrackingDocKind, (s: ResolvedSubjects, l: Loaded) =>
     weekStartDayString: s.weekStartDayString,
   }),
   attendance: (s) => ({ founderId: s.founderId }),
-  submission: (s) => ({ teamId: s.teamId, deliverables: {}, metrics: {}, productUrl: null, links: [], submittedDateISOString: null }),
+  sessionRating: (s, l) => ({
+    programId: l.founder!.programId,
+    batchId: l.founder!.batchId,
+    eventId: s.eventId,
+    founderId: s.founderId,
+    rating: null,
+    comment: null,
+    submittedDateISOString: new Date().toISOString(),
+  }),
+  submission: (s) => emptySubmission(s.teamId!),
 };
 
 /** 5. Les copies de `people` vers les fondateurs de la personne. */
@@ -314,119 +320,189 @@ function personCopies(person: Person, personPatch: Record<string, unknown>) {
 
 export type SetFieldsResult = { written: number; unchanged: number; paths: string[] };
 
+/** Un champ ecarte en mode partiel. `subject` : son sujet manque, est introuvable ou ne colle pas (membre, batch). */
+export type FieldRejection = { dbField: DbFieldKey; message: string; subject: boolean };
+
+export type FieldWritesOptions = {
+  /**
+   * Ecarter les champs fautifs (`rejected`) au lieu de refuser tout l'appel :
+   * une reponse de formulaire garde ce qui est valide. L'API et le MCP restent
+   * en « tout ou rien ». Les refus de droits levent toujours.
+   */
+  partial?: boolean;
+  /** Changements calcules (dans `changes`) mais pas ecrits : en attente de validation du staff. */
+  hold?: (change: FieldChange) => boolean;
+  /**
+   * Ecriture d'une reponse de formulaire : le formulaire, cree par le staff, a
+   * choisi ses champs et ses sujets. Les controles de « Mon profil » ne
+   * s'appliquent pas (le repondant n'a souvent pas de compte).
+   */
+  asForm?: boolean;
+};
+
+export type FieldWritesPlan = OperationPlan<SetFieldsResult> & { changes: FieldChange[]; rejected: FieldRejection[] };
+
+/**
+ * Le plan d'ecriture de `set_fields`, partage avec les formulaires. Chaque
+ * etape nomme les champs qu'elle refuse : en mode strict elle leve, en mode
+ * partiel ces champs seuls sont ecartes et les etapes suivantes continuent.
+ */
+export async function planFieldWrites(
+  tx: Transaction,
+  caller: Caller,
+  input: SetFieldsInput,
+  options: FieldWritesOptions = {},
+): Promise<FieldWritesPlan> {
+  const db = getFirestore();
+  const s = input.subjects;
+  const rejected: FieldRejection[] = [];
+  let fields = knownFields(input.values);
+
+  /** Lance une etape ; en mode partiel, son refus ecarte les champs `blamed` au lieu de tout l'appel. */
+  const attempt = <T>(blamed: (f: FieldMeta) => boolean, subject: boolean, step: () => T): T | undefined => {
+    try {
+      return step();
+    } catch (error) {
+      if (!options.partial || !(error instanceof ApiError)) throw error;
+      for (const f of fields.filter(blamed)) rejected.push({ dbField: f.key, message: error.message, subject });
+      fields = fields.filter((f) => !blamed(f));
+      return undefined;
+    }
+  };
+  const needs = (f: FieldMeta, subject: SubjectKey) => (DOC_KINDS[f.kind].subjects as readonly SubjectKey[]).includes(subject);
+
+  // Etapes sans lecture : un appel invalide ne coute rien.
+  if (s.weekStartDayString) attempt((f) => needs(f, "week"), true, () => assertMonday(s.weekStartDayString!));
+  const pathByKind = new Map<DocKind, string>();
+  for (const kind of new Set(fields.map((f) => f.kind))) {
+    const path = attempt((f) => f.kind === kind, true, () => resolvePath(kind, s));
+    if (path) pathByKind.set(kind, path);
+  }
+  const values = new Map<DbFieldKey, FormAnswer>();
+  for (const f of fields) {
+    attempt((g) => g.key === f.key, false, () => values.set(f.key, parseValue(f, input.values[f.key])));
+  }
+  if (!options.asForm) assertSelfEditableFields(caller, fields);
+
+  if (fields.length === 0) {
+    return { preview: { changes: [], summary: "0 field(s) to write, 0 unchanged." }, commit: null, targetPaths: [], changes: [], rejected };
+  }
+
+  // UNE lecture groupee : documents de base, listes fermees, fondateurs cites, documents cibles.
+  const subjects = new Set(fields.flatMap((f) => DOC_KINDS[f.kind].subjects as readonly SubjectKey[]));
+  const baseDocs = BASE_DOCS.filter((b) => subjects.has(b.subject)).flatMap((b) => {
+    const path = b.path(s);
+    return path ? [{ ...b, path }] : [];
+  });
+  const listKeys = [...new Set(fields.flatMap(({ def }) => listKeyOf(def.value) ?? []))];
+  const refsOf = (f: FieldMeta) => (f.def.value.kind === "founderRefs" ? (values.get(f.key) as string[]) : []);
+  const founderRefIds = [...new Set(fields.flatMap(refsOf))];
+  const paths = new Set<string>([
+    ...baseDocs.map((b) => b.path),
+    ...listKeys.map((k) => docPaths.list(k)),
+    ...founderRefIds.map((id) => docPaths.founder(id)),
+    ...fields.map((f) => pathByKind.get(f.kind)!),
+  ]);
+  const snaps = new Map((await tx.getAll(...[...paths].map((p) => db.doc(p)))).map((d) => [d.ref.path, d]));
+
+  for (const b of baseDocs) {
+    attempt((f) => needs(f, b.subject), true, () => {
+      if (!snaps.get(b.path)!.exists) throw notFound(b.code, `${b.label} \`${b.path.split("/").pop()}\` does not exist.`, `subjects.${SUBJECT_INPUT_KEY[b.subject]}`);
+    });
+  }
+  const dataAt = <T>(path: string | null) => (path ? ((snaps.get(path)?.data() as T | undefined) ?? null) : null);
+  const loaded: Loaded = {
+    person: dataAt<Person>(s.personId && subjects.has("person") ? docPaths.person(s.personId) : null),
+    founder: dataAt<Founder>(s.founderId && subjects.has("founder") ? docPaths.founder(s.founderId) : null),
+    startup: dataAt<Startup>(s.startupId && subjects.has("startup") ? docPaths.startup(s.startupId) : null),
+    eventBatchId: dataAt<{ batchId: string }>(s.eventId && subjects.has("event") ? docPaths.event(s.eventId) : null)?.batchId ?? null,
+  };
+  attempt((f) => f.kind === "checkin", true, () => {
+    if (fields.some((f) => f.kind === "checkin") && loaded.startup && s.founderId && !loaded.startup.memberIds.includes(s.founderId)) {
+      throw badRequest("not_a_member", `Founder \`${s.founderId}\` is not a member of startup \`${s.startupId}\`.`, "subjects.founderId");
+    }
+  });
+  attempt((f) => f.kind === "attendance", true, () => {
+    if (fields.some((f) => f.kind === "attendance") && loaded.founder && loaded.eventBatchId && loaded.founder.batchId !== loaded.eventBatchId) {
+      throw badRequest("wrong_batch", "This founder and this event belong to different batches.", "subjects.eventId");
+    }
+  });
+
+  if (!options.asForm) assertOwnsSubjects(caller, fields, s, loaded);
+
+  const lists = new Map(listKeys.flatMap((k) => {
+    const list = dataAt<ClosedList>(docPaths.list(k));
+    return list ? [[k, list] as const] : [];
+  }));
+  for (const f of fields) {
+    attempt((g) => g.key === f.key, false, () => {
+      const missing = refsOf(f).filter((id) => !snaps.get(docPaths.founder(id))!.exists);
+      if (missing.length) throw notFound("founder_not_found", `Unknown founders: ${missing.join(", ")}.`, `values.${f.key}`);
+      values.set(f.key, normalizeEnum(f, values.get(f.key)!, lists));
+    });
+  }
+  const targets = new Map(fields.map((f) => [f.kind, snaps.get(pathByKind.get(f.kind)!)!]));
+  const { changes, patches } = diff(fields, values, targets, options.hold);
+  const written = [...patches.values()].reduce((n, patch) => n + Object.keys(patch).length, 0);
+  const preview = { changes, summary: `${written} field(s) to write, ${changes.length - written} unchanged.` };
+  if (written === 0) return { preview, commit: null, targetPaths: [], changes, rejected };
+
+  // Second aller-retour, seulement si une copie de `people` est en jeu.
+  const personPatch = patches.get("person");
+  const copies =
+    personPatch && loaded.person && Object.keys(personPatch).some((f) => PERSON_FIELDS_WITH_COPIES.has(f))
+      ? personCopies(loaded.person, personPatch)
+      : null;
+  const personFounders =
+    copies && loaded.person!.founderIds.length ? await tx.getAll(...loaded.person!.founderIds.map((id) => db.doc(docPaths.founder(id)))) : [];
+
+  const targetPaths = [...patches.keys()].map((k) => pathByKind.get(k)!);
+  return {
+    preview,
+    changes,
+    rejected,
+    targetPaths,
+    commit: (wtx) => {
+      const now = new Date().toISOString();
+      for (const [kind, patch] of patches) {
+        const ref = db.doc(pathByKind.get(kind)!);
+        const data: Record<string, unknown> = { ...patch };
+        if (DOC_KINDS[kind].timestamped) data.updatedDateISOString = now;
+        if (kind === "attendance") Object.assign(data, { markedByUid: caller.uid, markedDateISOString: now });
+        if (kind === "person" && copies?.displayName) data.displayName = copies.displayName;
+
+        // Documents de base : leur existence est verifiee plus haut. Sous-documents
+        // prives : fusionnes. Documents de suivi : crees complets a la premiere ecriture.
+        const lifecycle = DOC_KINDS[kind].lifecycle;
+        if (lifecycle === "tracking" && !targets.get(kind)!.exists) {
+          const base = TRACKING_BASE[kind as TrackingDocKind](s, loaded);
+          wtx.set(ref, { ...DEFAULTS_BY_KIND.get(kind), ...base, ...data });
+        } else {
+          wtx.set(ref, data, { merge: true });
+        }
+      }
+
+      if (copies) {
+        for (const f of personFounders) {
+          if (!f.exists) continue;
+          if (Object.keys(copies.copies.founderDirectory).length) {
+            wtx.set(db.doc(docPaths.founderDirectory(f.id)), copies.copies.founderDirectory, { merge: true });
+          }
+          if (Object.keys(copies.copies.founder).length) wtx.set(f.ref, { ...copies.copies.founder, updatedDateISOString: now }, { merge: true });
+        }
+      }
+
+      return { written, unchanged: changes.length - written, paths: targetPaths };
+    },
+  };
+}
+
 export const setFields: Operation<typeof SetFieldsInput, SetFieldsResult> = {
   name: "set_fields",
   input: SetFieldsInput,
   // Le staff, et les fondateurs (leur propre profil, verifie champ par champ).
   allowed: (caller) => isStaffViewer(caller.viewer) || caller.foundersByBatch.size > 0,
-  async plan(tx: Transaction, caller, input): Promise<OperationPlan<SetFieldsResult>> {
-    const db = getFirestore();
-    const s = input.subjects;
-
-    // Etapes sans lecture : un appel invalide ne coute rien.
-    const fields = knownFields(input.values);
-    const kinds = [...new Set(fields.map((f) => f.kind))];
-    const pathByKind = resolvePaths(kinds, s);
-    const values = parseValues(fields, input.values);
-    assertSelfEditableFields(caller, fields);
-
-    // UNE lecture groupee : documents de base, listes fermees, fondateurs cites, documents cibles.
-    const needs = new Set(kinds.flatMap((k) => DOC_KINDS[k].subjects as readonly SubjectKey[]));
-    const baseDocs = BASE_DOCS.filter((b) => needs.has(b.subject)).flatMap((b) => {
-      const path = b.path(s);
-      return path ? [{ ...b, path }] : [];
-    });
-    const listKeys = [
-      ...new Set(fields.flatMap(({ def }) => ((def.value.kind === "enum" || def.value.kind === "enumMulti") && def.value.listKey ? [def.value.listKey] : []))),
-    ];
-    const founderRefIds = [...new Set(fields.flatMap(({ key, def }) => (def.value.kind === "founderRefs" ? (values.get(key) as string[]) : [])))];
-    const paths = new Set<string>([
-      ...baseDocs.map((b) => b.path),
-      ...listKeys.map((k) => `${COL.lists}/${k}`),
-      ...founderRefIds.map((id) => docPaths.founder(id)),
-      ...pathByKind.values(),
-    ]);
-    const snaps = new Map((await tx.getAll(...[...paths].map((p) => db.doc(p)))).map((d) => [d.ref.path, d]));
-
-    for (const b of baseDocs) {
-      if (!snaps.get(b.path)!.exists) throw notFound(b.code, `${b.label} \`${b.path.split("/").pop()}\` does not exist.`, `subjects.${SUBJECT_INPUT_KEY[b.subject]}`);
-    }
-    const dataAt = <T>(path: string | null) => (path ? ((snaps.get(path)?.data() as T | undefined) ?? null) : null);
-    const loaded: Loaded = {
-      person: dataAt<Person>(s.personId && needs.has("person") ? docPaths.person(s.personId) : null),
-      founder: dataAt<Founder>(s.founderId && needs.has("founder") ? docPaths.founder(s.founderId) : null),
-      startup: dataAt<Startup>(s.startupId && needs.has("startup") ? docPaths.startup(s.startupId) : null),
-      eventBatchId: dataAt<{ batchId: string }>(s.eventId && needs.has("event") ? docPaths.event(s.eventId) : null)?.batchId ?? null,
-    };
-    if (kinds.includes("checkin") && loaded.startup && s.founderId && !loaded.startup.memberIds.includes(s.founderId)) {
-      throw badRequest("not_a_member", `Founder \`${s.founderId}\` is not a member of startup \`${s.startupId}\`.`, "subjects.founderId");
-    }
-    if (kinds.includes("attendance") && loaded.founder && loaded.eventBatchId && loaded.founder.batchId !== loaded.eventBatchId) {
-      throw badRequest("wrong_batch", "This founder and this event belong to different batches.", "subjects.eventId");
-    }
-
-    assertOwnsSubjects(caller, fields, s, loaded);
-
-    const missingFounders = founderRefIds.filter((id) => !snaps.get(docPaths.founder(id))!.exists);
-    if (missingFounders.length) throw notFound("founder_not_found", `Unknown founders: ${missingFounders.join(", ")}.`, "values");
-    normalizeEnums(fields, values, new Map(listKeys.flatMap((k) => {
-      const list = dataAt<ClosedList>(`${COL.lists}/${k}`);
-      return list ? [[k, list] as const] : [];
-    })));
-
-    const targets = new Map(kinds.map((k) => [k, snaps.get(pathByKind.get(k)!)!]));
-    const { changes, patches } = diff(fields, values, targets);
-    const written = changes.filter((c) => c.status === "write").length;
-    const preview = { changes, summary: `${written} field(s) to write, ${changes.length - written} unchanged.` };
-    if (written === 0) return { preview, commit: null, targetPaths: [] };
-
-    // Second aller-retour, seulement si une copie de `people` est en jeu.
-    const personPatch = patches.get("person");
-    const copies =
-      personPatch && loaded.person && Object.keys(personPatch).some((f) => PERSON_FIELDS_WITH_COPIES.has(f))
-        ? personCopies(loaded.person, personPatch)
-        : null;
-    const personFounders =
-      copies && loaded.person!.founderIds.length ? await tx.getAll(...loaded.person!.founderIds.map((id) => db.doc(docPaths.founder(id)))) : [];
-
-    const targetPaths = [...patches.keys()].map((k) => pathByKind.get(k)!);
-    return {
-      preview,
-      targetPaths,
-      commit: (wtx) => {
-        const now = new Date().toISOString();
-        for (const [kind, patch] of patches) {
-          const ref = db.doc(pathByKind.get(kind)!);
-          const data: Record<string, unknown> = { ...patch };
-          if (DOC_KINDS[kind].timestamped) data.updatedDateISOString = now;
-          if (kind === "attendance") Object.assign(data, { markedByUid: caller.uid, markedDateISOString: now });
-          if (kind === "person" && copies?.displayName) data.displayName = copies.displayName;
-
-          // Documents de base : leur existence est verifiee plus haut. Sous-documents
-          // prives : fusionnes. Documents de suivi : crees complets a la premiere ecriture.
-          const lifecycle = DOC_KINDS[kind].lifecycle;
-          if (lifecycle === "tracking" && !targets.get(kind)!.exists) {
-            const base = TRACKING_BASE[kind as TrackingDocKind](s, loaded);
-            wtx.set(ref, { ...DEFAULTS_BY_KIND.get(kind), ...base, ...data });
-          } else {
-            wtx.set(ref, data, { merge: true });
-          }
-        }
-
-        if (copies) {
-          for (const f of personFounders) {
-            if (!f.exists) continue;
-            if (Object.keys(copies.copies.founderDirectory).length) {
-              wtx.set(db.doc(docPaths.founderDirectory(f.id)), copies.copies.founderDirectory, { merge: true });
-            }
-            if (Object.keys(copies.copies.founder).length) wtx.set(f.ref, { ...copies.copies.founder, updatedDateISOString: now }, { merge: true });
-          }
-        }
-
-        return { written, unchanged: changes.length - written, paths: targetPaths };
-      },
-    };
-  },
+  plan: (tx, caller, input) => planFieldWrites(tx, caller, input),
 };
 
 /** Le registre, tel qu'un agent ou une integration doit le lire (`list fields`). */

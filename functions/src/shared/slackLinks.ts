@@ -32,6 +32,5 @@ export const slackDmWebUrl = (teamId: string, userId: string) =>
 export const slackDmUrl = (teamId: string, userId: string) =>
   `slack://user?team=${encodeURIComponent(teamId)}&id=${encodeURIComponent(userId)}`;
 
-/** Canal : lien https documente (`app_redirect`), qui fonctionne aussi sans l'application. */
-export const slackChannelUrl = (teamId: string, channelId: string) =>
-  `https://slack.com/app_redirect?channel=${encodeURIComponent(channelId)}&team=${encodeURIComponent(teamId)}`;
+/** Espace de travail entier (client web, qui propose d'ouvrir l'application). */
+export const slackWorkspaceUrl = (teamId: string) => `https://app.slack.com/client/${encodeURIComponent(teamId)}/`;

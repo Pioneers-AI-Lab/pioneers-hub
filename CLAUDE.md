@@ -68,6 +68,12 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
 - **Ecritures de champs** : `set_fields` lit le registre (`shared/fieldRegistry.ts`) : validation, listes
   fermees (cle ou libelle), `fill_empty` / `overwrite` / `merge_unique`, aucune valeur vide, copies
   `people` -> fondateurs. Les documents de suivi (semaine, update, presence, soumission) se creent a la demande.
+  Le plan (`planFieldWrites`) a un mode `partial` (un champ fautif est ecarte, pas l'appel : formulaires)
+  et un `hold` (calcule, pas ecrit : validation du staff). /v1 et le MCP restent en « tout ou rien ».
+  Une URL sans protocole est completee (`shared/text.ts#normalizeHttpUrl`).
+- **Formulaires publics** (`/forms/[formId]`, sans compte, une question par ecran : `components/forms/TypeForm`) :
+  callables `getPublicForm` (noms du batch en nom court) et `submitFormResponse` (`services/forms.ts`,
+  id de reponse deterministe par ouverture de page, ecritures via `planFieldWrites` en mode partiel).
 - **Jamais lus par l'API** : `peerRatings`, `picks`, `judges`, `apiKeys`, `writePlans` (SPECS §4.8).
 - **OAuth 2.1** (`functions/src/oauth`, connecteur claude.ai et Claude Code) : decouverte RFC 9728 / 8414, enregistrement
   dynamique, `/oauth/authorize` -> page front `/oauth/consent` (callables `oauthDescribeRequest` / `oauthDecide`),
@@ -140,6 +146,7 @@ d'acces en v1. Collections a plat avec `programId` / `batchId`.
 | Programme | `programs/[programId]/layout.tsx` | `ProgramContext` (+ ses batchs) | `Program`, `Batch` |
 | Batch + role | `.../batches/[batchId]/layout.tsx` | `BatchContext`, `FoundersContext`, `StartupsContext` | `Batch`, `BatchRole` |
 | Fondateur | `.../founders/[founderId]/layout.tsx` | `FounderContext` | `Founder`, `FounderDirectory`, `FounderProfile`, `FounderInternal` |
+| Annuaire (grille) | `.../founders/layout.tsx` | `FounderDirectoriesContext` (mode liste / grille ; `private/directory` de chaque fondateur une fois la grille ouverte) | `FounderDirectory` |
 | Startup | `.../startups/[startupId]/layout.tsx` | `StartupContext` | `Startup`, `StartupProfile`, `StartupInternal` |
 | Batch (suite) | idem batch | `EventsContext`, `ListsContext`, `CohortContext` (batchStats + scores), `LeaderboardsContext` | `PioneersEvent`, `ClosedList`, `BatchStats`, `Score`, `Leaderboard` |
 | Moi | `.../me/layout.tsx`, `.../todo/layout.tsx` | `MeGate` -> `FounderContext` (id du rattachement) + `OpenFormsContext` | |
@@ -156,7 +163,7 @@ Regles :
    refuse. Sous lui, le document n'est jamais nul (`useFounder().founder`).
 4. **Le role se calcule une fois, au batch** (`useBatch().role`) ; les niveaux en dessous le
    lisent. On n'ouvre pas d'ecouteur que les regles refuseraient : cible `null`.
-5. **Ecouteurs via `useDocListener` / `useQueryListener`** : `undefined` = on attend une
+5. **Ecouteurs via `useDocListener` / `useQueryListener`** (`useDocsListener` : un document par id, quand une requete de groupe ne passe pas les regles) : `undefined` = on attend une
    dependance, `null` = pas le droit, ref = on ecoute. Requetes nommees dans
    `lib/firestore/refs.ts` (`queries.*`, avec une `key` stable).
 6. **Les contextes ne font que lire.** Ecritures : `lib/firestore/write.ts`, ou une callable

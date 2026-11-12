@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { onSnapshot, type DocumentReference, type FirestoreError, type Query } from "firebase/firestore";
 
 // ----------------------------
@@ -78,4 +78,53 @@ export function useQueryListener<T>(named: { key: string; query: Query<T> } | nu
   if (key === null) return { data: [], ...SKIPPED };
   if (received?.key !== key) return { data: [], ...WAITING };
   return { data: received.data, isLoading: false, error: received.error };
+}
+
+/**
+ * Ecoute plusieurs documents, chacun sous l'id que lui donne l'appelant : pour
+ * une liste dont chaque element a son document prive
+ * (`founders/{id}/private/directory`), qu'une requete de groupe ne lirait pas
+ * (les regles relisent le parent de chaque document). `isLoading` tombe quand
+ * chaque document a repondu une fois ; un document absent ou refuse manque a
+ * la carte (`error` garde le premier refus). Quand la liste change, ce qui est
+ * deja recu reste affiche pendant le reabonnement.
+ */
+export function useDocsListener<T>(
+  entries: readonly (readonly [id: string, ref: DocumentReference<T>])[] | null | undefined,
+): Listened<Map<string, T>> {
+  // Trie : un fondateur renomme (liste reordonnee) ne reabonne pas tout.
+  const key = entries == null ? entries : entries.map(([, ref]) => ref.path).sort().join("|");
+  const [byId, setById] = useState<Map<string, T | null>>(() => new Map());
+  const [error, setError] = useState<FirestoreError | null>(null);
+
+  useEffect(() => {
+    if (!entries) return;
+    const unsubscribes = entries.map(([id, ref]) => {
+      const update = (data: T | null) => setById((prev) => new Map(prev).set(id, data));
+      return onSnapshot(
+        ref,
+        (snapshot) => update(snapshot.exists() ? snapshot.data() : null),
+        (e) => {
+          setError((prev) => prev ?? e);
+          update(null);
+        },
+      );
+    });
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- on se reabonne quand les CHEMINS changent, pas les objets.
+  }, [key]);
+
+  const data = useMemo(() => {
+    const out = new Map<string, T>();
+    entries?.forEach(([id]) => {
+      const value = byId.get(id);
+      if (value != null) out.set(id, value);
+    });
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` resume `entries`.
+  }, [byId, key]);
+
+  if (key === undefined) return { data, ...WAITING };
+  if (key === null) return { data, ...SKIPPED };
+  return { data, isLoading: entries!.some(([id]) => !byId.has(id)), error };
 }

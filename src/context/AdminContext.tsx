@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import { Stack, Text, Title } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { isStaffViewer } from "@shared/access";
 import type { Batch, Form, Founder, Membership, PioneersEvent, Program, WithId } from "@shared/types";
 import { queries } from "@/lib/firestore/refs";
+import { errorMessage } from "@/lib/errors";
+import { saveUserPreferences } from "@/lib/firestore/write";
 import { createStrictContext } from "@/lib/createStrictContext";
 import { useQueryListener } from "@/hooks/useFirestoreListener";
 import { useAuth } from "@/context/AuthContext";
@@ -19,8 +22,9 @@ import { paths } from "@/lib/paths";
 // (les regles refuseraient de toute facon les ecritures). Le role se lit sur
 // le compte (`isStaffViewer`), pas sur un batch : /admin n'est sous aucun batch.
 //
-// Le batch de travail se CHOISIT dans la page (BatchPicker) : par defaut le
-// batch en cours, puis le plus recent ; le choix est retenu par navigateur.
+// Le batch de travail se CHOISIT dans chaque outil (BatchPicker) : un seul
+// choix pour tous les outils, retenu sur le compte (`users.preferences.batchId`,
+// suit le compte d'un appareil a l'autre) ; a defaut, le batch en cours.
 // Les listes du batch choisi sont lues ICI, une fois pour tous les outils :
 // fondateurs (participants des tirages), evenements (brouillons compris),
 // appartenances (historique « qui a ete avec qui »), formulaires.
@@ -45,53 +49,29 @@ type AdminValue = {
 const [AdminContextProvider, useAdmin] = createStrictContext<AdminValue>("Admin");
 export { useAdmin };
 
-const STORAGE_KEY = "pioneers.admin.batchId";
-
-function readStoredBatchId(): string | null {
-  try {
-    return window.localStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function storeBatchId(batchId: string) {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, batchId);
-  } catch {
-    // Stockage indisponible (navigation privee) : le choix vaut pour la session.
-  }
-}
-
-/** Le batch par defaut : en cours, sinon a venir, sinon le plus recent. */
-function defaultBatch(batches: WithId<Batch>[]): WithId<Batch> | null {
-  return (
-    batches.find((b) => b.status === "active") ??
-    batches.find((b) => b.status === "upcoming") ??
-    batches[0] ??
-    null
-  );
-}
+/**
+ * Le batch par defaut, faute de choix : celui en cours (le plus recemment
+ * commence s'il y en a plusieurs), sinon le plus recent. `batches` est trie
+ * du debut le plus recent au plus ancien.
+ */
+const defaultBatch = (batches: WithId<Batch>[]): WithId<Batch> | null =>
+  batches.find((b) => b.status === "active") ?? batches[0] ?? null;
 
 export function AdminProvider({ children }: { children: ReactNode }) {
-  const { viewer, isLoading: isAuthLoading } = useAuth();
+  const { user, viewer, isLoading: isAuthLoading } = useAuth();
   const isStaff = isStaffViewer(viewer);
 
   const programs = useQueryListener(isAuthLoading ? undefined : isStaff ? queries.activePrograms() : null);
   const batchList = useQueryListener(isAuthLoading ? undefined : isStaff ? queries.activeBatches() : null);
-  const [chosenId, setChosenId] = useState<string | null>(null);
-
-  // Le choix retenu se lit apres le montage (pas de `window` au pre-rendu).
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setChosenId((current) => current ?? readStoredBatchId());
-  }, []);
+  // L'ecriture locale de Firestore renvoie aussitot le nouveau choix par
+  // l'ecouteur du compte : pas d'etat local a tenir en plus.
+  const preferredId = user?.preferences?.batchId ?? null;
 
   const batches = useMemo(
     () => [...batchList.data].sort((a, b) => b.startDayString.localeCompare(a.startDayString)),
     [batchList.data],
   );
-  const batch = batches.find((b) => b.id === chosenId) ?? defaultBatch(batches);
+  const batch = batches.find((b) => b.id === preferredId) ?? defaultBatch(batches);
   const batchId = batch?.id ?? null;
 
   const founders = useQueryListener(batchId ? queries.foundersOfBatch(batchId, "batch") : batchList.isLoading ? undefined : null);
@@ -99,10 +79,16 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const memberships = useQueryListener(batchId ? queries.teamMembershipsOfBatch(batchId) : batchList.isLoading ? undefined : null);
   const forms = useQueryListener(batchId ? queries.formsOfBatch(batchId) : batchList.isLoading ? undefined : null);
 
-  const selectBatch = useCallback((id: string) => {
-    setChosenId(id);
-    storeBatchId(id);
-  }, []);
+  const uid = user?.id ?? null;
+  const selectBatch = useCallback(
+    (id: string) => {
+      if (!uid || id === preferredId) return;
+      saveUserPreferences(uid, { batchId: id }).catch((err: unknown) =>
+        notifications.show({ color: "red", message: errorMessage(err) }),
+      );
+    },
+    [uid, preferredId],
+  );
 
   const value = useMemo<AdminValue | null>(() => {
     if (!batch) return null;

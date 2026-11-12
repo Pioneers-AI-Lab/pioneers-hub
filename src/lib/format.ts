@@ -1,5 +1,7 @@
 import dayjs from "dayjs";
 
+export { searchKey } from "@shared/text";
+
 // ----------------------------
 // Affichage des dates et des nombres
 // ----------------------------
@@ -45,7 +47,7 @@ export const todayDayString = () => dayjs().format("YYYY-MM-DD");
 export const joinList = (values: readonly string[] | null | undefined, sep = ", ") =>
   values && values.length > 0 ? values.join(sep) : "-";
 
-export const PROFILE_CATEGORY_LABEL = { technical: "Tech", business: "Business", hybrid: "Hybrid" } as const;
+export { PROFILE_CATEGORY_LABELS as PROFILE_CATEGORY_LABEL } from "@shared/types";
 
 /** Score sur 10 : `7.4`, `-` sans donnee. */
 export const score10 = (v: number | null | undefined) => (v === null || v === undefined ? "-" : v.toFixed(1));
@@ -66,3 +68,13 @@ export function money(v: number | null | undefined): string {
 /** Nombre entier lisible : `12 400`. */
 export const integer = (v: number | null | undefined) =>
   v === null || v === undefined ? "-" : Math.round(v).toLocaleString("en-US").replace(/,/g, " ");
+
+/** Un instant ISO pour un champ `datetime-local` (`YYYY-MM-DDTHH:mm`, heure locale), et retour. */
+export const toLocalInput = (iso: string | null) => (iso ? dayjs(iso).format("YYYY-MM-DDTHH:mm") : "");
+export const fromLocalInput = (value: string) => (value ? new Date(value).toISOString() : null);
+
+/** La valeur d'une metrique d'evenement avec son unite : « 1 250 EUR », « 12.5 % », « 42 ». */
+export function metricValue(metric: { unit: string | null }, v: number): string {
+  const n = Number.isInteger(v) ? integer(v) : v.toFixed(1);
+  return metric.unit ? `${n} ${metric.unit}` : n;
+}

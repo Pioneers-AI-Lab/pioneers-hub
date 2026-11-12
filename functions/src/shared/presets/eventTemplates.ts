@@ -168,3 +168,11 @@ export const EVENT_TEMPLATES = {
 } satisfies Record<string, EventTemplate>;
 
 export type EventTemplateKey = keyof typeof EVENT_TEMPLATES;
+
+/**
+ * La question par defaut d'une demande de choix (`PioneersEvent.picks`) :
+ * apres un speed dating (`matching`), qui t'a marque ; sinon, les mutual picks
+ * avant le hackathon de 3 jours.
+ */
+export const defaultPicksQuestion = (kind: EventKind): string =>
+  kind === "matching" ? "Who stood out for you?" : "Who would you like to start a company with?";

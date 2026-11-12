@@ -1,7 +1,7 @@
 "use client";
 
 import { Avatar, Group, Stack, Text, Title } from "@mantine/core";
-import type { FounderStatus } from "@shared/types";
+import { EXISTING_CO_FOUNDERS_LABELS, type FounderStatus } from "@shared/types";
 import { useFounder } from "@/context/FounderContext";
 import { useStartups } from "@/context/StartupsContext";
 import { useBatch } from "@/context/BatchContext";
@@ -29,7 +29,6 @@ const list = (values: readonly string[] | null | undefined) => (values && values
 
 const yesNo = (v: boolean | null | undefined) => (v === true ? "Yes" : v === false ? "No" : null);
 
-const CO_FOUNDERS_LABEL = { in_batch: "In the batch", outside_batch: "Outside the batch", none: "None" } as const;
 
 /**
  * La fiche d'un fondateur, section par section selon ce que le role peut lire
@@ -148,7 +147,7 @@ export function FounderCard() {
               <Field label="Open to join another project">{yesNo(directory.openToJoinAnotherProject)}</Field>
               <Field label="Existing project">{directory.hasExistingProject ? directory.projectExplanation ?? "Yes" : yesNo(directory.hasExistingProject)}</Field>
               <Field label="Existing co-founders">
-                {directory.hasExistingCoFounders ? CO_FOUNDERS_LABEL[directory.hasExistingCoFounders] : null}
+                {directory.hasExistingCoFounders ? EXISTING_CO_FOUNDERS_LABELS[directory.hasExistingCoFounders] : null}
               </Field>
             </FieldGrid>
           </Section>

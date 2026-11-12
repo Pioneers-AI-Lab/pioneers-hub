@@ -5,7 +5,7 @@ import { useAdmin } from "@/context/AdminContext";
 
 const STATUS_LABEL = { upcoming: "upcoming", active: "live", completed: "completed" } as const;
 
-/** Le batch sur lequel travaillent les outils. Retenu par navigateur. */
+/** Le batch sur lequel travaillent les outils. Retenu sur le compte, pour tous les outils. */
 export function BatchPicker() {
   const { batches, batch, selectBatch, programsById } = useAdmin();
   return (

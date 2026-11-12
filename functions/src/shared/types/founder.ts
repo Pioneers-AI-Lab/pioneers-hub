@@ -38,6 +38,7 @@ import type { CommitmentStatus } from "./form";
 /** @source SP26 « Profile Category » (genere a l'import, valide par l'admin). */
 export const PROFILE_CATEGORIES = ["technical", "business", "hybrid"] as const;
 export type ProfileCategory = (typeof PROFILE_CATEGORIES)[number];
+export const PROFILE_CATEGORY_LABELS: Record<ProfileCategory, string> = { technical: "Tech", business: "Business", hybrid: "Hybrid" };
 
 /**
  * @source SP26 « Status ». Les valeurs exactes de la colonne Airtable sont a
@@ -52,6 +53,11 @@ export type LeftProgramReason = "left_early" | "left_after_selection_day";
 /** @source SP26 « Do you have existing co-founders in the batch ? » */
 export const EXISTING_CO_FOUNDERS = ["in_batch", "outside_batch", "none"] as const;
 export type ExistingCoFounders = (typeof EXISTING_CO_FOUNDERS)[number];
+export const EXISTING_CO_FOUNDERS_LABELS: Record<ExistingCoFounders, string> = {
+  in_batch: "In the batch",
+  outside_batch: "Outside the batch",
+  none: "None",
+};
 
 /** Statistiques publiques, ecrites par Cloud Functions. */
 export type FounderPublicStats = {
@@ -256,12 +262,21 @@ export type FounderStats = BatchScoped & {
 };
 
 // ----------------------------
-// picks/{batchId}_{founderId}  (staff + l'auteur)
+// picks/{eventId}_{founderId}  (staff + l'auteur)
 // ----------------------------
+// Des choix prives et classes, toujours rattaches a un evenement qui les
+// demande (`PioneersEvent.picks`) : les mutual picks avant le hackathon de
+// 3 jours (« avec qui monter une boite ? »), le « qui t'a marque » d'un speed
+// dating. Les choix reciproques sont apparies en premier par le staff.
 
-export type MutualPicks = BatchScoped & {
+/** Un fondateur qu'on peut choisir dans ce batch : ni parti, ni archive. */
+export const isPickable = (f: Pick<Founder, "batchId" | "status" | "archivedDateISOString">, batchId: string): boolean =>
+  f.batchId === batchId && f.status !== "left" && f.archivedDateISOString === null;
+
+export type Picks = BatchScoped & {
+  eventId: string;
   founderId: string;
-  /** Choix prives et classes de futurs co-fondateurs. */
+  /** Classes : le premier est le premier choix. */
   pickedFounderIds: string[];
   submittedDateISOString: DateISOString;
 };

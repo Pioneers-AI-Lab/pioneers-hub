@@ -89,35 +89,33 @@ function NewEventForm({ mode, count }: { mode: TeamToolMode; count: number }) {
   };
 
   return (
-    <Section title="New" hint={`Creates the event in ${batch.name}, then opens the generator.`}>
-      <Stack>
-        {templates.length > 1 && (
-          <Select
-            label="Format"
-            allowDeselect={false}
-            value={templateKey}
-            onChange={(v) => {
-              if (!v) return;
-              const key = v as EventTemplateKey;
-              setTemplateKey(key);
-              setName(`${EVENT_TEMPLATES[key].label} ${count + 1}`);
-            }}
-            data={templates}
-          />
-        )}
-        <TextInput label="Name" value={name} onChange={(e) => setName(e.currentTarget.value)} />
-        <TextInput label="Starts" type="datetime-local" value={start} onChange={(e) => setStart(e.currentTarget.value)} />
-        <TextInput label="Location" placeholder="Optional" value={location} onChange={(e) => setLocation(e.currentTarget.value)} />
-        <Box>
-          <Text size="sm" fw={500} mb={4}>
-            {tool.groupLabel} size
-          </Text>
-          <SegmentedControl fullWidth value={size} onChange={setSize} data={SIZES} />
-        </Box>
-        <Button size="md" fullWidth disabled={!name.trim() || !start} loading={isSaving} onClick={submit}>
-          Create and draw
-        </Button>
-      </Stack>
-    </Section>
+    <Stack>
+      {templates.length > 1 && (
+        <Select
+          label="Format"
+          allowDeselect={false}
+          value={templateKey}
+          onChange={(v) => {
+            if (!v) return;
+            const key = v as EventTemplateKey;
+            setTemplateKey(key);
+            setName(`${EVENT_TEMPLATES[key].label} ${count + 1}`);
+          }}
+          data={templates}
+        />
+      )}
+      <TextInput label="Name" value={name} onChange={(e) => setName(e.currentTarget.value)} />
+      <TextInput label="Starts" type="datetime-local" value={start} onChange={(e) => setStart(e.currentTarget.value)} />
+      <TextInput label="Location" placeholder="Optional" value={location} onChange={(e) => setLocation(e.currentTarget.value)} />
+      <Box>
+        <Text size="sm" fw={500} mb={4}>
+          {tool.groupLabel} size
+        </Text>
+        <SegmentedControl fullWidth value={size} onChange={setSize} data={SIZES} />
+      </Box>
+      <Button size="md" fullWidth disabled={!name.trim() || !start} loading={isSaving} onClick={submit}>
+        Create and draw
+      </Button>
+    </Stack>
   );
 }

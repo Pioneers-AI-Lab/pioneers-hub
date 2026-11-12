@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge, Button, Checkbox, Group, SegmentedControl, Stack, Text, TextInput } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import type { AccountAccess, AccountRow } from "@shared/callables";
 import type { InvestorAccess, UserRole } from "@shared/types";
 import { useAuth } from "@/context/AuthContext";
+import { useAction } from "@/hooks/useAction";
+import { useCallable } from "@/hooks/useCallable";
 import { call } from "@/lib/firebase";
 import { formatDateTime } from "@/lib/format";
 import { paths } from "@/lib/paths";
@@ -25,10 +26,6 @@ import { Empty, Section } from "@/components/ui/Section";
 
 const ROLE_LABELS: Record<UserRole, string> = { staff: "Staff", investor: "Investor", mentor: "Mentor" };
 const NO_ACCESS: AccountAccess = { roles: [], investorAccess: null };
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "Something went wrong.";
-}
 
 /** Resume des droits d'un compte, pour la ligne de la liste. */
 function accessSummary(account: AccountRow): string {
@@ -82,32 +79,17 @@ function AccessEditor({ value, onChange }: { value: AccountAccess; onChange: (ne
 
 export default function AdminAccessPage() {
   const { viewer } = useAuth();
-  const [accounts, setAccounts] = useState<AccountRow[] | null>(null);
+  const { data, error, isLoading, reload } = useCallable("listAccounts", {});
+  const accounts = data?.accounts ?? null;
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AccountRow | null>(null);
   const [draft, setDraft] = useState<AccountAccess>(NO_ACCESS);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteAccess, setInviteAccess] = useState<AccountAccess>({ roles: ["staff"], investorAccess: null });
-  const [busy, setBusy] = useState<string | null>(null);
-  // Incremente apres chaque changement : relance le chargement de la liste.
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    call("listAccounts")({})
-      .then(({ data }) => {
-        if (!cancelled) setAccounts(data.accounts);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        notifications.show({ color: "red", message: errorMessage(err) });
-        setAccounts([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
+  const { isBusy, run: runAction } = useAction();
+  // Le bouton qui tourne : celui de la derniere action lancee.
+  const [busyLabel, setBusyLabel] = useState<string | null>(null);
+  const busy = isBusy ? busyLabel : null;
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!accounts || !q) return accounts ?? [];
@@ -115,18 +97,10 @@ export default function AdminAccessPage() {
   }, [accounts, search]);
 
   const run = async (label: string, action: () => Promise<unknown>, success: string) => {
-    setBusy(label);
-    try {
-      await action();
-      notifications.show({ message: success });
-      setReloadKey((k) => k + 1);
-      return true;
-    } catch (err) {
-      notifications.show({ color: "red", message: errorMessage(err) });
-      return false;
-    } finally {
-      setBusy(null);
-    }
+    setBusyLabel(label);
+    const ok = (await runAction(action, success)) !== undefined;
+    if (ok) reload();
+    return ok;
   };
 
   const open = (account: AccountRow) => {
@@ -140,7 +114,8 @@ export default function AdminAccessPage() {
     if (ok) setInviteEmail("");
   };
 
-  if (accounts === null) return <PageLoader />;
+  if (isLoading) return <PageLoader />;
+  if (!accounts) return <Empty>{error}</Empty>;
   const isSelf = selected?.uid === viewer?.uid;
 
   return (

@@ -28,6 +28,9 @@ export const paths = {
   leaderboard: (programId: string, batchId: string, eventId?: string) =>
     `${batchBase(programId, batchId)}/leaderboard${eventId ? `#${encodeURIComponent(eventId)}` : ""}`,
   todo: (programId: string, batchId: string) => `${batchBase(programId, batchId)}/todo`,
+  debrief: (programId: string, batchId: string, eventId: string) =>
+    `${batchBase(programId, batchId)}/todo/debrief/${eventId}`,
+  picks: (programId: string, batchId: string, eventId: string) => `${batchBase(programId, batchId)}/todo/picks/${eventId}`,
   me: (programId: string, batchId: string) => `${batchBase(programId, batchId)}/me`,
   meEdit: (programId: string, batchId: string) => `${batchBase(programId, batchId)}/me/edit`,
   staff: (programId: string, batchId: string) => `${batchBase(programId, batchId)}/staff`,
@@ -36,6 +39,10 @@ export const paths = {
   staffSettings: (programId: string, batchId: string) => `${batchBase(programId, batchId)}/staff/settings`,
   /** Repartition publique d'une lunch roulette (lien partage, sans compte). */
   lunchRoulette: (eventId: string) => `/lunch-roulette/${eventId}`,
+  /** Feuille de notes d'un jure (sans compte). Le secret du lien suit en fragment (`#…`) : il ne part jamais au serveur. */
+  judge: (eventId: string, judgeId: string) => `/judge/${eventId}/${judgeId}`,
+  /** Formulaire public, une question par ecran (lien partage, sans compte). */
+  form: (formId: string) => `/forms/${formId}`,
   /** Outils du staff, hors batch (le batch se choisit dans la page). */
   admin: () => "/admin",
   adminAccess: () => "/admin/access",

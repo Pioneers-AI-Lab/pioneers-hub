@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Box, Group, Stack, Text, UnstyledButton } from "@mantine/core";
-import { FOUNDER_PILLARS, type AttendanceStatus, type CommitmentStatus, type FounderPillar } from "@shared/types";
+import { COMMITMENT_STATUS_LABELS, FOUNDER_PILLARS, type AttendanceStatus, type FounderPillar } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
 import { useEvents } from "@/context/EventsContext";
@@ -267,13 +267,6 @@ export function FounderNetwork() {
   );
 }
 
-const COMMITMENT_LABEL: Record<CommitmentStatus, string> = {
-  committed: "Committed to a startup",
-  on_a_project: "On a project, not committed",
-  testing_relationships: "Testing relationships",
-  what_am_i_doing_here: "What am I doing here?",
-};
-
 /** Formulaires de motivation et d'objectifs, semaine par semaine. */
 export function FounderWeeks() {
   const { weeks, isSelf } = useFounder();
@@ -290,7 +283,7 @@ export function FounderWeeks() {
                 <Text fw={600}>Week of {formatDay(w.weekStartDayString, true)}</Text>
                 {w.commitmentStatus && (
                   <Text size="sm" c="pioneers">
-                    {COMMITMENT_LABEL[w.commitmentStatus]}
+                    {COMMITMENT_STATUS_LABELS[w.commitmentStatus]}
                   </Text>
                 )}
               </Group>

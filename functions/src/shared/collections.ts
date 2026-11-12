@@ -106,7 +106,7 @@ export const docIds = {
   claimRequest: (batchId: string, uid: string) => `${batchId}_${uid}`,
   evaluation: (evaluatorId: string, targetId: string) => `${evaluatorId}_${targetId}`,
   peerRating: (raterFounderId: string, rateeFounderId: string) => `${raterFounderId}_${rateeFounderId}`,
-  picks: (batchId: string, founderId: string) => `${batchId}_${founderId}`,
+  picks: (eventId: string, founderId: string) => `${eventId}_${founderId}`,
   founderWeek: (founderId: string, weekStartDayString: string) => `${founderId}_${weekStartDayString}`,
   /** Un update par fondateur et par semaine : plusieurs membres peuvent chacun remplir le leur. */
   checkin: (startupId: string, weekStartDayString: string, founderId: string) =>
@@ -135,6 +135,12 @@ export const docIds = {
  * s'en servent tous les deux.
  */
 export const docPaths = {
+  batch: (batchId: string) => `${COL.batches}/${batchId}`,
+  /** Rattachement d'un compte a un profil fondateur du batch. */
+  membership: (batchId: string, uid: string) => `${COL.batchMemberships}/${docIds.membership(batchId, uid)}`,
+  list: (listKey: string) => `${COL.lists}/${listKey}`,
+  form: (formId: string) => `${COL.forms}/${formId}`,
+  mentor: (mentorId: string) => `${COL.mentors}/${mentorId}`,
   person: (personId: string) => `${COL.people}/${personId}`,
   founder: (founderId: string) => `${COL.founders}/${founderId}`,
   founderDirectory: (founderId: string) => `${COL.founders}/${founderId}/${SUB.private}/${PRIVATE_DOC.directory}`,
@@ -151,6 +157,19 @@ export const docPaths = {
   submission: (eventId: string, teamId: string) => `${COL.events}/${eventId}/${SUB.submissions}/${teamId}`,
   event: (eventId: string) => `${COL.events}/${eventId}`,
   team: (eventId: string, teamId: string) => `${COL.events}/${eventId}/${SUB.teams}/${teamId}`,
+  evaluation: (eventId: string, evaluatorId: string, targetId: string) =>
+    `${COL.events}/${eventId}/${SUB.evaluations}/${docIds.evaluation(evaluatorId, targetId)}`,
+  leaderboard: (eventId: string) => `${COL.leaderboards}/${eventId}`,
+  picks: (eventId: string, founderId: string) => `${COL.picks}/${docIds.picks(eventId, founderId)}`,
+  sessionRating: (eventId: string, founderId: string) => `${COL.sessionRatings}/${docIds.sessionRating(eventId, founderId)}`,
+  /** Jure sans compte (empreinte du secret de son lien) : staff seulement, jamais lu par l'API (SPECS §4.8). */
+  judge: (eventId: string, judgeId: string) => `${COL.events}/${eventId}/${SUB.judges}/${judgeId}`,
+  judges: (eventId: string) => `${COL.events}/${eventId}/${SUB.judges}`,
+  /** Ecrit par la callable du Debrief ; jamais lu par l'API (SPECS §4.8). */
+  peerRating: (eventId: string, raterFounderId: string, rateeFounderId: string) =>
+    `${COL.events}/${eventId}/${SUB.peerRatings}/${docIds.peerRating(raterFounderId, rateeFounderId)}`,
+  metricSnapshot: (subjectId: string, metric: string, dayString: string, phase: "before" | "after" | null) =>
+    `${COL.metricSnapshots}/${docIds.metricSnapshot(subjectId, metric, dayString, phase)}`,
 } as const;
 
 /** Sous-collections d'un evenement lues par le serveur (jamais `peerRatings` ni `judges` : SPECS §4.8). */
@@ -158,5 +177,6 @@ export const eventCollectionPaths = {
   teams: (eventId: string) => `${COL.events}/${eventId}/${SUB.teams}`,
   attendance: (eventId: string) => `${COL.events}/${eventId}/${SUB.attendance}`,
   submissions: (eventId: string) => `${COL.events}/${eventId}/${SUB.submissions}`,
+  evaluations: (eventId: string) => `${COL.events}/${eventId}/${SUB.evaluations}`,
 } as const;
 

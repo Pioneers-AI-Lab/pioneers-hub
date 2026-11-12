@@ -1,8 +1,19 @@
 import { docPaths } from "./collections";
-import { ATTENDANCE_STATUSES, COMMITMENT_STATUSES, EVENT_KIND_FEATURES, EXISTING_CO_FOUNDERS, PROFILE_CATEGORIES } from "./types";
+import {
+  ATTENDANCE_STATUS_LABELS,
+  ATTENDANCE_STATUSES,
+  COMMITMENT_STATUS_LABELS,
+  COMMITMENT_STATUSES,
+  EVENT_KIND_FEATURES,
+  EXISTING_CO_FOUNDERS,
+  EXISTING_CO_FOUNDERS_LABELS,
+  PROFILE_CATEGORIES,
+  PROFILE_CATEGORY_LABELS,
+} from "./types";
 import type {
   Attendance,
   Checkin,
+  ClosedList,
   EventKind,
   FormFieldType,
   Founder,
@@ -12,6 +23,7 @@ import type {
   FounderWeek,
   MetricKey,
   Person,
+  SessionRating,
   Startup,
   StartupInternal,
   StartupProfile,
@@ -61,6 +73,7 @@ export type DocKindMap = {
   startupInternal: StartupInternal;
   checkin: Checkin;
   attendance: Attendance;
+  sessionRating: SessionRating;
   submission: Submission;
 };
 export type DocKind = keyof DocKindMap;
@@ -133,6 +146,8 @@ export const DOC_KINDS = {
     owner: "founder",
     path: (s: Subjects) => docPaths.attendance(s.event, s.founder),
   },
+  /** La note en un geste d'une seance (SPECS §4.4) : un formulaire « Session feedback » rattache a l'evenement l'ecrit. */
+  sessionRating: { lifecycle: "tracking", timestamped: false, subjects: ["event", "founder"], owner: "founder", path: (s: Subjects) => docPaths.sessionRating(s.event, s.founder) },
   submission: { lifecycle: "tracking", timestamped: false, subjects: ["event", "team"], owner: "startup", path: (s: Subjects) => docPaths.submission(s.event, s.team) },
 } as const satisfies Record<
   DocKind,
@@ -228,13 +243,35 @@ export type ValueSpec =
   | { kind: "url" }
   | { kind: "email" }
   | { kind: "phone" }
-  /** Valeur d'une liste fermee (`lists/{listKey}`) ou de valeurs fixes. */
-  | { kind: "enum"; listKey: string | null; values: readonly string[] | null }
-  | { kind: "enumMulti"; listKey: string | null; values: readonly string[] | null }
+  /**
+   * Valeur d'une liste fermee (`lists/{listKey}`) ou de valeurs fixes ; le
+   * libelle d'une valeur fixe (`labels`) est celui qu'affichent l'app et les formulaires.
+   */
+  | { kind: "enum"; listKey: string | null; values: readonly string[] | null; labels?: Readonly<Record<string, string>> }
+  | { kind: "enumMulti"; listKey: string | null; values: readonly string[] | null; labels?: Readonly<Record<string, string>> }
   | { kind: "founderRefs"; maxItems: number | null }
   /** Une URL, ou une liste d'URL si `multiple`. */
   | { kind: "files"; multiple: boolean };
 export type ValueKind = ValueSpec["kind"];
+
+/** Une valeur choisie dans une liste (fermee ou fixe) : le seul cas ou une valeur a un libelle. */
+export const isEnumValue = (spec: ValueSpec): spec is Extract<ValueSpec, { kind: "enum" | "enumMulti" }> =>
+  spec.kind === "enum" || spec.kind === "enumMulti";
+
+/** La liste fermee (`lists/{listKey}`) d'ou viennent les valeurs du champ, s'il en a une. */
+export const listKeyOf = (spec: ValueSpec): string | null => (isEnumValue(spec) ? spec.listKey : null);
+
+/**
+ * Les valeurs acceptees et leur libelle : la liste fermee (sans ses valeurs
+ * archivees), ou les valeurs fixes. `null` si le champ n'est pas une liste.
+ */
+export function enumOptions(spec: ValueSpec, lists: ReadonlyMap<string, ClosedList>): { value: string; label: string }[] | null {
+  if (!isEnumValue(spec)) return null;
+  if (spec.listKey) {
+    return (lists.get(spec.listKey)?.items ?? []).filter((i) => !i.archived).map((i) => ({ value: i.value, label: i.label }));
+  }
+  return (spec.values ?? []).map((v) => ({ value: v, label: spec.labels?.[v] ?? v }));
+}
 
 /** La valeur est une liste (et vaut `[]` quand elle est vide, jamais `null`). */
 export const isListValue = (spec: ValueSpec): boolean =>
@@ -327,7 +364,7 @@ export const DB_FIELDS = {
 
   // ---- Fondateur : carte et Profile Book ----
   /** @source SP26 « Profile Category » : propose a l'import, valide par le staff. */
-  "founder.profileCategory": field("Profile category", { kind: "enum", listKey: null, values: PROFILE_CATEGORIES }),
+  "founder.profileCategory": field("Profile category", { kind: "enum", listKey: null, values: PROFILE_CATEGORIES, labels: PROFILE_CATEGORY_LABELS }),
   "founder.hardSkills": field("Hard skills", { kind: "enumMulti", listKey: "hardSkills", values: null }, {
     expected: once("required"),
     writePolicy: "merge_unique",
@@ -360,7 +397,7 @@ export const DB_FIELDS = {
   "founderDirectory.projectExplanation": field("Project explanation", longText()),
   "founderDirectory.hasExistingCoFounders": field(
     "Existing co-founders",
-    { kind: "enum", listKey: null, values: EXISTING_CO_FOUNDERS },
+    { kind: "enum", listKey: null, values: EXISTING_CO_FOUNDERS, labels: EXISTING_CO_FOUNDERS_LABELS },
     { expected: once() },
   ),
   "founderDirectory.openToJoinAnotherProject": field("Open to join another project", yesNo, { expected: once() }),
@@ -388,7 +425,7 @@ export const DB_FIELDS = {
   "founderWeek.goalForWeek": field("Goal for the week", longText(), { expected: weekly }),
   "founderWeek.commitmentStatus": field(
     "Commitment status",
-    { kind: "enum", listKey: null, values: COMMITMENT_STATUSES },
+    { kind: "enum", listKey: null, values: COMMITMENT_STATUSES, labels: COMMITMENT_STATUS_LABELS },
     { expected: weekly },
   ),
   "founderWeek.projectName": field("Project name", text(120)),
@@ -400,9 +437,13 @@ export const DB_FIELDS = {
   // ---- Fondateur : presence ----
   "attendance.status": field(
     "Attendance",
-    { kind: "enum", listKey: null, values: ATTENDANCE_STATUSES },
+    { kind: "enum", listKey: null, values: ATTENDANCE_STATUSES, labels: ATTENDANCE_STATUS_LABELS },
     { expected: { scope: "per_event", priority: "required" } },
   ),
+
+  // ---- Fondateur : note de seance ----
+  "sessionRating.rating": field("Session rating", { kind: "rating", min: 1, max: 5 }),
+  "sessionRating.comment": field("Session comment", longText()),
 
   // ---- Startup : carte et profil ----
   "startup.name": field("Startup name", text(80), { expected: once("required") }),
