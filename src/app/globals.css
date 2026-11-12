@@ -41,6 +41,9 @@ button.row:active,
   .card-link:hover {
     background: var(--mantine-color-dark-6);
   }
+  .card-link:hover {
+    border-color: var(--mantine-color-dark-3);
+  }
 }
 button.row {
   width: 100%;
@@ -65,11 +68,6 @@ button.row {
   text-decoration: none;
   min-width: 0;
   overflow-wrap: anywhere;
-}
-@media (hover: hover) {
-  .card-link:hover {
-    border-color: var(--mantine-color-dark-3);
-  }
 }
 .card-cover {
   position: relative;

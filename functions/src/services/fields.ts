@@ -313,6 +313,9 @@ function personCopies(person: Person, personPatch: Record<string, unknown>) {
   }
   const copies: Record<"founder" | "founderDirectory", Record<string, unknown>> = { founder: {}, founderDirectory: {} };
   for (const c of PERSON_COPY_ENTRIES) if (c.source in next) copies[c.kind][c.field] = next[c.source];
+  // La grande photo (Storage, ecrite par l'import) montrait l'ancienne photo :
+  // on l'efface, la carte de l'annuaire retombe sur la nouvelle `photoUrl`.
+  if ("photoUrl" in next) copies.founder.coverPhotoUrl = null;
   return { displayName: next.displayName as string | undefined, copies };
 }
 

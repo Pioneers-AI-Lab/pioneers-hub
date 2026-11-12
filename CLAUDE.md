@@ -25,6 +25,8 @@ npm run deploy:rules  # regles + index Firestore sur le projet reel (apres check
 npm run init:prod     # documents de depart du projet reel (rejouable, n'ecrase rien)
 npm run grant -- <email> staff|investor ic|investor portfolio|mentor|none   # role d'un compte, reel
 node scripts/import-sp26.mjs <bundle.json> --prod   # import du batch Spring 2026 (paquet hors depot, donnees personnelles)
+node scripts/import-fa26.mjs <lien-airtable> --prod [--dry-run]   # batch Fall 2026 depuis la vue partagee du Profile Book (lien hors depot)
+npx firebase deploy --only storage --project prod   # regles Storage (tout refuse : lecture par URL a jeton)
 npm run typecheck     # route types + front + functions
 npm run lint
 npm run build
@@ -41,8 +43,14 @@ verifier un build a cote d'un `next dev` : `NEXT_DIST_DIR=.next-emu next build` 
 `NEXT_DIST_DIR=.next-emu next start` (Next ajoute alors `.next-emu` au tsconfig : ne pas le commiter).
 
 Donnees : batch `spring-2026` (termine) importe du dashboard spring2026.thepioneer.vc (ids Airtable,
-reimport sans perte des rattachements). Photos et logos : vignettes JPEG 128 px en `data:` URL dans
-`photoUrl` / `logoUrl`, faute de Storage (plan Blaze) ; a migrer vers Storage ensuite.
+reimport sans perte des rattachements). Batch `fall-2026` importe le 12/11 de la vue partagee
+« Pioneers Profile Book - FA26 » (32 fondateurs, ids Airtable, sans email : rattachement par /claim).
+Reimport : un profil reclame garde son rattachement et ses valeurs non vides ; les photos viennent toujours de l'import.
+Photos et logos : vignettes JPEG 128 px en `data:` URL dans `photoUrl` / `logoUrl` (avatars).
+Grandes photos dans Storage (bucket `pioneers-3627c.firebasestorage.app`, europe-west9, cree le 12/11) :
+`founders/{id}/cover.jpg` (800 px au plus), URL a jeton dans `founders.coverPhotoUrl` (couverture des
+cartes de l'annuaire). `storage.rules` refuse tout acces direct ; qui lit le document a l'URL.
+SP26 n'a que ses vignettes (originaux non gardes). Emulateur Storage : port 9399.
 
 Les ports des emulateurs sont decales des valeurs par defaut : une autre suite
 (Trippple) tourne souvent sur 4000/5001. `firebase-tools` est epingle en local

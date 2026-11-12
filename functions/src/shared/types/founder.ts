@@ -84,6 +84,14 @@ export type Founder = BatchScoped &
     name: string;
     /** Copie de `people.photoUrl`. @source SP26 « Your photo » */
     photoUrl: string | null;
+    /**
+     * Grande photo (couverture des cartes de l'annuaire) : URL Storage a jeton
+     * (`founders/{id}/cover.jpg`), lisible par qui lit ce document. Ecrite par
+     * l'import, ce n'est pas une copie de `people` ; effacee quand
+     * `people.photoUrl` change (services/fields.ts). Absent des documents plus
+     * anciens ; a defaut, la carte montre `photoUrl`. @source FA26 « Your Photo »
+     */
+    coverPhotoUrl?: string | null;
     profileCategory: ProfileCategory | null;
     /** @source SP26 « Hard Skills » (liste fermee `lists/hardSkills`) */
     hardSkills: string[];

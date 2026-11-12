@@ -1,0 +1,17 @@
+rules_version = '2';
+
+// ----------------------------
+// Storage : aucun acces direct depuis un client
+// ----------------------------
+// Les fichiers (photos des fondateurs : founders/{founderId}/cover.jpg) sont
+// ecrits par les scripts d'import (Admin SDK, qui ignore ces regles) et lus par
+// leur URL a jeton (`?alt=media&token=...`), qui ne passe pas par les regles.
+// L'URL vit dans le document Firestore dont la visibilite convient
+// (`founders/{id}`) : qui ne lit pas ce document n'a pas l'URL.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -31,14 +31,15 @@ export function FounderGridCard({
 }) {
   const category = founder.profileCategory ? PROFILE_CATEGORY_LABEL[founder.profileCategory] : null;
   const context = [category, directory?.nationality, startupName].filter(Boolean).join(" · ");
+  // La grande photo (Storage) ; a defaut, la vignette de 128 px.
+  const cover = founder.coverPhotoUrl || founder.photoUrl;
 
   return (
     <Link href={href} className="card-link">
       <div className="card-cover">
-        {founder.photoUrl ? (
-          // Vignette en data URL : next/image n'apporte rien ici.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={founder.photoUrl} alt="" />
+        {cover ? (
+          // eslint-disable-next-line @next/next/no-img-element -- URL Storage a jeton ou data URL : next/image n'apporte rien.
+          <img src={cover} alt="" loading="lazy" decoding="async" />
         ) : (
           <Avatar name={founder.name} color="initials" size={96} radius="xl" />
         )}
