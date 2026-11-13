@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Box, Group, Stack, Text, UnstyledButton } from "@mantine/core";
+import { isWorkTeamEvent } from "@shared/events";
 import { COMMITMENT_STATUS_LABELS, FOUNDER_PILLARS, type AttendanceStatus, type FounderPillar } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
@@ -95,11 +96,16 @@ export function FounderPerformance() {
 export function FounderTeams() {
   const { program } = useProgram();
   const { batch } = useBatch();
-  const { teamMemberships, canSeeDirectory } = useFounder();
-  const { eventsById } = useEvents();
+  const { teamMemberships: allMemberships, canSeeDirectory } = useFounder();
+  const { eventsById, allEventsById } = useEvents();
   const { startupsById } = useStartups();
   const { leaderboardsByEventId } = useLeaderboards();
   if (!canSeeDirectory) return null;
+  // Les tables d'une lunch roulette ne sont pas des equipes : ni rang, ni score.
+  const teamMemberships = allMemberships.filter((m) => {
+    const event = m.eventId ? allEventsById.get(m.eventId) : undefined;
+    return !event || isWorkTeamEvent(event);
+  });
 
   return (
     <Section title="Teams and results">

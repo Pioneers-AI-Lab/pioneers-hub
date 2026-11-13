@@ -1,4 +1,4 @@
-import { setDoc } from "firebase/firestore";
+import { setDoc, updateDoc } from "firebase/firestore";
 import { emptySubmission, submissionStamp, type Submission, type WithId } from "@shared/types";
 import { refs } from "@/lib/firestore/refs";
 
@@ -28,4 +28,13 @@ export async function saveTeamResults(
     ...submissionStamp(staffUid, "staff", new Date().toISOString()),
   };
   await setDoc(refs.submission(eventId, teamId), submission);
+}
+
+/**
+ * La verification des preuves (SPECS §4.2) : lever le retard d'une soumission,
+ * ou mettre a 0 des elements du bareme (une fausse preuve). Ni l'heure d'envoi
+ * ni la source des releves ne changent ; le declencheur recalcule le classement.
+ */
+export async function setTeamProofCheck(eventId: string, teamId: string, patch: Partial<Pick<Submission, "lateWaived" | "zeroedItemKeys">>): Promise<void> {
+  await updateDoc(refs.submission(eventId, teamId), patch);
 }

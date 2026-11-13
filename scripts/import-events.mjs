@@ -21,13 +21,11 @@
 // Lit le code partage compile : `npm --prefix functions run build` apres un changement de functions/src/shared.
 
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
 import { initializeApp, applicationDefault } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { formOptions, parisLabel, readEventsFile, toEvent } from "./lib/eventsFile.mjs";
 
 const require = createRequire(import.meta.url);
-const { EVENT_TEMPLATES } = require("../functions/lib/shared/presets/eventTemplates.js");
-const { defaultStartTime, newEvent } = require("../functions/lib/shared/events.js");
 const { eventFormDocs, eventFormsPlan } = require("../functions/lib/shared/eventForms.js");
 
 const PROJECT_ID = "pioneers-3627c";
@@ -39,51 +37,15 @@ if (!week) {
 }
 if (process.env.FIRESTORE_EMULATOR_HOST) throw new Error("import-events: FIRESTORE_EMULATOR_HOST est defini, on viserait les emulateurs");
 
-const data = JSON.parse(readFileSync(new URL("../data/events.json", import.meta.url), "utf8"));
-const selected = data.events.filter((e) => e.programWeek === week);
-if (selected.length === 0) throw new Error(`Aucun evenement pour « ${week} »`);
-
-/** Heure de Paris -> ISO. Les dates importees sont en hiver (UTC+1). */
-const parisISO = (day, time) => new Date(`${day}T${time}:00+01:00`).toISOString();
-const parisLabel = (iso) => new Date(iso).toLocaleString("sv-SE", { timeZone: "Europe/Paris" }).slice(0, 16);
-
-function toEvent(e, now) {
-  if (e.templateKey && !EVENT_TEMPLATES[e.templateKey]) throw new Error(`${e.key}: modele inconnu ${e.templateKey}`);
-  const timeless = !e.startDateISOString;
-  if (timeless && !e.dayString) throw new Error(`${e.key}: ni heure ni jour`);
-  const event = newEvent(
-    {
-      programId: data.programId,
-      batchId: data.batchId,
-      templateKey: e.templateKey,
-      kind: e.kind,
-      name: e.name,
-      startDateISOString: e.startDateISOString ?? parisISO(e.dayString, defaultStartTime(e.templateKey ?? null)),
-      // Sans fin : la duree du modele.
-      endDateISOString: e.endDateISOString ?? null,
-      status: timeless && e.templateKey !== "lunch_roulette" ? "draft" : "scheduled",
-      location: e.location,
-    },
-    {
-      topic: e.topic,
-      programWeek: e.programWeek,
-      isMilestone: e.isMilestone,
-      audience: e.audience,
-      guests: e.guests,
-      rankingMetricKey: e.rankingMetricKey ?? null,
-    },
-  );
-  return { ...event, createdDateISOString: now, updatedDateISOString: now };
-}
+const { data, selected } = readEventsFile(week);
 
 initializeApp({ projectId: PROJECT_ID, credential: applicationDefault() });
 const db = getFirestore();
 const now = new Date().toISOString();
 
-const events = selected.map((e) => ({ e, ev: toEvent(e, now) }));
-// Le pack du modele, plus les formulaires de `forms` du fichier ; les metriques du fichier remplacent celles du modele.
-const packForms = (e) => [...new Set([...(EVENT_TEMPLATES[e.templateKey]?.forms ?? []), ...(e.forms ?? [])])];
-const plans = events.flatMap(({ e, ev }) => eventFormsPlan(e.key, ev, { forms: packForms(e), metrics: e.metrics ?? null }, now));
+const events = selected.map((e) => ({ e, ev: toEvent(data, e, now) }));
+// Le pack du modele, plus les formulaires de `forms` du fichier, avec ses reglages (scripts/lib/eventsFile.mjs).
+const plans = events.flatMap(({ e, ev }) => eventFormsPlan(e.key, ev, formOptions(e), now));
 const refs = selected.map((e) => db.doc(`events/${e.key}`));
 const formDocs = plans.map((p) => eventFormDocs(p, now));
 const formRefs = formDocs.map(([form]) => db.doc(form.path));

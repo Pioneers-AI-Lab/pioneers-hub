@@ -191,7 +191,36 @@ export type PioneersEvent = BatchScoped &
      * encaisse). Absent des anciens documents.
      */
     rankingMetricKey?: string | null;
+    /**
+     * Le bareme du leaderboard (SPECS §4.2, decision du 13/11) : il remplace
+     * `rankingMetricKey`. Absent : les notes du jury, ou la metrique choisie.
+     */
+    scoring?: EventScoring | null;
   };
+
+/**
+ * Un element du bareme :
+ *   - `per_unit` : `pointsPerUnit` points par unite d'une metrique de la Submission ;
+ *   - `proportional` : la meilleure equipe a `maxPoints` sur cette metrique, les autres en proportion ;
+ *   - `criterion` : la moyenne des jures sur un critere, ramenee a `maxPoints` (sinon la note telle quelle).
+ * `tieBreakOnly` : il departage sans compter dans le total.
+ */
+export type ScoringItem = {
+  key: string;
+  label: string;
+  mode: "per_unit" | "proportional" | "criterion";
+  /** La cle de la metrique (`submission.metrics.<cle>`) ou du critere (`evaluation.scores.<cle>`). */
+  sourceKey: string;
+  pointsPerUnit?: number | null;
+  maxPoints?: number | null;
+  tieBreakOnly?: boolean;
+};
+
+/** Le bareme d'un evenement : ses elements, puis les cles d'element qui departagent, dans l'ordre. */
+export type EventScoring = { items: ScoringItem[]; tieBreaks: string[] };
+
+/** Le bareme de l'evenement, `null` s'il n'en a pas (ou un bareme vide). */
+export const scoringOf = (event: { scoring?: EventScoring | null }): EventScoring | null => (event.scoring?.items.length ? event.scoring : null);
 
 /**
  * Les fondateurs invites a un evenement a audience restreinte : les invites
@@ -252,6 +281,11 @@ export const DELIVERABLES = [
 ] as const;
 export type Deliverable = (typeof DELIVERABLES)[number];
 
+/** D'ou vient le probleme d'une equipe (Fall 2026, H2 et H3). */
+export const PROBLEM_SOURCES = ["pain_library", "own_idea"] as const;
+export type ProblemSource = (typeof PROBLEM_SOURCES)[number];
+export const PROBLEM_SOURCE_LABELS: Record<ProblemSource, string> = { pain_library: "From the pain library", own_idea: "Our own idea" };
+
 export type Submission = {
   teamId: string;
   title: string | null;
@@ -275,18 +309,37 @@ export type Submission = {
   proofUrls: string[];
   /** Precisions libres de l'equipe (ex. le type de client du hackathon Agent Agency). */
   notes: string | null;
+  /** Fall 2026 : le probleme en une phrase (H1), sa source (H2, H3), les apprentissages (H2), le dossier Drive des preuves. */
+  painSentence: string | null;
+  problemSource: ProblemSource | null;
+  learnings: string | null;
+  driveFolderUrl: string | null;
   submittedDateISOString: DateISOString | null;
+  /**
+   * Dernier envoi par le formulaire APRES son echeance (SPECS §4.2) : le bareme
+   * lui donne 0, sauf si le staff leve le retard (`lateWaived`). Seul un envoi
+   * par formulaire le recalcule ; une correction du staff le laisse.
+   */
+  late: boolean;
+  lateWaived: boolean;
+  /** Elements du bareme mis a 0 par le staff (une fausse preuve), par cle d'element. */
+  zeroedItemKeys: string[];
   /** Dernier ecrivain : le repondant du Debrief, ou le staff qui corrige. Source des releves. */
   recordedByUid: string | null;
   recordedSource: "self_reported" | "staff" | null;
 };
 
 /** Ce que tout ecrivain d'une soumission pose : la source des releves de metriques (`onSubmissionWritten`). */
-export const submissionStamp = (uid: string, source: "self_reported" | "staff", now: string) => ({
+export const submissionStamp = (uid: string, source: "self_reported" | "staff", now: string, deadline?: DateISOString | null) => ({
   submittedDateISOString: now,
   recordedByUid: uid,
   recordedSource: source,
+  // Un envoi par formulaire connait l'echeance : il dit s'il est en retard.
+  ...(deadline !== undefined ? { late: deadline !== null && now > deadline } : {}),
 });
+
+/** Envoyee apres l'echeance et sans exception du staff : le bareme lui donne 0. */
+export const isLateUnwaived = (s: Pick<Submission, "late" | "lateWaived"> | null | undefined): boolean => s?.late === true && s.lateWaived !== true;
 
 /** Une soumission vide : la base de tout ecrivain (Debrief, staff, API, via le registre). */
 export const emptySubmission = (teamId: string): Submission => ({
@@ -301,7 +354,14 @@ export const emptySubmission = (teamId: string): Submission => ({
   productUrl: null,
   proofUrls: [],
   notes: null,
+  painSentence: null,
+  problemSource: null,
+  learnings: null,
+  driveFolderUrl: null,
   submittedDateISOString: null,
+  late: false,
+  lateWaived: false,
+  zeroedItemKeys: [],
   recordedByUid: null,
   recordedSource: null,
 });
@@ -424,6 +484,12 @@ export type LeaderboardRow = {
   rankDelta: number | null;
   criteriaScores: Record<string, number>;
   evaluationsCount: number;
+  /** Bareme : les points de chaque element, leur total, et la soumission en retard (0). */
+  points?: Record<string, number>;
+  total?: number;
+  late?: boolean;
+  /** Le score ramene a la meilleure equipe = 100 : il s'additionne d'un hackathon a l'autre (classement cumule). */
+  normalized?: number;
 };
 
 /**
@@ -435,6 +501,14 @@ export type Leaderboard = BatchScoped & {
   eventId: string;
   /** La metrique qui classe, `null` (ou absent) : les notes du jury. */
   metric?: EventMetric | null;
+  /** Le bareme qui classe (prioritaire sur `metric`). */
+  scoring?: EventScoring | null;
+  /**
+   * Publie : visible des fondateurs (avec la visibilite du batch). Un evenement a
+   * bareme l'est quand le staff publie son classement, apres la verification des
+   * preuves ; sans bareme, toujours.
+   */
+  published?: boolean;
   rows: LeaderboardRow[];
   computedDateISOString: DateISOString;
 };

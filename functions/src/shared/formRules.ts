@@ -308,6 +308,9 @@ export const versionedSnapshot = (form: Pick<Form, "questions" | "attachments" |
 /** Le formulaire parle de l'equipe du repondant ou de ses coequipiers : il faut etre membre d'une equipe publiee. */
 export const formNeedsTeam = (form: Pick<Form, "questions">) => activeQuestions(form).some((q) => SCOPE_RULES[scopeOf(q)].needsTeam);
 
+/** Toutes ses questions portent sur l'equipe (la Submission) : un envoi vaut pour toute l'equipe. */
+export const isTeamForm = (questions: readonly FormQuestion[]) => questions.length > 0 && questions.every((q) => scopeOf(q) === "team");
+
 /** Sur quoi porte le denominateur, affiche avec le taux. */
 export type AudienceBasis = "batch" | "present" | "teams" | "invited";
 

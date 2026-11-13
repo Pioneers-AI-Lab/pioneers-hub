@@ -1,6 +1,7 @@
 import { getFirestore } from "firebase-admin/firestore";
 import { docPaths } from "../shared/collections";
 import type { Evaluation, EventTeam, MetricSnapshot, PioneersEvent, Submission } from "../shared/types";
+import { sameIds } from "../shared/kpis";
 import { recomputeLeaderboard } from "./leaderboards";
 import { parisDay } from "./schemas";
 
@@ -25,7 +26,12 @@ const db = () => getFirestore();
 export async function onSubmissionChange(eventId: string, teamId: string, before: Submission | null, after: Submission | null): Promise<void> {
   const changed = Object.entries(after?.metrics ?? {}).filter(([metric, value]) => typeof value === "number" && before?.metrics?.[metric] !== value);
   const metricsRemoved = Object.keys(before?.metrics ?? {}).some((metric) => after?.metrics?.[metric] === undefined);
-  if (changed.length === 0 && !metricsRemoved && before?.submittedDateISOString === after?.submittedDateISOString) return;
+  // Le bareme lit aussi le retard, son exception et les elements mis a 0 par le staff.
+  const scoringInputsChanged =
+    before?.late !== after?.late ||
+    before?.lateWaived !== after?.lateWaived ||
+    !sameIds(before?.zeroedItemKeys, after?.zeroedItemKeys);
+  if (changed.length === 0 && !metricsRemoved && !scoringInputsChanged && before?.submittedDateISOString === after?.submittedDateISOString) return;
 
   if (after && changed.length > 0) {
     const [eventSnap, teamSnap] = await db().getAll(db().doc(docPaths.event(eventId)), db().doc(docPaths.team(eventId, teamId)), {

@@ -503,29 +503,41 @@ const submitForm = (fns, formId, answers, extra = {}) =>
   });
 const publicForm = async (fns, formId, extra = {}) => (await httpsCallable(fns, "getPublicForm")({ formId, ...extra })).data;
 
-console.log("hackathon debrief (form: team results and peer ratings)");
+console.log("hackathon submission and peer rating (forms)");
 {
   const adb = getAdminFirestore();
   const EVENT = "demo-hackathon-1";
   const FORM = "demo-debrief-1";
+  const PEER = "demo-peer-1";
   const snapshotsOf = (metric) =>
     adb.collection("metricSnapshots").where("eventId", "==", EVENT).where("metric", "==", metric).get();
   const results = { metric_callsMade: 42, metric_meetingsBooked: 3, proofs: "example.com/calls", product: "https://example.com", notes: "SMB bakeries." };
 
   const ada = await clientAs("ada-1");
-  await expectOk("founder opens the debrief: her team and her teammate", async () => {
+  await expectOk("founder opens the submission: her team", async () => {
     const form = await publicForm(ada.functions, FORM);
-    if (form.team?.id !== "team-a" || form.targets.each_teammate.map((t) => t.value).join() !== "chloe-demo") throw new Error(JSON.stringify(form.team));
+    if (form.team?.id !== "team-a" || form.targets.each_teammate.length !== 0) throw new Error(JSON.stringify(form.team));
     return `${form.questions.length} questions`;
   });
-  await expectOk("founder sends results and rates her teammate", async () => {
-    await submitForm(ada.functions, FORM, { ...results, "peerRating@chloe-demo": 4, "peerComment@chloe-demo": "  Ships fast.  " });
-    const saved = (await adb.doc(`events/${EVENT}/peerRatings/ada-example_chloe-demo`).get()).data();
-    if (saved?.rating !== 4 || saved.comment !== "Ships fast." || saved.teamId !== "team-a") throw new Error("rating not stored as sent");
+  await expectOk("founder opens the peer rating: her teammate", async () => {
+    const form = await publicForm(ada.functions, PEER);
+    if (form.targets.each_teammate.map((t) => t.value).join() !== "chloe-demo") throw new Error(JSON.stringify(form.targets));
+  });
+  await expectOk("founder sends the team results after the deadline (late)", async () => {
+    await submitForm(ada.functions, FORM, results);
     const sub = (await adb.doc(`events/${EVENT}/submissions/team-a`).get()).data();
-    if (sub?.metrics.callsMade !== 42 || sub.proofUrls[0] !== "https://example.com/calls" || sub.recordedSource !== "self_reported") {
+    if (sub?.metrics.callsMade !== 42 || sub.proofUrls[0] !== "https://example.com/calls" || sub.recordedSource !== "self_reported" || sub.late !== true) {
       throw new Error(JSON.stringify(sub));
     }
+  });
+  await expectOk("the submission is done for her teammate too", async () => {
+    const done = await adb.doc(`formCompletions/${FORM}_chloe-demo`).get();
+    if (!done.exists) throw new Error("no completion for the teammate");
+  });
+  await expectOk("founder rates her teammate", async () => {
+    await submitForm(ada.functions, PEER, { "peerRating@chloe-demo": 4, "peerComment@chloe-demo": "  Ships fast.  " });
+    const saved = (await adb.doc(`events/${EVENT}/peerRatings/ada-example_chloe-demo`).get()).data();
+    if (saved?.rating !== 4 || saved.comment !== "Ships fast." || saved.teamId !== "team-a") throw new Error("rating not stored as sent");
   });
   await expectOk("one snapshot per metric (trigger)", () =>
     waitFor(async () => {
@@ -537,13 +549,14 @@ console.log("hackathon debrief (form: team results and peer ratings)");
   );
   await expectOk("her answers come back, to correct them", async () => {
     const form = await publicForm(ada.functions, FORM);
-    if (form.prefill["peerRating@chloe-demo"] !== 4 || form.prefill.metric_callsMade !== 42 || !form.canResubmit) throw new Error(JSON.stringify(form.prefill));
+    const peer = await publicForm(ada.functions, PEER);
+    if (form.prefill.metric_callsMade !== 42 || peer.prefill["peerRating@chloe-demo"] !== 4 || !form.canResubmit) throw new Error(JSON.stringify(form.prefill));
   });
   await expectCallableError("founder rates someone outside her team", "invalid-argument", () =>
-    submitForm(ada.functions, FORM, { "peerRating@chloe-demo": 4, "peerRating@ben-sample": 5 }),
+    submitForm(ada.functions, PEER, { "peerRating@chloe-demo": 4, "peerRating@ben-sample": 5 }),
   );
-  await expectCallableError("each teammate must be rated", "invalid-argument", () => submitForm(ada.functions, FORM, results));
-  await expectCallableError("rating out of 1-5", "invalid-argument", () => submitForm(ada.functions, FORM, { "peerRating@chloe-demo": 9 }));
+  await expectCallableError("each teammate must be rated", "invalid-argument", () => submitForm(ada.functions, PEER, { "peerComment@chloe-demo": "No score." }));
+  await expectCallableError("rating out of 1-5", "invalid-argument", () => submitForm(ada.functions, PEER, { "peerRating@chloe-demo": 9 }));
   await expectOk("founder re-reads a rating she gave", () => read(doc(ada.db, `events/${EVENT}/peerRatings/ada-example_chloe-demo`)));
   await adb.doc(`events/${EVENT}/peerRatings/chloe-demo_ada-example`).set({
     programId: "accelerator",
@@ -562,16 +575,16 @@ console.log("hackathon debrief (form: team results and peer ratings)");
   await deleteApp(ada.app);
 
   const pub = await clientAs(null);
-  await expectCallableError("the debrief needs an account", "permission-denied", () =>
-    submitForm(pub.functions, FORM, { "peerRating@chloe-demo": 1 }, { respondent: { founderId: "ada-example" } }),
+  await expectCallableError("the peer rating needs an account", "permission-denied", () =>
+    submitForm(pub.functions, PEER, { "peerRating@chloe-demo": 1 }, { respondent: { founderId: "ada-example" } }),
   );
   await deleteApp(pub.app);
   const lp = await clientAs("lp-1");
-  await expectOk("investor has no team in the debrief", async () => {
+  await expectOk("investor has no team in the submission", async () => {
     const form = await publicForm(lp.functions, FORM);
     if (form.respondent !== null || form.team !== null) throw new Error(JSON.stringify(form.respondent));
   });
-  await expectCallableError("investor answers the debrief", "permission-denied", () => submitForm(lp.functions, FORM, { "peerRating@chloe-demo": 3 }));
+  await expectCallableError("investor answers the peer rating", "permission-denied", () => submitForm(lp.functions, PEER, { "peerRating@chloe-demo": 3 }));
   await expectDenied("investor reads the raw form responses", () => count(query(collection(lp.db, "formResponses"), where("formId", "==", FORM))));
   await deleteApp(lp.app);
 
@@ -613,6 +626,63 @@ console.log("leaderboard ranking (callables)");
   await deleteApp(staff.app);
   const ada = await clientAs("ada-1");
   await expectCallableError("founder changes the ranking", "permission-denied", () => rank(ada.functions, "callsMade"));
+  await deleteApp(ada.app);
+}
+
+// ---- Bareme, publication, verification des preuves, scores du batch ---------------
+console.log("scoring: points, late submission, proof check, publication, batch scores");
+{
+  const adb = getAdminFirestore();
+  const EVENT = "demo-hackathon-1";
+  const board = async () => (await adb.doc(`leaderboards/${EVENT}`).get()).data();
+  const teamA = async () => (await board())?.rows.find((r) => r.targetId === "team-a");
+  // 40 points par rendez-vous, 1 point par appel.
+  await adb.doc(`events/${EVENT}`).update({
+    scoring: {
+      items: [
+        { key: "meetingsBooked", label: "Meetings booked", mode: "per_unit", sourceKey: "meetingsBooked", pointsPerUnit: 40 },
+        { key: "callsMade", label: "Calls made", mode: "per_unit", sourceKey: "callsMade", pointsPerUnit: 1 },
+      ],
+      tieBreaks: [],
+    },
+  });
+  const staff = await clientAs("staff-1");
+  const publish = (fns, on) => httpsCallable(fns, "publishEventRanking")({ eventId: EVENT, publish: on });
+  await expectOk("staff publishes the ranking: a late submission scores 0", async () => {
+    await publish(staff.functions, true);
+    const b = await board();
+    const row = b?.rows.find((r) => r.targetId === "team-a");
+    if (b?.published !== true || row?.late !== true || row.total !== 0) throw new Error(JSON.stringify(row));
+  });
+  await expectOk("staff waives the late submission: the points count", async () => {
+    await updateDoc(doc(staff.db, `events/${EVENT}/submissions/team-a`), { lateWaived: true });
+    return waitFor(async () => {
+      const row = await teamA();
+      if (row?.total !== 160 || row.points.meetingsBooked !== 120 || row.normalized !== 100) throw new Error(JSON.stringify(row));
+      return `${row.total} pts`;
+    });
+  });
+  await expectOk("staff sets an item to 0 after a fake proof", async () => {
+    await updateDoc(doc(staff.db, `events/${EVENT}/submissions/team-a`), { zeroedItemKeys: ["meetingsBooked"] });
+    return waitFor(async () => {
+      const row = await teamA();
+      if (row?.total !== 40 || row.points.meetingsBooked !== 0) throw new Error(JSON.stringify(row));
+    });
+  });
+  await expectOk("staff recomputes the batch scores", async () => {
+    const r = (await httpsCallable(staff.functions, "recomputeBatchScores")({ batchId: "fall-2026" })).data;
+    const stats = (await adb.doc("founderStats/chloe-demo").get()).data();
+    const ada = (await adb.doc("scores/founder_ada-example").get()).data();
+    if (stats?.peerRating.average !== 4 || stats.peerRating.count !== 1) throw new Error(JSON.stringify(stats?.peerRating));
+    if (ada?.subScores.execution !== 10) throw new Error(JSON.stringify(ada?.subScores));
+    return `${r.founders} founders`;
+  });
+  await deleteApp(staff.app);
+  const ada = await clientAs("ada-1");
+  await expectCallableError("founder publishes a ranking", "permission-denied", () => publish(ada.functions, false));
+  await expectCallableError("founder recomputes the scores", "permission-denied", () =>
+    httpsCallable(ada.functions, "recomputeBatchScores")({ batchId: "fall-2026" }),
+  );
   await deleteApp(ada.app);
 }
 

@@ -242,7 +242,7 @@ function MatchingSection() {
 
   if (!matching) {
     return (
-      <Section title="Matching" hint="Groups drawn from the participants: work teams, or tables to meet new people. The debrief and peer ratings need one.">
+      <Section title="Matching" hint="Groups drawn from the participants: work teams, or tables to meet new people. The submission and the peer rating need one.">
         <Group gap="xs">
           {(["challenge", "matching"] as const).map((mode) => (
             <Button key={mode} variant="default" disabled={isBusy} onClick={() => add(mode)}>

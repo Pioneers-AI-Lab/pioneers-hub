@@ -106,7 +106,8 @@ set(`batches/${BATCH_ID}`, {
     { key: "ic", label: "Investment Committee", dayString: null },
     { key: "demo_day", label: "Demo Day", dayString: null },
   ],
-  settings: { leaderboardVisibility: "visible", slackChannelId: null, slackTeamId: null },
+  // Scores recopies du dashboard SP26 : le calcul du Hub (services/scores.ts) n'y touche jamais.
+  settings: { leaderboardVisibility: "visible", slackChannelId: null, slackTeamId: null, scoresSource: "imported" },
 });
 
 // ---- Startups ----------------------------------------------------------------------

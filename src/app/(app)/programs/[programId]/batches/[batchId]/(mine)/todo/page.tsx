@@ -92,7 +92,7 @@ export default function TodoPage() {
       )}
 
       {debriefs.length > 0 && (
-        <Section title="Hackathons" hint="Your team's results and a word on each teammate, after every hackathon.">
+        <Section title="Hackathons" hint="Your team's submission before the deadline, then a word on each teammate at the debrief.">
           <RowList>
             {debriefs.map((d) => (
               <FormRow key={d.form.id} item={d} />

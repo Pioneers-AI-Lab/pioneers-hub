@@ -17,7 +17,7 @@ import {
   type ResolvedSubjects,
   type SubjectKey,
 } from "../shared/fieldRegistry";
-import { FORM_ANSWER_MAX, answerToFieldValue, fieldValueToAnswer, formNeedsTeam, ratingScale } from "../shared/formRules";
+import { FORM_ANSWER_MAX, answerToFieldValue, fieldValueToAnswer, formNeedsTeam, isTeamForm, ratingScale } from "../shared/formRules";
 import type {
   CallableRequest,
   CallableResponse,
@@ -664,7 +664,7 @@ async function planWrites(
   };
 
   const values = Object.fromEntries([...byField].map(([key, e]) => [key, e.value]));
-  const plan = await planFieldWrites(tx, formCaller(actorUid), { subjects, values }, { partial: true, hold: needsApproval, asForm: true, createWith });
+  const plan = await planFieldWrites(tx, formCaller(actorUid), { subjects, values }, { partial: true, hold: needsApproval, asForm: true, createWith, formDeadline: form.deadlineDateISOString });
 
   const pathOf = (key: DbFieldKey) => {
     const resolved = resolveDocPath(parseDbField(key).doc, subjects);
@@ -818,16 +818,22 @@ export async function submitFormResponse(
     // anonyme n'a pas de repondant : rien ne le rattache au fondateur. Un jury
     // n'est le « To do » de personne.
     if (respondent?.founderId && !judge) {
-      const completion: FormCompletion = {
-        programId: form.programId,
-        batchId: form.batchId,
-        formId,
-        founderId: respondent.founderId,
-        formKind: form.kind,
-        responseId: responseRef.id,
-        completedDateISOString: nowISO,
-      };
-      tx.set(db().doc(docPaths.formCompletion(formId, respondent.founderId)), completion);
+      // Un formulaire de l'equipe (la Submission) est fait pour toute l'equipe : un
+      // coequipier a repondu pour tous. Un formulaire par fondateur, pour lui seul.
+      const teamForm = ctx.team !== null && isTeamForm(questions);
+      const founderIds = teamForm ? ctx.team!.memberIds : [respondent.founderId];
+      for (const founderId of founderIds) {
+        const completion: FormCompletion = {
+          programId: form.programId,
+          batchId: form.batchId,
+          formId,
+          founderId,
+          formKind: form.kind,
+          responseId: responseRef.id,
+          completedDateISOString: nowISO,
+        };
+        tx.set(db().doc(docPaths.formCompletion(formId, founderId)), completion);
+      }
     }
     writeAudit(tx, formCaller(actorUid), {
       action: "submit_form_response",

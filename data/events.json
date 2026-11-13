@@ -1,5 +1,5 @@
 {
-  "_doc": "Evenements du batch Fall 2026 (Pioneers Accelerator), a importer plus tard dans `events` (pas encore en base). Champs alignes sur `PioneersEvent` (functions/src/shared/types/event.ts) ; les heures `startTime`/`endTime` sont en heure de Paris (UTC+1), `startDateISOString` en UTC. Modele standard (SPECS §2) : l'evenement ne porte ni grille ni metriques ; scripts/import-events.mjs cree ses formulaires (shared/eventForms.ts) : le Debrief d'un hackathon avec `metrics` (sinon celles du modele), le jury et les picks en brouillon, et les modeles de `forms` en brouillon. Champs non importes : `key`, `dayString`, `endDayString`, `startTime`, `endTime`, `dateHint`, `schedule`, `dataToCollect`, `source`. `dataToCollect.status` : ok = stocke et saisissable ; partial = stocke en texte libre ; missing_capture = la base sait stocker, pas encore d'outil de saisie ; missing_structure = pas de place dans la base.",
+  "_doc": "Evenements du batch Fall 2026 (Pioneers Accelerator), a importer plus tard dans `events` (pas encore en base). Champs alignes sur `PioneersEvent` (functions/src/shared/types/event.ts) ; les heures `startTime`/`endTime` sont en heure de Paris (UTC+1), `startDateISOString` en UTC. Modele standard (SPECS §2) : l'evenement ne porte ni grille ni metriques ; scripts/import-events.mjs cree ses formulaires (shared/eventForms.ts) : le Debrief d'un hackathon avec `metrics` (sinon celles du modele), le jury et les picks en brouillon, et les modeles de `forms` en brouillon. Champs non importes : `key`, `dayString`, `endDayString`, `startTime`, `endTime`, `dateHint`, `schedule`, `dataToCollect`, `source`. `dataToCollect.status` : ok = stocke et saisissable ; partial = stocke en texte libre ; missing_capture = la base sait stocker, pas encore d'outil de saisie ; missing_structure = pas de place dans la base. Semaine 1 : planning valide du 13/11 (24 evenements). `formSettings` : par modele de formulaire, `opens` / `deadline` (heure de Paris, jour de l'evenement) et `draft` ; `criteria`, `submissionFields`, `scoring` et `sessions` (retro) vont aux formulaires et a l'evenement (scripts/sync-events.mjs). `archived` : cles a archiver en base (jamais supprimees).",
   "programId": "accelerator",
   "batchId": "fall-2026",
   "sources": [
@@ -64,11 +64,11 @@
   "events": [
     {
       "key": "fa26-station-f-onboarding",
-      "name": "Station F onboarding",
+      "name": "Station F Onboarding",
       "kind": "session",
       "templateKey": null,
       "stage": null,
-      "topic": "Badge collection (photo ID, HAL onboarding done)",
+      "topic": "Badges, wifi and a quick tour so you know where everything is. Try to come a few minutes early.",
       "dayString": "2026-11-16",
       "endDayString": null,
       "startTime": "09:30",
@@ -76,13 +76,13 @@
       "startDateISOString": "2026-11-16T08:30:00.000Z",
       "endDateISOString": "2026-11-16T09:30:00.000Z",
       "dateHint": null,
-      "location": "Station F, main entrance reception",
+      "location": "STATION F, 5 Parv. Alan Turing, 75013 Paris, France",
       "programWeek": "Week 1",
       "isMilestone": false,
       "audience": "batch",
       "guests": [],
       "metrics": null,
-      "schedule": null,
+      "rankingMetricKey": null,
       "dataToCollect": [
         {
           "what": "Presence des la premiere heure",
@@ -91,29 +91,29 @@
           "status": "ok"
         }
       ],
-      "source": "Notion Fall 2026, brief"
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
     },
     {
       "key": "fa26-kickoff",
-      "name": "Pioneers Fall 2026 kick-off",
+      "name": "Pioneers Mission Brief + Intro from Maxime Arnulf, Founder of Pioneers",
       "kind": "session",
       "templateKey": null,
       "stage": null,
-      "topic": "Mission brief",
+      "topic": "What the next few months look like, what we expect from you and how you'll be evaluated. Then a quick icebreaker so the room stops being full of strangers.",
       "dayString": "2026-11-16",
       "endDayString": null,
       "startTime": "10:30",
-      "endTime": null,
+      "endTime": "11:30",
       "startDateISOString": "2026-11-16T09:30:00.000Z",
-      "endDateISOString": null,
+      "endDateISOString": "2026-11-16T10:30:00.000Z",
       "dateHint": null,
-      "location": "Creativity Room",
+      "location": "Station F - Creativity Room",
       "programWeek": "Week 1",
       "isMilestone": true,
       "audience": "batch",
       "guests": [],
       "metrics": null,
-      "schedule": null,
+      "rankingMetricKey": null,
       "dataToCollect": [
         {
           "what": "Presence",
@@ -122,23 +122,85 @@
           "status": "ok"
         }
       ],
-      "source": "Notion Fall 2026"
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
     },
     {
-      "key": "fa26-twin-launch",
-      "name": "Twin launch",
+      "key": "fa26-polaroid",
+      "name": "Polaroid picture time",
       "kind": "session",
       "templateKey": null,
       "stage": null,
       "topic": null,
       "dayString": "2026-11-16",
       "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "lun. 16 nov., heure a confirmer",
+      "startTime": "11:30",
+      "endTime": "12:00",
+      "startDateISOString": "2026-11-16T10:30:00.000Z",
+      "endDateISOString": "2026-11-16T11:00:00.000Z",
+      "dateHint": null,
+      "location": "Pioneers Space @Station F",
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        }
+      ],
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+    },
+    {
+      "key": "fa26-lunch-roulette-11-16",
+      "name": "Lunch roulette",
+      "kind": "matching",
+      "templateKey": "lunch_roulette",
+      "stage": null,
+      "topic": "Lunch with people from the batch who you don't know yet. We shuffle the groups every day, in groups of 4, and we post the groups on Slack. The top name is responsible for gathering the 3 others and selecting the lunch spot.",
+      "dayString": "2026-11-16",
+      "endDayString": null,
+      "startTime": "12:00",
+      "endTime": "13:00",
+      "startDateISOString": "2026-11-16T11:00:00.000Z",
+      "endDateISOString": "2026-11-16T12:00:00.000Z",
+      "dateHint": null,
       "location": null,
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        }
+      ],
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+    },
+    {
+      "key": "fa26-twin-launch",
+      "name": "\"Building with AI\" by Daniel Kumlin, Founding Engineer @Twin",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-16",
+      "endDayString": null,
+      "startTime": "13:30",
+      "endTime": "15:00",
+      "startDateISOString": "2026-11-16T12:30:00.000Z",
+      "endDateISOString": "2026-11-16T14:00:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Creativity Room",
       "programWeek": "Week 1",
       "isMilestone": false,
       "audience": "batch",
@@ -153,7 +215,7 @@
         }
       ],
       "metrics": null,
-      "schedule": null,
+      "rankingMetricKey": null,
       "dataToCollect": [
         {
           "what": "Compte Twin de chaque fondateur",
@@ -168,29 +230,29 @@
           "status": "missing_capture"
         }
       ],
-      "source": "brief"
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
     },
     {
       "key": "fa26-founder-introductions",
-      "name": "Founder introductions",
+      "name": "Founder Introductions",
       "kind": "session",
-      "templateKey": null,
+      "templateKey": "founder_introductions",
       "stage": null,
-      "topic": null,
+      "topic": "Time to present yourself. Three minutes in front of batch to tell everyone who you are, what you've done and what you want to build. A template slide will be shared on slack.",
       "dayString": "2026-11-16",
       "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "lun. 16 nov., heure a confirmer",
-      "location": null,
+      "startTime": "16:00",
+      "endTime": "18:30",
+      "startDateISOString": "2026-11-16T15:00:00.000Z",
+      "endDateISOString": "2026-11-16T17:30:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Creativity Room",
       "programWeek": "Week 1",
       "isMilestone": false,
       "audience": "batch",
       "guests": [],
       "metrics": null,
-      "schedule": null,
+      "rankingMetricKey": null,
       "dataToCollect": [
         {
           "what": "Presentation de chaque fondateur",
@@ -205,41 +267,84 @@
           "status": "ok"
         }
       ],
-      "source": "brief",
-      "forms": [
-        "founder_introductions"
-      ]
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
     },
     {
-      "key": "fa26-lunch-roulette-11-16",
-      "name": "Lunch roulette",
-      "kind": "matching",
-      "templateKey": "lunch_roulette",
+      "key": "fa26-drinks-11-16",
+      "name": "Drinks @La Felicita",
+      "kind": "session",
+      "templateKey": "social",
       "stage": null,
-      "topic": null,
+      "topic": "First drinks together. No agenda, just get to know each other. MINGLE!",
       "dayString": "2026-11-16",
       "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "midi, heure a confirmer",
+      "startTime": "18:30",
+      "endTime": "20:00",
+      "startDateISOString": "2026-11-16T17:30:00.000Z",
+      "endDateISOString": "2026-11-16T19:00:00.000Z",
+      "dateHint": null,
       "location": null,
       "programWeek": "Week 1",
       "isMilestone": false,
       "audience": "batch",
       "guests": [],
       "metrics": null,
-      "schedule": null,
+      "rankingMetricKey": null,
       "dataToCollect": [
         {
-          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
-          "target": "events/{id}/teams + memberships",
-          "capture": "generateur",
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
           "status": "ok"
         }
       ],
-      "source": "brief"
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+    },
+    {
+      "key": "fa26-speed-dating",
+      "name": "Speeddating",
+      "kind": "matching",
+      "templateKey": null,
+      "stage": null,
+      "topic": "Quick one-on-ones with everyone in the batch. You rotate every 3 minutes, so have your 30-second intro ready.",
+      "dayString": "2026-11-17",
+      "endDayString": null,
+      "startTime": "09:30",
+      "endTime": "11:30",
+      "startDateISOString": "2026-11-17T08:30:00.000Z",
+      "endDateISOString": "2026-11-17T10:30:00.000Z",
+      "dateHint": null,
+      "location": "La Felicità",
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Qui a rencontre qui",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        },
+        {
+          "what": "« Who stood out » : un choix par fondateur",
+          "target": "a creer (pick avec contexte)",
+          "capture": "fondateur",
+          "status": "missing_structure"
+        }
+      ],
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)",
+      "matching": null,
+      "forms": [
+        "picks"
+      ],
+      "formSettings": {
+        "picks": {
+          "draft": true
+        }
+      }
     },
     {
       "key": "fa26-lunch-roulette-11-17",
@@ -247,21 +352,21 @@
       "kind": "matching",
       "templateKey": "lunch_roulette",
       "stage": null,
-      "topic": null,
+      "topic": "Lunch with people from the batch who you don't know yet. We shuffle the groups every day, in groups of 4, and we post the groups on Slack. The top name is responsible for gathering the 3 others and selecting the lunch spot.",
       "dayString": "2026-11-17",
       "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "midi, heure a confirmer",
+      "startTime": "12:00",
+      "endTime": "13:00",
+      "startDateISOString": "2026-11-17T11:00:00.000Z",
+      "endDateISOString": "2026-11-17T12:00:00.000Z",
+      "dateHint": null,
       "location": null,
       "programWeek": "Week 1",
       "isMilestone": false,
       "audience": "batch",
       "guests": [],
       "metrics": null,
-      "schedule": null,
+      "rankingMetricKey": null,
       "dataToCollect": [
         {
           "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
@@ -270,7 +375,281 @@
           "status": "ok"
         }
       ],
-      "source": "brief"
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+    },
+    {
+      "key": "fa26-talk-bruno-aziza",
+      "name": "\"From Europe to the Silicon Valley\" with Bruno Aziza",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-17",
+      "endDayString": null,
+      "startTime": "14:00",
+      "endTime": "15:30",
+      "startDateISOString": "2026-11-17T13:00:00.000Z",
+      "endDateISOString": "2026-11-17T14:30:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Junior Stage",
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Bruno Aziza",
+          "role": "speaker",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+    },
+    {
+      "key": "fa26-talk-hugo-manoukian",
+      "name": "Masterclass with Hugo Manoukian",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": "Session with Hugo Manoukian, one of our Venture Partners. Come with questions.",
+      "dayString": "2026-11-17",
+      "endDayString": null,
+      "startTime": "16:30",
+      "endTime": "18:00",
+      "startDateISOString": "2026-11-17T15:30:00.000Z",
+      "endDateISOString": "2026-11-17T17:00:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Junior Stage",
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Hugo Manoukian",
+          "role": "speaker",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+    },
+    {
+      "key": "fa26-hackathon-1-pain-hunters",
+      "name": "Hackathon 1: Pain Hunters",
+      "kind": "team_challenge",
+      "templateKey": "hackathon",
+      "stage": null,
+      "topic": "Find a real problem people complain about, and prove it. Send Twin agents through Reddit, X, LinkedIn and review sites, then come back with the evidence and a list of 30 potential customers.",
+      "dayString": "2026-11-18",
+      "endDayString": null,
+      "startTime": "09:30",
+      "endTime": "11:30",
+      "startDateISOString": "2026-11-18T08:30:00.000Z",
+      "endDateISOString": "2026-11-18T10:30:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Junior Stage",
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Twin",
+          "role": "guest",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        },
+        {
+          "name": "Daniel Kumlin (Twin)",
+          "role": "judge",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": [
+        {
+          "key": "evidencePosts",
+          "label": "Number of evidence items",
+          "unit": null
+        },
+        {
+          "key": "potentialCustomers",
+          "label": "Number of potential customers",
+          "unit": null
+        }
+      ],
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Equipes et appartenances datees",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        },
+        {
+          "what": "Compteurs : preuves, clients potentiels, entrees de la pain library",
+          "target": "submissions/{teamId}.metrics + metricSnapshots",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Liens : sources des preuves, liste des 30 clients potentiels",
+          "target": "submissions/{teamId}.links",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
+          "target": "events/{id}/peerRatings",
+          "capture": "fondateur",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Retro d'equipe",
+          "target": "formResponses (exercise_feedback)",
+          "capture": "formulaire",
+          "status": "ok"
+        }
+      ],
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)",
+      "criteria": [
+        {
+          "key": "evidence",
+          "label": "Evidence",
+          "min": 0,
+          "max": 20,
+          "weight": 20
+        },
+        {
+          "key": "painSentence",
+          "label": "Pain sentence",
+          "min": 0,
+          "max": 15,
+          "weight": 15
+        },
+        {
+          "key": "agentUse",
+          "label": "Best tech/agent use",
+          "min": 0,
+          "max": 15,
+          "weight": 15
+        }
+      ],
+      "submissionFields": [
+        "painSentence",
+        "driveFolderUrl"
+      ],
+      "scoring": {
+        "items": [
+          {
+            "key": "evidence",
+            "label": "Evidence",
+            "mode": "criterion",
+            "sourceKey": "evidence",
+            "maxPoints": 20
+          },
+          {
+            "key": "potentialCustomers",
+            "label": "Potential customers",
+            "mode": "proportional",
+            "sourceKey": "potentialCustomers",
+            "maxPoints": 30
+          },
+          {
+            "key": "painSentence",
+            "label": "Pain sentence",
+            "mode": "criterion",
+            "sourceKey": "painSentence",
+            "maxPoints": 15
+          },
+          {
+            "key": "agentUse",
+            "label": "Best tech/agent use",
+            "mode": "criterion",
+            "sourceKey": "agentUse",
+            "maxPoints": 15
+          }
+        ],
+        "tieBreaks": []
+      },
+      "formSettings": {
+        "debrief": {
+          "deadline": "11:15"
+        },
+        "peer_rating": {
+          "opens": "11:30"
+        }
+      }
+    },
+    {
+      "key": "fa26-hackathon-1-debrief",
+      "name": "Hackathon 1 Debrief: Results & Retro",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": "We go through the results, talk about what worked in your team and what didn't, and you fill in the peer rating form. Be honest, only the Pioneers team sees the ratings.",
+      "dayString": "2026-11-18",
+      "endDayString": null,
+      "startTime": "11:30",
+      "endTime": "12:00",
+      "startDateISOString": "2026-11-18T10:30:00.000Z",
+      "endDateISOString": "2026-11-18T11:00:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Junior Stage",
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        }
+      ],
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
     },
     {
       "key": "fa26-lunch-roulette-11-18",
@@ -278,21 +657,21 @@
       "kind": "matching",
       "templateKey": "lunch_roulette",
       "stage": null,
-      "topic": null,
+      "topic": "Lunch with people from the batch who you don't know yet. We shuffle the groups every day, in groups of 4, and we post the groups on Slack. The top name is responsible for gathering the 3 others and selecting the lunch spot.",
       "dayString": "2026-11-18",
       "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "midi, heure a confirmer",
+      "startTime": "12:00",
+      "endTime": "13:00",
+      "startDateISOString": "2026-11-18T11:00:00.000Z",
+      "endDateISOString": "2026-11-18T12:00:00.000Z",
+      "dateHint": null,
       "location": null,
       "programWeek": "Week 1",
       "isMilestone": false,
       "audience": "batch",
       "guests": [],
       "metrics": null,
-      "schedule": null,
+      "rankingMetricKey": null,
       "dataToCollect": [
         {
           "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
@@ -301,7 +680,53 @@
           "status": "ok"
         }
       ],
-      "source": "brief"
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+    },
+    {
+      "key": "fa26-talk-benoit-miegeville",
+      "name": "Building your Sales Pipeline - Benoit Miegeville, CEO @Sonik",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": "Benoit Miegeville, CEO of Sonik, on building a superstar sales pipeline from nothing.",
+      "dayString": "2026-11-18",
+      "endDayString": null,
+      "startTime": "17:30",
+      "endTime": "18:45",
+      "startDateISOString": "2026-11-18T16:30:00.000Z",
+      "endDateISOString": "2026-11-18T17:45:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Creativity Room",
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Benoit Miegeville",
+          "role": "speaker",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
     },
     {
       "key": "fa26-lunch-roulette-11-19",
@@ -309,21 +734,21 @@
       "kind": "matching",
       "templateKey": "lunch_roulette",
       "stage": null,
-      "topic": null,
+      "topic": "Lunch with people from the batch who you don't know yet. We shuffle the groups every day, in groups of 4, and we post the groups on Slack. The top name is responsible for gathering the 3 others and selecting the lunch spot.",
       "dayString": "2026-11-19",
       "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "midi, heure a confirmer",
+      "startTime": "12:00",
+      "endTime": "13:00",
+      "startDateISOString": "2026-11-19T11:00:00.000Z",
+      "endDateISOString": "2026-11-19T12:00:00.000Z",
+      "dateHint": null,
       "location": null,
       "programWeek": "Week 1",
       "isMilestone": false,
       "audience": "batch",
       "guests": [],
       "metrics": null,
-      "schedule": null,
+      "rankingMetricKey": null,
       "dataToCollect": [
         {
           "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
@@ -332,7 +757,344 @@
           "status": "ok"
         }
       ],
-      "source": "brief"
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+    },
+    {
+      "key": "fa26-hackathon-2-phone-agents",
+      "name": "Hackathon 2: Phone Agents",
+      "kind": "team_challenge",
+      "templateKey": "hackathon",
+      "stage": null,
+      "topic": "Build a voice agent on Twin that calls real businesses to test a problem and book meetings. What counts is real conversations and meetings booked. Only call businesses, and always let people opt out.",
+      "dayString": "2026-11-19",
+      "endDayString": null,
+      "startTime": "14:00",
+      "endTime": "16:00",
+      "startDateISOString": "2026-11-19T13:00:00.000Z",
+      "endDateISOString": "2026-11-19T15:00:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Junior Stage",
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Twin",
+          "role": "guest",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": [
+        {
+          "key": "callsMade",
+          "label": "Calls made",
+          "unit": null
+        },
+        {
+          "key": "callsAnswered",
+          "label": "Pickups",
+          "unit": null
+        },
+        {
+          "key": "conversationsDone",
+          "label": "Conversations of 60 s or more",
+          "unit": null
+        },
+        {
+          "key": "meetingsBooked",
+          "label": "Meetings booked",
+          "unit": null
+        }
+      ],
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Equipes et appartenances datees",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        },
+        {
+          "what": "Compteurs : appels, vraies conversations, rendez-vous",
+          "target": "submissions/{teamId}.metrics + metricSnapshots",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Transcripts d'appels",
+          "target": "submissions/{teamId}.links",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Gagnant : le plus de conversations et de rendez-vous",
+          "target": "classement par metrique",
+          "capture": "calcul",
+          "status": "missing_structure"
+        },
+        {
+          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
+          "target": "events/{id}/peerRatings",
+          "capture": "fondateur",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)",
+      "criteria": [
+        {
+          "key": "scriptAndLearnings",
+          "label": "Script and learnings",
+          "min": 0,
+          "max": 20,
+          "weight": 20
+        }
+      ],
+      "submissionFields": [
+        "problemSource",
+        "learnings",
+        "driveFolderUrl"
+      ],
+      "scoring": {
+        "items": [
+          {
+            "key": "meetingsBooked",
+            "label": "Meetings booked",
+            "mode": "per_unit",
+            "sourceKey": "meetingsBooked",
+            "pointsPerUnit": 40
+          },
+          {
+            "key": "conversationsDone",
+            "label": "Real conversations",
+            "mode": "per_unit",
+            "sourceKey": "conversationsDone",
+            "pointsPerUnit": 10
+          },
+          {
+            "key": "scriptAndLearnings",
+            "label": "Script and learnings",
+            "mode": "criterion",
+            "sourceKey": "scriptAndLearnings",
+            "maxPoints": 20
+          }
+        ],
+        "tieBreaks": []
+      },
+      "formSettings": {
+        "debrief": {
+          "deadline": "15:55"
+        },
+        "peer_rating": {
+          "opens": "16:00"
+        }
+      }
+    },
+    {
+      "key": "fa26-hackathon-2-debrief",
+      "name": "Hackathon 2 Debrief: Results & Retro",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": "We go through the results, talk about what worked in your team and what didn't, and you fill in the peer rating form. Be honest, only the Pioneers team sees the ratings.",
+      "dayString": "2026-11-19",
+      "endDayString": null,
+      "startTime": "16:00",
+      "endTime": "16:30",
+      "startDateISOString": "2026-11-19T15:00:00.000Z",
+      "endDateISOString": "2026-11-19T15:30:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Junior Stage",
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        }
+      ],
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+    },
+    {
+      "key": "fa26-drinks-11-19",
+      "name": "Drinks @La Felicita",
+      "kind": "session",
+      "templateKey": "social",
+      "stage": null,
+      "topic": "Drinks at La Felicita. You've earned them.",
+      "dayString": "2026-11-19",
+      "endDayString": null,
+      "startTime": "19:00",
+      "endTime": "20:30",
+      "startDateISOString": "2026-11-19T18:00:00.000Z",
+      "endDateISOString": "2026-11-19T19:30:00.000Z",
+      "dateHint": null,
+      "location": null,
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        }
+      ],
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+    },
+    {
+      "key": "fa26-hackathon-3-distribution-machine",
+      "name": "Hackathon 3: Distribution machine",
+      "kind": "team_challenge",
+      "templateKey": "hackathon",
+      "stage": null,
+      "topic": "Take a landing page from zero to signups in two hours. Use agents to post on X and LinkedIn, write an SEO article and make ad creatives. Most signups wins.",
+      "dayString": "2026-11-20",
+      "endDayString": null,
+      "startTime": "09:30",
+      "endTime": "11:30",
+      "startDateISOString": "2026-11-20T08:30:00.000Z",
+      "endDateISOString": "2026-11-20T10:30:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Creativity Room",
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Twin",
+          "role": "guest",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": [
+        {
+          "key": "leadsCollected",
+          "label": "Number of leads",
+          "unit": null
+        },
+        {
+          "key": "reach",
+          "label": "Reach (views, impressions or visits, if known)",
+          "unit": null
+        }
+      ],
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Equipes et appartenances datees",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        },
+        {
+          "what": "Compteurs : inscriptions, posts, articles SEO, creatives, taux de conversion",
+          "target": "submissions/{teamId}.metrics + metricSnapshots",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Liens : landing page, posts, article, creatives",
+          "target": "submissions/{teamId}.links / productUrl",
+          "capture": "equipe",
+          "status": "missing_capture"
+        },
+        {
+          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
+          "target": "events/{id}/peerRatings",
+          "capture": "fondateur",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)",
+      "criteria": [
+        {
+          "key": "leadQuality",
+          "label": "Lead quality",
+          "min": 1,
+          "max": 5,
+          "weight": 5
+        }
+      ],
+      "submissionFields": [
+        "problemSource",
+        "driveFolderUrl"
+      ],
+      "scoring": {
+        "items": [
+          {
+            "key": "leadsCollected",
+            "label": "Valid leads",
+            "mode": "per_unit",
+            "sourceKey": "leadsCollected",
+            "pointsPerUnit": 1
+          },
+          {
+            "key": "leadQuality",
+            "label": "Lead quality",
+            "mode": "criterion",
+            "sourceKey": "leadQuality",
+            "tieBreakOnly": true
+          }
+        ],
+        "tieBreaks": [
+          "leadQuality"
+        ]
+      },
+      "formSettings": {
+        "debrief": {
+          "deadline": "11:15"
+        },
+        "peer_rating": {
+          "opens": "11:30"
+        }
+      }
+    },
+    {
+      "key": "fa26-hackathon-3-debrief",
+      "name": "Hackathon 3 Debrief: Results & Retro",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": "We go through the results, talk about what worked in your team and what didn't, and you fill in the peer rating form. Be honest, only the Pioneers team sees the ratings.",
+      "dayString": "2026-11-20",
+      "endDayString": null,
+      "startTime": "11:30",
+      "endTime": "12:00",
+      "startDateISOString": "2026-11-20T10:30:00.000Z",
+      "endDateISOString": "2026-11-20T11:00:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Creativity Room",
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        }
+      ],
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
     },
     {
       "key": "fa26-lunch-roulette-11-20",
@@ -340,21 +1102,21 @@
       "kind": "matching",
       "templateKey": "lunch_roulette",
       "stage": null,
-      "topic": null,
+      "topic": "Lunch with people from the batch who you don't know yet. We shuffle the groups every day, in groups of 4, and we post the groups on Slack. The top name is responsible for gathering the 3 others and selecting the lunch spot.",
       "dayString": "2026-11-20",
       "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "midi, heure a confirmer",
+      "startTime": "12:00",
+      "endTime": "13:00",
+      "startDateISOString": "2026-11-20T11:00:00.000Z",
+      "endDateISOString": "2026-11-20T12:00:00.000Z",
+      "dateHint": null,
       "location": null,
       "programWeek": "Week 1",
       "isMilestone": false,
       "audience": "batch",
       "guests": [],
       "metrics": null,
-      "schedule": null,
+      "rankingMetricKey": null,
       "dataToCollect": [
         {
           "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
@@ -363,7 +1125,135 @@
           "status": "ok"
         }
       ],
-      "source": "brief"
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+    },
+    {
+      "key": "fa26-talk-alexis-robert",
+      "name": "Masterclass: From Zero to One by Alexis Robert, General Partner @Kima Ventures",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": "Alexis Robert, GP at Kima Ventures, on going from zero to one. One of the best sessions we run, don't miss it.",
+      "dayString": "2026-11-20",
+      "endDayString": null,
+      "startTime": "13:00",
+      "endTime": "14:30",
+      "startDateISOString": "2026-11-20T12:00:00.000Z",
+      "endDateISOString": "2026-11-20T13:30:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Creativity Room",
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Alexis Robert",
+          "role": "speaker",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+    },
+    {
+      "key": "fa26-week-1-retro",
+      "name": "Week 1 Retro & Peer Ratings",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": "A quick look back at the week, and peer ratings for everyone you've worked with so far. These help decide the teams for hackathon 5, so take them seriously.",
+      "dayString": "2026-11-20",
+      "endDayString": null,
+      "startTime": "14:30",
+      "endTime": "15:00",
+      "startDateISOString": "2026-11-20T13:30:00.000Z",
+      "endDateISOString": "2026-11-20T14:00:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Creativity Room",
+      "programWeek": "Week 1",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Feedback anonyme de la semaine 1",
+          "target": "formResponses (weekly_feedback, anonyme)",
+          "capture": "formulaire",
+          "status": "ok"
+        },
+        {
+          "what": "Tous les avis entre pairs de la semaine, en un lieu",
+          "target": "events/*/peerRatings",
+          "capture": "lecture staff",
+          "status": "ok"
+        }
+      ],
+      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)",
+      "forms": [
+        "week_retro"
+      ],
+      "sessions": [
+        {
+          "id": "fa26-twin-launch",
+          "label": "Building with AI (Twin)"
+        },
+        {
+          "id": "fa26-founder-introductions",
+          "label": "Founder Introductions"
+        },
+        {
+          "id": "fa26-speed-dating",
+          "label": "Speeddating"
+        },
+        {
+          "id": "fa26-talk-bruno-aziza",
+          "label": "From Europe to the Silicon Valley (Bruno Aziza)"
+        },
+        {
+          "id": "fa26-talk-hugo-manoukian",
+          "label": "Masterclass with Hugo Manoukian"
+        },
+        {
+          "id": "fa26-hackathon-1-pain-hunters",
+          "label": "Hackathon 1: Pain Hunters"
+        },
+        {
+          "id": "fa26-talk-benoit-miegeville",
+          "label": "Building your Sales Pipeline (Benoit Miegeville)"
+        },
+        {
+          "id": "fa26-hackathon-2-phone-agents",
+          "label": "Hackathon 2: Phone Agents"
+        },
+        {
+          "id": "fa26-hackathon-3-distribution-machine",
+          "label": "Hackathon 3: Distribution machine"
+        },
+        {
+          "id": "fa26-talk-alexis-robert",
+          "label": "From Zero to One (Alexis Robert)"
+        }
+      ]
     },
     {
       "key": "fa26-lunch-roulette-11-23",
@@ -426,430 +1316,6 @@
         }
       ],
       "source": "brief"
-    },
-    {
-      "key": "fa26-lunch-roulette-11-25",
-      "name": "Lunch roulette",
-      "kind": "matching",
-      "templateKey": "lunch_roulette",
-      "stage": null,
-      "topic": null,
-      "dayString": "2026-11-25",
-      "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "midi, heure a confirmer",
-      "location": null,
-      "programWeek": "Week 2",
-      "isMilestone": false,
-      "audience": "batch",
-      "guests": [],
-      "metrics": null,
-      "schedule": null,
-      "dataToCollect": [
-        {
-          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
-          "target": "events/{id}/teams + memberships",
-          "capture": "generateur",
-          "status": "ok"
-        }
-      ],
-      "source": "brief"
-    },
-    {
-      "key": "fa26-lunch-roulette-11-26",
-      "name": "Lunch roulette",
-      "kind": "matching",
-      "templateKey": "lunch_roulette",
-      "stage": null,
-      "topic": null,
-      "dayString": "2026-11-26",
-      "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "midi, heure a confirmer",
-      "location": null,
-      "programWeek": "Week 2",
-      "isMilestone": false,
-      "audience": "batch",
-      "guests": [],
-      "metrics": null,
-      "schedule": null,
-      "dataToCollect": [
-        {
-          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
-          "target": "events/{id}/teams + memberships",
-          "capture": "generateur",
-          "status": "ok"
-        }
-      ],
-      "source": "brief"
-    },
-    {
-      "key": "fa26-lunch-roulette-11-27",
-      "name": "Lunch roulette",
-      "kind": "matching",
-      "templateKey": "lunch_roulette",
-      "stage": null,
-      "topic": null,
-      "dayString": "2026-11-27",
-      "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "midi, heure a confirmer",
-      "location": null,
-      "programWeek": "Week 2",
-      "isMilestone": false,
-      "audience": "batch",
-      "guests": [],
-      "metrics": null,
-      "schedule": null,
-      "dataToCollect": [
-        {
-          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
-          "target": "events/{id}/teams + memberships",
-          "capture": "generateur",
-          "status": "ok"
-        }
-      ],
-      "source": "brief"
-    },
-    {
-      "key": "fa26-speed-dating",
-      "name": "Founder speed dating",
-      "kind": "matching",
-      "templateKey": "speed_dating",
-      "stage": null,
-      "topic": null,
-      "dayString": "2026-11-17",
-      "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "mar. 17 nov., heure a confirmer",
-      "location": null,
-      "programWeek": "Week 1",
-      "isMilestone": false,
-      "audience": "batch",
-      "guests": [],
-      "metrics": null,
-      "schedule": null,
-      "dataToCollect": [
-        {
-          "what": "Qui a rencontre qui",
-          "target": "events/{id}/teams + memberships",
-          "capture": "generateur",
-          "status": "ok"
-        },
-        {
-          "what": "« Who stood out » : un choix par fondateur",
-          "target": "a creer (pick avec contexte)",
-          "capture": "fondateur",
-          "status": "missing_structure"
-        }
-      ],
-      "source": "brief"
-    },
-    {
-      "key": "fa26-hackathon-1-pain-hunters",
-      "name": "Hackathon 1: Pain Hunters",
-      "kind": "team_challenge",
-      "templateKey": "hackathon",
-      "stage": null,
-      "topic": "Find a real pain with evidence (10+ posts or reviews from Reddit, X, LinkedIn, G2, Trustpilot) and build a list of potential customers.",
-      "dayString": "2026-11-18",
-      "endDayString": null,
-      "startTime": "09:30",
-      "endTime": "12:00",
-      "startDateISOString": "2026-11-18T08:30:00.000Z",
-      "endDateISOString": "2026-11-18T11:00:00.000Z",
-      "dateHint": null,
-      "location": null,
-      "programWeek": "Week 1",
-      "isMilestone": false,
-      "audience": "batch",
-      "guests": [
-        {
-          "name": "Twin",
-          "role": "guest",
-          "personId": null,
-          "founderId": null,
-          "mentorId": null,
-          "intro": null
-        }
-      ],
-      "metrics": [
-        {
-          "key": "evidencePosts",
-          "label": "Evidence posts or reviews collected",
-          "unit": null
-        },
-        {
-          "key": "potentialCustomers",
-          "label": "Potential customers listed",
-          "unit": null
-        },
-        {
-          "key": "painLibraryEntries",
-          "label": "Entries in the shared pain library",
-          "unit": null
-        }
-      ],
-      "schedule": null,
-      "dataToCollect": [
-        {
-          "what": "Equipes et appartenances datees",
-          "target": "events/{id}/teams + memberships",
-          "capture": "generateur",
-          "status": "ok"
-        },
-        {
-          "what": "Compteurs : preuves, clients potentiels, entrees de la pain library",
-          "target": "submissions/{teamId}.metrics + metricSnapshots",
-          "capture": "equipe",
-          "status": "missing_capture"
-        },
-        {
-          "what": "Liens : sources des preuves, liste des 30 clients potentiels",
-          "target": "submissions/{teamId}.links",
-          "capture": "equipe",
-          "status": "missing_capture"
-        },
-        {
-          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
-          "target": "events/{id}/peerRatings",
-          "capture": "fondateur",
-          "status": "missing_capture"
-        },
-        {
-          "what": "Retro d'equipe",
-          "target": "formResponses (exercise_feedback)",
-          "capture": "formulaire",
-          "status": "ok"
-        }
-      ],
-      "source": "email, brief",
-      "forms": [
-        "exercise_feedback"
-      ]
-    },
-    {
-      "key": "fa26-hackathon-2-phone-agents",
-      "name": "Hackathon 2: Phone Agents",
-      "kind": "team_challenge",
-      "templateKey": "hackathon",
-      "rankingMetricKey": "conversationsDone",
-      "stage": null,
-      "topic": "Build a voice agent that calls businesses to test the pain and book meetings. Winner: most real conversations and meetings booked.",
-      "dayString": "2026-11-19",
-      "endDayString": null,
-      "startTime": "14:00",
-      "endTime": "16:30",
-      "startDateISOString": "2026-11-19T13:00:00.000Z",
-      "endDateISOString": "2026-11-19T15:30:00.000Z",
-      "dateHint": null,
-      "location": null,
-      "programWeek": "Week 1",
-      "isMilestone": false,
-      "audience": "batch",
-      "guests": [
-        {
-          "name": "Twin",
-          "role": "guest",
-          "personId": null,
-          "founderId": null,
-          "mentorId": null,
-          "intro": null
-        }
-      ],
-      "metrics": [
-        {
-          "key": "callsMade",
-          "label": "Calls made",
-          "unit": null
-        },
-        {
-          "key": "conversationsDone",
-          "label": "Conversations done",
-          "unit": null
-        },
-        {
-          "key": "meetingsBooked",
-          "label": "Meetings booked",
-          "unit": null
-        }
-      ],
-      "schedule": null,
-      "dataToCollect": [
-        {
-          "what": "Equipes et appartenances datees",
-          "target": "events/{id}/teams + memberships",
-          "capture": "generateur",
-          "status": "ok"
-        },
-        {
-          "what": "Compteurs : appels, vraies conversations, rendez-vous",
-          "target": "submissions/{teamId}.metrics + metricSnapshots",
-          "capture": "equipe",
-          "status": "missing_capture"
-        },
-        {
-          "what": "Transcripts d'appels",
-          "target": "submissions/{teamId}.links",
-          "capture": "equipe",
-          "status": "missing_capture"
-        },
-        {
-          "what": "Gagnant : le plus de conversations et de rendez-vous",
-          "target": "classement par metrique",
-          "capture": "calcul",
-          "status": "missing_structure"
-        },
-        {
-          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
-          "target": "events/{id}/peerRatings",
-          "capture": "fondateur",
-          "status": "missing_capture"
-        }
-      ],
-      "source": "email, brief",
-      "forms": [
-        "exercise_feedback"
-      ]
-    },
-    {
-      "key": "fa26-hackathon-3-distribution-machine",
-      "name": "Hackathon 3: Distribution Machine",
-      "kind": "team_challenge",
-      "templateKey": "hackathon",
-      "stage": null,
-      "topic": "Take a landing page from zero to signups in two hours with X and LinkedIn posts, an SEO article and ad creatives.",
-      "dayString": "2026-11-20",
-      "endDayString": null,
-      "startTime": "09:30",
-      "endTime": "12:00",
-      "startDateISOString": "2026-11-20T08:30:00.000Z",
-      "endDateISOString": "2026-11-20T11:00:00.000Z",
-      "dateHint": null,
-      "location": null,
-      "programWeek": "Week 1",
-      "isMilestone": false,
-      "audience": "batch",
-      "guests": [
-        {
-          "name": "Twin",
-          "role": "guest",
-          "personId": null,
-          "founderId": null,
-          "mentorId": null,
-          "intro": null
-        }
-      ],
-      "metrics": [
-        {
-          "key": "accountsCreated",
-          "label": "Accounts created",
-          "unit": null
-        },
-        {
-          "key": "postsPublished",
-          "label": "X and LinkedIn posts published",
-          "unit": null
-        },
-        {
-          "key": "seoArticles",
-          "label": "SEO articles published",
-          "unit": null
-        },
-        {
-          "key": "adCreatives",
-          "label": "Ad creatives",
-          "unit": null
-        },
-        {
-          "key": "conversionRate",
-          "label": "Conversion rate",
-          "unit": "%"
-        }
-      ],
-      "schedule": null,
-      "dataToCollect": [
-        {
-          "what": "Equipes et appartenances datees",
-          "target": "events/{id}/teams + memberships",
-          "capture": "generateur",
-          "status": "ok"
-        },
-        {
-          "what": "Compteurs : inscriptions, posts, articles SEO, creatives, taux de conversion",
-          "target": "submissions/{teamId}.metrics + metricSnapshots",
-          "capture": "equipe",
-          "status": "missing_capture"
-        },
-        {
-          "what": "Liens : landing page, posts, article, creatives",
-          "target": "submissions/{teamId}.links / productUrl",
-          "capture": "equipe",
-          "status": "missing_capture"
-        },
-        {
-          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
-          "target": "events/{id}/peerRatings",
-          "capture": "fondateur",
-          "status": "missing_capture"
-        }
-      ],
-      "source": "email, brief",
-      "forms": [
-        "exercise_feedback"
-      ]
-    },
-    {
-      "key": "fa26-week-1-retro",
-      "name": "Week 1 retro",
-      "kind": "session",
-      "templateKey": null,
-      "stage": null,
-      "topic": null,
-      "dayString": "2026-11-20",
-      "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "ven. 20 nov., heure a confirmer",
-      "location": null,
-      "programWeek": "Week 1",
-      "isMilestone": false,
-      "audience": "batch",
-      "guests": [],
-      "metrics": null,
-      "schedule": null,
-      "dataToCollect": [
-        {
-          "what": "Feedback anonyme de la semaine 1",
-          "target": "formResponses (weekly_feedback, anonyme)",
-          "capture": "formulaire",
-          "status": "ok"
-        },
-        {
-          "what": "Tous les avis entre pairs de la semaine, en un lieu",
-          "target": "events/*/peerRatings",
-          "capture": "lecture staff",
-          "status": "ok"
-        }
-      ],
-      "source": "brief",
-      "forms": [
-        "weekly_feedback"
-      ]
     },
     {
       "key": "fa26-hackathon-4-agent-agency",
@@ -1064,190 +1530,6 @@
         }
       ],
       "source": "email, brief"
-    },
-    {
-      "key": "fa26-talk-bruno-aziza",
-      "name": "Talk: Bruno Aziza",
-      "kind": "session",
-      "templateKey": "masterclass",
-      "stage": null,
-      "topic": null,
-      "dayString": null,
-      "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "semaines 1-2, date a confirmer",
-      "location": null,
-      "programWeek": null,
-      "isMilestone": false,
-      "audience": "batch",
-      "guests": [
-        {
-          "name": "Bruno Aziza",
-          "role": "speaker",
-          "personId": null,
-          "founderId": null,
-          "mentorId": null,
-          "intro": null
-        }
-      ],
-      "metrics": null,
-      "schedule": null,
-      "dataToCollect": [
-        {
-          "what": "Presence",
-          "target": "events/{id}/attendance",
-          "capture": "staff (pointage)",
-          "status": "ok"
-        },
-        {
-          "what": "Note en un geste (1-5)",
-          "target": "sessionRatings",
-          "capture": "formulaire",
-          "status": "missing_capture"
-        }
-      ],
-      "source": "brief"
-    },
-    {
-      "key": "fa26-talk-hugo-manoukian",
-      "name": "Talk: Hugo Manoukian",
-      "kind": "session",
-      "templateKey": "masterclass",
-      "stage": null,
-      "topic": null,
-      "dayString": null,
-      "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "semaines 1-2, date a confirmer",
-      "location": null,
-      "programWeek": null,
-      "isMilestone": false,
-      "audience": "batch",
-      "guests": [
-        {
-          "name": "Hugo Manoukian",
-          "role": "speaker",
-          "personId": null,
-          "founderId": null,
-          "mentorId": null,
-          "intro": null
-        }
-      ],
-      "metrics": null,
-      "schedule": null,
-      "dataToCollect": [
-        {
-          "what": "Presence",
-          "target": "events/{id}/attendance",
-          "capture": "staff (pointage)",
-          "status": "ok"
-        },
-        {
-          "what": "Note en un geste (1-5)",
-          "target": "sessionRatings",
-          "capture": "formulaire",
-          "status": "missing_capture"
-        }
-      ],
-      "source": "brief"
-    },
-    {
-      "key": "fa26-talk-benoit-miegeville",
-      "name": "Talk: Benoit Miegeville",
-      "kind": "session",
-      "templateKey": "masterclass",
-      "stage": null,
-      "topic": null,
-      "dayString": null,
-      "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "semaines 1-2, date a confirmer",
-      "location": null,
-      "programWeek": null,
-      "isMilestone": false,
-      "audience": "batch",
-      "guests": [
-        {
-          "name": "Benoit Miegeville",
-          "role": "speaker",
-          "personId": null,
-          "founderId": null,
-          "mentorId": null,
-          "intro": null
-        }
-      ],
-      "metrics": null,
-      "schedule": null,
-      "dataToCollect": [
-        {
-          "what": "Presence",
-          "target": "events/{id}/attendance",
-          "capture": "staff (pointage)",
-          "status": "ok"
-        },
-        {
-          "what": "Note en un geste (1-5)",
-          "target": "sessionRatings",
-          "capture": "formulaire",
-          "status": "missing_capture"
-        }
-      ],
-      "source": "brief"
-    },
-    {
-      "key": "fa26-talk-alexis-robert",
-      "name": "Talk: Alexis Robert",
-      "kind": "session",
-      "templateKey": "masterclass",
-      "stage": null,
-      "topic": null,
-      "dayString": null,
-      "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "semaines 1-2, date a confirmer",
-      "location": null,
-      "programWeek": null,
-      "isMilestone": false,
-      "audience": "batch",
-      "guests": [
-        {
-          "name": "Alexis Robert",
-          "role": "speaker",
-          "personId": null,
-          "founderId": null,
-          "mentorId": null,
-          "intro": null
-        }
-      ],
-      "metrics": null,
-      "schedule": null,
-      "dataToCollect": [
-        {
-          "what": "Presence",
-          "target": "events/{id}/attendance",
-          "capture": "staff (pointage)",
-          "status": "ok"
-        },
-        {
-          "what": "Note en un geste (1-5)",
-          "target": "sessionRatings",
-          "capture": "formulaire",
-          "status": "missing_capture"
-        }
-      ],
-      "source": "brief"
     },
     {
       "key": "fa26-talk-cyril",
@@ -2008,5 +2290,10 @@
       ],
       "source": "Notion Fall 2026, FAQ"
     }
+  ],
+  "archived": [
+    "fa26-lunch-roulette-11-25",
+    "fa26-lunch-roulette-11-26",
+    "fa26-lunch-roulette-11-27"
   ]
 }

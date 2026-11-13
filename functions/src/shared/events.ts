@@ -117,6 +117,9 @@ export function matchingOf(event: MatchingSource): EventMatching | null {
   return { mode, size: event.teamSize ?? teamSizeFor(GENERATOR_PRESETS[mode].defaultSize) };
 }
 
+/** Des equipes de travail (challenge), pas des tables pour se rencontrer : Submission, Peer rating, coequipiers, fiche. */
+export const isWorkTeamEvent = (event: MatchingSource): boolean => matchingOf(event)?.mode === "challenge";
+
 /** Ce que note le jury : les groupes du matching s'il y en a un, sinon les startups de l'evenement. */
 export const juryTargetOf = (event: MatchingSource): "team" | "startup" => (matchingOf(event) ? "team" : "startup");
 

@@ -218,6 +218,20 @@ export type Callables = {
     req: { eventId: string; metricKey: string | null };
     res: { ok: true };
   };
+  /**
+   * Staff : publie (ou retire, `publish: false`) le classement d'un evenement a
+   * bareme, apres la verification des preuves, puis recalcule les scores du
+   * batch. Journalise.
+   */
+  publishEventRanking: {
+    req: { eventId: string; publish: boolean };
+    res: { ok: true };
+  };
+  /** Staff : recalcule les scores du batch (SPECS §5.5), comme chaque nuit. */
+  recomputeBatchScores: {
+    req: { batchId: string };
+    res: { founders: number; startups: number; computedDateISOString: string };
+  };
   /** Staff : cree ou remplace le lien partage du jury (l'ancien cesse de marcher). Journalise. */
   resetJuryLink: {
     req: { eventId: string };

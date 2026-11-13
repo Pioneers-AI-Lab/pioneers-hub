@@ -6,6 +6,7 @@ import { useParamsTS } from "@/hooks/useParamsTS";
 import { formatDateTime } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { StaffTeamResults } from "@/components/admin/StaffTeamResults";
+import { TeamProofCheck } from "@/components/admin/TeamProofCheck";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Empty } from "@/components/ui/Section";
 
@@ -41,12 +42,13 @@ export default function AdminTeamResultsPage() {
           current={submission}
           hint={[
             submission?.submittedDateISOString ? `Last saved ${formatDateTime(submission.submittedDateISOString)}.` : "Nothing entered yet.",
-            "The metrics are the questions of the event's debrief. Numbers you save here are marked as entered by the staff.",
+            "The metrics are the questions of the event's submission. Numbers you save here are marked as entered by the staff.",
           ].join(" ")}
         />
       ) : (
         <Empty>The event has not started yet. Results open once it does.</Empty>
       )}
+      {submission && <TeamProofCheck eventId={event.id} teamId={team.id} scoring={event.scoring ?? null} submission={submission} />}
     </>
   );
 }

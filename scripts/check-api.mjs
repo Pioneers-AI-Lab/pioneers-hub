@@ -242,7 +242,7 @@ const call = async (key, name, args) => {
   check(!t.isError && t.data.preview.event.scoringCriteria?.length > 0, "a model copies its scoring grid", t.data);
   // Un template est un pack : l'evenement, son matching et ses formulaires, nes comme lui.
   t = await call(key, "pioneers_create_event", { batchId: "fall-2026", templateKey: "hackathon", name: "Pack check", startDateISOString: "2026-11-30T09:30:00+01:00" });
-  check(!t.isError && t.data.preview.event.matching === "teams of 3" && t.data.preview.event.forms.some((f) => /Debrief \(open\)/.test(f)), "a hackathon pack previews its teams and forms", t.data);
+  check(!t.isError && t.data.preview.event.matching === "teams of 3" && t.data.preview.event.forms.some((f) => /Submission \(open\)/.test(f)) && t.data.preview.event.forms.some((f) => /Peer rating \(open\)/.test(f)), "a hackathon pack previews its teams and forms", t.data);
   t = await call(key, "pioneers_create_event", { planId: t.data.planId });
   {
     const packId = t.data?.result?.eventId;
@@ -282,8 +282,14 @@ const call = async (key, name, args) => {
   check(t.isError && /eventId/.test(t.data), "a debrief needs its event", t.data);
   t = await call(key, "pioneers_create_form", { batchId: "fall-2026", templateKey: "debrief", eventId: "demo-hackathon-1" });
   check(
+    !t.isError && t.data.preview.form.identityCheck === "account" && t.data.preview.form.questions.every((q) => q.about === "team"),
+    "a submission previews its team questions only",
+    t.data,
+  );
+  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", templateKey: "peer_rating", eventId: "demo-hackathon-1" });
+  check(
     !t.isError && t.data.preview.form.identityCheck === "account" && t.data.preview.form.questions.some((q) => q.writesTo === "peerRating.rating" && q.about === "each_teammate"),
-    "a debrief previews its peer rating, for each teammate",
+    "a peer rating previews its rating, for each teammate",
     t.data,
   );
   t = await call(key, "pioneers_create_form", { batchId: "fall-2026", templateKey: "weekly_update" });

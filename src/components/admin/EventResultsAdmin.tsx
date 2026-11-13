@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, CopyButton, Group, SegmentedControl, Select, Stack, Text } from "@mantine/core";
-import { FORM_TEMPLATES, type FormTemplateKey } from "@shared/presets/formTemplates";
+import { FORM_TEMPLATES, type FormTemplate, type FormTemplateKey } from "@shared/presets/formTemplates";
+import { isWorkTeamEvent } from "@shared/events";
 import { formState } from "@shared/forms";
-import { activeQuestions, isPickable, type Evaluation, type Form, type WithId } from "@shared/types";
+import { activeQuestions, isLateUnwaived, isPickable, scoringOf, type Evaluation, type EventScoring, type Form, type ScoringItem, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminEvent } from "@/context/AdminEventContext";
 import { useAction } from "@/hooks/useAction";
@@ -35,15 +36,25 @@ import { Empty, Section } from "@/components/ui/Section";
 
 const JURY = "__jury__";
 
-/** Les modeles de formulaire proposes pour un evenement ; le Debrief, seulement avec un matching. */
-const EVENT_FORM_TEMPLATES: FormTemplateKey[] = ["debrief", "jury", "picks", "exercise_feedback", "session_feedback", "founder_introductions", "weekly_feedback"];
+/** Les modeles de formulaire proposes pour un evenement ; la Submission et le Peer rating, seulement avec des equipes de travail. */
+const EVENT_FORM_TEMPLATES: FormTemplateKey[] = [
+  "debrief",
+  "peer_rating",
+  "jury",
+  "picks",
+  "founder_introductions",
+  "week_retro",
+  "exercise_feedback",
+  "session_feedback",
+  "weekly_feedback",
+];
 
 export function EventResultsAdmin() {
-  const { matching, metrics, criteria, juryForm } = useAdminEvent();
+  const { event, matching, metrics, criteria, juryForm } = useAdminEvent();
   return (
     <>
       <FormsSection />
-      {(metrics.length > 0 || criteria.length > 0) && <RankingSection />}
+      {scoringOf(event) ? <ScoringSection scoring={scoringOf(event)!} /> : (metrics.length > 0 || criteria.length > 0) && <RankingSection />}
       {matching && metrics.length > 0 && <ResultsSection />}
       {juryForm && <JurySection juryForm={juryForm} />}
       <PicksSection />
@@ -54,11 +65,11 @@ export function EventResultsAdmin() {
 /** Les formulaires de l'evenement, et ceux a creer depuis un modele. */
 function FormsSection() {
   const router = useRouter();
-  const { event, forms, matching } = useAdminEvent();
+  const { event, forms } = useAdminEvent();
   const { batch } = useAdmin();
   const { isBusy, run } = useAction();
   const nowISO = new Date().toISOString();
-  const offered = EVENT_FORM_TEMPLATES.filter((key) => key !== "debrief" || matching !== null);
+  const offered = EVENT_FORM_TEMPLATES.filter((key) => !(FORM_TEMPLATES[key] as FormTemplate).needsWorkTeams || isWorkTeamEvent(event));
 
   const create = async (templateKey: FormTemplateKey) => {
     const id = await run(() => createForm({ programId: batch.programId, batchId: batch.id, templateKey, eventId: event.id, event }), "Draft created");
@@ -68,7 +79,7 @@ function FormsSection() {
   return (
     <Section
       title={`Forms · ${forms.length}`}
-      hint="Everything founders and the jury enter for this event is a form: the debrief (team results, a word on each teammate), the jury, the picks, feedback. Create one from a model, then adjust its questions."
+      hint="Everything founders and the jury enter for this event is a form: the submission (team results, before the deadline), the peer rating (a word on each teammate), the jury, the picks, the retro. Create one from a model, then adjust its questions."
     >
       {forms.length > 0 && (
         <RowList>
@@ -97,7 +108,49 @@ function FormsSection() {
   );
 }
 
-/** Ce qui classe le leaderboard : les notes du jury, ou une metrique du Debrief. */
+/** Le pourquoi des points d'un element, en clair. */
+function scoringItemRule(item: ScoringItem): string {
+  if (item.mode === "per_unit") return `${item.pointsPerUnit ?? 1} pt per unit`;
+  if (item.mode === "proportional") return `best team gets ${item.maxPoints ?? 0}, others in proportion`;
+  return item.maxPoints ? `jury, out of ${item.maxPoints}` : "jury";
+}
+
+/**
+ * Un evenement a bareme (SPECS §4.2) : ses elements, puis la publication du
+ * classement, une fois les preuves verifiees. Publier relance aussi le calcul
+ * des scores du batch.
+ */
+function ScoringSection({ scoring }: { scoring: EventScoring }) {
+  const { event } = useAdminEvent();
+  const { isBusy, run } = useAction();
+  const isPublished = event.leaderboardRevealDateISOString !== null;
+  const publish = (on: boolean) =>
+    void run(() => call("publishEventRanking")({ eventId: event.id, publish: on }), on ? "Ranking published" : "Ranking unpublished");
+
+  return (
+    <Section
+      title="Leaderboard"
+      hint={
+        isPublished
+          ? `Published ${formatDateTime(event.leaderboardRevealDateISOString!)}: founders see the ranking.`
+          : "Founders see the ranking once you publish it, after checking the proofs. A late submission scores 0."
+      }
+    >
+      <RowList>
+        {scoring.items.map((item) => (
+          <Row key={item.key} title={item.label} subtitle={item.tieBreakOnly ? `Tie-break · ${scoringItemRule(item)}` : scoringItemRule(item)} />
+        ))}
+      </RowList>
+      <Group mt="sm">
+        <Button size="md" loading={isBusy} variant={isPublished ? "default" : "filled"} onClick={() => publish(!isPublished)}>
+          {isPublished ? "Unpublish ranking" : "Publish ranking"}
+        </Button>
+      </Group>
+    </Section>
+  );
+}
+
+/** Ce qui classe le leaderboard : les notes du jury, ou une metrique de la Submission. */
 function RankingSection() {
   const { event, metrics } = useAdminEvent();
   const { isBusy, run } = useAction();
@@ -110,7 +163,7 @@ function RankingSection() {
 
   const options = [{ value: JURY, label: "Jury scores" }, ...metrics.map((m) => ({ value: m.key, label: m.label }))];
   return (
-    <Section title="Leaderboard" hint="What ranks the teams. A number is a metric question of the debrief, entered by each team.">
+    <Section title="Leaderboard" hint="What ranks the teams. A number is a metric question of the submission, entered by each team.">
       {options.length <= 3 ? (
         <SegmentedControl fullWidth maw={480} data={options} value={value} onChange={change} disabled={isBusy} />
       ) : (
@@ -127,7 +180,7 @@ function ResultsSection() {
   const entered = published.filter((t) => submissionsByTeamId.get(t.id)?.submittedDateISOString).length;
 
   return (
-    <Section title={`Results · ${entered} of ${published.length}`} hint="What each team entered in its debrief. Open a team to enter or correct its numbers.">
+    <Section title={`Results · ${entered} of ${published.length}`} hint="What each team entered in its submission. Open a team to enter or correct its numbers.">
       {published.length === 0 ? (
         <Empty>Teams show up here once they are published.</Empty>
       ) : (
@@ -138,7 +191,15 @@ function ResultsSection() {
               .filter((m) => values[m.key] !== undefined)
               .map((m) => `${metricValue(m, values[m.key])} ${m.label.toLowerCase()}`)
               .join(" · ");
-            return <LinkRow key={t.id} href={paths.adminEventTeam(event.id, t.id)} title={t.name} subtitle={summary || "No results yet"} />;
+            const late = isLateUnwaived(submissionsByTeamId.get(t.id));
+            return (
+              <LinkRow
+                key={t.id}
+                href={paths.adminEventTeam(event.id, t.id)}
+                title={t.name}
+                subtitle={[late ? "Late: scores 0" : null, summary || "No results yet"].filter(Boolean).join(" · ")}
+              />
+            );
           })}
         </RowList>
       )}

@@ -19,6 +19,8 @@ import {
   PROFILE_CATEGORIES,
   PROFILE_CATEGORY_LABELS,
   submissionStamp,
+  PROBLEM_SOURCES,
+  PROBLEM_SOURCE_LABELS,
 } from "./types";
 import type {
   Attendance,
@@ -132,7 +134,7 @@ export type SubjectOwner = TargetKind;
 type Subjects = Record<SubjectKey, string>;
 
 /** Ce que sait l'ecriture au moment de poser ses champs techniques. */
-export type WriteStamp = { now: string; uid: string; asForm: boolean };
+export type WriteStamp = { now: string; uid: string; asForm: boolean; /** Echeance du formulaire qui ecrit (`null` : sans echeance). */ formDeadline?: string | null };
 
 /**
  * `formOnly` : document qui ne s'ecrit QUE par son formulaire (avis entre pairs,
@@ -212,7 +214,7 @@ export const DOC_KINDS = {
     owner: "startup",
     path: (s: Subjects) => docPaths.submission(s.event, s.team),
     // La source des releves de metriques (declencheur `onSubmissionWritten`).
-    stamp: ({ now, uid, asForm }: WriteStamp) => submissionStamp(uid, asForm ? "self_reported" : "staff", now),
+    stamp: ({ now, uid, asForm, formDeadline }: WriteStamp) => submissionStamp(uid, asForm ? "self_reported" : "staff", now, asForm ? (formDeadline ?? null) : undefined),
   },
 } as const satisfies Record<
   DocKind,
@@ -619,6 +621,10 @@ export const DB_FIELDS = {
   "submission.productUrl": field("Product", { kind: "url" }),
   "submission.proofUrls": field("Proof links", { kind: "files", multiple: true }),
   "submission.notes": field("Team notes", text(2000, true)),
+  "submission.painSentence": field("Pain in one sentence", text(300)),
+  "submission.problemSource": field("Problem source", { kind: "enum", listKey: null, values: PROBLEM_SOURCES, labels: PROBLEM_SOURCE_LABELS }),
+  "submission.learnings": field("What the team learned", longText()),
+  "submission.driveFolderUrl": field("Drive folder", { kind: "url" }),
 
   // ---- Avis entre pairs (Debrief, portee « chaque coequipier ») ----
   "peerRating.rating": field("Would start a company with this person", { kind: "rating", min: 1, max: 5 }),
@@ -749,6 +755,10 @@ for (const key of Object.keys(DB_FIELDS) as (keyof typeof DB_FIELDS)[]) {
   const { doc, field: name } = parseDbField(key);
   EXPECTED_BY_OWNER[DOC_KINDS[doc].owner].push({ key, doc, name, def: { ...def, expected: def.expected } });
 }
+
+/** Le nombre de champs obligatoires « une fois » d'un fondateur ou d'une startup : le denominateur de la completude. */
+export const countRequiredFields = (owner: SubjectOwner): number =>
+  EXPECTED_BY_OWNER[owner].filter((e) => e.def.expected.scope === "once" && e.def.expected.priority === "required").length;
 
 export function listMissingFields(
   snapshot: SubjectSnapshot,

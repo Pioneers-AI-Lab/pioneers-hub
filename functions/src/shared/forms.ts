@@ -24,8 +24,8 @@ export type NewFormInput = {
    * grille du jury) viennent de son modele (`templateKey`).
    */
   event?: Pick<PioneersEvent, "kind" | "templateKey"> | null;
-  /** Remplace les metriques ou la grille du modele d'evenement (import, migration). */
-  defaults?: Partial<Pick<TemplateContext, "metrics" | "criteria">>;
+  /** Remplace les reglages du modele d'evenement (import, migration) : metriques, grille, champs de la Submission, seances de la retro. */
+  defaults?: Partial<Pick<TemplateContext, "metrics" | "criteria" | "submissionFields" | "sessions">>;
 };
 
 /** Ce dont un modele de formulaire construit ses questions, pour cet evenement. */
@@ -35,6 +35,8 @@ export function templateContext(input: Pick<NewFormInput, "event" | "defaults">)
     eventKind: input.event?.kind ?? null,
     metrics: input.defaults?.metrics ?? preset?.metrics ?? [],
     criteria: input.defaults?.criteria ?? preset?.criteria ?? [],
+    submissionFields: input.defaults?.submissionFields ?? null,
+    sessions: input.defaults?.sessions ?? [],
   };
 }
 

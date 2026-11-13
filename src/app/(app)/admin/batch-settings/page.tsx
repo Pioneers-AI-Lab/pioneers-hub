@@ -6,7 +6,9 @@ import { notifications } from "@mantine/notifications";
 import { isSlackChannelId, isSlackTeamId } from "@shared/slackLinks";
 import type { Batch, BatchStatus, LeaderboardVisibility, WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
+import { useAction } from "@/hooks/useAction";
 import { updateBatch } from "@/lib/batchAdmin";
+import { call } from "@/lib/firebase";
 import { paths } from "@/lib/paths";
 import { BatchPicker } from "@/components/admin/BatchPicker";
 import { CreateBatchButton, CreateProgramButton } from "@/components/admin/CreateDialogs";
@@ -24,6 +26,7 @@ export default function BatchSettingsPage() {
       <BatchPicker />
       {/* Remonte a chaque modification distante ou changement de batch : le brouillon repart de la base. */}
       <SettingsForm key={`${batch.id}:${batch.updatedDateISOString}`} batch={batch}>
+        <ScoresSection batch={batch} />
         <Section title="Programs and batches" hint={`${programs.length} programs, ${batches.length} batches. A new batch becomes the one you work on.`}>
           <Group>
             <CreateBatchButton programs={programs} defaultProgramId={batch.programId} onCreated={selectBatch} />
@@ -143,5 +146,33 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
         )}
       </Box>
     </>
+  );
+}
+
+/**
+ * Les scores du batch (SPECS §5.5) : recalcules chaque nuit et a la publication
+ * d'un classement ; ce bouton les recalcule tout de suite. Un batch dont les
+ * scores viennent d'un ancien outil (Spring 2026) n'est jamais recalcule.
+ */
+function ScoresSection({ batch }: { batch: WithId<Batch> }) {
+  const { isBusy, run } = useAction();
+  if (batch.settings.scoresSource === "imported") {
+    return (
+      <Section title="Scores">
+        <Text size="sm" c="dimmed">
+          This batch&apos;s scores were imported from a former tool. They are not recomputed.
+        </Text>
+      </Section>
+    );
+  }
+  const recompute = () => void run(() => call("recomputeBatchScores")({ batchId: batch.id }), "Scores recomputed");
+  return (
+    <Section title="Scores" hint="Program Performance, startup scores, attendance and network. Recomputed every night at 2:00 and when a ranking is published.">
+      <Group>
+        <Button size="md" variant="default" loading={isBusy} onClick={recompute}>
+          Recompute scores
+        </Button>
+      </Group>
+    </Section>
   );
 }

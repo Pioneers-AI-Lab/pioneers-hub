@@ -74,7 +74,7 @@ export default function NewFormPage() {
           {template?.needsEvent && (
             <Select
               label="Event"
-              description="The form is tied to this event: a debrief or a jury takes its metrics or its scoring grid from the event's model."
+              description="The form is tied to this event: a submission or a jury takes its metrics or its scoring grid from the event's model."
               clearable
               searchable
               value={eventId}

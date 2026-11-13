@@ -37,6 +37,12 @@ export type BatchSettings = {
    * Absent des batchs plus anciens.
    */
   slackTeamId?: string | null;
+  /**
+   * D'ou viennent les scores (`scores`, `scoreSignals`, `founderStats`) : `hub` =
+   * calcules par le Hub (SPECS §5.5, par defaut) ; `imported` = recopies d'un
+   * ancien outil (Spring 2026) : le calcul n'y touche jamais.
+   */
+  scoresSource?: "hub" | "imported";
 };
 
 export type Batch = Timestamps &

@@ -455,16 +455,23 @@ const openForm = (id, input, tweak = (f) => f) => {
   const { form } = firstPublication(newForm({ ...scoped, event: { kind: "team_challenge", templateKey: null }, ...input }), now);
   batch.set(db.doc(`forms/${id}`), { ...tweak(form), ...stamps });
 };
-openForm("demo-debrief-1", {
-  templateKey: "debrief",
-  eventId: "demo-hackathon-1",
-  defaults: {
-    metrics: [
-      { key: "callsMade", label: "Calls made", unit: null },
-      { key: "meetingsBooked", label: "Meetings booked", unit: null },
-    ],
+// La Submission du hackathon 1 : son echeance est passee, tout envoi est « en retard ».
+openForm(
+  "demo-debrief-1",
+  {
+    templateKey: "debrief",
+    eventId: "demo-hackathon-1",
+    defaults: {
+      metrics: [
+        { key: "callsMade", label: "Calls made", unit: null },
+        { key: "meetingsBooked", label: "Meetings booked", unit: null },
+      ],
+    },
   },
-});
+  (f) => ({ ...f, deadlineDateISOString: new Date(Date.parse(now) - 3600_000).toISOString() }),
+);
+// Le Peer rating du hackathon 1 : un avis sur chaque coequipier (formulaire a part).
+openForm("demo-peer-1", { templateKey: "peer_rating", eventId: "demo-hackathon-1" });
 openForm("demo-debrief-2", {
   templateKey: "debrief",
   eventId: "demo-hackathon-2",

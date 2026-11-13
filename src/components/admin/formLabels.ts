@@ -10,8 +10,8 @@ export const FORM_KIND_LABELS: Record<FormKind, string> = {
   weekly_update: "Thursday update",
   exercise_feedback: "Exercise feedback",
   session_feedback: "Session feedback",
-  peer_feedback: "Peer feedback",
-  debrief: "Hackathon debrief",
+  peer_feedback: "Peer rating",
+  debrief: "Hackathon submission",
   jury: "Jury",
   picks: "Picks",
   exit: "Exit form",
@@ -33,7 +33,7 @@ export const IDENTITY_OPTIONS: { value: FormIdentityCheck; label: string }[] = [
 
 export const IDENTITY_HINTS: Record<FormIdentityCheck, string> = {
   select_name: "The respondent picks their name from the batch list (never typed).",
-  account: "The respondent signs in with their Pioneers account. They find their answers again and can change them while the form is open. For the debrief and picks.",
+  account: "The respondent signs in with their Pioneers account. They find their answers again and can change them while the form is open. For the submission, the peer rating and picks.",
   email_code: "The respondent signs in with their Pioneers account (former email-code setting).",
   jury_link: "One shared link with a secret, no account: each judge picks or types their name, then scores every team. For a jury.",
   anonymous: "No identity: answers are tied to the batch and the event only.",

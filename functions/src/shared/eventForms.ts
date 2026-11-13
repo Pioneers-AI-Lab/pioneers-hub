@@ -1,8 +1,8 @@
 import { docPaths } from "./collections";
-import { isUpcomingEvent, matchingOf } from "./events";
+import { isUpcomingEvent, isWorkTeamEvent } from "./events";
 import { firstPublication, newForm, type FormData } from "./forms";
 import { eventTemplateOf } from "./presets/eventTemplates";
-import { FORM_TEMPLATES, templateQuestions, type FormTemplateKey } from "./presets/formTemplates";
+import { FORM_TEMPLATES, templateQuestions, type FormTemplate, type FormTemplateKey, type RetroSession, type SubmissionFieldKey } from "./presets/formTemplates";
 import type { Criterion, EventMetric, FormVersion, PioneersEvent } from "./types";
 
 // ----------------------------
@@ -27,11 +27,26 @@ export type LegacyEventSettings = {
   picks?: { question: string; max: number; closesDateISOString: string | null } | null;
 };
 
+/**
+ * L'ouverture et l'echeance d'un formulaire de l'evenement, si elles different
+ * de son debut ; `draft` : il reste en brouillon meme si l'evenement est
+ * programme (le staff le publiera s'il en veut).
+ */
+export type EventFormDates = { opensDateISOString?: string | null; deadlineDateISOString?: string | null; draft?: boolean };
+
 export type EventFormsOptions = {
   /** Les formulaires a creer ; par defaut ceux du pack du modele. */
   forms?: readonly FormTemplateKey[];
-  /** Remplace les metriques du Debrief (import : celles du fichier). */
+  /** Remplace les metriques de la Submission (import : celles du fichier). */
   metrics?: EventMetric[] | null;
+  /** Remplace la grille du jury du modele (import : celle du fichier). */
+  criteria?: Criterion[] | null;
+  /** Les champs d'equipe de la Submission (import). */
+  submissionFields?: readonly SubmissionFieldKey[] | null;
+  /** Les seances que la retro fait noter (import). */
+  sessions?: readonly RetroSession[];
+  /** Ouverture et echeance par formulaire : la Submission a son echeance, le Peer rating s'ouvre au debrief. */
+  formDates?: Partial<Record<FormTemplateKey, EventFormDates>>;
   /** Les anciens champs (migration) : ils ajoutent leurs formulaires. */
   legacy?: LegacyEventSettings;
 };
@@ -47,23 +62,29 @@ export function eventFormsPlan(eventId: string, event: EventForPlan, options: Ev
   const legacy = options.legacy ?? {};
   const isPast = !isUpcomingEvent(event, nowISO);
   const preset = eventTemplateOf(event.templateKey);
-  const hasTeams = matchingOf(event) !== null;
+  const hasWorkTeams = isWorkTeamEvent(event);
   const metrics = legacy.metrics ?? options.metrics ?? preset?.metrics ?? [];
-  const criteria = legacy.criteria ?? preset?.criteria ?? [];
+  const criteria = legacy.criteria ?? options.criteria ?? preset?.criteria ?? [];
 
   // Un evenement passe : seulement ce que portaient ses anciens champs. A venir : le pack, et l'ancien en plus.
   const wanted = new Set<FormTemplateKey>(isPast ? [] : (options.forms ?? preset?.forms ?? []));
   if (legacy.metrics?.length) wanted.add("debrief");
   if (legacy.criteria?.length) wanted.add("jury");
   if (legacy.picks) wanted.add("picks");
-  // Un Debrief parle de l'equipe : il faut un matching ; un jury, une grille.
-  if (!hasTeams) wanted.delete("debrief");
+  // Une Submission et un Peer rating parlent de l'equipe : il faut des equipes de travail ; un jury, une grille.
+  if (!hasWorkTeams) for (const key of wanted) if ((FORM_TEMPLATES[key] as FormTemplate).needsWorkTeams) wanted.delete(key);
   if (criteria.length === 0) wanted.delete("jury");
 
   // Comme l'evenement : publie (ouvert a son debut), en brouillon, ou ferme s'il est passe.
-  const status = isPast ? "closed" : event.status === "draft" ? "draft" : "open";
+  const eventStatus = isPast ? "closed" : event.status === "draft" ? "draft" : "open";
   return [...wanted].map((templateKey) => {
-    let extra: Parameters<typeof newForm>[1] = { opensDateISOString: status === "open" ? event.startDateISOString : null };
+    const dates = options.formDates?.[templateKey] ?? {};
+    const status = dates.draft && eventStatus === "open" ? "draft" : eventStatus;
+    let extra: Parameters<typeof newForm>[1] = {
+      // Publie : ouvert a son heure (le debut de l'evenement par defaut). Brouillon : le staff l'ouvrira.
+      opensDateISOString: status === "open" ? (dates.opensDateISOString ?? event.startDateISOString) : (dates.opensDateISOString ?? null),
+      deadlineDateISOString: dates.deadlineDateISOString ?? null,
+    };
     if (templateKey === "picks" && legacy.picks) {
       // La question, le nombre de choix et la cloture de l'ancienne demande ; ouverte des maintenant.
       const { question, max, closesDateISOString } = legacy.picks;
@@ -75,7 +96,14 @@ export function eventFormsPlan(eventId: string, event: EventForPlan, options: Ev
       extra = { questions, deadlineDateISOString: closesDateISOString, opensDateISOString: status === "open" ? nowISO : null };
     }
     const draft = newForm(
-      { programId: event.programId, batchId: event.batchId, templateKey, eventId, event, defaults: { metrics, criteria } },
+      {
+        programId: event.programId,
+        batchId: event.batchId,
+        templateKey,
+        eventId,
+        event,
+        defaults: { metrics, criteria, submissionFields: options.submissionFields ?? null, sessions: options.sessions ?? [] },
+      },
       extra,
     );
     const id = `${eventId}-${templateKey}`;

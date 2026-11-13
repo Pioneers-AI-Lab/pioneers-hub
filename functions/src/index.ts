@@ -23,6 +23,9 @@ import * as judges from "./services/judges";
 import * as forms from "./services/forms";
 import * as kpis from "./services/kpis";
 import * as teamResults from "./services/teamResults";
+import * as scores from "./services/scores";
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import { cleanId } from "./services/clean";
 import { onDocumentUpdated, onDocumentWritten } from "firebase-functions/v2/firestore";
 
 initializeApp();
@@ -158,6 +161,30 @@ export const setEventRanking = onCallTyped("setEventRanking", async (request) =>
   const actorUid = await assertStaff(request.auth?.uid);
   await leaderboards.setEventRanking(actorUid, request.data?.eventId, request.data?.metricKey);
   return { ok: true as const };
+});
+
+export const publishEventRanking = onCallTyped("publishEventRanking", async (request) => {
+  const actorUid = await assertStaff(request.auth?.uid);
+  const { batchId } = await leaderboards.publishEventRanking(actorUid, request.data?.eventId, request.data?.publish);
+  // Execution et le classement cumule suivent le classement publie (SPECS §5.5).
+  await scores.recomputeBatchScores(batchId).catch((e) => console.error("recomputeBatchScores after publish", e));
+  return { ok: true as const };
+});
+
+// ----------------------------
+// Scores du batch (SPECS §5.5) : chaque nuit, a la publication d'un classement,
+// et sur le bouton du staff (Admin > Batch settings).
+// ----------------------------
+
+export const recomputeBatchScores = onCallTyped("recomputeBatchScores", async (request) => {
+  await assertStaff(request.auth?.uid);
+  const { founders, startups, computedDateISOString } = await scores.recomputeBatchScores(cleanId(request.data?.batchId, "batchId"));
+  return { founders, startups, computedDateISOString };
+});
+
+export const nightlyScores = onSchedule({ schedule: "0 2 * * *", timeZone: "Europe/Paris", timeoutSeconds: 540 }, async () => {
+  const done = await scores.recomputeActiveBatches();
+  console.log("nightlyScores", JSON.stringify(done));
 });
 
 export const resetJuryLink = onCallTyped("resetJuryLink", async (request) => {

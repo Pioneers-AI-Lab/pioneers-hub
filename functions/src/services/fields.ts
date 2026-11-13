@@ -419,6 +419,8 @@ export type FieldWritesOptions = {
   asForm?: boolean;
   /** Champs poses a la creation d'un document de suivi, par document (le nom du jure, la cible notee...). */
   createWith?: Partial<Record<DocKind, Record<string, unknown>>>;
+  /** Echeance du formulaire qui ecrit : une soumission envoyee apres est « en retard ». */
+  formDeadline?: string | null;
 };
 
 export type FieldWritesPlan = OperationPlan<SetFieldsResult> & { changes: FieldChange[]; rejected: FieldRejection[] };
@@ -552,7 +554,7 @@ export async function planFieldWrites(
         const ref = db.doc(pathByKind.get(kind)!);
         const data: Record<string, unknown> = { ...patch };
         if (DOC_KINDS[kind].timestamped) data.updatedDateISOString = now;
-        Object.assign(data, stampOf(kind, { now, uid: caller.uid, asForm: options.asForm === true }));
+        Object.assign(data, stampOf(kind, { now, uid: caller.uid, asForm: options.asForm === true, formDeadline: options.formDeadline ?? null }));
         if (kind === "person" && copies?.displayName) data.displayName = copies.displayName;
 
         // Documents de base : leur existence est verifiee plus haut. Sous-documents
@@ -611,5 +613,6 @@ export function describeFields() {
     .map((family) => ({ family, kind: parseDbField(`${family}.x`).doc }))
     .filter(({ kind }) => !isFormOnly(kind))
     .map(({ family, kind }) => describe(`${family}.<key>`, kind, FIELD_FAMILIES[family]));
-  return [...fixed, ...families];
+  // Les familles d'abord : une reponse MCP trop longue est tronquee par la fin.
+  return [...families, ...fixed];
 }

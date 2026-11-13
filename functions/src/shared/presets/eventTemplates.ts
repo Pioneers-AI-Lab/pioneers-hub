@@ -102,7 +102,7 @@ const tables = (max: number): EventMatching => ({ mode: "matching", size: teamSi
 
 /** Ce que chaque etiquette propose par defaut : le pack s'en ecarte au besoin. */
 const DEFAULTS: Record<EventKind, Pick<EventTemplate, "durationMinutes" | "startTime" | "matching" | "forms">> = {
-  team_challenge: { durationMinutes: 150, startTime: "09:30", matching: teams(3), forms: ["debrief", "jury", "exercise_feedback"] },
+  team_challenge: { durationMinutes: 150, startTime: "09:30", matching: teams(3), forms: ["debrief", "peer_rating", "jury"] },
   pitch: { durationMinutes: 120, startTime: "14:00", matching: null, forms: ["jury"] },
   matching: { durationMinutes: 60, startTime: "12:30", matching: tables(4), forms: [] },
   session: { durationMinutes: 60, startTime: "10:00", matching: null, forms: ["session_feedback"] },
@@ -121,7 +121,7 @@ export const EVENT_TEMPLATES = {
   // ---- team_challenge ----
   hackathon: t({
     label: "Hackathon",
-    summary: "Teams of 3, debrief, jury, exercise feedback",
+    summary: "Teams of 3, submission, peer rating, jury",
     kind: "team_challenge",
     criteria: HACKATHON_CRITERIA,
     metrics: HACKATHON_METRICS,
@@ -129,14 +129,14 @@ export const EVENT_TEMPLATES = {
   }),
   edge_drill: t({
     label: "Edge drill",
-    summary: "Teams of 3, debrief, jury, exercise feedback",
+    summary: "Teams of 3, submission, peer rating, jury",
     kind: "team_challenge",
     // Documente : total /15 (« Total Star Review »), soit 3 criteres /5.
     criteria: [c("edgeArticulation", "Edge articulation"), c("execution", "Execution"), c("collaboration", "Collaboration")],
   }),
   customer_discovery: t({
     label: "Customer discovery challenge",
-    summary: "Teams of 3, debrief with outreach numbers, jury, feedback",
+    summary: "Teams of 3, submission with outreach numbers, peer rating, jury",
     kind: "team_challenge",
     // Documente : score /5. Echelle de chaque critere : TODO.
     criteria: [c("proofLevel", "Proof level"), c("insights", "Insights"), c("traction", "Traction"), c("execution", "Execution")],
@@ -145,7 +145,7 @@ export const EVENT_TEMPLATES = {
   }),
   vibethon: t({
     label: "Vibethon",
-    summary: "Teams of 3, debrief, jury, exercise feedback",
+    summary: "Teams of 3, submission, peer rating, jury",
     kind: "team_challenge",
     // Documente : score /5.
     criteria: [
@@ -156,16 +156,16 @@ export const EVENT_TEMPLATES = {
       c("execution", "Execution"),
     ],
   }),
-  workshop: t({ label: "Workshop or group exercise", summary: "Teams of 3, debrief, exercise feedback", kind: "team_challenge", legacyType2025: "Group exercise" }),
+  workshop: t({ label: "Workshop or group exercise", summary: "Teams of 3, submission, peer rating", kind: "team_challenge", legacyType2025: "Group exercise" }),
   customer_day: t({
     label: "Customer day",
-    summary: "Teams of 3, debrief with conversations, exercise feedback",
+    summary: "Teams of 3, submission with conversations, peer rating",
     kind: "team_challenge",
     durationMinutes: 480,
     metrics: [s("conversationsDone")],
   }),
   // Une metrique par equipe, avant / apres : le staff la declare a la creation.
-  traction_sprint: t({ label: "48-hour traction sprint", summary: "Teams of 3, debrief, exercise feedback", kind: "team_challenge", durationMinutes: 2880 }),
+  traction_sprint: t({ label: "48-hour traction sprint", summary: "Teams of 3, submission, peer rating", kind: "team_challenge", durationMinutes: 2880 }),
 
   // ---- pitch (grille unique) ----
   pitch_day: t({ label: "Pitch day", summary: "Jury on the startups (40 / 40 / 20)", kind: "pitch", criteria: PIONEERS_RUBRIC }),

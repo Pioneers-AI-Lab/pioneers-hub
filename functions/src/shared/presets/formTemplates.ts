@@ -15,23 +15,39 @@ import { CHECKIN_GOALS, CHECKIN_METRICS, withUnit, type CheckinGoalKey, type Che
 // les autres restent « non rattachees » et Claude les analyse par le MCP.
 // L'onboarding n'est pas un modele ici : il arrive par l'import CSV.
 //
-// Les formulaires d'un evenement (SPECS §2, modele standard) : le Debrief d'un
-// hackathon (une question par metrique, de portee « son equipe », et l'avis sur
-// chaque coequipier), le jury (une note par critere, de portee « chaque
-// equipe », poids sur la question) et les picks. Leurs questions se
-// construisent a partir des metriques et de la grille par defaut du modele
-// d'evenement (`build`), que le staff ajuste ensuite dans l'editeur.
+// Les formulaires d'un evenement (SPECS §2, modele standard) : la Submission d'un
+// hackathon (cle `debrief` : une question par metrique et les champs de l'equipe,
+// de portee « son equipe », envoyee avant l'echeance), le Peer rating (l'avis sur
+// chaque coequipier, decision du 13/11), le jury (une note par critere, de portee
+// « chaque equipe », poids et echelle sur la question), les picks et la retro de
+// la semaine. Leurs questions se construisent a partir des reglages par defaut du
+// modele d'evenement (`build`), que le staff ajuste ensuite dans l'editeur.
 
 /** La question des avis entre pairs (SPECS §4.3), de 1 a 5. */
 const PEER_QUESTION = "Would you start a company with this person?";
 
+/** Les champs d'equipe qu'une Submission peut demander, en plus de ses metriques. */
+export const SUBMISSION_FIELDS = ["painSentence", "problemSource", "productUrl", "proofUrls", "learnings", "driveFolderUrl", "notes"] as const;
+export type SubmissionFieldKey = (typeof SUBMISSION_FIELDS)[number];
+/** Sans choix de l'evenement : les champs d'avant Fall 2026. */
+const DEFAULT_SUBMISSION_FIELDS: SubmissionFieldKey[] = ["productUrl", "proofUrls", "notes"];
+/** Demandes avant les metriques : ce dont parle l'equipe. */
+const LEADING_FIELDS = new Set<SubmissionFieldKey>(["painSentence", "problemSource"]);
+
+/** Une seance a noter dans la retro de la semaine. */
+export type RetroSession = { id: string; label: string };
+
 /** Ce dont un modele construit ses questions : l'evenement et ses reglages par defaut. */
 export type TemplateContext = {
   eventKind: EventKind | null;
-  /** Metriques du Debrief : celles du modele d'evenement, ou donnees a la creation. */
+  /** Metriques de la Submission : celles du modele d'evenement, ou donnees a la creation. */
   metrics: EventMetric[];
   /** Grille du jury : celle du modele d'evenement, ou donnee a la creation. */
   criteria: Criterion[];
+  /** Champs d'equipe de la Submission, dans l'ordre ; ceux d'avant Fall 2026 sans choix. */
+  submissionFields?: readonly SubmissionFieldKey[] | null;
+  /** Les seances que la retro fait noter. */
+  sessions?: readonly RetroSession[];
 };
 
 export type FormTemplate = {
@@ -43,6 +59,8 @@ export type FormTemplate = {
   approval: FormApproval;
   /** Le formulaire se rattache a un evenement (feedback d'exercice ou de session, Debrief, jury, picks). */
   needsEvent: boolean;
+  /** Il parle de l'equipe du repondant (Submission, Peer rating) : seulement pour un evenement a equipes de travail. */
+  needsWorkTeams?: boolean;
   questions: FormQuestion[];
   /** Questions construites depuis l'evenement (Debrief, jury, picks) ; `questions` sinon. */
   build?: (ctx: TemplateContext) => FormQuestion[];
@@ -83,35 +101,82 @@ const criterionQuestion = (c: Criterion): FormQuestion =>
     weight: c.weight,
   });
 
+/** Les questions des champs d'equipe d'une Submission (ids stables : `product`, `proofs`, `notes` d'avant). */
+const SUBMISSION_FIELD_QUESTIONS: Record<SubmissionFieldKey, () => FormQuestion> = {
+  painSentence: () =>
+    q("painSentence", {
+      type: "text",
+      label: "Pain in one sentence",
+      description: "Who has the problem, what it is, how they cope today.",
+      dbField: "submission.painSentence",
+      required: true,
+    }),
+  problemSource: () => q("problemSource", { type: "single_choice", label: "Problem", dbField: "submission.problemSource", required: true }),
+  productUrl: () => q("product", { type: "link", label: "Product link", dbField: "submission.productUrl" }),
+  proofUrls: () =>
+    q("proofs", {
+      type: "long_text",
+      label: "Proof links",
+      description: "One link per line: call transcripts, customer list, posts, creatives...",
+      dbField: "submission.proofUrls",
+    }),
+  learnings: () => q("learnings", { type: "long_text", label: "Three things you learned", dbField: "submission.learnings", required: true }),
+  driveFolderUrl: () =>
+    q("drive", {
+      type: "link",
+      label: "Your team's Drive folder",
+      description: "Every proof lives there. Files changed after the deadline don't count. No proof, no points.",
+      dbField: "submission.driveFolderUrl",
+      required: true,
+    }),
+  notes: () => q("notes", { type: "long_text", label: "Anything to add for the Pioneers team?", dbField: "submission.notes" }),
+};
+
 export const FORM_TEMPLATES = {
-  // Le Debrief d'un hackathon (SPECS §4.2, §4.3) : connexion obligatoire (avis
-  // prives), reponses retrouvees et modifiables tant qu'il est ouvert.
+  // La Submission d'un hackathon (SPECS §4.2, decision du 13/11), cle `debrief` :
+  // une par equipe, envoyee par le team lead avant l'echeance. Connexion
+  // obligatoire : l'equipe est celle du repondant. Le dernier envoi compte ; apres
+  // l'echeance, il est marque « en retard ».
   debrief: template({
-    label: "Hackathon debrief",
+    label: "Hackathon submission",
     kind: "debrief",
-    title: "Debrief",
-    description: "Your team's results, then a word on each teammate. One teammate can enter the results for the whole team: the last save counts.",
+    title: "Submission",
+    description:
+      "One per team, sent by your team lead before the deadline. Any teammate can send it: the last save counts. A submission after the deadline scores 0.",
     identityCheck: "account",
     needsEvent: true,
+    needsWorkTeams: true,
     questions: [],
-    build: ({ metrics }) => [
-      ...metrics.map(metricQuestion),
-      q("product", { type: "link", label: "Product link", dbField: "submission.productUrl" }),
-      q("proofs", {
-        type: "long_text",
-        label: "Proof links",
-        description: "One link per line: call transcripts, customer list, posts, creatives...",
-        dbField: "submission.proofUrls",
-      }),
-      q("notes", { type: "long_text", label: "Anything to add for the Pioneers team?", dbField: "submission.notes" }),
+    build: ({ metrics, submissionFields }) => {
+      const fields = submissionFields ?? DEFAULT_SUBMISSION_FIELDS;
+      const fieldQuestion = (key: SubmissionFieldKey) => SUBMISSION_FIELD_QUESTIONS[key]();
+      return [
+        ...fields.filter((f) => LEADING_FIELDS.has(f)).map(fieldQuestion),
+        ...metrics.map(metricQuestion),
+        ...fields.filter((f) => !LEADING_FIELDS.has(f)).map(fieldQuestion),
+      ];
+    },
+  }),
+
+  // L'avis sur chaque coequipier (SPECS §4.3, decision du 13/11) : un formulaire a
+  // part, le meme pour tout le batch, rempli avant de quitter le debrief.
+  peer_rating: template({
+    label: "Peer rating",
+    kind: "peer_feedback",
+    title: "Peer rating",
+    description: "30 seconds, one score per teammate. Private: only the Pioneers team reads it.",
+    identityCheck: "account",
+    needsEvent: true,
+    needsWorkTeams: true,
+    questions: [
       q("peerRating", {
         type: "rating",
         label: PEER_QUESTION,
-        description: "1 = no, 5 = without hesitation. Private: only the Pioneers team reads it.",
+        description: "1 = no, 5 = without hesitation.",
         dbField: "peerRating.rating",
         required: true,
       }),
-      q("peerComment", { type: "text", label: "One line on this teammate", dbField: "peerRating.comment" }),
+      q("peerComment", { type: "text", label: "Why? (optional)", dbField: "peerRating.comment" }),
     ],
   }),
 
@@ -160,6 +225,8 @@ export const FORM_TEMPLATES = {
     needsEvent: true,
     questions: [
       q("introduceYourself", { type: "long_text", label: "Introduce yourself", dbField: "founderDirectory.introduceYourself", required: true }),
+      // Le statut d'engagement des le premier jour (sous-score Commitment, SPECS §5.1).
+      q("commitmentStatus", { type: "single_choice", label: "Where are you at?", dbField: "founderWeek.commitmentStatus", required: true }),
       q("meet", {
         type: "entity_picker",
         label: "Founders you would like to meet",
@@ -267,6 +334,27 @@ export const FORM_TEMPLATES = {
       q("week", { type: "rating", label: "How was your week?", required: true }),
       q("keep", { type: "long_text", label: "What should we keep?" }),
       q("improve", { type: "long_text", label: "What should we improve?" }),
+    ],
+  }),
+
+  // La retro de fin de semaine (SPECS §4.4, decision du 13/11) : anonyme, 3 minutes
+  // sur place. Donnees brutes, aucun champ en base : Claude les analyse.
+  week_retro: template({
+    label: "Week retro (anonymous)",
+    kind: "custom",
+    title: "Week retro",
+    description: "Anonymous, 3 minutes. Rate each session of the week, then tell us what to keep and what to change.",
+    identityCheck: "anonymous",
+    needsEvent: true,
+    questions: [],
+    build: ({ sessions }) => [
+      ...(sessions ?? []).map((s) => q(`session_${s.id}`, { type: "rating", label: s.label })),
+      q("sessionsWhy", { type: "long_text", label: "Any session you rated 1 or 2: why?" }),
+      q("energy", { type: "rating", label: "Your energy this week", scale: { min: 1, max: 10 }, required: true }),
+      q("recommend", { type: "rating", label: "Would you recommend Pioneers to a friend?", scale: { min: 0, max: 10 }, required: true }),
+      q("keep", { type: "long_text", label: "One thing to keep" }),
+      q("change", { type: "long_text", label: "One thing to change" }),
+      q("moreLess", { type: "long_text", label: "What do you want to see more of, or less of?" }),
     ],
   }),
 

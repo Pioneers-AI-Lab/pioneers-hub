@@ -80,15 +80,15 @@ const DOC_KIND_LABELS: Record<DocKind, string> = {
   checkin: "Thursday update",
   attendance: "Attendance",
   sessionRating: "Session rating",
-  submission: "Team submission (debrief)",
+  submission: "Team submission",
   picks: "Picks",
-  peerRating: "Peer rating (debrief)",
+  peerRating: "Peer rating",
   evaluation: "Jury score",
 };
 
 /** Comment l'editeur nomme une famille (le type de question qui l'alimente : `FAMILY_QUESTION_TYPE`). */
 const FAMILY_CHOICES: Record<FieldFamily, { group: string; noun: string }> = {
-  "submission.metrics": { group: "Team metric (debrief)", noun: "metric" },
+  "submission.metrics": { group: "Team metric (submission)", noun: "metric" },
   "evaluation.scores": { group: "Jury criterion", noun: "criterion" },
 };
 
@@ -310,7 +310,7 @@ function Editor({ form }: { form: WithId<Form> }) {
           />
           <Select
             label="Event"
-            description="Debrief, jury, picks, exercise or session feedback: the answers are tied to this event, its teams and its teams scored."
+            description="Submission, peer rating, jury, picks, retro or feedback: the answers are tied to this event, its teams and its teams scored."
             clearable
             searchable
             value={draft.eventId}

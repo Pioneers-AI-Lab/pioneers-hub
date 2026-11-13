@@ -73,6 +73,12 @@ export function weightedMean(entries: readonly (readonly [value: number | null, 
   return weightSum === 0 ? null : total / weightSum;
 }
 
+/** Moyenne simple, `null` sans valeur. */
+export const mean = (values: readonly number[]): number | null => weightedMean(values.map((v) => [v, 1] as const));
+
+/** Arrondi a `digits` decimales. */
+export const roundTo = (value: number, digits: number): number => Math.round(value * 10 ** digits) / 10 ** digits;
+
 /** Estimation a trois niveaux, utilisee par l'analyse de marche (TAM, SAM, SOM, CAGR). */
 export type RangeEstimate = {
   low: number | null;
