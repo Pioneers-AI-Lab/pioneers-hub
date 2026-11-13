@@ -1,17 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Button, Group, Progress, Select, Stack, Text } from "@mantine/core";
+import { memo, useMemo, useState } from "react";
+import { Button, Group, Progress, Stack, Text } from "@mantine/core";
 import { useClipboard } from "@mantine/hooks";
-import { notifications } from "@mantine/notifications";
-import { enumOptions, getFieldDef, type DbFieldKey } from "@shared/fieldRegistry";
-import { formAudience, parisMonday, responseProgress, type AudienceBasis } from "@shared/formRules";
-import type { FieldWrite, FormAnswer, FormQuestion, FormResponse, WithId } from "@shared/types";
+import { enumOptions, getFieldDef, listKeyOf, type DbFieldKey } from "@shared/fieldRegistry";
+import { formAudience, formNeedsTeam, responseProgress, type AudienceBasis } from "@shared/formRules";
+import { isPerTarget, parseAnswerKey, scopeOf, type FormAnswer, type FormQuestion, type FormResponse, type ListKey, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminForm } from "@/context/AdminFormContext";
+import { useLists } from "@/context/ListsContext";
+import { useAction } from "@/hooks/useAction";
 import { call } from "@/lib/firebase";
-import { errorMessage } from "@/lib/errors";
-import { formatDateTime, formatDay } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
+import { RESPONSE_STATUS, WRITE_STATUS } from "@/components/admin/formLabels";
+import { Field } from "@/components/ui/Field";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
@@ -21,10 +23,13 @@ import { Empty, Section } from "@/components/ui/Section";
 // ----------------------------
 // En tete, l'avancement pour relancer : « 12 / 30 » parmi ceux qui DEVAIENT
 // repondre (`formAudience` : presents a la seance, equipes, invites ou batch),
-// repondants distincts, sur la semaine en cours pour un formulaire recurrent
-// (`responseProgress`). Puis les retardataires, a copier dans Slack.
+// repondants distincts de CE formulaire (`responseProgress`). Puis les
+// retardataires, a copier dans Slack.
 // Enfin chaque reponse : ses reponses en clair, ce qu'elle a ecrit dans la
 // base, et les valeurs en attente a valider ou refuser.
+//
+// `memo` : monte dans l'editeur, le composant ne se recalcule pas a chaque
+// frappe dans le titre ou une question (il ne lit que des contextes).
 
 const BASIS_LABEL: Record<AudienceBasis, (eventName: string) => string> = {
   batch: () => "founders of the batch",
@@ -33,82 +38,63 @@ const BASIS_LABEL: Record<AudienceBasis, (eventName: string) => string> = {
   invited: (e) => `invited to ${e}`,
 };
 
-const RESPONSE_STATUS: Record<FormResponse["status"], string> = {
-  processed: "Done",
-  pending_approval: "To review",
-  partially_rejected: "Partly rejected",
-};
-
-const WRITE_STATUS: Record<FieldWrite["status"], string> = {
-  applied: "Written",
-  pending_approval: "To review",
-  rejected: "Rejected",
-  unchanged: "Unchanged",
-  invalid: "Invalid",
-};
-
-export function FormResponses() {
-  const { form, responses, attendance, teams, isResponsesLoading } = useAdminForm();
-  const { founders, foundersById, eventsById } = useAdmin();
+export const FormResponses = memo(function FormResponses() {
+  const { form, responses, attendance, isResponsesLoading } = useAdminForm();
+  const { founders, foundersById, eventsById, teamMemberships } = useAdmin();
   const clipboard = useClipboard({ timeout: 1500 });
   const [openId, setOpenId] = useState<string | null>(null);
 
   const event = form.eventId ? (eventsById.get(form.eventId) ?? null) : null;
   const audience = useMemo(
-    () => formAudience({ identityCheck: form.identityCheck, founders, event, attendance, teams }),
-    [form.identityCheck, founders, event, attendance, teams],
+    () =>
+      formAudience({
+        identityCheck: form.identityCheck,
+        needsTeam: formNeedsTeam(form),
+        batchId: form.batchId,
+        founders,
+        event,
+        attendance,
+        teamMemberIds: event ? teamMemberships.filter((m) => m.eventId === event.id).map((m) => m.founderId) : [],
+      }),
+    [form, founders, event, attendance, teamMemberships],
   );
 
-  // Formulaire recurrent : une periode par semaine (lundi a Paris), la semaine en cours par defaut.
-  const isRecurring = form.recurrenceRule !== null;
-  const weeks = useMemo(() => {
-    const all = new Set([parisMonday(new Date().toISOString()), ...responses.map((r) => parisMonday(r.submittedDateISOString))]);
-    return [...all].sort().reverse();
-  }, [responses]);
-  const [pickedWeek, setPickedWeek] = useState<string | null>(null);
-  const weekStart = isRecurring ? (pickedWeek ?? weeks[0]) : null;
-
-  const progress = responseProgress(audience, responses, weekStart);
-  const nameOf = (founderId: string | null) => (founderId ? (foundersById.get(founderId)?.name ?? founderId) : "Anonymous");
-  const opened = responses.find((r) => r.id === openId) ?? null;
+  const progress = responseProgress(audience, responses);
 
   if (isResponsesLoading) return null;
 
-  const expected = audience.kind === "founders" ? audience.founderIds.length : 0;
+  const nameOf = (founderId: string | null) => (founderId ? (foundersById.get(founderId)?.name ?? founderId) : "Anonymous");
+  /** Le repondant d'une reponse : le fondateur, ou le jure (nom choisi ou saisi). */
+  const respondentOf = (r: FormResponse) => (r.respondentFounderId ? nameOf(r.respondentFounderId) : (r.respondentName ?? "Anonymous"));
+  const missingNames = progress.missing.map(nameOf).join(", ");
+  const basisLabel = audience.kind === "founders" ? BASIS_LABEL[audience.basis](event?.name ?? "the event") : null;
+  const opened = responses.find((r) => r.id === openId) ?? null;
+
   return (
     <Section
       title="Responses"
       hint={
-        audience.kind === "anonymous"
-          ? "Anonymous form: only the number of answers is known, not who is missing."
-          : `Distinct founders who answered, among the ${BASIS_LABEL[audience.basis](event?.name ?? "the event")}.`
+        basisLabel
+          ? `Distinct founders who answered, among the ${basisLabel}.`
+          : audience.kind === "jury"
+            ? "Jury form: each save of a judge is an answer. The scores themselves are on the event's page."
+            : "Anonymous form: only the number of answers is known, not who is missing."
       }
     >
       <Stack gap="md">
-        {isRecurring && (
-          <Select
-            label="Week"
-            data={weeks.map((w) => ({ value: w, label: `Week of ${formatDay(w)}` }))}
-            value={weekStart}
-            onChange={setPickedWeek}
-            allowDeselect={false}
-            maw={320}
-          />
-        )}
-
-        {audience.kind === "anonymous" ? (
+        {audience.kind !== "founders" ? (
           <Text size="xl" fw={600} className="num">
             {progress.responses} {progress.responses === 1 ? "answer" : "answers"}
           </Text>
         ) : (
           <Stack gap={6}>
             <Text size="xl" fw={600} className="num">
-              {progress.answered.length} / {expected}
+              {progress.answered.length} / {audience.founderIds.length}
               <Text span size="sm" c="dimmed" fw={400} ml="xs">
-                {BASIS_LABEL[audience.basis](event?.name ?? "the event")}
+                {basisLabel}
               </Text>
             </Text>
-            <Progress value={expected ? (progress.answered.length / expected) * 100 : 0} size="sm" />
+            <Progress value={audience.founderIds.length ? (progress.answered.length / audience.founderIds.length) * 100 : 0} size="sm" />
             {progress.outside.length > 0 && (
               <Text size="sm" c="dimmed">
                 Also answered, outside this list: {progress.outside.map(nameOf).join(", ")}.
@@ -122,9 +108,9 @@ export function FormResponses() {
             <Text size="sm" fw={600}>
               Not answered yet ({progress.missing.length})
             </Text>
-            <Text size="sm">{progress.missing.map(nameOf).join(", ")}</Text>
+            <Text size="sm">{missingNames}</Text>
             <Group>
-              <Button variant="default" size="md" onClick={() => clipboard.copy(progress.missing.map(nameOf).join(", "))}>
+              <Button variant="default" size="md" onClick={() => clipboard.copy(missingNames)}>
                 {clipboard.copied ? "Copied" : "Copy names"}
               </Button>
             </Group>
@@ -139,11 +125,11 @@ export function FormResponses() {
               <ButtonRow
                 key={r.id}
                 onClick={() => setOpenId(r.id)}
-                title={nameOf(r.respondentFounderId)}
+                title={respondentOf(r)}
                 subtitle={`${formatDateTime(r.submittedDateISOString)} · version ${r.formVersion}`}
                 meta={
-                  <Text size="sm" c={r.status === "pending_approval" ? "pioneers" : "dimmed"}>
-                    {RESPONSE_STATUS[r.status]}
+                  <Text size="sm" c={RESPONSE_STATUS[r.status].color}>
+                    {RESPONSE_STATUS[r.status].label}
                   </Text>
                 }
               />
@@ -152,84 +138,93 @@ export function FormResponses() {
         )}
       </Stack>
 
-      <ResponsiveDialog opened={opened !== null} onClose={() => setOpenId(null)} title={opened ? nameOf(opened.respondentFounderId) : undefined}>
+      <ResponsiveDialog opened={opened !== null} onClose={() => setOpenId(null)} title={opened ? respondentOf(opened) : undefined}>
         {opened && <ResponseDetail response={opened} questions={form.questions} />}
       </ResponsiveDialog>
     </Section>
   );
-}
+});
 
 /** Une reponse en clair : les reponses question par question, puis ce qu'elle ecrit dans la base. */
 function ResponseDetail({ response, questions }: { response: WithId<FormResponse>; questions: FormQuestion[] }) {
   const { foundersById, eventsById } = useAdmin();
-  const [busy, setBusy] = useState<number | null>(null);
+  const { labelOf } = useLists();
+  const { isBusy, run } = useAction();
+  const [deciding, setDeciding] = useState<number | null>(null);
 
-  /** Une valeur lisible : noms des fondateurs et des evenements, libelles des listes fixes. */
+  /** Une valeur lisible : noms des fondateurs et des evenements, libelles des listes (fermees ou fixes). */
   const format = (value: FormAnswer, dbField: DbFieldKey | null): string => {
-    const labels = dbField ? new Map((enumOptions(getFieldDef(dbField).value, new Map()) ?? []).map((o) => [o.value, o.label])) : null;
+    const spec = dbField ? getFieldDef(dbField).value : null;
+    const listKey = spec ? listKeyOf(spec) : null;
     const one = (v: string | number | boolean): string => {
       if (typeof v === "boolean") return v ? "Yes" : "No";
       const text = String(v);
-      return foundersById.get(text)?.name ?? eventsById.get(text)?.name ?? labels?.get(text) ?? text;
+      const named = foundersById.get(text)?.name ?? eventsById.get(text)?.name;
+      if (named) return named;
+      if (listKey) return labelOf(listKey as ListKey, text);
+      return (spec && enumOptions(spec, new Map())?.find((o) => o.value === text)?.label) ?? text;
     };
-    if (value === null) return "-";
+    if (value === null) return "";
     return Array.isArray(value) ? value.map(one).join(", ") : one(value);
   };
 
   async function decide(writeIndex: number, approve: boolean) {
-    setBusy(writeIndex);
-    try {
-      await call("decideFormWrite")({ responseId: response.id, writeIndex, approve });
-    } catch (err) {
-      notifications.show({ color: "red", message: errorMessage(err) });
-    } finally {
-      setBusy(null);
-    }
+    setDeciding(writeIndex);
+    await run(() => call("decideFormWrite")({ responseId: response.id, writeIndex, approve }), approve ? "Written" : "Rejected");
+    setDeciding(null);
   }
 
-  const answered = questions.filter((q) => q.id in response.answers);
   return (
     <Stack gap="lg">
       <Text size="sm" c="dimmed">
         {formatDateTime(response.submittedDateISOString)} · version {response.formVersion}
       </Text>
       <Stack gap="sm">
-        {answered.map((q) => (
-          <div key={q.id}>
-            <Text size="sm" c="dimmed">
-              {q.label}
-            </Text>
-            <Text style={{ whiteSpace: "pre-line" }}>{format(response.answers[q.id], q.dbField)}</Text>
-          </div>
-        ))}
+        {questions.flatMap((q) =>
+          // Une question par cible (coequipier, equipe notee) : une ligne par cible repondue.
+          Object.keys(response.answers)
+            .map((key) => ({ key, ...parseAnswerKey(key) }))
+            .filter((a) => a.questionId === q.id && (a.targetId !== null) === isPerTarget(scopeOf(q)))
+            .map(({ key, targetId }) => {
+              const target = targetId ? (response.targetNames?.[targetId] ?? foundersById.get(targetId)?.name ?? targetId) : null;
+              return (
+                <Field key={key} label={target ? `${q.label} · ${target}` : q.label} showEmpty>
+                  {format(response.answers[key], q.dbField)}
+                </Field>
+              );
+            }),
+        )}
       </Stack>
 
       {response.writes.length > 0 && (
         <Stack gap="sm">
           <Text fw={600}>In the database</Text>
           {response.writes.map((w, i) => (
-            <div key={`${w.dbField}-${i}`}>
+            <Stack key={`${w.dbField}-${i}`} gap={4}>
               <Group justify="space-between" wrap="nowrap" gap="xs">
-                <Text size="sm" c="dimmed">
+                <span className="label">
                   {getFieldDef(w.dbField).label}
-                </Text>
-                <Text size="sm" c={w.status === "pending_approval" ? "pioneers" : w.status === "invalid" ? "red" : "dimmed"}>
-                  {WRITE_STATUS[w.status]}
+                  {w.targetId ? ` · ${response.targetNames?.[w.targetId] ?? foundersById.get(w.targetId)?.name ?? w.targetId}` : ""}
+                </span>
+                <Text size="sm" c={WRITE_STATUS[w.status].color}>
+                  {WRITE_STATUS[w.status].label}
                 </Text>
               </Group>
-              <Text>{format(w.value, w.dbField)}</Text>
+              <Text size="sm" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+                {format(w.value, w.dbField)}
+              </Text>
               {w.status === "pending_approval" && (
                 <>
                   {w.previousValue !== null && (
-                    <Text size="sm" c="dimmed">
+                    <Text size="sm" c="dimmed" style={{ whiteSpace: "pre-wrap" }}>
                       Replaces: {format(w.previousValue, w.dbField)}
                     </Text>
                   )}
-                  <Group gap="sm" mt="xs">
-                    <Button size="md" loading={busy === i} disabled={busy !== null} onClick={() => decide(i, true)}>
+                  <Group gap="sm" mt={4}>
+                    <Button size="md" loading={deciding === i} disabled={isBusy} onClick={() => decide(i, true)}>
                       Approve
                     </Button>
-                    <Button size="md" variant="default" disabled={busy !== null} onClick={() => decide(i, false)}>
+                    <Button size="md" variant="default" disabled={isBusy} onClick={() => decide(i, false)}>
                       Reject
                     </Button>
                   </Group>
@@ -240,15 +235,15 @@ function ResponseDetail({ response, questions }: { response: WithId<FormResponse
                   {w.reason}
                 </Text>
               )}
-            </div>
+            </Stack>
           ))}
         </Stack>
       )}
 
       {response.unmatched.length > 0 && (
         <Text size="sm" c="dimmed">
-          {response.unmatched.length} {response.unmatched.length === 1 ? "answer is" : "answers are"} not linked to a database field. Claude can
-          suggest where they belong.
+          {response.unmatched.length} {response.unmatched.length === 1 ? "answer is" : "answers are"} not linked to a database field. Claude
+          can suggest where they belong.
         </Text>
       )}
     </Stack>

@@ -24,10 +24,13 @@ import { Empty, Section } from "@/components/ui/Section";
 // L'accueil a deja essaye l'email du compte. Ici, le fondateur choisit son
 // batch, puis son nom parmi les profils non reclames : son compte est relie
 // tout de suite et il entre dans l'espace du batch. Le staff voit chaque
-// rattachement (Staff > Access) et peut delier.
+// rattachement (Admin > Founder profiles) et peut delier. Un profil par batch : un batch
+// ou le compte est deja rattache ne propose plus de profil. Le profil choisi
+// peut porter un autre email que le compte (un fondateur importe avec une
+// adresse, connecte avec une autre).
 export default function ClaimPage() {
   const router = useRouter();
-  const { firebaseUser, viewer, isLoading: isAuthLoading, memberships } = useAuth();
+  const { firebaseUser, viewer, isLoading: isAuthLoading } = useAuth();
   const claim = useClaim();
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<WithId<Founder> | null>(null);
@@ -70,7 +73,7 @@ export default function ClaimPage() {
     );
   }
 
-  const linkedHere = batch ? memberships.find((m) => m.batchId === batch.id) : undefined;
+  const linkedHere = batch !== null && claim.linkedBatchIds.has(batch.id);
 
   const confirm = async () => {
     if (!picked) return;
@@ -101,7 +104,13 @@ export default function ClaimPage() {
                 key={b.id}
                 title={b.name}
                 subtitle={[claim.programsById.get(b.programId)?.name, formatPeriod(b.startDayString, b.endDayString)].filter(Boolean).join(" · ")}
-                meta={b.id === claim.selectedBatchId ? <Text size="sm" c="pioneers">Selected</Text> : undefined}
+                meta={
+                  b.id === claim.selectedBatchId ? (
+                    <Text size="sm" c="pioneers">Selected</Text>
+                  ) : claim.linkedBatchIds.has(b.id) ? (
+                    <Text size="sm" c="dimmed">Linked</Text>
+                  ) : undefined
+                }
                 onClick={() => {
                   claim.selectBatch(b.id);
                   setSearch("");

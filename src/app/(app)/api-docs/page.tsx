@@ -8,6 +8,7 @@ import { useApiKeys } from "@/context/ApiKeysContext";
 import { call } from "@/lib/firebase";
 import { formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { Empty, Section } from "@/components/ui/Section";
 import { Row, RowList } from "@/components/ui/Rows";
 import { ExternalLink } from "@/components/ui/Field";
@@ -103,7 +104,8 @@ function ApiKeys() {
   const { apiKeys, isLoading } = useApiKeys();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [created, setCreated] = useState<{ name: string; key: string } | null>(null);
+  const [created, setCreated] = useState<{ keyId: string; name: string; key: string } | null>(null);
+  const [toRevoke, setToRevoke] = useState<(typeof apiKeys)[number] | null>(null);
 
   /** Une action a la fois ; un refus s'affiche comme partout dans l'app (notification). */
   const run = async (id: string, action: () => Promise<void>) => {
@@ -120,13 +122,16 @@ function ApiKeys() {
   const create = () =>
     run("create", async () => {
       const { data } = await call("createApiKey")({ name: name.trim() });
-      setCreated({ name: name.trim(), key: data.key });
+      setCreated({ keyId: data.keyId, name: name.trim(), key: data.key });
       setName("");
     });
 
+  // Revoquee, la cle n'est plus affichee (meme juste creee) : elle ne sert plus a rien.
   const revoke = (keyId: string) =>
     run(keyId, async () => {
       await call("revokeApiKey")({ keyId });
+      setCreated((c) => (c?.keyId === keyId ? null : c));
+      setToRevoke(null);
     });
 
   return (
@@ -170,7 +175,7 @@ function ApiKeys() {
                 k.revokedDateISOString ? (
                   "Revoked"
                 ) : (
-                  <Button size="compact-sm" variant="default" loading={busy === k.id} disabled={busy !== null} onClick={() => void revoke(k.id)}>
+                  <Button size="compact-sm" variant="default" disabled={busy !== null} onClick={() => setToRevoke(k)}>
                     Revoke
                   </Button>
                 )
@@ -179,6 +184,23 @@ function ApiKeys() {
           ))}
         </RowList>
       )}
+
+      <ResponsiveDialog opened={toRevoke !== null} onClose={() => setToRevoke(null)} title="Revoke this key?">
+        <Stack>
+          <Text size="sm">
+            {toRevoke?.name}: every script or integration using it is refused from its next request. This cannot be undone:
+            create a new key to reconnect them.
+          </Text>
+          <Group grow>
+            <Button variant="default" size="md" disabled={busy !== null} onClick={() => setToRevoke(null)}>
+              Cancel
+            </Button>
+            <Button color="red" size="md" loading={busy === toRevoke?.id} disabled={busy !== null} onClick={() => toRevoke && void revoke(toRevoke.id)}>
+              Revoke
+            </Button>
+          </Group>
+        </Stack>
+      </ResponsiveDialog>
     </Section>
   );
 }
@@ -215,7 +237,7 @@ function ApiReference() {
         Add ?dryRun=true to see what would change without writing. Send an Idempotency-Key header so that a retried request never writes twice. Empty values are refused: clear a field in the interface.
       </Text>
       <CodeBlock
-        code={`curl -X POST "${API_PUBLIC_URL}/v1/fields?dryRun=true" \\\n  -H "Authorization: Bearer ph_live_..." \\\n  -H "Content-Type: application/json" \\\n  -H "Idempotency-Key: import-2026-11-16-row-12" \\\n  -d '{\n    "subjects": { "startupId": "...", "founderId": "...", "weekStartDayString": "2026-11-16" },\n    "values": { "checkin.revenue": 1200, "checkin.moral": 8 }\n  }'`}
+        code={`curl -X POST "${API_PUBLIC_URL}/v1/fields?dryRun=true" \\\n  -H "Authorization: Bearer ph_live_..." \\\n  -H "Content-Type: application/json" \\\n  -H "Idempotency-Key: import-2026-11-16-row-12" \\\n  -d '{\n    "subjects": { "startupId": "...", "founderId": "...", "weekStartDayString": "2026-11-16" },\n    "values": { "checkin.totalAmountPaid": 1200, "checkin.moral": 8 }\n  }'`}
       />
 
       <Label>Errors</Label>

@@ -1,5 +1,4 @@
-import type { EventPicks, Picks } from "@shared/types";
-import { formatDateTime } from "@/lib/format";
+import type { Picks } from "@shared/types";
 
 /** Les choix reciproques (A a choisi B, B a choisi A), avec le rang donne par chacun : ils sont apparies en premier. */
 export function mutualPairs(picks: readonly Pick<Picks, "founderId" | "pickedFounderIds">[]) {
@@ -11,7 +10,3 @@ export function mutualPairs(picks: readonly Pick<Picks, "founderId" | "pickedFou
     }),
   );
 }
-
-/** « Hackathon 5 · until 23 Nov, 18:00 ». */
-export const picksSubtitle = (eventName: string, picks: EventPicks) =>
-  [eventName, picks.closesDateISOString && `until ${formatDateTime(picks.closesDateISOString)}`].filter(Boolean).join(" · ");

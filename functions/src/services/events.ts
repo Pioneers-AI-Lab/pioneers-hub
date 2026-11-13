@@ -1,6 +1,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, type Transaction } from "firebase-admin/firestore";
 import { docPaths, eventCollectionPaths } from "../shared/collections";
+import { juryTargetOf } from "../shared/events";
 import type { EventTeam, PioneersEvent, Startup } from "../shared/types";
 
 // ----------------------------
@@ -26,15 +27,13 @@ export type ScoredTarget = { id: string; name: string; memberIds: string[]; memb
  * Ce que le jury note et que le leaderboard classe : LA meme liste pour les
  * deux (les equipes publiees, ou les startups de l'evenement).
  */
-export async function scoredTargets(
-  tx: Transaction | null,
-  eventId: string,
-  event: PioneersEvent,
-  target: "team" | "startup",
-): Promise<ScoredTarget[]> {
-  if (target === "startup") {
+export async function scoredTargets(tx: Transaction | null, eventId: string, event: PioneersEvent): Promise<ScoredTarget[]> {
+  // Les groupes du matching, ou a defaut les startups de l'evenement (`juryTargetOf`).
+  if (juryTargetOf(event) === "startup") {
     const refs = event.startupIds.map((id) => db().doc(docPaths.startup(id)));
-    const snaps = refs.length ? await (tx ? tx.getAll(...refs) : db().getAll(...refs)) : [];
+    // Le nom et les membres seuls : une fiche porte son logo en `data:` URL.
+    const read = { fieldMask: ["name", "memberIds"] };
+    const snaps = refs.length ? await (tx ? tx.getAll(...refs, read) : db().getAll(...refs, read)) : [];
     return snaps.flatMap((s) => {
       const st = s.data() as Startup | undefined;
       return st ? [{ id: s.id, name: st.name, memberIds: st.memberIds, memberNames: null }] : [];

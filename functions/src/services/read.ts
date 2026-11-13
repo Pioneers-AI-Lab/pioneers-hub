@@ -9,9 +9,11 @@ import {
   canReadPerson,
   canReadStartupProfile,
   canReadTeam,
+  canSeeEvent,
   isInsider,
   isInsiderViewer,
 } from "../shared/access";
+import { isPublishedEvent } from "../shared/events";
 import type { Caller } from "../api/caller";
 import { badRequest, forbidden, notFound } from "../api/errors";
 import { founderIdIn, roleOf } from "../api/viewer";
@@ -30,8 +32,8 @@ import { describeFields } from "./fields";
 //
 // ⛔️ JAMAIS LUS ICI : `events/*/peerRatings` (SPECS §4.8 : Claude n'a acces
 // qu'aux agregats des avis entre pairs, `founderStats.peerRating`), `picks`
-// (mutual picks individuels), `events/*/judges` (empreintes des jetons des
-// jures), `apiKeys`, `writePlans`. Aucun chemin de ce fichier ne les nomme ;
+// (mutual picks individuels), `events/*/judges` (secret du lien partage
+// du jury), `apiKeys`, `writePlans`. Aucun chemin de ce fichier ne les nomme ;
 // les sous-collections d'evenement lues sont celles de `eventCollectionPaths`.
 //
 // ⛔️ CHAQUE OBJET EST FILTRE PAR LES DROITS DE L'APPELANT, ici et nulle part
@@ -203,9 +205,29 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
   // Fondateurs : la carte n'est lue que par le batch, le staff, les investors,
   // ou si elle est publique ou non reclamee (regle `founders`).
   const role = object === "founders" ? roleOf(caller, input.batchId!) : null;
-  const visible = role ? docs.filter((d) => canReadFounderCard(role, d as unknown as Founder)) : docs;
+  const canSee = object === "events" ? await eventFilterFor(caller, input.batchId!) : null;
+  const visible = role
+    ? docs.filter((d) => canReadFounderCard(role, d as unknown as Founder))
+    : canSee
+      ? docs.filter((d) => canSee(d as unknown as PioneersEvent))
+      : docs;
   if (spec.sort) visible.sort((a, b) => String(a[spec.sort!] ?? "").localeCompare(String(b[spec.sort!] ?? "")));
   return { object, items: visible.map((d) => (spec.short as (x: unknown) => unknown)(d)) };
+}
+
+/**
+ * Les evenements que l'appelant voit dans un batch, comme a l'ecran
+ * (`EventsContext`) : le staff voit tout, brouillons compris ; les autres, les
+ * evenements publies, et ceux a audience restreinte seulement s'ils y sont
+ * invites (`canSeeEvent`). Un fondateur coute une lecture : sa startup.
+ */
+async function eventFilterFor(caller: Caller, batchId: string) {
+  const role = roleOf(caller, batchId);
+  const founderId = founderIdIn(caller, batchId);
+  const startupId =
+    role === "founder" && founderId ? (((await getFirestore().doc(docPaths.founder(founderId)).get()).get("startupId") as string | null) ?? null) : null;
+  return (e: Pick<PioneersEvent, "status" | "archivedDateISOString" | "audience" | "guestFounderIds" | "startupIds">) =>
+    role === "staff" || (isPublishedEvent(e) && canSeeEvent(role, founderId, startupId, e));
 }
 
 function required(snap: DocumentSnapshot, object: string, id: string) {
@@ -277,7 +299,9 @@ export async function getObject(caller: Caller, input: GetInput): Promise<Record
         insider ? db.collection(eventCollectionPaths.attendance(id)).get() : null,
         db.collection(eventCollectionPaths.submissions(id)).get(),
       ]);
-      const role = roleOf(caller, (required(event, object, id).data() as PioneersEvent).batchId);
+      const data = required(event, object, id).data() as PioneersEvent;
+      if (!(await eventFilterFor(caller, data.batchId))(data)) throw notFound(`${object}_not_found`, `No ${object} with id \`${id}\`.`, "id");
+      const role = roleOf(caller, data.batchId);
       return {
         object,
         ...withId(event),

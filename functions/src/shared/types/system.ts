@@ -38,12 +38,21 @@ export const LIST_KEYS = [
 ] as const;
 export type ListKey = (typeof LIST_KEYS)[number];
 
+/** Teintes des etiquettes : celles d'Airtable, sans leurs nuances (`tealDark` -> `teal`). */
+export const TAG_COLORS = ["blue", "cyan", "teal", "green", "yellow", "orange", "red", "pink", "purple", "gray"] as const;
+export type TagColor = (typeof TAG_COLORS)[number];
+
 export type ListItem = {
   value: string;
   label: string;
   /** Ex. `technical` / `business` pour les competences. */
   group: string | null;
   archived: boolean;
+  /**
+   * Couleur de l'etiquette. @source couleur de l'option Airtable (import FA26).
+   * Absente : une teinte stable tiree de la valeur.
+   */
+  color?: TagColor | null;
 };
 
 export type ClosedList = {

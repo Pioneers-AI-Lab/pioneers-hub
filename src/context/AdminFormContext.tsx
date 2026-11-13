@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, type ReactNode } from "react";
-import type { Attendance, EventTeam, Form, FormResponse, WithId } from "@shared/types";
+import type { Attendance, Form, FormResponse, WithId } from "@shared/types";
 import { queries, refs } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
 import { useDocListener, useQueryListener } from "@/hooks/useFirestoreListener";
@@ -19,16 +19,16 @@ import { paths } from "@/lib/paths";
 // formulaire d'un autre batch bascule le batch de travail sur le sien (la
 // liste des evenements a rattacher est celle de son batch).
 //
-// Les reponses, et pour un formulaire rattache a un evenement ses presences et
-// ses equipes : c'est ce qui dit QUI devait repondre (`formAudience`).
+// Une fois le formulaire publie : ses reponses, et ce qui dit QUI devait
+// repondre (`formAudience`) : les presences de son evenement quand elles
+// comptent. Les equipes publiees viennent de `useAdmin().teamMemberships`.
 
 type AdminFormValue = {
   form: WithId<Form>;
-  /** Plus recentes d'abord. */
+  /** Plus recentes d'abord (vide tant que le formulaire n'est pas publie). */
   responses: WithId<FormResponse>[];
-  /** Presences et equipes de l'evenement du formulaire (vides sans evenement). */
+  /** Presences de l'evenement du formulaire (vide sans evenement a presence, ou formulaire anonyme). */
   attendance: WithId<Attendance>[];
-  teams: WithId<EventTeam>[];
   isResponsesLoading: boolean;
 };
 
@@ -37,30 +37,34 @@ export { useAdminForm };
 
 export function AdminFormProvider({ children }: { children: ReactNode }) {
   const { formId } = useParamsTS<{ formId: string }>();
-  const { batch, batches, selectBatch } = useAdmin();
+  const { batch, batches, selectBatch, eventsById } = useAdmin();
   const form = useDocListener(refs.form(formId));
-  const responses = useQueryListener(queries.responsesOfForm(formId));
-  const eventId = form.data ? form.data.eventId : undefined;
-  const attendance = useQueryListener(eventId === undefined ? undefined : eventId ? queries.attendanceOfEvent(eventId) : null);
-  const teams = useQueryListener(eventId === undefined ? undefined : eventId ? queries.teamsOfEvent(eventId) : null);
 
-  const formBatchId = form.data?.batchId ?? null;
+  // `undefined` : on attend le formulaire ; `null` : rien a ecouter.
+  const f = form.data;
+  const event = f?.eventId ? eventsById.get(f.eventId) : undefined;
+  // Les absents ne sont pas attendus (`formAudience`), quelle que soit la mecanique.
+  const needsAttendance = f && f.identityCheck !== "anonymous" && event;
+  const responses = useQueryListener(f === null ? undefined : f.version > 0 ? queries.responsesOfForm(formId) : null);
+  // Lue par le suivi des reponses, donc pour un formulaire publie seulement.
+  const attendance = useQueryListener(f === null ? undefined : f.version > 0 && needsAttendance ? queries.attendanceOfEvent(event.id) : null);
+
+  const formBatchId = f?.batchId ?? null;
   useEffect(() => {
     if (formBatchId && formBatchId !== batch.id) selectBatch(formBatchId);
   }, [formBatchId, batch.id, selectBatch]);
 
   const value = useMemo<AdminFormValue | null>(
     () =>
-      form.data
+      f
         ? {
-            form: form.data,
+            form: f,
             responses: [...responses.data].sort((a, b) => b.submittedDateISOString.localeCompare(a.submittedDateISOString)),
             attendance: attendance.data,
-            teams: teams.data,
-            isResponsesLoading: responses.isLoading || attendance.isLoading || teams.isLoading,
+            isResponsesLoading: responses.isLoading || attendance.isLoading,
           }
         : null,
-    [form.data, responses.data, responses.isLoading, attendance.data, attendance.isLoading, teams.data, teams.isLoading],
+    [f, responses.data, responses.isLoading, attendance.data, attendance.isLoading],
   );
 
   // Batch archive : hors de la liste de travail, l'outil ne s'y applique plus.

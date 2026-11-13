@@ -3,6 +3,16 @@
 :root {
   /* Hauteur de la barre d'onglets du bas (mobile), zone de securite comprise. */
   --tabbar-height: calc(56px + env(safe-area-inset-bottom));
+  /* Marge haute du contenu sous l'en-tete (AppChrome), reprise par `.fixed-page`. */
+  --app-content-pt: var(--mantine-spacing-md);
+}
+
+/* Pas de rebond elastique en bout de page (iOS, macOS) : il emportait l'en-tete
+   et la barre d'onglets du bas, tous deux en `position: fixed`. Coupe aussi le
+   « tirer pour rafraichir » (Chrome Android), sans objet : tout est en temps reel. */
+html,
+body {
+  overscroll-behavior-y: none;
 }
 
 body {
@@ -77,6 +87,19 @@ button.row {
   aspect-ratio: 4 / 3;
   background: var(--mantine-color-dark-6);
   border-bottom: 1px solid var(--mantine-color-dark-4);
+}
+/* Bouton pose sur une photo (retirer la photo) : fond sombre translucide, comme la barre d'onglets. */
+.photo-overlay-button.photo-overlay-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(10, 10, 12, 0.78);
+  color: var(--mantine-color-white);
+}
+
+/* Seule dans un cadre (apercu de « Mon profil ») : pas de filet sous la photo. */
+.card-cover:last-child {
+  border-bottom: 0;
 }
 .card-cover img {
   position: absolute;
@@ -186,6 +209,20 @@ button.row {
   .savebar {
     bottom: 0;
   }
+}
+
+/* Page a la hauteur de l'ecran : en-tete et `.savebar` restent en place, seule
+   la liste (`.fixed-page-scroll`) defile (Admin > Events). */
+.fixed-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - var(--app-shell-header-offset, 0px) - var(--app-content-pt));
+}
+.fixed-page-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* Fond anime des pages de connexion (AnimatedBackdrop). */

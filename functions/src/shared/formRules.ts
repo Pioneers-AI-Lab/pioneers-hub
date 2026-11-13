@@ -1,17 +1,25 @@
 import {
   DB_FIELDS,
+  FAMILY_QUESTION_TYPE,
   INPUT_COMPATIBILITY,
+  criterionKeyOf,
+  familyOf,
   getFieldDef,
   listKeyOf,
+  metricKeyOf,
+  parseDbField,
   requiredSubjects,
+  scopeOfDoc,
   type DbFieldKey,
   type SubjectKey,
   type ValueSpec,
 } from "./fieldRegistry";
-import { EVENT_KIND_FEATURES } from "./types";
+import { EVENT_METRIC_RENAMES, standardMetricOf, type StandardMetric } from "./presets/standardMetrics";
+import { absentFounderIds, eventRoster } from "./attendance";
+import { matchingOf } from "./events";
+import { IDENTITY_RULES, SCOPE_RULES, activeQuestions, isBatchParticipant, isJuryForm, scopeOf } from "./types";
 import type {
   Attendance,
-  EventTeam,
   Form,
   FormAnswer,
   FormAttachments,
@@ -20,7 +28,9 @@ import type {
   FormQuestion,
   FormResponse,
   Founder,
+  PickerEntity,
   PioneersEvent,
+  QuestionScope,
   SubjectSource,
 } from "./types";
 
@@ -45,27 +55,84 @@ export const FORM_FIELD_TYPE_LABELS: Record<FormFieldType, string> = {
 /** Longueur maximale d'une reponse : la page publique la borne, le serveur la verifie. */
 export const FORM_ANSWER_MAX = { text: 1000, long_text: 10000, link: 2000 } as const;
 
-/** Les champs de la base qu'une question de ce type peut alimenter. */
+/** Les champs de la base qu'une question de ce type peut alimenter (hors familles : metriques et criteres). */
 export function compatibleDbFields(type: FormFieldType): DbFieldKey[] {
   const kinds = INPUT_COMPATIBILITY[type];
   return (Object.keys(DB_FIELDS) as DbFieldKey[]).filter((key) => kinds.includes(getFieldDef(key).value.kind));
 }
 
 /**
+ * La portee qu'exige le champ d'une question : une soumission est celle de
+ * l'equipe, un avis entre pairs porte sur chaque coequipier, une note du jury
+ * sur chaque equipe notee (`DOC_KINDS[...].scope`) ; `self` sans champ.
+ */
+export const scopeForField = (dbField: DbFieldKey | null): QuestionScope => (dbField ? scopeOfDoc(parseDbField(dbField).doc) : "self");
+
+/** L'echelle d'une note : celle de la question, 1 a 5 par defaut. */
+export const DEFAULT_RATING_SCALE = { min: 1, max: 5 } as const;
+export const ratingScale = (q: Pick<FormQuestion, "scale">) => q.scale ?? DEFAULT_RATING_SCALE;
+
+/** Une question de note du jury, comptee dans la moyenne ponderee du leaderboard. */
+export const isJuryCriterion = (q: Pick<FormQuestion, "type" | "dbField">) => q.type === "rating" && criterionKeyOf(q.dbField) !== null;
+
+/**
  * Ce qu'une question herite du champ choisi : l'echelle d'une note, les
  * options d'un choix a valeurs fixes, la limite d'une liste de fondateurs.
  */
-export function alignQuestionWithField(question: FormQuestion): FormQuestion {
-  if (!question.dbField) return question;
-  const value = getFieldDef(question.dbField).value;
+export function alignQuestionWithField(input: FormQuestion): FormQuestion {
+  if (!input.dbField) return input;
+  // La portee suit le document du champ (une soumission est celle de l'equipe...).
+  // Une metrique standard porte sa definition, quel que soit qui cree la question.
+  const description = input.description ?? standardMetricOfField(input.dbField)?.description ?? null;
+  const question: FormQuestion = { ...input, scope: scopeForField(input.dbField), description };
+  const value = getFieldDef(input.dbField).value;
   if (value.kind === "rating") return { ...question, scale: { min: value.min, max: value.max } };
   if ((value.kind === "enum" || value.kind === "enumMulti") && value.values) return { ...question, options: [...value.values] };
   if (value.kind === "enum" && value.listKey) return { ...question, options: null };
   if (value.kind === "boolean") return { ...question, options: ["Yes", "No"] };
-  if (value.kind === "founderRefs")
-    return { ...question, picker: { entity: "founder", maxItems: value.maxItems ?? question.picker?.maxItems ?? 1 } };
+  if (value.kind === "founderRefs") {
+    // Le champ borne ; la question peut demander moins (top 3).
+    const cap = value.maxItems ?? 50;
+    const asked = question.picker?.entity === "founder" ? question.picker.maxItems : null;
+    return { ...question, picker: { entity: "founder", maxItems: asked ? Math.min(asked, cap) : cap } };
+  }
   return question;
 }
+
+/** Ce qu'on donne pour creer une question : le reste prend sa valeur par defaut. */
+export type NewQuestionInput = {
+  type: FormFieldType;
+  label: string;
+  dbField?: DbFieldKey | null;
+  required?: boolean;
+  description?: string | null;
+  options?: string[] | null;
+  scale?: { min: number; max: number } | null;
+  picker?: { entity: PickerEntity; maxItems: number } | null;
+  scope?: QuestionScope;
+  weight?: number | null;
+};
+
+/**
+ * Une question neuve, alignee sur son champ : la seule facon d'en construire une
+ * (modeles de formulaires, API et MCP). Une note sans echelle vaut 1-5.
+ */
+export const newQuestion = (id: string, input: NewQuestionInput): FormQuestion =>
+  alignQuestionWithField({
+    id,
+    type: input.type,
+    label: input.label,
+    description: input.description ?? null,
+    required: input.required ?? false,
+    options: input.options ?? null,
+    scale: input.scale ?? (input.type === "rating" ? { ...DEFAULT_RATING_SCALE } : null),
+    picker: input.picker ?? null,
+    dbField: input.dbField ?? null,
+    requiresApproval: null,
+    archived: false,
+    scope: input.scope ?? "self",
+    weight: input.weight ?? null,
+  });
 
 /**
  * L'inverse d'`alignQuestionWithField` : la reponse a une question, a la forme
@@ -80,8 +147,34 @@ export function answerToFieldValue(spec: ValueSpec, answer: FormAnswer): FormAns
       .map((line) => line.trim())
       .filter(Boolean);
   }
-  if (spec.kind === "files" && spec.multiple && typeof answer === "string") return [answer];
+  // Un lien par ligne (texte long), ou un lien seul.
+  if (spec.kind === "files" && spec.multiple && typeof answer === "string") return answer.split(/\s+/).filter(Boolean);
   return answer;
+}
+
+/**
+ * La valeur d'un champ, a la forme d'une reponse a cette question (reponses
+ * deja donnees, prerempliees) : `true` -> « Yes », une liste -> une ligne par
+ * element dans un texte long. `undefined` : rien a preremplir.
+ */
+export function fieldValueToAnswer(q: Pick<FormQuestion, "type">, spec: ValueSpec, value: unknown): FormAnswer | undefined {
+  if (value === null || value === undefined || value === "") return undefined;
+  if (spec.kind === "boolean") return value === true ? "Yes" : value === false ? "No" : undefined;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return undefined;
+    if (q.type === "long_text") return value.join("\n");
+    if (q.type === "link" || q.type === "file" || q.type === "text") return String(value[0]);
+    return value.map(String);
+  }
+  if (typeof value === "object") return undefined;
+  return value as FormAnswer;
+}
+
+/** La metrique standard d'un champ : un chiffre de l'update (`checkin.<cle>`) ou une metrique d'equipe (`submission.metrics.<cle>`). */
+export function standardMetricOfField(dbField: DbFieldKey): StandardMetric | null {
+  const { doc, field } = parseDbField(dbField);
+  const key = doc === "checkin" ? field : metricKeyOf(dbField);
+  return key ? standardMetricOf(key) : null;
 }
 
 /** Ce qui empeche d'enregistrer une question (vide si rien). */
@@ -103,8 +196,31 @@ export function questionProblems(question: FormQuestion): string[] {
   if (question.type === "entity_picker") {
     if (!question.picker || question.picker.maxItems < 1) problems.push("Choose what to pick, and how many at most.");
   }
+  if (question.dbField) {
+    const expected = scopeForField(question.dbField);
+    if (scopeOf(question) !== expected) problems.push(`"${getFieldDef(question.dbField).label}" is filled ${SCOPE_PHRASE[expected]}.`);
+    const family = familyOf(question.dbField);
+    // Une ancienne cle (SPECS annexe A.5) casserait la comparaison entre hackathons.
+    const legacy = metricKeyOf(question.dbField);
+    if (legacy && legacy in EVENT_METRIC_RENAMES) problems.push(`The key ${legacy} is now ${EVENT_METRIC_RENAMES[legacy]}: use the standard key.`);
+    if (family && FAMILY_QUESTION_TYPE[family.family] !== question.type) {
+      problems.push(`A ${family.family === "submission.metrics" ? "team metric" : "jury criterion"} is a ${FORM_FIELD_TYPE_LABELS[FAMILY_QUESTION_TYPE[family.family]].toLowerCase()} question.`);
+    }
+  }
+  if (question.weight !== undefined && question.weight !== null) {
+    if (!isJuryCriterion(question)) problems.push("Only a jury score has a weight.");
+    else if (!(question.weight > 0)) problems.push("A weight is a number above 0.");
+  }
   return problems;
 }
+
+/** Comment se remplit une question, selon sa portee (messages de l'editeur). */
+const SCOPE_PHRASE: Record<QuestionScope, string> = {
+  self: "by each respondent",
+  team: "once per team",
+  each_teammate: "for each teammate",
+  each_target: "for each team scored",
+};
 
 /** D'ou vient, par defaut, l'id d'un sujet exige par les champs. */
 const DEFAULT_SOURCE: Record<SubjectKey, SubjectSource | null> = {
@@ -113,8 +229,11 @@ const DEFAULT_SOURCE: Record<SubjectKey, SubjectSource | null> = {
   startup: { from: "respondent_startup" },
   week: { from: "submission_week" },
   event: { from: "form_event" },
-  // Une equipe se choisit par une question « choisir une equipe » : a regler a la main.
-  team: null,
+  // L'equipe publiee du repondant a l'evenement du formulaire (une question
+  // « choisir une equipe » peut la remplacer, reglee a la main).
+  team: { from: "respondent_team" },
+  target: { from: "target" },
+  judge: { from: "respondent" },
 };
 
 /**
@@ -138,7 +257,7 @@ export function formProblems(
 ): string[] {
   const problems: string[] = [];
   if (!form.title.trim()) problems.push("The form has no title.");
-  const active = form.questions.filter((q) => !q.archived);
+  const active = activeQuestions(form);
   active.forEach((q, i) => questionProblems(q).forEach((p) => problems.push(`Question ${i + 1}: ${p}`)));
   const subjects = requiredSubjects(active.filter((q) => q.dbField).map((q) => q.dbField as DbFieldKey));
   if (isAnonymous(form.identityCheck) && subjects.some((s) => s === "founder" || s === "person" || s === "startup"))
@@ -147,6 +266,15 @@ export function formProblems(
     problems.push("Some questions write to an event: attach the form to an event.");
   if (subjects.includes("team") && !form.attachments.team)
     problems.push("Some questions write to a team: add a question that picks the team.");
+  const scopes = new Set(active.map(scopeOf));
+  if ([...scopes].some((sc) => sc !== "self") && !form.eventId)
+    problems.push("Questions about a team, teammates or teams scored need the form to be attached to an event.");
+  const isJury = isJuryForm(form);
+  if (formNeedsTeam(form) && (isAnonymous(form.identityCheck) || isJury))
+    problems.push("Questions about the respondent's team or teammates need the respondent's name: ask for it, or ask to sign in.");
+  if (scopes.has("each_target") && !isJury)
+    problems.push("Questions about each team scored are for a jury: use the shared jury link as respondent.");
+  if (isJury && [...scopes].some((sc) => sc !== "each_target")) problems.push("A jury form only asks about each team scored.");
   return problems;
 }
 
@@ -166,69 +294,78 @@ export const versionedSnapshot = (form: Pick<Form, "questions" | "attachments" |
 // ----------------------------
 // Qui doit repondre, et qui a repondu (relances du staff)
 // ----------------------------
-// Le taux de reponse n'est juste que si l'on compte :
+// Le taux de reponse se compte PAR FORMULAIRE, et n'est juste que si l'on compte :
 //   - des REPONDANTS distincts, pas des reponses (une page rouverte = un envoi de plus) ;
-//   - sur la PERIODE en cours pour un formulaire recurrent (sinon le cumul des
-//     semaines depasse 100 %) ;
 //   - parmi les ATTENDUS seulement : un fondateur parti ou absent qui repond est
 //     compte a part, pas dans le taux.
+// Pas de formulaire recurrent (decision du 12/11) : l'update de chaque semaine
+// est son propre formulaire, duplique du precedent. Son taux est donc le sien.
 // Un formulaire anonyme ne dit pas qui a repondu : on n'y compte que des reponses.
+// Un formulaire de jury non plus (les jures ne sont pas des attendus connus).
+// Un formulaire qui parle de l'equipe ou des coequipiers (Debrief) ne s'adresse
+// qu'aux membres d'une equipe publiee de son evenement.
+
+/** Le formulaire parle de l'equipe du repondant ou de ses coequipiers : il faut etre membre d'une equipe publiee. */
+export const formNeedsTeam = (form: Pick<Form, "questions">) => activeQuestions(form).some((q) => SCOPE_RULES[scopeOf(q)].needsTeam);
 
 /** Sur quoi porte le denominateur, affiche avec le taux. */
 export type AudienceBasis = "batch" | "present" | "teams" | "invited";
 
-export type FormAudience = { kind: "anonymous" } | { kind: "founders"; basis: AudienceBasis; founderIds: string[] };
+export type FormAudience =
+  | { kind: "anonymous" }
+  | { kind: "jury" }
+  | { kind: "founders"; basis: AudienceBasis; founderIds: string[] };
 
-type AudienceFounder = Pick<Founder, "status" | "isExternalFounder" | "archivedDateISOString" | "startupId"> & { id: string };
-
-/** Fondateurs du batch attendus a un formulaire : ni partis, ni archives, ni cofondateurs exterieurs au batch. */
-const isActiveFounder = (f: AudienceFounder) =>
-  f.archivedDateISOString === null && !f.isExternalFounder && (f.status === "enrolled" || f.status === "active");
+type AudienceInput = {
+  identityCheck: FormIdentityCheck;
+  /** `formNeedsTeam` : seuls les membres des equipes publiees sont attendus. */
+  needsTeam: boolean;
+  batchId: string;
+  founders: (Pick<Founder, "batchId" | "status" | "archivedDateISOString" | "isExternalFounder" | "startupId"> & { id: string })[];
+  event: Pick<PioneersEvent, "kind" | "matching" | "teamSize" | "audience" | "guestFounderIds" | "startupIds"> | null;
+  attendance: Pick<Attendance, "founderId" | "status">[];
+  /** Membres des equipes publiees de l'evenement (`memberships`). */
+  teamMemberIds: string[];
+};
 
 /**
- * Les fondateurs qui doivent repondre. Rattache a un evenement : les PRESENTS
- * si la presence a ete relevee (un feedback de seance ne se demande pas aux
- * absents), sinon les membres des equipes publiees (hackathon), sinon les
- * invites (audience restreinte). Sinon, tout le batch.
+ * A qui s'adresse le formulaire, anonyme ou non : les participants du batch
+ * (`isBatchParticipant`), et pour un formulaire rattache a un evenement, ses
+ * attendus moins ses absents (`eventRoster`, shared/attendance.ts). Le Debrief :
+ * les membres des equipes publiees. Sinon tous les presents si la presence a
+ * ete relevee (un feedback de seance ne se demande pas aux absents), sinon les
+ * membres des equipes publiees (hackathon), sinon les invites ou le batch.
  */
-export function formAudience(input: {
-  identityCheck: FormIdentityCheck;
-  founders: AudienceFounder[];
-  event: Pick<PioneersEvent, "kind" | "audience" | "guestFounderIds" | "startupIds"> | null;
-  attendance: Pick<Attendance, "founderId" | "status">[];
-  teams: Pick<EventTeam, "memberIds" | "publishedDateISOString">[];
-}): FormAudience {
-  if (input.identityCheck === "anonymous") return { kind: "anonymous" };
-  const active = input.founders.filter(isActiveFounder);
-  const among = (basis: AudienceBasis, ids: Set<string>): FormAudience => ({
-    kind: "founders",
+function addressees(input: Omit<AudienceInput, "identityCheck">): { basis: AudienceBasis; founderIds: string[] } {
+  const participants = input.founders.filter((f) => isBatchParticipant(f, input.batchId));
+  const among = (basis: AudienceBasis, keep: (id: string) => boolean) => ({
     basis,
-    founderIds: active.filter((f) => ids.has(f.id)).map((f) => f.id),
+    founderIds: participants.filter((f) => keep(f.id)).map((f) => f.id),
   });
+
   const { event } = input;
-  if (event) {
-    const present = input.attendance.filter((a) => a.status !== "absent");
-    if (EVENT_KIND_FEATURES[event.kind].attendance && present.length > 0) return among("present", new Set(present.map((a) => a.founderId)));
-    const published = input.teams.filter((t) => t.publishedDateISOString !== null);
-    if (EVENT_KIND_FEATURES[event.kind].teams && published.length > 0) return among("teams", new Set(published.flatMap((t) => t.memberIds)));
-    if (event.audience === "guests") {
-      const startups = new Set(event.startupIds);
-      return among("invited", new Set([...event.guestFounderIds, ...active.filter((f) => f.startupId && startups.has(f.startupId)).map((f) => f.id)]));
-    }
-  }
-  return { kind: "founders", basis: "batch", founderIds: active.map((f) => f.id) };
+  const members = new Set(input.teamMemberIds);
+  if (!event) return input.needsTeam ? among("teams", (id) => members.has(id)) : among("batch", () => true);
+  // Le Debrief : les membres des equipes publiees, personne avant le tirage.
+  const absent = absentFounderIds(input.attendance);
+  if (input.needsTeam) return among("teams", (id) => members.has(id) && !absent.has(id));
+  const roster = eventRoster(input.batchId, event, participants, input.attendance);
+  const present = new Set(roster.rows.filter((r) => r.status !== "absent").map((r) => r.founder.id));
+  if (roster.isTaken) return among("present", (id) => present.has(id));
+  if (matchingOf(event) && members.size > 0) return among("teams", (id) => members.has(id) && present.has(id));
+  return among(roster.isRestricted ? "invited" : "batch", (id) => present.has(id));
 }
 
-/** Le lundi (`YYYY-MM-DD`) de la semaine d'un instant, a Paris : la periode d'un formulaire recurrent. */
-export function parisMonday(iso: string): string {
-  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(new Date(iso));
-  const d = new Date(`${day}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
-  return d.toISOString().slice(0, 10);
+/** Les fondateurs qui doivent repondre (`addressees`) ; un formulaire anonyme ne dit pas lesquels ont repondu. */
+export function formAudience(input: AudienceInput): FormAudience {
+  const respondent = IDENTITY_RULES[input.identityCheck].respondent;
+  if (respondent === "none") return { kind: "anonymous" };
+  if (respondent === "judge") return { kind: "jury" };
+  return { kind: "founders", ...addressees(input) };
 }
 
 export type ResponseProgress = {
-  /** Reponses de la periode (toutes, doublons compris). */
+  /** Reponses du formulaire (toutes, doublons compris). */
   responses: number;
   /** Attendus qui ont repondu, et ceux qui manquent (vides pour un formulaire anonyme). */
   answered: string[];
@@ -237,23 +374,49 @@ export type ResponseProgress = {
   outside: string[];
 };
 
-/**
- * L'avancement d'un formulaire. `weekStart` : la periode d'un formulaire
- * recurrent (lundi a Paris) ; `null` compte toutes les reponses.
- */
+/** L'avancement d'un formulaire, sur toutes ses reponses. */
 export function responseProgress(
   audience: FormAudience,
-  responses: Pick<FormResponse, "respondentFounderId" | "submittedDateISOString">[],
-  weekStart: string | null,
+  responses: Pick<FormResponse, "respondentFounderId">[],
 ): ResponseProgress {
-  const inPeriod = weekStart ? responses.filter((r) => parisMonday(r.submittedDateISOString) === weekStart) : responses;
-  if (audience.kind === "anonymous") return { responses: inPeriod.length, answered: [], missing: [], outside: [] };
-  const respondents = new Set(inPeriod.flatMap((r) => (r.respondentFounderId ? [r.respondentFounderId] : [])));
+  if (audience.kind !== "founders") return { responses: responses.length, answered: [], missing: [], outside: [] };
+  const respondents = new Set(responses.flatMap((r) => (r.respondentFounderId ? [r.respondentFounderId] : [])));
   const expected = new Set(audience.founderIds);
   return {
-    responses: inPeriod.length,
+    responses: responses.length,
     answered: audience.founderIds.filter((id) => respondents.has(id)),
     missing: audience.founderIds.filter((id) => !respondents.has(id)),
     outside: [...respondents].filter((id) => !expected.has(id)),
   };
+}
+
+/**
+ * Le formulaire s'adresse-t-il a CE fondateur (son « To do ») ? La meme
+ * audience que `formAudience`, vue du fondateur : avec sa seule presence a
+ * l'evenement (il lit la sienne, pas celle des autres) et ses seules equipes.
+ * Un absent ne le voit donc pas ; un fondateur sans equipe voit celui d'un
+ * hackathon a equipes : mieux vaut un formulaire de trop qu'un formulaire cache. Un
+ * formulaire anonyme suit l'audience de son evenement, comme les autres. Deux
+ * exceptions : le Debrief ne s'adresse qu'aux membres d'une equipe publiee
+ * (`formNeedsTeam`), et un formulaire de jury a aucun fondateur.
+ */
+export function formConcernsFounder(
+  form: Pick<Form, "batchId" | "identityCheck" | "questions">,
+  founder: AudienceInput["founders"][number],
+  event: AudienceInput["event"],
+  /** Le fondateur est dans une equipe publiee de l'evenement du formulaire. */
+  isTeamMember: boolean,
+  /** Sa presence a l'evenement du formulaire, absente si elle n'a pas ete relevee. */
+  attendance?: Pick<Attendance, "founderId" | "status">,
+): boolean {
+  if (isJuryForm(form)) return false;
+  const { founderIds } = addressees({
+    needsTeam: formNeedsTeam(form),
+    batchId: form.batchId,
+    founders: [founder],
+    event,
+    attendance: attendance ? [attendance] : [],
+    teamMemberIds: isTeamMember ? [founder.id] : [],
+  });
+  return founderIds.includes(founder.id);
 }

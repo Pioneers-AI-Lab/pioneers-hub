@@ -9,6 +9,7 @@ import { useFounderDirectories, type FoundersView } from "@/context/FounderDirec
 import { useFounders } from "@/context/FoundersContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
+import { missingRequiredFields } from "@/lib/completeness";
 import { PROFILE_CATEGORY_LABEL, score10 } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { FounderGridCard } from "@/components/founder/FounderGridCard";
@@ -43,6 +44,14 @@ export default function FoundersPage() {
     if (!byScore) return list;
     return [...list].sort((a, b) => (founderPerformance(b.id) ?? -1) - (founderPerformance(a.id) ?? -1));
   }, [founders, search, filter, byScore, founderPerformance]);
+  // Grille : les profils complets d'abord, l'ordre choisi garde dans chaque groupe.
+  // Complet = aucun champ obligatoire vide (le profil prive n'en porte aucun).
+  // Sans annuaire (visiteur public), on ne sait pas : ordre inchange.
+  const gridFounders = useMemo(() => {
+    if (view !== "grid" || directoriesById.size === 0) return visible;
+    const isComplete = new Map(visible.map((f) => [f.id, missingRequiredFields(f, directoriesById.get(f.id) ?? null, null).length === 0]));
+    return [...visible.filter((f) => isComplete.get(f.id)), ...visible.filter((f) => !isComplete.get(f.id))];
+  }, [view, visible, directoriesById]);
 
   if (isLoading) return <PageLoader />;
 
@@ -118,7 +127,7 @@ export default function FoundersPage() {
       ) : view === "grid" ? (
         <div className="bleed-wide">
           <SimpleGrid type="container" cols={{ base: 1, "540px": 2, "840px": 3 }} spacing="md" verticalSpacing="md" mt="xs">
-            {visible.map((f) => (
+            {gridFounders.map((f) => (
               <FounderGridCard
                 key={f.id}
                 href={paths.founder(program.id, batch.id, f.id)}

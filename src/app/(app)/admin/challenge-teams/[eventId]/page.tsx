@@ -1,11 +1,7 @@
-import { EventResultsAdmin } from "@/components/admin/EventResultsAdmin";
-import { TeamGenerator } from "@/components/admin/TeamGenerator";
+import { redirect } from "next/navigation";
+import { paths } from "@/lib/paths";
 
-export default function ChallengeTeamsEventPage() {
-  return (
-    <>
-      <TeamGenerator mode="challenge" />
-      <EventResultsAdmin />
-    </>
-  );
+// Ancienne adresse : le tirage de l'evenement est sous sa page (Admin > Events > l'evenement > matching).
+export default async function Page({ params }: PageProps<"/admin/challenge-teams/[eventId]">) {
+  redirect(paths.adminEventMatching((await params).eventId));
 }

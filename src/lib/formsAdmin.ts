@@ -1,7 +1,7 @@
 import { writeBatch } from "firebase/firestore";
 import { deriveAttachments, formProblems, versionedSnapshot } from "@shared/formRules";
-import { FORM_TEMPLATES, type FormTemplateKey } from "@shared/presets/formTemplates";
-import type { Form, FormVersion, WithId } from "@shared/types";
+import { formVersion, newForm, type NewFormInput } from "@shared/forms";
+import type { Form, WithId } from "@shared/types";
 import { db } from "@/lib/firebase";
 import { refs } from "@/lib/firestore/refs";
 import { createDoc, patchDoc } from "@/lib/firestore/write";
@@ -28,35 +28,10 @@ export type FormDraft = Pick<
   | "status"
   | "opensDateISOString"
   | "deadlineDateISOString"
-  | "recurrenceRule"
 > & { attachments?: Form["attachments"] };
 
-export async function createForm(input: {
-  programId: string;
-  batchId: string;
-  templateKey: FormTemplateKey | null;
-  eventId: string | null;
-}): Promise<string> {
-  const template = input.templateKey ? FORM_TEMPLATES[input.templateKey] : null;
-  const questions = template ? template.questions.map((q) => ({ ...q })) : [];
-  return createDoc<Form>(refs.forms(), {
-    programId: input.programId,
-    batchId: input.batchId,
-    archivedDateISOString: null,
-    kind: template?.kind ?? "custom",
-    title: template?.title ?? "Untitled form",
-    description: template?.description ?? null,
-    version: 0,
-    questions,
-    attachments: deriveAttachments(questions),
-    approval: template?.approval ?? "none",
-    identityCheck: template?.identityCheck ?? "select_name",
-    eventId: input.eventId,
-    status: "draft",
-    opensDateISOString: null,
-    deadlineDateISOString: null,
-    recurrenceRule: null,
-  });
+export async function createForm(input: NewFormInput): Promise<string> {
+  return createDoc<Form>(refs.forms(), newForm(input));
 }
 
 /**
@@ -78,33 +53,38 @@ export async function saveForm(form: WithId<Form>, draft: FormDraft, options: { 
   const now = new Date().toISOString();
 
   const batch = writeBatch(db);
+  // La semaine d'un formulaire est celle de son ouverture : publie sans date, il ouvre maintenant.
+  const opensDateISOString = isFirstPublication ? (draft.opensDateISOString ?? now) : draft.opensDateISOString;
   batch.set(
     refs.form(form.id),
-    { ...draft, attachments, version, status, updatedDateISOString: now },
+    { ...draft, opensDateISOString, attachments, version, status, updatedDateISOString: now },
     { merge: true },
   );
   if (version !== form.version) {
-    const snapshot: FormVersion = {
-      version,
-      questions: next.questions,
-      attachments,
-      approval: next.approval,
-      publishedDateISOString: now,
-    };
-    batch.set(refs.formVersion(form.id, version), { ...snapshot, id: String(version) });
+    batch.set(refs.formVersion(form.id, version), { ...formVersion({ ...next, attachments }, version, now), id: String(version) });
   }
   await batch.commit();
   return version;
 }
 
-/** Copie en brouillon (version 0), sans les reponses ni l'historique. */
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const nextWeek = (iso: string | null) => (iso ? new Date(Date.parse(iso) + WEEK_MS).toISOString() : null);
+
+/**
+ * Copie en brouillon (version 0), sans les reponses ni l'historique. Un
+ * formulaire par occurrence : celui d'une semaine (`attachments.week`) donne
+ * celui de la semaine suivante, dates decalees de 7 jours ; les autres (un
+ * feedback d'evenement) repartent sans dates, a fixer pour leur occurrence.
+ */
 export async function duplicateForm(form: WithId<Form>): Promise<string> {
+  const isWeekly = form.attachments.week !== undefined;
   return createDoc<Form>(refs.forms(), {
     programId: form.programId,
     batchId: form.batchId,
     archivedDateISOString: null,
     kind: form.kind,
-    title: `Copy of ${form.title}`,
+    // L'occurrence suivante d'un formulaire de semaine garde son titre (ses dates la distinguent).
+    title: isWeekly ? form.title : `Copy of ${form.title}`,
     description: form.description,
     version: 0,
     // Les questions archivees ne servent qu'a l'historique de l'original.
@@ -114,9 +94,8 @@ export async function duplicateForm(form: WithId<Form>): Promise<string> {
     identityCheck: form.identityCheck,
     eventId: form.eventId,
     status: "draft",
-    opensDateISOString: form.opensDateISOString,
-    deadlineDateISOString: form.deadlineDateISOString,
-    recurrenceRule: form.recurrenceRule,
+    opensDateISOString: isWeekly ? nextWeek(form.opensDateISOString) : null,
+    deadlineDateISOString: isWeekly ? nextWeek(form.deadlineDateISOString) : null,
   });
 }
 
@@ -126,4 +105,13 @@ export async function archiveForm(form: WithId<Form>) {
     archivedDateISOString: new Date().toISOString(),
     status: form.status === "open" ? "closed" : form.status,
   });
+}
+
+/**
+ * Ouvre ou ferme un formulaire publie, sans nouvelle version. Fermer le
+ * formulaire de jury, c'est verrouiller les notes ; fermer un formulaire Picks,
+ * c'est clore les choix.
+ */
+export async function setFormStatus(formId: string, status: "open" | "closed"): Promise<void> {
+  await patchDoc<Form>(refs.form(formId), { status });
 }

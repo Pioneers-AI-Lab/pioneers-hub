@@ -1,4 +1,4 @@
-import type { EventKind, Membership, ProfileCategory } from "./types";
+import type { EventTeam, MatchingMode, Membership, ProfileCategory, TeamRole } from "./types";
 
 // ----------------------------
 // Generateur de groupes (SPECS §4.1)
@@ -46,7 +46,7 @@ export type GeneratorRules = {
 };
 
 /**
- * Reglages par mecanique (SPECS §4.1).
+ * Reglages par mode de matching (SPECS §4.1, `EventMatching.mode`).
  *   challenge  1. jamais deux fois la meme paire en hackathon ; 2. au moins un
  *              tech par equipe ; 3. eviter les paires deja reunies en roulette.
  *   matching   faire rencontrer de nouvelles personnes : jamais deux fois la
@@ -61,16 +61,22 @@ export const GENERATOR_PRESETS = {
     defaultSize: 4,
     rules: { matchingRepeatWeight: 10_000, challengeRepeatWeight: 100, noTechPenalty: 0, noBusinessPenalty: 0 },
   },
-} as const satisfies Record<string, { defaultSize: number; rules: GeneratorRules }>;
+} as const satisfies Record<MatchingMode, { defaultSize: number; rules: GeneratorRules }>;
 
-export type GeneratorMode = keyof typeof GENERATOR_PRESETS;
+export type GeneratorMode = MatchingMode;
 
 export const GROUP_SIZE_MIN = 2;
 export const GROUP_SIZE_MAX = 5;
 
-/** Mecanique d'evenement -> reglages du generateur. */
-export const generatorModeOfKind = (kind: EventKind): GeneratorMode | null =>
-  kind === "team_challenge" ? "challenge" : kind === "matching" ? "matching" : null;
+/** Les tailles proposees dans les outils, en texte (`SegmentedControl`). */
+export const GROUP_SIZES = Array.from({ length: GROUP_SIZE_MAX - GROUP_SIZE_MIN + 1 }, (_, i) => String(GROUP_SIZE_MIN + i));
+
+/** L'ordre d'affichage des groupes d'un tirage : `…-t2` avant `…-t10` (ids de `teamIdFor`). */
+export const byGroupOrder = (a: { id: string }, b: { id: string }) => groupNumber(a.id) - groupNumber(b.id);
+const groupNumber = (id: string) => Number(id.match(/(\d+)$/)?.[1] ?? 0);
+
+/** Taille d'un matching (`EventMatching.size`) a partir de sa taille maximale. */
+export const teamSizeFor = (max: number) => ({ min: Math.max(GROUP_SIZE_MIN, max - 1), max });
 
 export type GeneratorInput = {
   participants: GeneratorParticipant[];
@@ -119,6 +125,19 @@ export type GeneratorResult = {
 
 // ---- Paires et historique ------------------------------------------------------
 
+/**
+ * Mecanique d'une appartenance qui compte dans l'historique : equipe d'un
+ * evenement a groupes, hors l'evenement en cours de tirage. `null` sinon.
+ */
+function modeOfMembership(
+  m: Pick<Membership, "kind" | "eventId">,
+  modeOfEvent: (eventId: string) => GeneratorMode | null,
+  excludeEventId: string | null,
+): GeneratorMode | null {
+  if (m.kind !== "event_team" || !m.eventId || m.eventId === excludeEventId) return null;
+  return modeOfEvent(m.eventId);
+}
+
 export const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
 const bump = (map: Map<string, number>, key: string) => map.set(key, (map.get(key) ?? 0) + 1);
@@ -130,14 +149,13 @@ const bump = (map: Map<string, number>, key: string) => map.set(key, (map.get(ke
  */
 export function buildPairHistory(
   memberships: readonly Pick<Membership, "kind" | "teamId" | "eventId" | "founderId">[],
-  kindOfEvent: (eventId: string) => EventKind | null,
+  /** Le mode du matching de l'evenement d'une appartenance (`matchingOf(event)?.mode`). */
+  modeOfEvent: (eventId: string) => GeneratorMode | null,
   excludeEventId: string | null,
 ): PairHistory {
   const teams = new Map<string, { mode: GeneratorMode; members: Set<string> }>();
   for (const m of memberships) {
-    if (m.kind !== "event_team" || !m.eventId || m.eventId === excludeEventId) continue;
-    const kind = kindOfEvent(m.eventId);
-    const mode = kind ? generatorModeOfKind(kind) : null;
+    const mode = modeOfMembership(m, modeOfEvent, excludeEventId);
     if (!mode) continue;
     const key = `${m.eventId}/${m.teamId}`;
     const team = teams.get(key) ?? { mode, members: new Set<string>() };
@@ -150,6 +168,66 @@ export function buildPairHistory(
     for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) bump(history[mode], pairKey(ids[i], ids[j]));
   }
   return history;
+}
+
+// ---- Leader d'un groupe -----------------------------------------------------------
+// Un leader par groupe, tire au sort : il rassemble le groupe et veille au bon
+// deroulement. Rotation : on tire parmi les membres qui ont le moins mene, par
+// mecanique (mener une table de lunch ne dispense pas de mener une equipe de
+// hackathon). Garde dans `EventTeam.roles` et, a la publication, dans
+// l'appartenance datee (`Membership.role`), que lit la rotation.
+
+export const LEADER_ROLE = "leader" satisfies TeamRole;
+
+/** Le leader d'une equipe enregistree (`null` : aucun, ex. equipes d'avant les leaders). */
+export const leaderIdOf = (team: Pick<EventTeam, "memberIds" | "roles">): string | null =>
+  team.memberIds.find((id) => team.roles[id]?.includes(LEADER_ROLE)) ?? null;
+
+/** Nombre de fois ou chacun a deja mene un groupe de cette mecanique dans le batch. */
+export function buildLeaderCounts(
+  memberships: readonly Pick<Membership, "kind" | "eventId" | "founderId" | "role">[],
+  modeOfEvent: (eventId: string) => GeneratorMode | null,
+  mode: GeneratorMode,
+  excludeEventId: string | null,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const m of memberships) {
+    if (m.role === LEADER_ROLE && modeOfMembership(m, modeOfEvent, excludeEventId) === mode) bump(counts, m.founderId);
+  }
+  return counts;
+}
+
+/** Tire le leader d'un groupe parmi ceux qui ont le moins mene. */
+export function pickLeader(memberIds: readonly string[], counts: ReadonlyMap<string, number>, random = Math.random): string | null {
+  if (memberIds.length === 0) return null;
+  const least = Math.min(...memberIds.map((id) => counts.get(id) ?? 0));
+  const candidates = memberIds.filter((id) => (counts.get(id) ?? 0) === least);
+  return candidates[Math.floor(random() * candidates.length)];
+}
+
+/**
+ * Chaque groupe a un leader : celui qui est encore membre reste, les autres
+ * groupes en tirent un (`pickLeader`). Apres un tirage, un echange, un depart.
+ */
+export function assignLeaders<G extends { memberIds: string[]; leaderId: string | null }>(
+  groups: readonly G[],
+  counts: ReadonlyMap<string, number>,
+  random = Math.random,
+): G[] {
+  return groups.map((g) =>
+    g.leaderId && g.memberIds.includes(g.leaderId) ? g : { ...g, leaderId: pickLeader(g.memberIds, counts, random) },
+  );
+}
+
+/** `EventTeam.roles` a enregistrer : les autres roles des membres gardes (SP26), le leader marque. */
+export function rolesWithLeader(previous: EventTeam["roles"], memberIds: readonly string[], leaderId: string | null): EventTeam["roles"] {
+  const roles: Record<string, TeamRole[]> = {};
+  for (const id of memberIds) {
+    const kept = (previous[id] ?? []).filter((r) => r !== LEADER_ROLE);
+    const all: TeamRole[] = id === leaderId ? [...kept, LEADER_ROLE] : kept;
+    if (all.length > 0) roles[id] = all;
+  }
+  return roles;
 }
 
 // ---- Tailles des groupes --------------------------------------------------------

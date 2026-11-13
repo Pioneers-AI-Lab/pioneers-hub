@@ -7,17 +7,15 @@
 // ajouter une ligne ici, puis l'implementer dans functions/src.
 
 import type {
-  Criterion,
-  EventMetric,
-  EventPicks,
   FieldWriteStatus,
   FormAnswer,
   FormFieldType,
   FormIdentityCheck,
+  FormKind,
   FormResponseStatus,
   InvestorAccess,
   PickerEntity,
-  SubmissionLink,
+  QuestionScope,
   UserRole,
 } from "./types";
 
@@ -37,7 +35,19 @@ export type PublicFormQuestion = {
   options: PublicChoice[] | null;
   scale: { min: number; max: number } | null;
   picker: { entity: PickerEntity; maxItems: number } | null;
+  /** De quoi parle la reponse : le repondant, son equipe, chaque coequipier, chaque equipe notee. */
+  scope: QuestionScope;
 };
+
+/**
+ * Qui repond, quand la page doit le dire au serveur : un fondateur choisi dans
+ * la liste, un jure de la liste (`judgeId`), ou un nom saisi par un jure
+ * exterieur. Un compte connecte et rattache n'en a pas besoin.
+ */
+export type RespondentInput = { founderId: string } | { judgeId: string } | { name: string };
+
+/** Le repondant reconnu par le serveur. */
+export type PublicRespondent = { founderId: string | null; judgeId: string | null; label: string };
 
 /**
  * Un formulaire vu SANS COMPTE (page /forms/[formId]). Les noms des fondateurs
@@ -47,6 +57,9 @@ export type PublicFormQuestion = {
 export type PublicForm = {
   formId: string;
   version: number;
+  kind: FormKind;
+  /** L'evenement du formulaire, pour revenir a sa page (un compte connecte du batch). */
+  event: { id: string; name: string; programId: string; batchId: string } | null;
   title: string;
   description: string | null;
   batchName: string;
@@ -55,12 +68,35 @@ export type PublicForm = {
   /** `draft` : seul le staff le voit, pour le relire ; il ne prend pas de reponse. */
   state: "open" | "not_open_yet" | "closed" | "draft";
   questions: PublicFormQuestion[];
-  /** Les fondateurs du batch, pour « choisir son nom » (vide si le formulaire est anonyme). */
+  /**
+   * Les noms a choisir : les fondateurs du batch (« choisir son nom »), ou pour
+   * un jury les invites, les noms deja venus noter et les fondateurs (nom court).
+   * Vide si le formulaire est anonyme.
+   */
   respondents: PublicChoice[];
+  /** Un jure exterieur peut saisir son nom (lien de jury). */
+  allowTypedName: boolean;
   /** Les listes des questions « choisir dans une liste », par objet. */
   choices: Partial<Record<PickerEntity, PublicChoice[]>>;
   /** Connecte et fondateur du batch : son profil, deja choisi. */
   viewerFounderId: string | null;
+  /**
+   * Le repondant reconnu (compte connecte, ou `respondent` de la requete) ;
+   * `null` tant qu'il n'est pas choisi. Les cibles et les reponses deja
+   * donnees en dependent.
+   */
+  respondent: PublicRespondent | null;
+  /** Son equipe publiee a l'evenement du formulaire, pour les questions « son equipe ». */
+  team: { id: string; name: string } | null;
+  /** Les cibles des questions par cible : ses coequipiers, les equipes (ou startups) a noter sauf la sienne. */
+  targets: Record<"each_teammate" | "each_target", PublicChoice[]>;
+  /**
+   * Les reponses deja donnees, par `answerKey` : seulement pour une identite
+   * prouvee (compte, lien de jury). Le formulaire se relit et se corrige.
+   */
+  prefill: Record<string, FormAnswer>;
+  /** Le formulaire se renvoie (identite prouvee, formulaire ouvert) : chaque envoi remplace les valeurs. */
+  canResubmit: boolean;
 };
 
 /** Un compte vu par Admin > Access : identite Firebase Auth et droits (`users/{uid}`). */
@@ -75,6 +111,7 @@ export type AccountRow = {
   /** Fournisseurs de connexion : `google.com`, `password`. Vide = invite, jamais connecte. */
   providers: string[];
   createdDateISOString: string;
+  /** `null` = jamais connecte (toujours `null` sans fournisseur : un compte invite ne s'est pas connecte). */
   lastSignInDateISOString: string | null;
   roles: UserRole[];
   investorAccess: InvestorAccess | null;
@@ -87,61 +124,13 @@ export type AccountRow = {
 export type AccountAccess = { roles: UserRole[]; investorAccess: InvestorAccess | null };
 
 /**
- * Un hackathon (mecanique `team_challenge`) commence, vu par un fondateur de
- * son equipe : ce qu'il doit encore saisir dans le Debrief.
+ * Qui note, sur le lien partage du jury : un nom de la liste (`judgeId`) ou un
+ * nom saisi (un exterieur sans compte).
  */
-export type ChallengeTask = {
-  eventId: string;
-  eventName: string;
-  startDateISOString: string;
-  /** Metriques declarees par l'evenement : les compteurs que l'equipe renseigne. */
-  metrics: EventMetric[];
-  /** Noms et photos : le front les a deja (`FoundersContext`). */
-  team: { id: string; name: string; teammateIds: string[] };
-  /** Les avis que ce fondateur a deja donnes, par coequipier note. */
-  myRatings: Record<string, { rating: number; comment: string | null }>;
-  /** Les resultats deja saisis par l'equipe, `null` si rien encore. */
-  results: TeamResults | null;
-};
+export type JuryIdentity = Exclude<RespondentInput, { founderId: string }>;
 
-/** Les resultats d'une equipe a un hackathon (une soumission). */
-export type TeamResults = {
-  /** Cle de `EventMetric.key` -> valeur. */
-  metrics: Record<string, number>;
-  links: SubmissionLink[];
-  productUrl: string | null;
-  notes: string | null;
-};
-
-/** La feuille d'un jure (lien prive, sans compte) : la grille, les cibles, ses notes deja donnees. */
-export type JudgeSheet = {
-  judgeName: string;
-  eventName: string;
-  startDateISOString: string;
-  /** Faux une fois l'evenement verrouille (`locked`, `completed`) : les notes sont figees. */
-  canEdit: boolean;
-  criteria: Criterion[];
-  /** Les equipes publiees ou les startups de l'evenement, sauf celles dont le jure est exclu. */
-  targets: { id: string; name: string; members: string[] }[];
-  /** Ses notes par cible. */
-  scores: Record<string, { scores: Record<string, number>; comment: string | null }>;
-};
-
-/** Limites du jury et des choix, verifiees par le serveur et reprises par les champs du front. */
-export const JUDGE_LIMITS = { name: 80, comment: 1000 } as const;
-export const PICKS_LIMITS = { question: 200 } as const;
-
-/** Ce qui identifie un jure : l'evenement, son id, et le secret de son lien. */
-export type JudgeKey = { eventId: string; judgeId: string; key: string };
-
-/** La question des avis entre pairs (SPECS §4.3), de 1 a 5. */
-export const PEER_QUESTION = "Would you start a company with this person?";
-
-/** Limites du Debrief, verifiees par le serveur et reprises par les champs du front. */
-export const DEBRIEF_LIMITS = { peerComment: 280, resultNotes: 2000, resultLinks: 20, linkLabel: 80 } as const;
-
-/** Un avis entre pairs : `PEER_QUESTION`, de 1 a 5, et une phrase. */
-export type PeerRatingInput = { rateeFounderId: string; rating: number; comment: string | null };
+/** Limites du lien de jury, verifiees par le serveur et reprises par les champs du front. */
+export const JUDGE_LIMITS = { name: 80 } as const;
 
 export type Callables = {
   /** Sonde : verifie que le front joint les Functions (region, emulateur). */
@@ -181,29 +170,27 @@ export type Callables = {
     req: { email: string } & AccountAccess;
     res: { uid: string; created: boolean };
   };
+  /**
+   * Admin > Access (staff) : lien pour choisir son mot de passe (Firebase, valable
+   * une heure, une fois), a transmettre a un compte qui ne s'est jamais connecte
+   * (invite). Retour sur /signin. Journalise, sans le lien.
+   */
+  createSetPasswordLink: {
+    req: { uid: string };
+    res: { link: string };
+  };
   /** Admin > Access (staff) : bloque ou debloque la connexion d'un compte. Journalise. */
   setAccountDisabled: {
     req: { uid: string; disabled: boolean };
     res: { ok: true };
   };
-  /** Debrief : les hackathons commences du fondateur connecte dans ce batch, son equipe et ses saisies. */
-  myChallengeTasks: {
-    req: { batchId: string };
-    res: { tasks: ChallengeTask[] };
-  };
-  /** Debrief : le fondateur note ses coequipiers. Rejouable : un nouvel avis remplace l'ancien. */
-  submitPeerRatings: {
-    req: { eventId: string; ratings: PeerRatingInput[] };
-    res: { saved: number };
-  };
-  /** Debrief : les resultats de l'equipe (un membre ou le staff). Chaque metrique devient un releve date. */
-  submitTeamResults: {
-    req: { eventId: string; teamId: string } & TeamResults;
-    res: { ok: true };
-  };
-  /** Formulaire public (sans compte) : questions, listes a choisir, noms courts du batch. */
+  /**
+   * Formulaire public : questions, listes a choisir, noms courts du batch. Avec
+   * `respondent` (ou un compte connecte), ses cibles et, pour une identite
+   * prouvee, ses reponses deja donnees. `key` : le secret d'un lien de jury.
+   */
   getPublicForm: {
-    req: { formId: string };
+    req: { formId: string; key?: string | null; respondent?: RespondentInput | null };
     res: PublicForm;
   };
   /**
@@ -217,7 +204,11 @@ export type Callables = {
       formId: string;
       version: number;
       submissionId: string;
-      respondentFounderId: string | null;
+      /** Qui repond, comme pour `getPublicForm` (inutile pour un compte connecte et rattache). */
+      respondent?: RespondentInput | null;
+      /** Le secret d'un lien de jury. */
+      key?: string | null;
+      /** Par `answerKey` (question, ou question et cible). */
       answers: Record<string, FormAnswer>;
     };
     res: { responseId: string; status: FormResponseStatus };
@@ -227,37 +218,14 @@ export type Callables = {
     req: { eventId: string; metricKey: string | null };
     res: { ok: true };
   };
-  /**
-   * Staff : un jure et son lien prive. Le secret n'est rendu qu'ICI, une fois
-   * (seule son empreinte est stockee) ; le lien expire le lendemain de l'evenement.
-   */
-  createJudge: {
-    req: { eventId: string; name: string; email: string | null; excludedTargetIds: string[] };
-    res: { judgeId: string; key: string; expiresDateISOString: string };
-  };
-  /** Staff : le lien du jure ne marche plus. */
-  revokeJudge: {
-    req: { eventId: string; judgeId: string };
+  /** Staff : cree ou remplace le lien partage du jury (l'ancien cesse de marcher). Journalise. */
+  resetJuryLink: {
+    req: { eventId: string };
     res: { ok: true };
   };
-  /** Jure (sans compte) : sa feuille de notes. */
-  getJudgeSheet: {
-    req: JudgeKey;
-    res: JudgeSheet;
-  };
-  /** Jure : ses notes pour une cible, corrigeables jusqu'au verrouillage. Journalise, puis recalcul du leaderboard. */
-  submitJudgeScores: {
-    req: JudgeKey & { targetId: string; scores: Record<string, number>; comment: string | null };
-    res: { ok: true };
-  };
-  /** Staff : ouvre, modifie ou ferme (`picks: null`) la demande de choix d'un evenement. Journalise. */
-  setEventPicks: {
-    req: { eventId: string; picks: EventPicks | null };
-    res: { ok: true };
-  };
-  /** Fondateur : ses choix classes pour la demande ouverte d'un evenement. Prives (staff + lui). */
-  submitPicks: {
-    req: { eventId: string; pickedFounderIds: string[] };
+  /** Staff : supprime une note du jury saisie par erreur (gardee entiere dans l'audit), puis recalcul du leaderboard. */
+  deleteJuryScore: {
+    req: { eventId: string; evaluationId: string };
     res: { ok: true };
   };
   /** Staff : valide (ecrit) ou refuse une valeur en attente d'une reponse de formulaire. Journalise. */

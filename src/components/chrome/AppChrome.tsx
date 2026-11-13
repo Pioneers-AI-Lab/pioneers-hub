@@ -48,7 +48,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
         </Container>
       </AppShell.Header>
       <AppShell.Main>
-        <Container size={760} px="md" pt="md" style={{ paddingLeft: "max(var(--mantine-spacing-md), env(safe-area-inset-left))", paddingRight: "max(var(--mantine-spacing-md), env(safe-area-inset-right))" }}>
+        <Container size={760} px="md" style={{ paddingTop: "var(--app-content-pt)", paddingLeft: "max(var(--mantine-spacing-md), env(safe-area-inset-left))", paddingRight: "max(var(--mantine-spacing-md), env(safe-area-inset-right))" }}>
           {children}
         </Container>
       </AppShell.Main>
@@ -84,7 +84,12 @@ function ViewerMenu() {
   // fondateur de plusieurs batchs ; le plus recent est celui qu'on vit).
   const latest = [...memberships].sort((a, b) => b.createdDateISOString.localeCompare(a.createdDateISOString))[0];
   const links: AccountLink[] = [
-    ...(latest ? [{ label: "Me", href: paths.me(latest.programId, latest.batchId) }] : []),
+    ...(latest
+      ? [
+          { label: "Me", href: paths.me(latest.programId, latest.batchId) },
+          { label: "Edit my profile", href: paths.meEdit(latest.programId, latest.batchId) },
+        ]
+      : []),
     { label: "Programs", href: paths.programs() },
     ...(isStaff ? [{ label: "Admin", href: paths.admin() }] : []),
     ...(canUseApi(viewer) ? [{ label: "API & MCP", href: paths.apiDocs() }] : []),

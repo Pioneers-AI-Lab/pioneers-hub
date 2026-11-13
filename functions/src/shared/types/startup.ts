@@ -1,5 +1,6 @@
 import type { Archivable, BatchScoped, DateISOString, DayString, RangeEstimate, StartupScoped, Timestamps } from "./common";
 import type { MetricKey } from "./form";
+import type { CheckinGoalKey, CheckinMetricKey } from "../presets/standardMetrics";
 
 // ----------------------------
 // Startup : trois documents, trois publics (SPECS §6.2)
@@ -34,7 +35,6 @@ export type StartupMember = {
 export type StartupPublicStats = {
   /** Rang au leaderboard du batch (1 = premier). */
   rank: number | null;
-  demos: number;
 };
 
 export type Startup = BatchScoped &
@@ -163,45 +163,43 @@ export type StartupInternal = {
 // document par fondateur et par semaine : plusieurs membres d'une startup
 // peuvent chacun remplir le leur, les agregats prennent le maximum (SPECS §5.3).
 
-export type Checkin = StartupScoped & {
-  founderId: string;
-  /** Lundi de la semaine. */
-  weekStartDayString: DayString;
-  /** @source SP26 « Interviews » */
-  interviews: number | null;
-  /** @source SP26 « Active users » */
-  activeUsers: number | null;
-  /** @source SP26 « Total users » */
-  totalUsers: number | null;
-  /** @source SP26 « Revenue » (de la semaine) */
-  revenue: number | null;
-  /** @source SP26 « Total revenue » */
-  totalRevenue: number | null;
-  /** @source SP26 « outbound this week » */
-  outbound: number | null;
-  /** @source SP26 « features shipped » */
-  featuresShipped: number | null;
-  /** @source SP26 « Moral » (1-10) */
-  moral: number | null;
-  /** @source SP26 « goals for next week » (objectifs chiffres) */
-  goalOutreach: number | null;
-  goalInterviews: number | null;
-  goalNewUsers: number | null;
-  goalRevenue: number | null;
-  /** @source SP26 « Goals » */
-  goals: string | null;
-  /** @source SP26 « Obstacle » */
-  obstacle: string | null;
-  /** @source SP26 « Learned » */
-  learned: string | null;
-  /** @source SP26 « Achievement » */
-  achievement: string | null;
-  /** @source 2025 « How can we help you ? » */
-  helpNeeded: string | null;
-  /** @source 2025 « Any document you would like to share ? » */
-  attachmentUrls: string[];
-  updatedDateISOString: DateISOString;
-};
+/**
+ * Les chiffres de toute la startup (presets/standardMetrics.ts) : pipeline de la
+ * semaine (flux), totaux a date et objectifs de la semaine suivante. `null` :
+ * pas repondu. Un update de Spring 2026 n'a que `conversationsDone` (ses
+ * « Interviews »), `totalUsers` et `activeUsers`.
+ */
+type CheckinNumbers = Record<CheckinMetricKey | CheckinGoalKey, number | null>;
+
+export type Checkin = StartupScoped &
+  CheckinNumbers & {
+    founderId: string;
+    /** Lundi de la semaine. */
+    weekStartDayString: DayString;
+    /** @source SP26 « Moral » (1-10) */
+    moral: number | null;
+    /**
+     * @deprecated Historique Spring 2026 (« Revenue » de la semaine, « Total revenue ») :
+     * encaisse, facture ou recurrent, on ne sait pas. Plus demande ; remplace par
+     * `totalAmountPaid` et `mrr`.
+     */
+    revenue: number | null;
+    /** @deprecated Voir `revenue`. */
+    totalRevenue: number | null;
+    /** @source SP26 « Goals » */
+    goals: string | null;
+    /** @source SP26 « Obstacle » */
+    obstacle: string | null;
+    /** @source SP26 « Learned » */
+    learned: string | null;
+    /** @source SP26 « Achievement » */
+    achievement: string | null;
+    /** @source 2025 « How can we help you ? » */
+    helpNeeded: string | null;
+    /** @source 2025 « Any document you would like to share ? » */
+    attachmentUrls: string[];
+    updatedDateISOString: DateISOString;
+  };
 
 // ----------------------------
 // kpiSeries/{startupId}  (agregat membres + staff + investors, recalcule par Cloud Functions)

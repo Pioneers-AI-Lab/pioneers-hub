@@ -42,9 +42,9 @@ const docs = [
       ...stamps,
       archivedDateISOString: null,
       programId: PROGRAM_ID,
-      name: "Fall 2026",
+      name: "fa26",
       startDayString: "2026-11-16",
-      endDayString: "2027-02-25",
+      endDayString: "2027-04-30",
       status: "upcoming",
       // Calendrier Fall 2026 (brief du 11/11, SPECS §9). Demos les 15/01, 29/01
       // et 12/02 : ce sont des evenements `pitch`, pas un jalon.

@@ -7,20 +7,20 @@ import { slackWorkspaceUrl } from "@shared/slackLinks";
 import { STARTUP_WEIGHTING_HINT } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
-import { useEvents } from "@/context/EventsContext";
 import { useFounders } from "@/context/FoundersContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
-import { PROFILE_CATEGORY_LABEL, formatDateTime, formatDay, formatPeriod, percent, relativeDays, score10, todayDayString } from "@/lib/format";
+import { PROFILE_CATEGORY_LABEL, formatDay, formatPeriod, percent, relativeDays, score10, todayDayString } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { LinkRow, Row, RowList } from "@/components/ui/Rows";
-import { Empty, Section } from "@/components/ui/Section";
+import { Section } from "@/components/ui/Section";
 import { StatGrid, StatTile } from "@/components/ui/StatTile";
 import { ChartCard } from "@/components/charts/ChartCard";
 import { NationalityMap } from "@/components/charts/NationalityMap";
 import { ProfileDonut } from "@/components/charts/ProfileDonut";
 import { RankedBars } from "@/components/charts/RankedBars";
-import { EVENT_KIND_LABEL } from "@/components/event/eventLabels";
+import { AddToCalendarButton } from "@/components/event/AddToCalendar";
+import { UpcomingEvents } from "@/components/event/UpcomingEvents";
 
 // ----------------------------
 // Accueil du batch
@@ -33,17 +33,14 @@ export default function BatchHomePage() {
   const { batch, role } = useBatch();
   const { founders } = useFounders();
   const { startups } = useStartups();
-  const { events, isLoading: isEventsLoading } = useEvents();
   const { stats, canSeeScores, founderPerformance, startupScoreOf } = useCohort();
 
   const today = todayDayString();
-  const nowISO = new Date().toISOString();
   const next = batch.milestones.find((m) => m.dayString && m.dayString >= today) ?? null;
   // Espace Slack du batch, pas un canal (le canal configure peut etre reserve au
   // staff) : pour ceux qui en font partie, pas un visiteur public.
   const slackTeamId = batch.settings.slackTeamId ?? null;
   const slackWorkspace = role !== "public" && slackTeamId ? slackWorkspaceUrl(slackTeamId) : null;
-  const upcoming = events.filter((e) => (e.endDateISOString ?? e.startDateISOString) >= nowISO).slice(0, 4);
 
   const topFounders = canSeeScores
     ? founders
@@ -179,24 +176,7 @@ export default function BatchHomePage() {
         </Section>
       )}
 
-      {batch.status !== "completed" && (
-        <Section title="Coming up">
-          {isEventsLoading ? null : upcoming.length === 0 ? (
-            <Empty>Nothing scheduled yet.</Empty>
-          ) : (
-            <RowList>
-              {upcoming.map((e) => (
-                <Row
-                  key={e.id}
-                  title={e.name}
-                  subtitle={[formatDateTime(e.startDateISOString), e.location].filter(Boolean).join(" · ")}
-                  meta={EVENT_KIND_LABEL[e.kind]}
-                />
-              ))}
-            </RowList>
-          )}
-        </Section>
-      )}
+      <UpcomingEvents limit={4} right={<AddToCalendarButton batchId={batch.id} batchName={batch.name} />} />
 
       <Section title="Results">
         <RowList>

@@ -6,15 +6,19 @@ import type { Archivable, BatchScoped, DateISOString, Timestamps } from "./commo
 //   events/{eventId}                                   PioneersEvent  public
 //     teams/{teamId}                                   EventTeam      public une fois publiee, staff + IC avant
 //     submissions/{teamId}                             Submission     public (equipe ecrit)
-//     evaluations/{evaluatorId}_{targetId}             Evaluation     staff + investors IC (+ le jure, les siennes)
-//     judges/{judgeId}                                 Judge          staff seulement (empreinte du jeton)
+//     evaluations/{evaluatorId}_{targetId}             Evaluation     staff + investors IC (le jury ecrit par callable)
+//     judges/link                                      JuryLink       staff seulement (secret du lien partage du jury)
 //     attendance/{founderId}                           Attendance     staff + investors IC (+ le fondateur, la sienne)
 //     peerRatings/{raterFounderId}_{rateeFounderId}    PeerRating     staff (+ l'auteur, les siens donnes) ; agregat dans founderStats
 //
-// UN SEUL MODELE POUR TOUS LES EXERCICES. Le SP26 avait une table par exercice
-// (Edge drill, Hackathon, Discovery, Vibethon, Weekly pitch), chacune avec ses
-// colonnes de notes. Ici, l'evenement declare sa grille (`criteria`) et chaque
-// evaluation remplit `scores[critere]`.
+// UN SEUL MODELE POUR TOUS LES EXERCICES (SPECS §2, decision du 12/11). Le SP26
+// avait une table par exercice (Edge drill, Hackathon, Discovery, Vibethon,
+// Weekly pitch), chacune avec ses colonnes de notes. Ici, un evenement est une
+// entree d'agenda, avec un tirage de groupes (`teams`) et des FORMULAIRES
+// (types/form.ts) : les metriques sont les questions de son Debrief
+// (`submission.metrics.<cle>`), la grille celles de son formulaire de jury
+// (`evaluation.scores.<cle>`, poids sur la question), les picks une question de
+// son formulaire Picks. L'evenement ne garde que le reglage de son leaderboard.
 //
 // LE TYPE D'UN EVENEMENT EST SA MECANIQUE, pas son nom (retour du 11/11) :
 // pitch day, Friday pitch, demo, Selection Day et IC sont tous des `pitch` ;
@@ -23,96 +27,41 @@ import type { Archivable, BatchScoped, DateISOString, Timestamps } from "./commo
 // shared/presets/eventTemplates.ts), et les jalons dans `stage`.
 
 /**
- * Les mecaniques. Chacune dit ce que la plateforme fait de l'evenement
- * (`EVENT_KIND_FEATURES`).
- *   team_challenge  equipes tirees, soumissions, metriques, notes du jury, avis
- *                   entre pairs, leaderboard : hackathons, Edge drill, customer
- *                   discovery, Vibethon, workshop, customer day, sprint de traction
- *   pitch           des startups pitchent et sont notees sur la grille unique :
- *                   pitch day, Friday pitch, demo, Selection Day, Pre-IC, IC
- *   matching        groupes tires pour se rencontrer, sans note : lunch roulette,
- *                   speed dating, round tables
- *   session         presence et note en un geste, avec des intervenants :
- *                   masterclass, talk, theme session, annonce, evenement social
- *   meeting         rendez-vous d'une startup ou d'un fondateur avec le staff, un
- *                   mentor ou un expert, avec notes : office hours, visio de mentorat
+ * Le TYPE d'un evenement : une ETIQUETTE (decision du 13/11), pour l'affichage
+ * et les modeles. Les outils ne viennent plus du type mais de ce qui est
+ * attache a l'evenement : un matching (`matching`) donne le tirage et les
+ * equipes, un formulaire de jury le jury et le leaderboard, un Debrief les
+ * resultats d'equipe (SPECS §2).
+ *   team_challenge  hackathons, Edge drill, customer discovery, Vibethon, workshop
+ *   pitch           pitch day, Friday pitch, demo, Selection Day, Pre-IC, IC
+ *   matching        lunch roulette, speed dating, round tables
+ *   session         masterclass, talk, theme session, annonce, evenement social
+ *                   (et un evenement cree a blanc)
+ *   meeting         office hours, visio de mentorat
  */
 export const EVENT_KINDS = ["team_challenge", "pitch", "matching", "session", "meeting"] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 
 /**
- * Ce que note un jury dans cette mecanique : une equipe (hackathon) ou une
- * startup (pitch). `null` : pas de jury ni de leaderboard du jury.
+ * Le mode d'un matching : ce que le generateur cherche (shared/teamGenerator.ts).
+ *   challenge  des equipes de travail : jamais deux fois la meme paire en
+ *              challenge, au moins un profil tech par equipe, un leader
+ *   matching   des tables pour se rencontrer : jamais deux fois la meme paire
+ *              a table, puis eviter les coequipiers de challenge
  */
-export function juryTarget(kind: EventKind): "team" | "startup" | null {
-  const target = EVENT_KIND_FEATURES[kind].evaluationTarget;
-  return target === "team" || target === "startup" ? target : null;
-}
+export const MATCHING_MODES = ["challenge", "matching"] as const;
+export type MatchingMode = (typeof MATCHING_MODES)[number];
 
-/** Ce que chaque mecanique active. L'interface et l'API s'en servent ; la donnee ne depend que de ca. */
-export const EVENT_KIND_FEATURES: Record<
-  EventKind,
-  {
-    /** Equipes generees (`teams`) et appartenances datees. */
-    teams: boolean;
-    /** Soumissions d'equipe et metriques de l'evenement. */
-    submissions: boolean;
-    /** Ce que notent les evaluateurs, `null` si rien. */
-    evaluationTarget: EvaluationTargetType | null;
-    /** Avis entre pairs apres l'evenement. */
-    peerRatings: boolean;
-    leaderboard: boolean;
-    /** Note en un geste par les participants. */
-    sessionRating: boolean;
-    /** Presence attendue de chaque participant (champ manquant sinon). */
-    attendance: boolean;
-  }
-> = {
-  team_challenge: {
-    teams: true,
-    submissions: true,
-    evaluationTarget: "team",
-    peerRatings: true,
-    leaderboard: true,
-    sessionRating: false,
-    attendance: true,
-  },
-  pitch: {
-    teams: false,
-    submissions: false,
-    evaluationTarget: "startup",
-    peerRatings: false,
-    leaderboard: true,
-    sessionRating: false,
-    attendance: false,
-  },
-  matching: {
-    teams: true,
-    submissions: false,
-    evaluationTarget: null,
-    peerRatings: false,
-    leaderboard: false,
-    sessionRating: false,
-    attendance: false,
-  },
-  session: {
-    teams: false,
-    submissions: false,
-    evaluationTarget: null,
-    peerRatings: false,
-    leaderboard: false,
-    sessionRating: true,
-    attendance: true,
-  },
-  meeting: {
-    teams: false,
-    submissions: false,
-    evaluationTarget: "startup",
-    peerRatings: false,
-    leaderboard: false,
-    sessionRating: true,
-    attendance: true,
-  },
+/**
+ * Le matching d'un evenement : 0 ou 1 (un tirage par evenement, decision du
+ * 12/11). Ses groupes sont `events/{id}/teams`. Il rend possibles les
+ * questions « son equipe » et « chaque coequipier » des formulaires, et le jury
+ * note ses groupes.
+ */
+export type EventMatching = {
+  mode: MatchingMode;
+  /** Taille visee des groupes (2 a 5). */
+  size: { min: number; max: number };
 };
 
 /**
@@ -123,8 +72,9 @@ export const PITCH_STAGES = ["selection_day", "pre_ic", "ic"] as const;
 export type PitchStage = (typeof PITCH_STAGES)[number];
 
 /**
- * draft -> scheduled -> live (notes ouvertes) -> locked (notes figees) -> completed.
- * Un jure peut corriger ses notes jusqu'a `locked`.
+ * draft -> scheduled -> live -> locked -> completed. Les notes du jury ne
+ * dependent pas du statut : elles sont ouvertes tant que le formulaire de jury
+ * l'est (le verrouiller, c'est le fermer).
  */
 export type EventStatus = "draft" | "scheduled" | "live" | "locked" | "completed";
 
@@ -132,10 +82,11 @@ export type EventStatus = "draft" | "scheduled" | "live" | "locked" | "completed
 export type EvaluationTargetType = "team" | "founder" | "startup" | "mentor";
 
 /**
- * Une metrique que l'evenement collecte (Fall 2026 : chaque hackathon a les
- * siennes : appels passes, inscriptions, argent encaisse...). Declaree par
- * l'evenement comme sa grille, remplie dans `Submission.metrics`, et recopiee
- * dans `metricSnapshots` pour le suivi dans le temps.
+ * Une metrique d'equipe (Fall 2026 : chaque hackathon a les siennes : appels
+ * passes, inscriptions, argent encaisse...). C'est une question du Debrief
+ * reliee a `submission.metrics.<key>` ; cette forme sert aux modeles
+ * (presets/eventTemplates.ts) et au leaderboard qui la nomme. Chaque valeur est
+ * recopiee dans `metricSnapshots` pour le suivi dans le temps.
  */
 export type EventMetric = {
   /** Cle stable. Ne se renomme jamais. */
@@ -144,7 +95,12 @@ export type EventMetric = {
   unit: string | null;
 };
 
-/** Un critere de grille. Le score total est la moyenne ponderee des scores ramenes a /10. */
+/**
+ * Un critere de grille : une question de note du formulaire de jury reliee a
+ * `evaluation.scores.<key>` (echelle de la question, poids `weight`). Cette
+ * forme sert aux modeles et au leaderboard. Le score total est la moyenne
+ * ponderee des scores ramenes a /10.
+ */
 export type Criterion = {
   /** Cle stable, utilisee dans `Evaluation.scores`. Ne se renomme jamais. */
   key: string;
@@ -217,54 +173,48 @@ export type PioneersEvent = BatchScoped &
     resourceUrl: string | null;
     status: EventStatus;
     /**
-     * Grille de notation ; vide pour les evenements sans evaluation. UNE SEULE
-     * ECHELLE (brief du 11/11) : pitch days, demos, Selection Day, Pre-IC et IC
-     * reprennent la grille Team 40 / Speed 40 / Market 20 (presets/eventTemplates.ts).
+     * Le matching de l'evenement, `null` sans tirage. Absent d'un evenement
+     * d'avant le 13/11 : il se deduit de son type et de `teamSize`
+     * (`matchingOf`, shared/events.ts).
      */
-    criteria: Criterion[];
-    /** Metriques collectees par l'evenement (hackathons). Vide sinon. */
-    metrics: EventMetric[];
-    evaluationTargetType: EvaluationTargetType | null;
-    /** Taille des equipes (Twin : 3 max, a confirmer). `null` si pas d'equipes. */
-    teamSize: { min: number; max: number } | null;
+    matching?: EventMatching | null;
+    /** @deprecated ancien : la cible du jury se deduit du matching (`juryTargetOf`). */
+    evaluationTargetType?: EvaluationTargetType | null;
+    /** @deprecated ancien : la taille est celle du matching (`matching.size`). */
+    teamSize?: { min: number; max: number } | null;
     /** Revelation programmee du leaderboard en salle. */
     leaderboardRevealDateISOString: DateISOString | null;
     /**
      * Ce qui classe le leaderboard : `null` = les notes du jury (par defaut) ;
-     * sinon la cle d'une de ses `metrics` (hackathons « Phone Agents » et
-     * « Agent Agency » : conversations, argent encaisse). Absent des anciens documents.
+     * sinon la cle d'une metrique de son Debrief (`submission.metrics.<cle>` :
+     * hackathons « Phone Agents » et « Agent Agency » : conversations, argent
+     * encaisse). Absent des anciens documents.
      */
     rankingMetricKey?: string | null;
-    /** Les choix prives que l'evenement recueille (`picks/{eventId}_{founderId}`), `null` sinon. Absent des anciens documents. */
-    picks?: EventPicks | null;
   };
 
 /**
- * Une demande de choix (mutual picks, « qui t'a marque » d'un speed dating).
- * Ouverte tant que `closesDateISOString` n'est pas passee (`null` : jusqu'a
- * ce que le staff la ferme).
+ * Les fondateurs invites a un evenement a audience restreinte : les invites
+ * nommes et les membres des startups concernees. `null` : tout le batch est
+ * invite (`audience: "batch"`).
  */
-export type EventPicks = {
-  question: string;
-  /** Nombre de choix au plus (top 3 le 23/11). */
-  max: number;
-  closesDateISOString: DateISOString | null;
-};
-
-/** Au plus 5 choix par demande. */
-export const PICKS_MAX = 5;
-
-/** La demande de choix de l'evenement, si elle est ouverte a cet instant. */
-export function openPicks(event: Pick<PioneersEvent, "picks" | "archivedDateISOString">, nowISO: string): EventPicks | null {
-  const picks = event.picks ?? null;
-  if (!picks || event.archivedDateISOString !== null) return null;
-  return picks.closesDateISOString === null || picks.closesDateISOString > nowISO ? picks : null;
+export function invitedFounderIds(
+  event: Pick<PioneersEvent, "audience" | "guestFounderIds" | "startupIds">,
+  founders: { id: string; startupId: string | null }[],
+): Set<string> | null {
+  if (event.audience === "batch") return null;
+  const startups = new Set(event.startupIds);
+  return new Set([...event.guestFounderIds, ...founders.filter((f) => f.startupId !== null && startups.has(f.startupId)).map((f) => f.id)]);
 }
 
 // ---- teams/{teamId} ----------------------------------------------------------
 
-/** Roles dans l'equipe. @source SP26 « Vibethon » (Tech lead, Presenter, Deck maker). */
-export type TeamRole = "tech_lead" | "presenter" | "deck_maker";
+/**
+ * Roles dans l'equipe. @source SP26 « Vibethon » (Tech lead, Presenter, Deck maker).
+ * `leader` : un par groupe (challenge ou lunch roulette), tire au sort au tirage
+ * (`pickLeader`, shared/teamGenerator.ts) ; il rassemble le groupe et veille au deroulement.
+ */
+export type TeamRole = "tech_lead" | "presenter" | "deck_maker" | "leader";
 
 export type EventTeam = {
   /** @source SP26 « Team Name » / « Group Name » */
@@ -302,9 +252,6 @@ export const DELIVERABLES = [
 ] as const;
 export type Deliverable = (typeof DELIVERABLES)[number];
 
-/** Une preuve jointe a une soumission (transcripts d'appels, liste de 30 clients potentiels, creatives...). */
-export type SubmissionLink = { label: string; url: string };
-
 export type Submission = {
   teamId: string;
   title: string | null;
@@ -316,17 +263,32 @@ export type Submission = {
   /** @source SP26 « Slide Deck » (Edge drill) */
   slideUrl: string | null;
   deliverables: Partial<Record<Deliverable, boolean>>;
-  /** Cle de `PioneersEvent.metrics` -> valeur. Chaque valeur est aussi un `metricSnapshot`. */
+  /**
+   * Cle de metrique -> valeur : questions du Debrief reliees a
+   * `submission.metrics.<cle>`. Chaque valeur est aussi un `metricSnapshot`
+   * (declencheur `onSubmissionWritten`).
+   */
   metrics: Record<string, number>;
   /** @source Fall 2026 « Build freeze » : URL du produit et fonctionnalites. */
   productUrl: string | null;
-  links: SubmissionLink[];
+  /** Liens de preuve (transcripts d'appels, liste de 30 clients potentiels, creatives...). */
+  proofUrls: string[];
   /** Precisions libres de l'equipe (ex. le type de client du hackathon Agent Agency). */
   notes: string | null;
   submittedDateISOString: DateISOString | null;
+  /** Dernier ecrivain : le repondant du Debrief, ou le staff qui corrige. Source des releves. */
+  recordedByUid: string | null;
+  recordedSource: "self_reported" | "staff" | null;
 };
 
-/** Une soumission vide : la base de ses deux ecrivains (Debrief, et formulaires / API via le registre). */
+/** Ce que tout ecrivain d'une soumission pose : la source des releves de metriques (`onSubmissionWritten`). */
+export const submissionStamp = (uid: string, source: "self_reported" | "staff", now: string) => ({
+  submittedDateISOString: now,
+  recordedByUid: uid,
+  recordedSource: source,
+});
+
+/** Une soumission vide : la base de tout ecrivain (Debrief, staff, API, via le registre). */
 export const emptySubmission = (teamId: string): Submission => ({
   teamId,
   title: null,
@@ -337,9 +299,11 @@ export const emptySubmission = (teamId: string): Submission => ({
   deliverables: {},
   metrics: {},
   productUrl: null,
-  links: [],
+  proofUrls: [],
   notes: null,
   submittedDateISOString: null,
+  recordedByUid: null,
+  recordedSource: null,
 });
 
 // ---- evaluations/{evaluatorId}_{targetId} ------------------------------------
@@ -359,14 +323,18 @@ export type FinalDecision = "go" | "no_go";
 
 export type Evaluation = {
   evaluatorKind: EvaluatorKind;
-  /** `judgeId` pour un jure, `uid` sinon. */
+  /**
+   * Un jure du lien partage : `founder-{founderId}` (un fondateur du batch) ou
+   * `jury-{empreinte du nom}` (un nom saisi) ; l'id d'un ancien document `judges`
+   * pour les liens par jure d'avant le 12/11. `uid` pour un autre evaluateur.
+   */
   evaluatorId: string;
   evaluatorName: string;
   /** @source SP26 « Weekly pitch » (External, a confirmer) */
   isExternal: boolean;
   targetType: EvaluationTargetType;
   targetId: string;
-  /** Critere -> note, sur l'echelle declaree par `PioneersEvent.criteria`. */
+  /** Critere -> note, sur l'echelle de la question du formulaire de jury (`evaluation.scores.<critere>`). */
   scores: Record<string, number>;
   /** @source 2025 « Overall Score » (grille IC) : note globale saisie, distincte de la moyenne ponderee. */
   overallScore: number | null;
@@ -387,28 +355,22 @@ export type Evaluation = {
   updatedDateISOString: DateISOString;
 };
 
-// ---- judges/{judgeId} --------------------------------------------------------
+// ---- judges/link -------------------------------------------------------------
 
-/** Un jure, sans compte : un lien prive et personnel par evenement. */
-export type Judge = {
-  name: string;
-  email: string | null;
+/**
+ * Le lien partage du jury d'un evenement (`/forms/{formId du jury}#secret`), un seul
+ * par evenement : qui l'a peut noter, sans compte, en choisissant ou saisissant
+ * son nom. Staff seulement (regle `judges`), jamais lu par l'API (SPECS §4.8).
+ * Le secret est garde EN CLAIR pour que le staff recopie le lien a tout moment :
+ * il ne donne que le droit de noter cet evenement, que le staff a deja.
+ * Le staff le remplace (l'ancien cesse de marcher). Les autres documents de
+ * `judges` sont les liens par jure d'avant le 12/11 : plus lus.
+ */
+export type JuryLink = {
+  secret: string;
   createdByUid: string;
   createdDateISOString: DateISOString;
-  /** Empreinte du jeton du lien ; le jeton en clair n'est jamais stocke. */
-  tokenHash: string;
-  /** Le lien expire le lendemain de l'evenement. */
-  expiresDateISOString: DateISOString;
-  revokedDateISOString: DateISOString | null;
-  /** Un jure ne note pas sa propre equipe. */
-  excludedTargetIds: string[];
 };
-
-/** L'etat du lien d'un jure a cet instant : le serveur le refuse s'il n'est pas `active`. */
-export function judgeLinkState(judge: Pick<Judge, "revokedDateISOString" | "expiresDateISOString">, nowISO: string) {
-  if (judge.revokedDateISOString !== null) return "revoked" as const;
-  return judge.expiresDateISOString < nowISO ? ("expired" as const) : ("active" as const);
-}
 
 // ---- attendance/{founderId} --------------------------------------------------
 

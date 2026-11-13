@@ -1,11 +1,15 @@
 "use client";
 
-import { Avatar, Group, Stack, Text, Title } from "@mantine/core";
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { Alert, Avatar, Box, Button, Group, Stack, Text, Title } from "@mantine/core";
 import { EXISTING_CO_FOUNDERS_LABELS, type FounderStatus } from "@shared/types";
 import { useFounder } from "@/context/FounderContext";
+import { useLists } from "@/context/ListsContext";
 import { useStartups } from "@/context/StartupsContext";
 import { useBatch } from "@/context/BatchContext";
 import { useProgram } from "@/context/ProgramContext";
+import { missingRequiredFields } from "@/lib/completeness";
 import { PROFILE_CATEGORY_LABEL, formatDay } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { ExternalLink, Field, FieldGrid } from "@/components/ui/Field";
@@ -33,13 +37,18 @@ const yesNo = (v: boolean | null | undefined) => (v === true ? "Yes" : v === fal
 /**
  * La fiche d'un fondateur, section par section selon ce que le role peut lire
  * (FounderContext n'a ouvert que les documents autorises). Sert a la fiche et
- * a « Me ».
+ * a « Me » (sa propre fiche). `selfSections` (To do, Coming up) ne s'affiche que
+ * sur SA fiche, sous les Providers qu'il lit (SelfProviders, monte par le layout).
  */
-export function FounderCard() {
+export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
   const { program } = useProgram();
   const { batch, role } = useBatch();
-  const { founder, directory, profile, internal, canSeeDirectory, isDetailsLoading } = useFounder();
+  const { founder, directory, profile, internal, canSeeDirectory, isSelf, canEdit, isDetailsLoading } = useFounder();
+  // Le fondateur lui-meme ou le staff : bouton d'edition et alerte « profil incomplet ».
+  const editHref = paths.founderEdit(program.id, batch.id, founder.id);
+  const missing = canEdit && !isDetailsLoading && directory ? missingRequiredFields(founder, directory, profile) : [];
   const { startupsById } = useStartups();
+  const { colorOf } = useLists();
   const startup = founder.startupId ? startupsById.get(founder.startupId) : undefined;
   const category = founder.profileCategory ? PROFILE_CATEGORY_LABEL[founder.profileCategory] : null;
 
@@ -47,7 +56,7 @@ export function FounderCard() {
     <Stack gap={0}>
       <Group gap="md" wrap="nowrap" align="center">
         <Avatar src={founder.photoUrl} name={founder.name} color="initials" size={64} radius="xl" />
-        <Stack gap={2} style={{ minWidth: 0 }}>
+        <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
           <Title order={2} style={{ overflowWrap: "anywhere" }}>
             {founder.name}
           </Title>
@@ -55,7 +64,31 @@ export function FounderCard() {
             {[category, STATUS_LABEL[founder.status]].filter(Boolean).join(" · ")}
           </Text>
         </Stack>
+        {/* Profil incomplet : l'alerte porte le bouton, un seul appel a l'action. */}
+        {canEdit && missing.length === 0 && (
+          <Button component={Link} href={editHref} variant="default" size="sm" style={{ flexShrink: 0 }}>
+            Edit profile
+          </Button>
+        )}
       </Group>
+
+      {missing.length > 0 && (
+        <Alert color="orange" variant="light" mt="md" p="sm">
+          <Group gap="sm" wrap="nowrap" justify="space-between">
+            <Box style={{ minWidth: 0 }}>
+              <Text fw={600} size="sm">
+                Profile incomplete
+              </Text>
+              <Text size="sm" c="dark.1">
+                Missing: {missing.map((m) => m.label).join(", ")}
+              </Text>
+            </Box>
+            <Button component={Link} href={editHref} color="orange" size="sm" style={{ flexShrink: 0 }}>
+              Complete
+            </Button>
+          </Group>
+        </Alert>
+      )}
 
       {/* Contacts rapides : ce que l'annuaire du batch connait (fondateurs du batch, staff, investors). */}
       {canSeeDirectory && directory && <QuickContacts directory={directory} slackTeamId={batch.settings.slackTeamId ?? null} />}
@@ -65,6 +98,8 @@ export function FounderCard() {
           {founder.trackRecordOneLiner}
         </Text>
       )}
+
+      {isSelf && selfSections}
 
       {startup && (
         <Section title="Startup">
@@ -84,9 +119,9 @@ export function FounderCard() {
       <Section title="Skills">
         <Stack gap="md">
           <Field label="Hard skills">
-            {founder.hardSkills.length ? <Tags values={founder.hardSkills} /> : null}
+            {founder.hardSkills.length ? <Tags values={founder.hardSkills} colorOf={(v) => colorOf("hardSkills", v)} /> : null}
           </Field>
-          <Field label="Industries">{founder.industries.length ? <Tags values={founder.industries} /> : null}</Field>
+          <Field label="Industries">{founder.industries.length ? <Tags values={founder.industries} colorOf={(v) => colorOf("industries", v)} /> : null}</Field>
           <Field label="Roles I could take">
             {founder.rolesICouldTake.length ? <Tags values={founder.rolesICouldTake} /> : null}
           </Field>

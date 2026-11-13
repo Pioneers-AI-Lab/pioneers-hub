@@ -1,28 +1,42 @@
 import { docPaths } from "./collections";
 import {
+  CHECKIN_GOALS,
+  CHECKIN_METRICS,
+  CHECKIN_OPTIONAL,
+  goalTarget,
+  STANDARD_METRICS,
+  withUnit,
+  type CheckinGoalKey,
+  type CheckinMetricKey,
+} from "./presets/standardMetrics";
+import {
   ATTENDANCE_STATUS_LABELS,
   ATTENDANCE_STATUSES,
   COMMITMENT_STATUS_LABELS,
   COMMITMENT_STATUSES,
-  EVENT_KIND_FEATURES,
   EXISTING_CO_FOUNDERS,
   EXISTING_CO_FOUNDERS_LABELS,
   PROFILE_CATEGORIES,
   PROFILE_CATEGORY_LABELS,
+  submissionStamp,
 } from "./types";
 import type {
   Attendance,
   Checkin,
   ClosedList,
+  Evaluation,
   EventKind,
   FormFieldType,
+  QuestionScope,
   Founder,
   FounderDirectory,
   FounderInternal,
   FounderProfile,
   FounderWeek,
   MetricKey,
+  PeerRating,
   Person,
+  Picks,
   SessionRating,
   Startup,
   StartupInternal,
@@ -41,7 +55,7 @@ import type {
 // colonne d'import CSV ou une suggestion du MCP peut ecrire. Brouillon du
 // 11/11 : une question porte `{ question, input type, dbfield }`.
 //
-// - Une adresse `dbField` vaut `"<docKind>.<champ>"` (ex. `"checkin.revenue"`,
+// - Une adresse `dbField` vaut `"<docKind>.<champ>"` (ex. `"checkin.totalAmountPaid"`,
 //   `"person.linkedinUrl"`). Elle est VERIFIEE A LA COMPILATION : une cle dont
 //   le champ n'existe pas dans le type du document est refusee.
 // - `value` dit quelle valeur est acceptee : l'API en tire sa validation, et
@@ -57,6 +71,13 @@ import type {
 // Ajouter un champ ecrivable = ajouter la propriete au type du document, puis
 // une ligne ici. Un formulaire ne cree jamais de schema ; une reponse qui ne
 // correspond a aucun champ reste « non rattachee » et le MCP l'analyse.
+//
+// Deux FAMILLES a cle libre (SPECS §2, decision du 12/11) : les metriques d'une
+// equipe (`submission.metrics.<cle>`) et les criteres du jury
+// (`evaluation.scores.<cle>`). La cle est celle d'une question du Debrief ou du
+// formulaire de jury ; elle reste la meme d'un evenement a l'autre (l'editeur
+// propose celles des modeles et celles deja utilisees), ce qui permet de
+// comparer les hackathons. Le libelle est celui de la question.
 
 // ---- Documents adressables ---------------------------------------------------
 
@@ -75,11 +96,18 @@ export type DocKindMap = {
   attendance: Attendance;
   sessionRating: SessionRating;
   submission: Submission;
+  picks: Picks;
+  peerRating: PeerRating;
+  evaluation: Evaluation;
 };
 export type DocKind = keyof DocKindMap;
 
-/** Ce qu'il faut connaitre pour adresser un document. */
-export type SubjectKey = "person" | "founder" | "startup" | "event" | "week" | "team";
+/**
+ * Ce qu'il faut connaitre pour adresser un document. `target` : la cible d'une
+ * question par cible (coequipier note, equipe notee) ; `judge` : le jure d'un
+ * formulaire de jury (`founder-{id}` ou `jury-{empreinte}`).
+ */
+export type SubjectKey = "person" | "founder" | "startup" | "event" | "week" | "team" | "target" | "judge";
 
 /** Les ids resolus pour une reponse (par le repondant, le staff ou une question). */
 export type ResolvedSubjects = Partial<{
@@ -89,6 +117,8 @@ export type ResolvedSubjects = Partial<{
   eventId: string;
   weekStartDayString: string;
   teamId: string;
+  targetId: string;
+  judgeId: string;
 }>;
 
 /** A qui « appartient » un document, pour `listMissingFields`. */
@@ -101,7 +131,17 @@ export type SubjectOwner = TargetKind;
  */
 type Subjects = Record<SubjectKey, string>;
 
+/** Ce que sait l'ecriture au moment de poser ses champs techniques. */
+export type WriteStamp = { now: string; uid: string; asForm: boolean };
+
 /**
+ * `formOnly` : document qui ne s'ecrit QUE par son formulaire (avis entre pairs,
+ * picks, notes du jury) : prives, jamais lus ni ecrits par l'API ou le MCP
+ * (SPECS §4.8). Le formulaire verifie la cible (coequipier, equipe notee).
+ * `scope` : la portee qu'impose le document a une question qui l'ecrit (une
+ * soumission est celle de l'equipe...) ; `self` sinon.
+ * `stamp` : les champs que toute ecriture pose (qui, quand, d'ou).
+ *
  * Cycle de vie d'un document, pour qui l'ecrit (API, import, formulaires) :
  *   base      personne, fondateur, startup : doit exister, jamais cree par un champ
  *   private   sous-document `private/*` : fusionne, cree au besoin
@@ -112,6 +152,24 @@ export type DocLifecycle = "base" | "private" | "tracking";
 
 export const DOC_KINDS = {
   person: { lifecycle: "base", timestamped: true, subjects: ["person"], owner: "founder", path: (s: Subjects) => docPaths.person(s.person) },
+  // ---- Documents d'un evenement ecrits par leur seul formulaire ----
+  picks: { lifecycle: "tracking", timestamped: false, formOnly: true,
+    subjects: ["event", "founder"],
+    owner: "founder",
+    path: (s: Subjects) => docPaths.picks(s.event, s.founder),
+    stamp: ({ now }: WriteStamp) => ({ submittedDateISOString: now }),
+  },
+  peerRating: { lifecycle: "tracking", timestamped: false, formOnly: true, scope: "each_teammate",
+    subjects: ["event", "founder", "target", "team"],
+    owner: "founder",
+    path: (s: Subjects) => docPaths.peerRating(s.event, s.founder, s.target),
+    stamp: ({ now }: WriteStamp) => ({ submittedDateISOString: now }),
+  },
+  evaluation: { lifecycle: "tracking", timestamped: true, formOnly: true, scope: "each_target",
+    subjects: ["event", "judge", "target"],
+    owner: "startup",
+    path: (s: Subjects) => docPaths.evaluation(s.event, s.judge, s.target),
+  },
   founder: { lifecycle: "base", timestamped: true, subjects: ["founder"], owner: "founder", path: (s: Subjects) => docPaths.founder(s.founder) },
   founderDirectory: { lifecycle: "private", timestamped: false,
     subjects: ["founder"],
@@ -145,20 +203,42 @@ export const DOC_KINDS = {
     subjects: ["event", "founder"],
     owner: "founder",
     path: (s: Subjects) => docPaths.attendance(s.event, s.founder),
+    stamp: ({ now, uid }: WriteStamp) => ({ markedByUid: uid, markedDateISOString: now }),
   },
   /** La note en un geste d'une seance (SPECS §4.4) : un formulaire « Session feedback » rattache a l'evenement l'ecrit. */
   sessionRating: { lifecycle: "tracking", timestamped: false, subjects: ["event", "founder"], owner: "founder", path: (s: Subjects) => docPaths.sessionRating(s.event, s.founder) },
-  submission: { lifecycle: "tracking", timestamped: false, subjects: ["event", "team"], owner: "startup", path: (s: Subjects) => docPaths.submission(s.event, s.team) },
+  submission: { lifecycle: "tracking", timestamped: false, scope: "team",
+    subjects: ["event", "team"],
+    owner: "startup",
+    path: (s: Subjects) => docPaths.submission(s.event, s.team),
+    // La source des releves de metriques (declencheur `onSubmissionWritten`).
+    stamp: ({ now, uid, asForm }: WriteStamp) => submissionStamp(uid, asForm ? "self_reported" : "staff", now),
+  },
 } as const satisfies Record<
   DocKind,
   {
     lifecycle: DocLifecycle;
     timestamped: boolean;
+    formOnly?: true;
+    scope?: QuestionScope;
     subjects: readonly SubjectKey[];
     owner: SubjectOwner;
     path: (s: Subjects) => string;
+    stamp?: (w: WriteStamp) => Record<string, unknown>;
   }
 >;
+
+/** Le document ne s'ecrit que par son formulaire (voir `formOnly`). */
+export const isFormOnly = (kind: DocKind): boolean => "formOnly" in DOC_KINDS[kind];
+
+/** Une entree de `DOC_KINDS`, avec ses options facultatives. */
+type DocKindDef = { scope?: QuestionScope; stamp?: (w: WriteStamp) => Record<string, unknown> };
+
+/** La portee qu'impose le document d'un champ (voir `scope`). */
+export const scopeOfDoc = (kind: DocKind): QuestionScope => (DOC_KINDS[kind] as DocKindDef).scope ?? "self";
+
+/** Les champs techniques que pose une ecriture de ce document (voir `stamp`). */
+export const stampOf = (kind: DocKind, w: WriteStamp): Record<string, unknown> => (DOC_KINDS[kind] as DocKindDef).stamp?.(w) ?? {};
 
 /** Les documents de suivi, ceux qu'une ecriture cree a la demande. */
 export type TrackingDocKind = { [K in DocKind]: (typeof DOC_KINDS)[K]["lifecycle"] extends "tracking" ? K : never }[DocKind];
@@ -171,6 +251,8 @@ export const SUBJECT_INPUT_KEY = {
   event: "eventId",
   week: "weekStartDayString",
   team: "teamId",
+  target: "targetId",
+  judge: "judgeId",
 } as const satisfies Record<SubjectKey, keyof ResolvedSubjects>;
 
 /** Chemin Firestore d'un document, ou les sujets qui manquent pour le trouver. */
@@ -283,7 +365,7 @@ export const isListValue = (spec: ValueSpec): boolean =>
 /** Quels types de question peuvent alimenter quels types de valeur (verifie a l'enregistrement du formulaire). */
 export const INPUT_COMPATIBILITY: Record<FormFieldType, readonly ValueKind[]> = {
   text: ["text", "url", "email", "phone", "day"],
-  long_text: ["text", "textList"],
+  long_text: ["text", "textList", "files"],
   number: ["number"],
   rating: ["rating", "number"],
   single_choice: ["enum", "boolean"],
@@ -310,7 +392,7 @@ export type WritePolicy = "fill_empty" | "overwrite" | "merge_unique";
 export type Expectation =
   | { scope: "once"; priority: "required" | "useful" }
   | { scope: "weekly"; priority: "required" | "useful" }
-  /** Pour chaque evenement dont la mecanique attend la presence (`EVENT_KIND_FEATURES[kind].attendance`). */
+  /** Pour chaque evenement auquel le fondateur etait attendu (ceux que l'appelant fournit, `SubjectSnapshot.events`). */
   | { scope: "per_event"; priority: "required" | "useful" };
 
 export type FieldDef = {
@@ -350,6 +432,31 @@ const field = (label: string, value: ValueSpec, options: Partial<Omit<FieldDef, 
 });
 
 /**
+ * Un chiffre de l'update tire du dictionnaire : son libelle dit la periode d'un
+ * flux (« this week ») et l'unite, pour qui l'ecrit sans formulaire (API, MCP).
+ * Le champ EST son indicateur (meme cle).
+ */
+const pipeline = (key: CheckinMetricKey): FieldDef => {
+  const m = STANDARD_METRICS[key];
+  return field(withUnit(`${m.label}${m.nature === "flow" ? " this week" : ""}`, m.unit), m.unit ? num(0, null, false) : num(), {
+    expected: CHECKIN_OPTIONAL.has(key) ? null : weekly,
+    indicator: key,
+  });
+};
+
+/** Un objectif chiffre de la semaine suivante, libelle et unite tires du flux vise. */
+const goal = (key: CheckinGoalKey): FieldDef => {
+  const m = STANDARD_METRICS[goalTarget(key)];
+  return field(withUnit(`Goal: ${m.label.toLowerCase()} next week`, m.unit), m.unit ? num(0, null, false) : num(), { indicator: key });
+};
+
+/** Les chiffres et objectifs de l'update (`CHECKIN_METRICS`, `CHECKIN_GOALS`), dans l'ordre du formulaire. */
+const CHECKIN_NUMBER_FIELDS = Object.fromEntries([
+  ...CHECKIN_METRICS.map((key) => [`checkin.${key}`, pipeline(key)]),
+  ...CHECKIN_GOALS.map((key) => [`checkin.${key}`, goal(key)]),
+]) as Record<`checkin.${CheckinMetricKey | CheckinGoalKey}`, FieldDef>;
+
+/**
  * Le registre. Ses cles sont verifiees par `satisfies` : une adresse fautive
  * ne compile pas. Les noms viennent de SPECS annexe A.
  */
@@ -363,6 +470,12 @@ export const DB_FIELDS = {
   "person.photoUrl": field("Photo", { kind: "files", multiple: false }, { expected: once() }),
 
   // ---- Fondateur : carte et Profile Book ----
+  // « required » = un profil complet (decision du 12/11) : les champs du Profile
+  // Book (carte de la grille) et ceux qui servent a trouver un cofondateur. La
+  // page To do, l'alerte « Profile incomplete » et le tri de la grille lisent
+  // cette meme regle (src/lib/completeness.ts).
+  /** Grande photo (Storage) : deposee depuis « Mon profil » ou par l'import FA26. */
+  "founder.coverPhotoUrl": field("HD photo", { kind: "files", multiple: false }, { expected: once("required") }),
   /** @source SP26 « Profile Category » : propose a l'import, valide par le staff. */
   "founder.profileCategory": field("Profile category", { kind: "enum", listKey: null, values: PROFILE_CATEGORIES, labels: PROFILE_CATEGORY_LABELS }),
   "founder.hardSkills": field("Hard skills", { kind: "enumMulti", listKey: "hardSkills", values: null }, {
@@ -371,7 +484,7 @@ export const DB_FIELDS = {
     mcpFillable: true,
   }),
   "founder.industries": field("Industries", { kind: "enumMulti", listKey: "industries", values: null }, {
-    expected: once(),
+    expected: once("required"),
     writePolicy: "merge_unique",
     mcpFillable: true,
   }),
@@ -381,18 +494,19 @@ export const DB_FIELDS = {
   }),
   "founderDirectory.introduceYourself": field("Introduce yourself", longText(), { expected: once("required") }),
   "founderDirectory.gender": field("Gender", text(40)),
-  "founderDirectory.nationality": field("Nationality", text(80), { expected: once() }),
+  "founderDirectory.nationality": field("Nationality", text(80), { expected: once("required") }),
   "founderDirectory.country": field("Country", text(80)),
-  "founderDirectory.education": field("Main education", text(200), { expected: once(), mcpFillable: true }),
+  "founderDirectory.education": field("Main education", text(200), { expected: once("required"), mcpFillable: true }),
   "founderDirectory.degree": field("Degree", { kind: "enum", listKey: "degrees", values: null }, { mcpFillable: true }),
   "founderDirectory.fieldOfStudy": field("Field of study", text(120), { mcpFillable: true }),
   "founderDirectory.yearsOfXP": field("Years of experience", num(0, 60), { expected: once(), mcpFillable: true }),
   "founderDirectory.notableCompanies": field("Notable companies", { kind: "textList", maxItems: 20 }, {
+    expected: once("required"),
     writePolicy: "merge_unique",
     mcpFillable: true,
   }),
   "founderDirectory.trackRecord": field("Track record", longText(), { expected: once("required") }),
-  "founderDirectory.interestedInWorkingOn": field("Interested in working on", longText()),
+  "founderDirectory.interestedInWorkingOn": field("Interested in working on", longText(), { expected: once("required") }),
   "founderDirectory.hasExistingProject": field("Existing project", yesNo, { expected: once() }),
   "founderDirectory.projectExplanation": field("Project explanation", longText()),
   "founderDirectory.hasExistingCoFounders": field(
@@ -482,19 +596,13 @@ export const DB_FIELDS = {
   "startupInternal.notes": field("Notes", longText(), { alwaysApprove: true }),
   "startupInternal.tractionNotes": field("Traction notes", longText(), { alwaysApprove: true }),
 
-  // ---- Startup : update du jeudi ----
-  "checkin.interviews": field("Users or customers interviewed", num(), { expected: weekly, indicator: "interviews" }),
-  "checkin.activeUsers": field("Active users", num(), { expected: weekly, indicator: "activeUsers" }),
-  "checkin.totalUsers": field("Total users", num(), { indicator: "totalUsers" }),
-  "checkin.revenue": field("Revenue this week", num(0, null, false), { expected: weekly, indicator: "revenue" }),
-  "checkin.totalRevenue": field("Total revenue", num(0, null, false), { indicator: "totalRevenue" }),
-  "checkin.outbound": field("Outbound this week", num(), { expected: weekly, indicator: "outbound" }),
-  "checkin.featuresShipped": field("Features shipped", num(), { indicator: "featuresShipped" }),
+  // ---- Startup : update du jeudi (cles standard, presets/standardMetrics.ts) ----
+  // Les chiffres de TOUTE la startup : flux de la semaine, puis totaux a date.
+  ...CHECKIN_NUMBER_FIELDS,
   "checkin.moral": field("Morale", { kind: "rating", min: 1, max: 10 }, { expected: weekly, indicator: "moral" }),
-  "checkin.goalOutreach": field("Goal: outreach next week", num(), { indicator: "goalOutreach" }),
-  "checkin.goalInterviews": field("Goal: interviews next week", num(), { indicator: "goalInterviews" }),
-  "checkin.goalNewUsers": field("Goal: new users next week", num(), { indicator: "goalNewUsers" }),
-  "checkin.goalRevenue": field("Goal: revenue next week", num(0, null, false), { indicator: "goalRevenue" }),
+  // Historique Spring 2026, de definition inconnue : garde pour ses courbes, plus demande.
+  "checkin.revenue": field("Revenue this week (Spring 2026, legacy)", num(0, null, false), { indicator: "revenue" }),
+  "checkin.totalRevenue": field("Total revenue (Spring 2026, legacy)", num(0, null, false), { indicator: "totalRevenue" }),
   "checkin.goals": field("Goals", longText()),
   "checkin.obstacle": field("Biggest obstacle", longText(), { expected: weekly }),
   "checkin.learned": field("What you learned from users", longText()),
@@ -502,23 +610,87 @@ export const DB_FIELDS = {
   "checkin.helpNeeded": field("How can we help", longText()),
   "checkin.attachmentUrls": field("Documents", { kind: "files", multiple: true }, { writePolicy: "merge_unique" }),
 
-  // ---- Soumission d'equipe ----
+  // ---- Soumission d'equipe (Debrief, portee « son equipe ») ----
   "submission.title": field("Title", text(120)),
   "submission.pitchOneLine": field("One-line pitch", text(200)),
   "submission.videoUrl": field("Video", { kind: "url" }),
   "submission.repoUrl": field("GitHub repository", { kind: "url" }),
   "submission.slideUrl": field("Slides", { kind: "url" }),
+  "submission.productUrl": field("Product", { kind: "url" }),
+  "submission.proofUrls": field("Proof links", { kind: "files", multiple: true }),
+  "submission.notes": field("Team notes", text(2000, true)),
+
+  // ---- Avis entre pairs (Debrief, portee « chaque coequipier ») ----
+  "peerRating.rating": field("Would start a company with this person", { kind: "rating", min: 1, max: 5 }),
+  "peerRating.comment": field("One line on this teammate", text(280)),
+
+  // ---- Choix prives (formulaire Picks ou Founder introductions) ----
+  "picks.pickedFounderIds": field("Picks", { kind: "founderRefs", maxItems: 10 }),
+
+  // ---- Notes du jury (portee « chaque equipe ») : les criteres sont la famille `evaluation.scores` ----
+  "evaluation.comment": field("Jury comment", text(1000, true)),
 } as const satisfies Partial<Record<DbFieldPath, FieldDef>>;
 
-/** Adresse d'un champ PRESENT dans le registre : le type de `FormQuestion.dbField`. */
-export type DbFieldKey = keyof typeof DB_FIELDS;
+/**
+ * Les familles a cle libre (voir l'en-tete) : `<famille>.<cle>`. Une metrique
+ * peut etre un pourcentage (taux de conversion) : pas forcement entiere. Une
+ * note du jury suit l'echelle de sa question (verifiee par le formulaire).
+ */
+export const FIELD_FAMILIES = {
+  "submission.metrics": field("Team metric", num(0, null, false)),
+  "evaluation.scores": field("Jury score", num(0, 100, false)),
+} as const satisfies Record<string, FieldDef>;
+
+/** Le seul type de question qui alimente une famille : une metrique est un nombre, un critere une note. */
+export const FAMILY_QUESTION_TYPE: Record<keyof typeof FIELD_FAMILIES, FormFieldType> = {
+  "submission.metrics": "number",
+  "evaluation.scores": "rating",
+};
+export type FieldFamily = keyof typeof FIELD_FAMILIES;
+
+/** Une cle de famille : une lettre minuscule, puis lettres et chiffres (`callsMade`, `teamQuality`). */
+export const FAMILY_KEY = /^[a-z][A-Za-z0-9]{0,39}$/;
+
+/** Adresse d'un champ du registre : le type de `FormQuestion.dbField`. */
+export type DbFieldKey = keyof typeof DB_FIELDS | `${FieldFamily}.${string}`;
+
+/** La famille et la cle d'une adresse de famille (`submission.metrics.callsMade`), sinon `null`. */
+export function familyOf(raw: string): { family: FieldFamily; key: string } | null {
+  for (const family of Object.keys(FIELD_FAMILIES) as FieldFamily[]) {
+    if (raw.startsWith(`${family}.`)) {
+      const key = raw.slice(family.length + 1);
+      return FAMILY_KEY.test(key) ? { family, key } : null;
+    }
+  }
+  return null;
+}
+
+/** L'adresse existe : un champ du registre, ou une cle valide d'une famille. */
+export const isDbFieldKey = (raw: string): raw is DbFieldKey => raw in DB_FIELDS || familyOf(raw) !== null;
+
+/** La cle d'un champ de cette famille, sinon `null`. */
+const familyKeyOf = (family: FieldFamily) => (dbField: DbFieldKey | null): string | null => {
+  const f = dbField ? familyOf(dbField) : null;
+  return f?.family === family ? f.key : null;
+};
+
+/** La cle de metrique d'une question du Debrief (`submission.metrics.<cle>`), sinon `null`. */
+export const metricKeyOf = familyKeyOf("submission.metrics");
+
+/** La cle de critere d'une question du jury (`evaluation.scores.<cle>`), sinon `null`. */
+export const criterionKeyOf = familyKeyOf("evaluation.scores");
 
 export function parseDbField(key: DbFieldKey): { doc: DocKind; field: string } {
   const dot = key.indexOf(".");
   return { doc: key.slice(0, dot) as DocKind, field: key.slice(dot + 1) };
 }
 
-export const getFieldDef = (key: DbFieldKey): FieldDef => DB_FIELDS[key];
+export const getFieldDef = (key: DbFieldKey): FieldDef => {
+  if (key in DB_FIELDS) return DB_FIELDS[key as keyof typeof DB_FIELDS];
+  const family = familyOf(key);
+  if (!family) throw new Error(`Unknown field \`${key}\`.`);
+  return FIELD_FAMILIES[family.family];
+};
 
 /** Les sujets qu'un ensemble de champs exige : c'est le rattachement automatique d'un formulaire. */
 export function requiredSubjects(keys: readonly DbFieldKey[]): SubjectKey[] {
@@ -571,7 +743,7 @@ const EXPECTED_BY_OWNER: Record<SubjectOwner, { key: DbFieldKey; doc: DocKind; n
   founder: [],
   startup: [],
 };
-for (const key of Object.keys(DB_FIELDS) as DbFieldKey[]) {
+for (const key of Object.keys(DB_FIELDS) as (keyof typeof DB_FIELDS)[]) {
   const def = getFieldDef(key);
   if (!def.expected) continue;
   const { doc, field: name } = parseDbField(key);
@@ -604,7 +776,7 @@ export function listMissingFields(
         break;
       case "per_event": {
         for (const event of snapshot.events) {
-          if (EVENT_KIND_FEATURES[event.eventKind].attendance && isEmptyValue(read(event.docs))) {
+          if (isEmptyValue(read(event.docs))) {
             out.push({ ...base, weekStartDayString: null, eventId: event.eventId });
           }
         }

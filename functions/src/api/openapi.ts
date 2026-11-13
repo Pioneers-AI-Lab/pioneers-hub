@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { CreateEventInput } from "../services/eventCreate";
+import { CreateFormInput } from "../services/formCreate";
 import { AddNoteInput } from "../services/notes";
 import { SetFieldsInput } from "../services/fields";
 import { ListInput, REST_OBJECTS } from "../services/read";
@@ -97,6 +99,20 @@ function build() {
       },
       "/v1/notes": {
         post: writeOperation("Add note", "Adds an internal note to a startup (also attached to its members) or a founder.", AddNoteInput),
+      },
+      "/v1/events": {
+        post: writeOperation(
+          "Create event",
+          "Staff. Creates an event in a batch: blank, or from a model (a pack: the event, its matching and its forms), with the startups and mentors concerned.",
+          CreateEventInput,
+        ),
+      },
+      "/v1/forms": {
+        post: writeOperation(
+          "Create form",
+          "Staff. Creates a form from a model or from given questions, validated like the Admin editor. A draft by default; `publish: true` opens it and returns its public link.",
+          CreateFormInput,
+        ),
       },
     },
   };

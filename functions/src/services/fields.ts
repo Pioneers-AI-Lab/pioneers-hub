@@ -5,13 +5,17 @@ import {
   DB_FIELDS,
   DOC_KINDS,
   enumOptions,
+  FIELD_FAMILIES,
   getFieldDef,
+  isDbFieldKey,
   isEmptyValue,
+  isFormOnly,
   isListValue,
   listKeyOf,
   parseDbField,
   PERSON_COPIES,
   resolveDocPath,
+  stampOf,
   SUBJECT_INPUT_KEY,
   type DbFieldKey,
   type DocKind,
@@ -34,7 +38,7 @@ import { dayString } from "./schemas";
 // services - ecrire des CHAMPS du registre
 // ----------------------------
 // LE geste d'ecriture generique : une liste d'adresses `dbField`
-// (`startupProfile.icp`, `checkin.revenue`, `person.linkedinUrl`) et leurs
+// (`startupProfile.icp`, `checkin.totalAmountPaid`, `person.linkedinUrl`) et leurs
 // valeurs, pour un ensemble de sujets (fondateur, startup, semaine, evenement,
 // equipe). C'est le REGISTRE (shared/fieldRegistry.ts) qui decide : valeur
 // acceptee, regle d'ecriture (`fill_empty`, `overwrite`, `merge_unique`), cycle
@@ -49,12 +53,15 @@ import { dayString } from "./schemas";
 //   - Les documents de base (personne, fondateur, startup, evenement, equipe)
 //     doivent exister ; les documents de suivi se creent a la demande.
 //   - Les COPIES suivent l'original, dans la meme transaction.
+//   - Les documents « formulaire seulement » (avis entre pairs, picks, notes du
+//     jury) ne s'ecrivent que par leur formulaire (`asForm`), qui a verifie la cible.
+//   - Une famille (`submission.metrics.<cle>`) s'ecrit en champ imbrique.
 //
 // Toutes les lectures partent en UN aller-retour (`tx.getAll`), plus un second
 // pour les fondateurs d'une personne quand une copie est en jeu : l'operation
 // est planifiee deux fois par le MCP (apercu, confirmation).
 
-const FIELD_KEYS = Object.keys(DB_FIELDS) as DbFieldKey[];
+const FIELD_KEYS = Object.keys(DB_FIELDS) as (keyof typeof DB_FIELDS)[];
 
 export const SetFieldsInput = z
   .object({
@@ -66,6 +73,8 @@ export const SetFieldsInput = z
         eventId: z.string().min(1),
         weekStartDayString: dayString.describe("Monday of the week, YYYY-MM-DD."),
         teamId: z.string().min(1),
+        targetId: z.string().min(1),
+        judgeId: z.string().min(1),
       } satisfies Record<keyof ResolvedSubjects, z.ZodType>)
       .partial()
       .strict()
@@ -77,7 +86,7 @@ export const SetFieldsInput = z
       .record(z.string(), z.unknown())
       .refine((v) => Object.keys(v).length > 0, "at least one field")
       .refine((v) => Object.keys(v).length <= 60, "at most 60 fields per call")
-      .describe('Field address -> value, e.g. {"startupProfile.icp": "...", "checkin.revenue": 1200}.'),
+      .describe('Field address -> value, e.g. {"startupProfile.icp": "...", "checkin.totalAmountPaid": 1200}.'),
   })
   .strict();
 export type SetFieldsInput = z.output<typeof SetFieldsInput>;
@@ -132,18 +141,47 @@ function valueSchema(spec: ValueSpec): z.ZodType {
 
 type FieldMeta = { key: DbFieldKey; kind: DocKind; field: string; def: FieldDef; schema: z.ZodType };
 
-const META = new Map<DbFieldKey, FieldMeta>(
-  FIELD_KEYS.map((key) => {
-    const { doc: kind, field } = parseDbField(key);
-    const def = getFieldDef(key);
-    return [key, { key, kind, field, def, schema: valueSchema(def.value) }];
-  }),
-);
+const metaFor = (key: DbFieldKey): FieldMeta => {
+  const { doc: kind, field } = parseDbField(key);
+  const def = getFieldDef(key);
+  return { key, kind, field, def, schema: valueSchema(def.value) };
+};
+
+const META = new Map<DbFieldKey, FieldMeta>(FIELD_KEYS.map((key) => [key, metaFor(key)]));
+
+/** Le champ d'une adresse : du registre, ou d'une famille (calcule a la demande, puis garde). */
+function metaOf(key: DbFieldKey): FieldMeta {
+  let meta = META.get(key);
+  if (!meta) META.set(key, (meta = metaFor(key)));
+  return meta;
+}
 
 /** Valeurs par defaut d'un document de suivi cree par une ecriture : `[]` pour une liste, `null` sinon. */
 const DEFAULTS_BY_KIND = new Map<DocKind, Record<string, FormAnswer>>();
-for (const m of META.values()) {
+for (const key of FIELD_KEYS) {
+  const m = metaOf(key);
   DEFAULTS_BY_KIND.set(m.kind, { ...DEFAULTS_BY_KIND.get(m.kind), [m.field]: isListValue(m.def.value) ? [] : null });
+}
+
+/** Les champs-familles de chaque document (`submission` -> `metrics`) : imbriques, ils fusionnent avec la base. */
+const FAMILY_HEADS = new Map<DocKind, string[]>();
+for (const family of Object.keys(FIELD_FAMILIES) as (keyof typeof FIELD_FAMILIES)[]) {
+  const { doc, field } = parseDbField(`${family}.x`);
+  FAMILY_HEADS.set(doc, [...(FAMILY_HEADS.get(doc) ?? []), field.split(".")[0]]);
+}
+
+/** `{ "metrics.calls": 3 }` -> `{ metrics: { calls: 3 } }` : un champ de famille est imbrique (un `set` ne lit pas les points). */
+function nest(patch: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [path, value] of Object.entries(patch)) {
+    const dot = path.indexOf(".");
+    if (dot < 0) out[path] = value;
+    else {
+      const head = path.slice(0, dot);
+      out[head] = { ...(out[head] as Record<string, unknown> | undefined), [path.slice(dot + 1)]: value };
+    }
+  }
+  return out;
 }
 
 const PERSON_COPY_ENTRIES = Object.entries(PERSON_COPIES).map(([copy, source]) => {
@@ -162,8 +200,7 @@ export type FieldChange = { dbField: DbFieldKey; before: unknown; after: unknown
 /** 0. Chaque adresse existe dans le registre ; sinon, les plus proches. */
 function knownFields(values: Record<string, unknown>): FieldMeta[] {
   return Object.keys(values).map((raw) => {
-    const meta = META.get(raw as DbFieldKey);
-    if (meta) return meta;
+    if (isDbFieldKey(raw)) return metaOf(raw);
     const [doc = "", field = ""] = raw.split(".");
     const near = FIELD_KEYS.filter((k) => k.startsWith(`${doc}.`) || k.toLowerCase().endsWith(`.${field.toLowerCase()}`)).slice(0, 8);
     throw badRequest(
@@ -258,6 +295,12 @@ function diff(
  * ecrit par le staff, comme dans l'app. Deux temps : le champ (sans lecture),
  * puis la propriete (une fois les documents lus).
  */
+/** Avis entre pairs, picks, notes du jury : seulement par leur formulaire, qui a verifie la cible. */
+function assertNotFormOnly(fields: FieldMeta[]) {
+  const formOnly = fields.find(({ kind }) => isFormOnly(kind));
+  if (formOnly) throw forbidden("form_only", `\`${formOnly.key}\` is private: it is only written by its form in the hub.`);
+}
+
 function assertSelfEditableFields(caller: Caller, fields: FieldMeta[]) {
   if (isStaffViewer(caller.viewer)) return;
   const staffOnly = fields.find(({ kind, field }) => !isSelfEditable(kind, field));
@@ -302,6 +345,38 @@ const TRACKING_BASE: Record<TrackingDocKind, (s: ResolvedSubjects, l: Loaded) =>
     submittedDateISOString: new Date().toISOString(),
   }),
   submission: (s) => emptySubmission(s.teamId!),
+  picks: (s, l) => ({
+    programId: l.founder!.programId,
+    batchId: l.founder!.batchId,
+    eventId: s.eventId,
+    founderId: s.founderId,
+    pickedFounderIds: [],
+  }),
+  peerRating: (s, l) => ({
+    programId: l.founder!.programId,
+    batchId: l.founder!.batchId,
+    raterFounderId: s.founderId,
+    rateeFounderId: s.targetId,
+    teamId: s.teamId,
+    rating: null,
+    comment: null,
+  }),
+  evaluation: (s) => ({
+    evaluatorKind: "judge",
+    evaluatorId: s.judgeId,
+    evaluatorName: "",
+    isExternal: true,
+    targetType: "team",
+    targetId: s.targetId,
+    scores: {},
+    overallScore: null,
+    wouldInvest: null,
+    betLikelihood: null,
+    wantsToContinue: null,
+    comment: null,
+    decision: null,
+    finalDecision: null,
+  }),
 };
 
 /** 5. Les copies de `people` vers les fondateurs de la personne. */
@@ -338,9 +413,12 @@ export type FieldWritesOptions = {
   /**
    * Ecriture d'une reponse de formulaire : le formulaire, cree par le staff, a
    * choisi ses champs et ses sujets. Les controles de « Mon profil » ne
-   * s'appliquent pas (le repondant n'a souvent pas de compte).
+   * s'appliquent pas (le repondant n'a souvent pas de compte), et les documents
+   * « formulaire seulement » s'ecrivent.
    */
   asForm?: boolean;
+  /** Champs poses a la creation d'un document de suivi, par document (le nom du jure, la cible notee...). */
+  createWith?: Partial<Record<DocKind, Record<string, unknown>>>;
 };
 
 export type FieldWritesPlan = OperationPlan<SetFieldsResult> & { changes: FieldChange[]; rejected: FieldRejection[] };
@@ -385,7 +463,10 @@ export async function planFieldWrites(
   for (const f of fields) {
     attempt((g) => g.key === f.key, false, () => values.set(f.key, parseValue(f, input.values[f.key])));
   }
-  if (!options.asForm) assertSelfEditableFields(caller, fields);
+  if (!options.asForm) {
+    assertNotFormOnly(fields);
+    assertSelfEditableFields(caller, fields);
+  }
 
   if (fields.length === 0) {
     return { preview: { changes: [], summary: "0 field(s) to write, 0 unchanged." }, commit: null, targetPaths: [], changes: [], rejected };
@@ -471,7 +552,7 @@ export async function planFieldWrites(
         const ref = db.doc(pathByKind.get(kind)!);
         const data: Record<string, unknown> = { ...patch };
         if (DOC_KINDS[kind].timestamped) data.updatedDateISOString = now;
-        if (kind === "attendance") Object.assign(data, { markedByUid: caller.uid, markedDateISOString: now });
+        Object.assign(data, stampOf(kind, { now, uid: caller.uid, asForm: options.asForm === true }));
         if (kind === "person" && copies?.displayName) data.displayName = copies.displayName;
 
         // Documents de base : leur existence est verifiee plus haut. Sous-documents
@@ -479,9 +560,14 @@ export async function planFieldWrites(
         const lifecycle = DOC_KINDS[kind].lifecycle;
         if (lifecycle === "tracking" && !targets.get(kind)!.exists) {
           const base = TRACKING_BASE[kind as TrackingDocKind](s, loaded);
-          wtx.set(ref, { ...DEFAULTS_BY_KIND.get(kind), ...base, ...data });
+          const nested = nest(data);
+          // Une famille (`metrics`, `scores`) part de l'objet de la base.
+          for (const family of FAMILY_HEADS.get(kind) ?? []) {
+            if (family in nested) nested[family] = { ...(base[family] as object), ...(nested[family] as object) };
+          }
+          wtx.set(ref, { ...DEFAULTS_BY_KIND.get(kind), ...base, ...options.createWith?.[kind], ...nested });
         } else {
-          wtx.set(ref, data, { merge: true });
+          wtx.set(ref, nest(data), { merge: true });
         }
       }
 
@@ -508,13 +594,22 @@ export const setFields: Operation<typeof SetFieldsInput, SetFieldsResult> = {
   plan: (tx, caller, input) => planFieldWrites(tx, caller, input),
 };
 
-/** Le registre, tel qu'un agent ou une integration doit le lire (`list fields`). */
+/**
+ * Le registre, tel qu'un agent ou une integration doit le lire (`list fields`),
+ * sans les documents « formulaire seulement ». Une famille se lit `<famille>.<key>`.
+ */
 export function describeFields() {
-  return [...META.values()].map(({ key, kind, def }) => ({
-    dbField: key,
+  const describe = (dbField: string, kind: DocKind, def: FieldDef) => ({
+    dbField,
     label: def.label,
     needs: (DOC_KINDS[kind].subjects as readonly SubjectKey[]).map((m) => SUBJECT_INPUT_KEY[m]),
     value: def.value,
     writePolicy: def.writePolicy,
-  }));
+  });
+  const fixed = FIELD_KEYS.map(metaOf).filter((m) => !isFormOnly(m.kind)).map((m) => describe(m.key, m.kind, m.def));
+  const families = (Object.keys(FIELD_FAMILIES) as (keyof typeof FIELD_FAMILIES)[])
+    .map((family) => ({ family, kind: parseDbField(`${family}.x`).doc }))
+    .filter(({ kind }) => !isFormOnly(kind))
+    .map(({ family, kind }) => describe(`${family}.<key>`, kind, FIELD_FAMILIES[family]));
+  return [...fixed, ...families];
 }

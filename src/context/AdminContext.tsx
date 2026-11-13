@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useMemo, type ReactNode } from "react";
-import { Stack, Text, Title } from "@mantine/core";
+import { Group, Stack, Text, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { isStaffViewer } from "@shared/access";
-import type { Batch, Form, Founder, Membership, PioneersEvent, Program, WithId } from "@shared/types";
+import type { Batch, Form, Founder, Membership, PioneersEvent, Program, Startup, WithId } from "@shared/types";
 import { queries } from "@/lib/firestore/refs";
 import { errorMessage } from "@/lib/errors";
 import { saveUserPreferences } from "@/lib/firestore/write";
@@ -13,10 +13,11 @@ import { useQueryListener } from "@/hooks/useFirestoreListener";
 import { useAuth } from "@/context/AuthContext";
 import { BlockedState } from "@/components/ui/BlockedState";
 import { PageLoader } from "@/components/ui/PageLoader";
+import { CreateBatchButton, CreateProgramButton } from "@/components/admin/CreateDialogs";
 import { paths } from "@/lib/paths";
 
 // ----------------------------
-// Espace admin (/admin) : les outils du staff, hors de l'arbre d'un batch
+// Espace admin (/admin) : TOUS les outils du staff, hors de l'arbre d'un batch
 // ----------------------------
 // Monte par app/(app)/admin/layout.tsx. GARDE : seul un compte `staff` entre
 // (les regles refuseraient de toute facon les ecritures). Le role se lit sur
@@ -30,6 +31,8 @@ import { paths } from "@/lib/paths";
 // appartenances (historique « qui a ete avec qui »), formulaires.
 
 type AdminValue = {
+  /** Non archives. */
+  programs: WithId<Program>[];
   programsById: Map<string, WithId<Program>>;
   batches: WithId<Batch>[];
   batch: WithId<Batch>;
@@ -37,9 +40,13 @@ type AdminValue = {
   /** Non archives, par nom ; les fondateurs partis (`left`) restent pour l'historique. */
   founders: WithId<Founder>[];
   foundersById: Map<string, WithId<Founder>>;
+  /** Non archivees, par nom (invites d'un evenement, cibles d'un jury). */
+  startups: WithId<Startup>[];
   /** Non archives, brouillons compris, du plus recent au plus ancien. */
   events: WithId<PioneersEvent>[];
   eventsById: Map<string, WithId<PioneersEvent>>;
+  /** Archives, du plus recent au plus ancien : a restaurer depuis Admin > Events. */
+  archivedEvents: WithId<PioneersEvent>[];
   teamMemberships: WithId<Membership>[];
   /** Non archives, du plus recent au plus ancien. */
   forms: WithId<Form>[];
@@ -78,6 +85,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const events = useQueryListener(batchId ? queries.eventsOfBatch(batchId) : batchList.isLoading ? undefined : null);
   const memberships = useQueryListener(batchId ? queries.teamMembershipsOfBatch(batchId) : batchList.isLoading ? undefined : null);
   const forms = useQueryListener(batchId ? queries.formsOfBatch(batchId) : batchList.isLoading ? undefined : null);
+  const startups = useQueryListener(batchId ? queries.startupsOfBatch(batchId) : batchList.isLoading ? undefined : null);
 
   const uid = user?.id ?? null;
   const selectBatch = useCallback(
@@ -95,25 +103,27 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     const founderList = founders.data
       .filter((f) => f.archivedDateISOString === null)
       .sort((a, b) => a.name.localeCompare(b.name));
-    const eventList = events.data
-      .filter((e) => e.archivedDateISOString === null)
-      .sort((a, b) => b.startDateISOString.localeCompare(a.startDateISOString));
+    const allEvents = [...events.data].sort((a, b) => b.startDateISOString.localeCompare(a.startDateISOString));
+    const eventList = allEvents.filter((e) => e.archivedDateISOString === null);
     return {
+      programs: programs.data,
       programsById: new Map(programs.data.map((p) => [p.id, p])),
       batches,
       batch,
       selectBatch,
       founders: founderList,
       foundersById: new Map(founderList.map((f) => [f.id, f])),
+      startups: startups.data.filter((s) => s.archivedDateISOString === null).sort((a, b) => a.name.localeCompare(b.name)),
       events: eventList,
       eventsById: new Map(eventList.map((e) => [e.id, e])),
+      archivedEvents: allEvents.filter((e) => e.archivedDateISOString !== null),
       teamMemberships: memberships.data,
       forms: forms.data
         .filter((f) => f.archivedDateISOString === null)
         .sort((a, b) => b.createdDateISOString.localeCompare(a.createdDateISOString)),
       isLoading: founders.isLoading || events.isLoading || memberships.isLoading || forms.isLoading,
     };
-  }, [batch, batches, programs.data, selectBatch, founders.data, founders.isLoading, events.data, events.isLoading, memberships.data, memberships.isLoading, forms.data, forms.isLoading]);
+  }, [batch, batches, programs.data, selectBatch, founders.data, founders.isLoading, startups.data, events.data, events.isLoading, memberships.data, memberships.isLoading, forms.data, forms.isLoading]);
 
   if (isAuthLoading) return <PageLoader />;
   if (!isStaff) return <BlockedState reason="forbidden" backHref={paths.home()} />;
@@ -123,6 +133,10 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       <Stack gap="xs" py="xl">
         <Title order={3}>No batch yet</Title>
         <Text c="dimmed">Create a program and a batch first: the tools work on the founders of a batch.</Text>
+        <Group mt="sm">
+          <CreateProgramButton />
+          {programs.data.length > 0 && <CreateBatchButton programs={programs.data} onCreated={selectBatch} />}
+        </Group>
       </Stack>
     );
   return <AdminContextProvider value={value}>{children}</AdminContextProvider>;

@@ -19,7 +19,7 @@ import {
 } from "@mantine/core";
 import { useClipboard } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import { getFieldDef, parseDbField, type DbFieldKey, type DocKind } from "@shared/fieldRegistry";
+import { FAMILY_KEY, FAMILY_QUESTION_TYPE, familyOf, getFieldDef, isFormOnly, parseDbField, type DbFieldKey, type DocKind, type FieldFamily } from "@shared/fieldRegistry";
 import {
   FORM_FIELD_TYPE_LABELS,
   alignQuestionWithField,
@@ -27,10 +27,15 @@ import {
   deriveAttachments,
   feedsIndicator,
   formProblems,
+  isJuryCriterion,
   questionProblems,
   versionedSnapshot,
 } from "@shared/formRules";
-import type { Form, FormApproval, FormFieldType, FormIdentityCheck, FormKind, FormQuestion, PickerEntity, WithId } from "@shared/types";
+import { formState } from "@shared/forms";
+import { EVENT_TEMPLATES } from "@shared/presets/eventTemplates";
+import { EVENT_METRIC_RENAMES, STANDARD_METRICS, standardEventMetricKey } from "@shared/presets/standardMetrics";
+import { camelKey } from "@shared/text";
+import { needsAccount, scopeOf, type Form, type FormApproval, type FormFieldType, type FormIdentityCheck, type FormKind, type FormQuestion, type PickerEntity, type QuestionScope, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminForm } from "@/context/AdminFormContext";
 import { formatDateTime, fromLocalInput, toLocalInput } from "@/lib/format";
@@ -41,9 +46,7 @@ import {
   FORM_KIND_LABELS,
   IDENTITY_HINTS,
   IDENTITY_OPTIONS,
-  WEEKDAYS,
-  parseWeeklyRule,
-  weeklyRule,
+  SCOPE_LABELS,
 } from "@/components/admin/formLabels";
 import { FormResponses } from "@/components/admin/FormResponses";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -58,6 +61,11 @@ import { Empty, Section } from "@/components/ui/Section";
 //   - une question supprimee est ARCHIVEE (les reponses passees la gardent) ;
 //   - changer le type d'une question cree une nouvelle question (nouvel id) ;
 //   - une question qui alimente un indicateur ne se supprime ni ne change de champ.
+// Le modele standard (SPECS §2) : une question a une PORTEE (le repondant, son
+// equipe, chaque coequipier, chaque equipe notee), dictee par son champ. Une
+// metrique d'equipe (`submission.metrics.<cle>`) et un critere du jury
+// (`evaluation.scores.<cle>`, avec son poids) gardent leur cle d'un evenement a
+// l'autre : l'editeur propose celles des modeles et celles deja utilisees.
 
 const DOC_KIND_LABELS: Record<DocKind, string> = {
   person: "Person",
@@ -72,7 +80,25 @@ const DOC_KIND_LABELS: Record<DocKind, string> = {
   checkin: "Thursday update",
   attendance: "Attendance",
   sessionRating: "Session rating",
-  submission: "Team submission",
+  submission: "Team submission (debrief)",
+  picks: "Picks",
+  peerRating: "Peer rating (debrief)",
+  evaluation: "Jury score",
+};
+
+/** Comment l'editeur nomme une famille (le type de question qui l'alimente : `FAMILY_QUESTION_TYPE`). */
+const FAMILY_CHOICES: Record<FieldFamily, { group: string; noun: string }> = {
+  "submission.metrics": { group: "Team metric (debrief)", noun: "metric" },
+  "evaluation.scores": { group: "Jury criterion", noun: "criterion" },
+};
+
+/** Valeur de la liste pour « nouvelle cle » d'une famille. */
+const NEW_KEY = (family: FieldFamily) => `${family}.__new__`;
+
+/** Une cle de famille tiree d'un libelle : `Calls made` -> `callsMade` (une lettre d'abord). */
+const keyFromLabel = (label: string) => {
+  const key = camelKey(label, new Set());
+  return /^[a-z]/.test(key) ? key : `m${key}`;
 };
 
 const PICKER_ENTITIES: { value: PickerEntity; label: string }[] = [
@@ -96,7 +122,6 @@ const draftOf = (form: Form): FormDraft => ({
   status: form.status,
   opensDateISOString: form.opensDateISOString,
   deadlineDateISOString: form.deadlineDateISOString,
-  recurrenceRule: form.recurrenceRule,
 });
 
 const blankQuestion = (): FormQuestion => ({
@@ -111,6 +136,8 @@ const blankQuestion = (): FormQuestion => ({
   dbField: null,
   requiresApproval: null,
   archived: false,
+  scope: "self",
+  weight: null,
 });
 
 export function FormEditor() {
@@ -144,7 +171,6 @@ function Editor({ form }: { form: WithId<Form> }) {
   const willBumpVersion = isPublished && versionedSnapshot(next) !== versionedSnapshot(form);
   const active = draft.questions.map((q, index) => ({ q, index })).filter(({ q }) => !q.archived);
   const archivedCount = draft.questions.length - active.length;
-  const weekly = parseWeeklyRule(draft.recurrenceRule);
 
   const save = async (publish: boolean) => {
     setIsSaving(true);
@@ -228,7 +254,14 @@ function Editor({ form }: { form: WithId<Form> }) {
         subtitle={[
           FORM_KIND_LABELS[form.kind],
           isPublished ? `version ${form.version}` : "draft, never published",
-          form.status === "open" ? "open" : form.status === "closed" ? "closed" : null,
+          // L'etat du lien, pas seulement le statut : publie mais pas encore ouvert = programme.
+          formState(form, new Date().toISOString()) === "not_open_yet" && form.opensDateISOString
+            ? `scheduled, opens ${formatDateTime(form.opensDateISOString)}`
+            : form.status === "open"
+              ? "open"
+              : form.status === "closed"
+                ? "closed"
+                : null,
         ]
           .filter(Boolean)
           .join(" · ")}
@@ -248,7 +281,13 @@ function Editor({ form }: { form: WithId<Form> }) {
         </Section>
       )}
 
-      <PublicLinkSection formId={form.id} isPublished={isPublished} />
+      {form.identityCheck === "jury_link" ? (
+        <Section title="Jury link" hint="The jury link carries a secret: copy it, or make a new one, from the event's page (Admin > Challenge teams).">
+          <Empty>Scores are locked by closing this form.</Empty>
+        </Section>
+      ) : (
+        <PublicLinkSection formId={form.id} isPublished={isPublished} needsAccount={needsAccount(form.identityCheck)} />
+      )}
 
       {isPublished && <FormResponses />}
 
@@ -271,7 +310,7 @@ function Editor({ form }: { form: WithId<Form> }) {
           />
           <Select
             label="Event"
-            description="Exercise or session feedback: the answers are tied to this event."
+            description="Debrief, jury, picks, exercise or session feedback: the answers are tied to this event, its teams and its teams scored."
             clearable
             searchable
             value={draft.eventId}
@@ -284,7 +323,7 @@ function Editor({ form }: { form: WithId<Form> }) {
       <Section title="Respondent" hint={IDENTITY_HINTS[draft.identityCheck]}>
         <SegmentedControl
           fullWidth
-          value={draft.identityCheck}
+          value={draft.identityCheck === "email_code" ? "account" : draft.identityCheck}
           onChange={(v) => set("identityCheck", v as FormIdentityCheck)}
           data={IDENTITY_OPTIONS}
         />
@@ -299,7 +338,10 @@ function Editor({ form }: { form: WithId<Form> }) {
         />
       </Section>
 
-      <Section title="Schedule">
+      <Section
+        title="Schedule"
+        hint="One form per occurrence. A weekly form writes to the week it opens: for next week, duplicate it."
+      >
         <Stack>
           <TextInput
             label="Opens"
@@ -313,23 +355,6 @@ function Editor({ form }: { form: WithId<Form> }) {
             value={toLocalInput(draft.deadlineDateISOString)}
             onChange={(e) => set("deadlineDateISOString", fromLocalInput(e.currentTarget.value))}
           />
-          <Group grow gap="xs" align="flex-end">
-            <Select
-              label="Repeats every"
-              placeholder="Never"
-              clearable
-              value={weekly?.day ?? null}
-              onChange={(day) => set("recurrenceRule", weeklyRule(day, weekly?.time ?? "10:00"))}
-              data={WEEKDAYS}
-            />
-            <TextInput
-              label="At"
-              type="time"
-              disabled={!weekly}
-              value={weekly?.time ?? "10:00"}
-              onChange={(e) => set("recurrenceRule", weeklyRule(weekly?.day ?? null, e.currentTarget.value))}
-            />
-          </Group>
         </Stack>
       </Section>
 
@@ -353,8 +378,10 @@ function Editor({ form }: { form: WithId<Form> }) {
                 title={`${i + 1}. ${q.label || "Untitled question"}`}
                 subtitle={[
                   FORM_FIELD_TYPE_LABELS[q.type],
+                  scopeOf(q) !== "self" ? SCOPE_LABELS[scopeOf(q)].toLowerCase() : null,
                   q.required ? "required" : null,
-                  q.dbField ? `writes ${getFieldDef(q.dbField).label}` : "not linked",
+                  q.dbField ? `writes ${fieldName(q)}` : "not linked",
+                  q.weight ? `weight ${q.weight}` : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -373,7 +400,15 @@ function Editor({ form }: { form: WithId<Form> }) {
 
       <Section title="Actions">
         <RowList>
-          <ButtonRow onClick={duplicate} title="Duplicate" subtitle="A new draft with the same questions" />
+          <ButtonRow
+            onClick={duplicate}
+            title="Duplicate"
+            subtitle={
+              form.attachments.week
+                ? "Next week's draft: same questions, dates moved by a week"
+                : "A new draft with the same questions, without dates"
+            }
+          />
           <ButtonRow onClick={() => setConfirmArchive(true)} title="Archive" subtitle="Closes the form and hides it from the lists" />
         </RowList>
       </Section>
@@ -449,12 +484,37 @@ function QuestionModal({
   onRemove: () => void;
   onMove: (delta: -1 | 1) => void;
 }) {
+  const { forms } = useAdmin();
   const [q, setQ] = useState<FormQuestion>(() => original ?? blankQuestion());
+  // Une nouvelle cle de famille, en cours de saisie (`null` : une cle existante, ou un autre champ).
+  const [newFamily, setNewFamily] = useState<{ family: FieldFamily; key: string } | null>(null);
   const set = <K extends keyof FormQuestion>(key: K, value: FormQuestion[K]) => setQ((x) => ({ ...x, [key]: value }));
-  const aligned = alignQuestionWithField(q);
-  const problems = questionProblems(aligned);
+  // Une cle invalide n'est pas encore un champ : la question reste sans champ tant qu'elle ne l'est pas.
+  const badKey = newFamily !== null && !FAMILY_KEY.test(newFamily.key);
+  const withKey = newFamily && !badKey ? { ...q, dbField: `${newFamily.family}.${newFamily.key}` as DbFieldKey } : q;
+  const aligned = alignQuestionWithField(withKey);
+  const problems = [...(badKey ? ["A key is a word in camelCase starting with a letter, e.g. callsMade."] : []), ...questionProblems(aligned)];
   const fieldValue = q.dbField ? getFieldDef(q.dbField).value : null;
   const optionsFromField = fieldValue !== null && (fieldValue.kind === "enum" || fieldValue.kind === "enumMulti" || fieldValue.kind === "boolean");
+
+  // Les cles connues de chaque famille : le dictionnaire standard, celles des modeles
+  // d'evenements, puis celles des formulaires du batch (sauf une ancienne cle renommee).
+  const known = useMemo(() => {
+    const out: Record<FieldFamily, Map<string, string>> = { "submission.metrics": new Map(), "evaluation.scores": new Map() };
+    for (const [key, m] of Object.entries(STANDARD_METRICS)) out["submission.metrics"].set(key, m.label);
+    for (const t of Object.values(EVENT_TEMPLATES)) {
+      for (const m of t.metrics) out["submission.metrics"].set(m.key, m.label);
+      for (const c of t.criteria) out["evaluation.scores"].set(c.key, c.label);
+    }
+    for (const f of forms) {
+      for (const x of f.questions) {
+        const family = x.dbField ? familyOf(x.dbField) : null;
+        const legacy = family?.family === "submission.metrics" && family.key in EVENT_METRIC_RENAMES;
+        if (family && !legacy && !out[family.family].has(family.key)) out[family.family].set(family.key, x.label);
+      }
+    }
+    return out;
+  }, [forms]);
 
   const fieldData = useMemo(() => {
     const groups = new Map<string, { value: string; label: string }[]>();
@@ -462,22 +522,48 @@ function QuestionModal({
       const group = DOC_KIND_LABELS[parseDbField(key).doc];
       const def = getFieldDef(key);
       const items = groups.get(group) ?? [];
-      items.push({ value: key, label: `${def.label}${def.indicator ? " (indicator)" : ""}` });
+      items.push({ value: key, label: `${def.label}${def.indicator ? " (indicator)" : ""}${isFormOnly(parseDbField(key).doc) ? " (private)" : ""}` });
       groups.set(group, items);
     }
+    const ownFamily = q.dbField ? familyOf(q.dbField) : null;
+    for (const family of Object.keys(FAMILY_CHOICES) as FieldFamily[]) {
+      const choice = FAMILY_CHOICES[family];
+      if (FAMILY_QUESTION_TYPE[family] !== q.type) continue;
+      const items = [...known[family]].map(([key, label]) => ({ value: `${family}.${key}`, label: `${label} (${key})` }));
+      // La cle de la question, si elle n'est pas encore connue (ajoutee dans cette fenetre).
+      const current = ownFamily?.family === family ? ownFamily.key : null;
+      if (current && !known[family].has(current)) items.unshift({ value: q.dbField!, label: `${q.label || current} (${current})` });
+      items.push({ value: NEW_KEY(family), label: `New ${choice.noun}...` });
+      groups.set(choice.group, items);
+    }
     return [...groups.entries()].map(([group, items]) => ({ group, items }));
-  }, [q.type]);
+  }, [q.type, q.dbField, q.label, known]);
+
+  const chooseField = (value: string | null) => {
+    const family = (Object.keys(FAMILY_CHOICES) as FieldFamily[]).find((f) => value === NEW_KEY(f));
+    if (family) {
+      const key = keyFromLabel(q.label || FAMILY_CHOICES[family].noun);
+      // « Cold calls » -> `callsMade` : une metrique deja connue sous une autre cle prend la cle standard.
+      setNewFamily({ family, key: family === "submission.metrics" ? standardEventMetricKey(key) : key });
+      return;
+    }
+    setNewFamily(null);
+    set("dbField", (value as DbFieldKey | null) ?? null);
+  };
 
   const changeType = (type: FormFieldType) =>
-    setQ((x) => ({
+    setQ((x) => {
+      const family = x.dbField ? familyOf(x.dbField) : null;
+      return {
       ...x,
       type,
       // Un champ incompatible avec le nouveau type est retire.
-      dbField: x.dbField && compatibleDbFields(type).includes(x.dbField) ? x.dbField : null,
+      dbField: x.dbField && (family ? FAMILY_QUESTION_TYPE[family.family] === type : compatibleDbFields(type).includes(x.dbField)) ? x.dbField : null,
       scale: type === "rating" ? (x.scale ?? { min: 1, max: 5 }) : null,
       options: type === "single_choice" || type === "multiple_choice" ? (x.options ?? []) : null,
       picker: type === "entity_picker" ? (x.picker ?? { entity: "founder", maxItems: 1 }) : null,
-    }));
+      };
+    });
 
   return (
     <Modal opened onClose={onClose} title={original ? "Edit question" : "New question"} size="lg" centered>
@@ -557,11 +643,47 @@ function QuestionModal({
           clearable
           searchable
           disabled={isIndicatorLocked}
-          value={q.dbField}
-          onChange={(v) => set("dbField", (v as DbFieldKey | null) ?? null)}
+          value={newFamily ? NEW_KEY(newFamily.family) : q.dbField}
+          onChange={chooseField}
           data={fieldData}
           comboboxProps={{ withinPortal: true }}
         />
+
+        {newFamily && (
+          <TextInput
+            label={`Key of the new ${FAMILY_CHOICES[newFamily.family].noun}`}
+            description="Stable across events, to compare them: reuse the same key for the same number. camelCase, e.g. callsMade."
+            value={newFamily.key}
+            onChange={(e) => setNewFamily({ ...newFamily, key: e.currentTarget.value.trim() })}
+          />
+        )}
+
+        {aligned.dbField ? (
+          scopeOf(aligned) !== "self" && (
+            <Text size="sm" c="dimmed">
+              Asked for: {SCOPE_LABELS[scopeOf(aligned)].toLowerCase()} (set by the field).
+            </Text>
+          )
+        ) : (
+          <Select
+            label="Asked for"
+            description="A question about each teammate or each team scored is repeated for every one of them."
+            allowDeselect={false}
+            value={scopeOf(q)}
+            onChange={(v) => v && set("scope", v as QuestionScope)}
+            data={(Object.keys(SCOPE_LABELS) as QuestionScope[]).map((value) => ({ value, label: SCOPE_LABELS[value] }))}
+          />
+        )}
+
+        {isJuryCriterion(aligned) && (
+          <NumberInput
+            label="Weight"
+            description="In the jury's weighted average (the IC grid is 40 / 40 / 20)."
+            min={0}
+            value={q.weight ?? 1}
+            onChange={(v) => set("weight", typeof v === "number" && v > 0 ? v : null)}
+          />
+        )}
 
         {q.dbField && (
           <Select
@@ -583,7 +705,7 @@ function QuestionModal({
           </Text>
         ))}
 
-        <Button size="md" fullWidth disabled={problems.length > 0} onClick={() => onApply(q)}>
+        <Button size="md" fullWidth disabled={problems.length > 0} onClick={() => onApply(withKey)}>
           {original ? "Apply" : "Add question"}
         </Button>
         {original && (
@@ -604,14 +726,27 @@ function QuestionModal({
   );
 }
 
+/** Le champ d'une question, tel que l'editeur le nomme : « Team metric callsMade ». */
+function fieldName(q: FormQuestion): string {
+  const family = q.dbField ? familyOf(q.dbField) : null;
+  if (family) return `${FAMILY_CHOICES[family.family].noun} ${family.key}`;
+  return q.dbField ? getFieldDef(q.dbField).label : "";
+}
+
 /** Le lien a partager (Slack) : la page publique, une question par ecran. Un brouillon s'y relit, sans prendre de reponse. */
-function PublicLinkSection({ formId, isPublished }: { formId: string; isPublished: boolean }) {
+function PublicLinkSection({ formId, isPublished, needsAccount }: { formId: string; isPublished: boolean; needsAccount: boolean }) {
   const clipboard = useClipboard({ timeout: 1500 });
   const path = paths.form(formId);
   return (
     <Section
       title="Public link"
-      hint={isPublished ? "Share it on Slack. No account is needed to answer." : "Preview the form as founders will see it. Publish it to collect answers."}
+      hint={
+        !isPublished
+          ? "Preview the form as founders will see it. Publish it to collect answers."
+          : needsAccount
+            ? "Share it on Slack. Founders sign in with their Pioneers account to answer."
+            : "Share it on Slack. No account is needed to answer."
+      }
     >
       <Group gap="sm">
         {isPublished && (

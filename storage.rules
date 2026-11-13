@@ -1,15 +1,40 @@
 rules_version = '2';
 
 // ----------------------------
-// Storage : aucun acces direct depuis un client
+// Storage : les photos des fondateurs
 // ----------------------------
-// Les fichiers (photos des fondateurs : founders/{founderId}/cover.jpg) sont
-// ecrits par les scripts d'import (Admin SDK, qui ignore ces regles) et lus par
-// leur URL a jeton (`?alt=media&token=...`), qui ne passe pas par les regles.
-// L'URL vit dans le document Firestore dont la visibilite convient
-// (`founders/{id}`) : qui ne lit pas ce document n'a pas l'URL.
+// founders/{founderId}/cover.jpg     ecrite par l'import FA26 (Admin SDK, qui
+//                                    ignore ces regles)
+// founders/{founderId}/photo-*.jpg   deposee depuis « Mon profil » par le
+//                                    fondateur lui-meme ou le staff ; un nom par
+//                                    version, donc une URL par version (le cache
+//                                    d'un an ne sert jamais l'ancienne). La
+//                                    precedente est supprimee apres le
+//                                    remplacement : son URL ne sert plus.
+//
+// Les pages lisent une photo par son URL a jeton (`?alt=media&token=...`), qui
+// ne passe pas par ces regles : l'URL vit dans `founders/{id}` (coverPhotoUrl),
+// qui ne la lit pas n'a pas l'URL. La lecture ci-dessous ne sert qu'a obtenir
+// cette URL juste apres le depot (getDownloadURL). Tout le reste est refuse.
 service firebase.storage {
   match /b/{bucket}/o {
+    // Une photo `photo-*.jpg` (meme motif que isFounderPhotoUrl, firestore.rules)
+    // du fondateur connecte (founders.uid, ecrit a la reclamation) ou du staff.
+    // Le fondateur d'abord : c'est le cas courant, une lecture Firestore de moins.
+    function canManagePhoto(founderId, fileName) {
+      return request.auth != null
+        && fileName.matches('photo-[A-Za-z0-9_-]+[.]jpg')
+        && (firestore.get(/databases/(default)/documents/founders/$(founderId)).data.get('uid', null) == request.auth.uid
+          || firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('roles', []).hasAny(['staff']));
+    }
+
+    match /founders/{founderId}/{fileName} {
+      allow read, delete: if canManagePhoto(founderId, fileName);
+      allow create: if canManagePhoto(founderId, fileName)
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType == 'image/jpeg';
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

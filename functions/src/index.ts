@@ -11,18 +11,19 @@ import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { FUNCTIONS_REGION, type CallableName, type CallableRequest, type CallableResponse } from "./shared/callables";
 import { API_KEY_NAME_MAX } from "./shared/api";
-import { COL } from "./shared/collections";
+import { COL, SUB } from "./shared/collections";
 import { isStaffViewer } from "./shared/access";
-import type { ApiKey } from "./shared/types";
+import type { ApiKey, Evaluation, Submission } from "./shared/types";
 import { mintApiKey } from "./api/caller";
 import { loadViewer } from "./api/viewer";
 import { decideRequest, describeRequest } from "./oauth/consent";
 import * as accounts from "./services/accounts";
-import * as challenges from "./services/challenges";
 import * as leaderboards from "./services/leaderboards";
 import * as judges from "./services/judges";
-import * as picks from "./services/picks";
 import * as forms from "./services/forms";
+import * as kpis from "./services/kpis";
+import * as teamResults from "./services/teamResults";
+import { onDocumentUpdated, onDocumentWritten } from "firebase-functions/v2/firestore";
 
 initializeApp();
 setGlobalOptions({ region: FUNCTIONS_REGION, maxInstances: 10 });
@@ -132,6 +133,13 @@ export const inviteAccount = onCallTyped("inviteAccount", async (request) => {
   return accounts.inviteAccount(actorUid, String(request.data?.email ?? ""), accounts.parseAccess(request.data ?? {}));
 });
 
+export const createSetPasswordLink = onCallTyped("createSetPasswordLink", async (request) => {
+  const actorUid = await assertStaff(request.auth?.uid);
+  const uid = String(request.data?.uid ?? "");
+  if (!uid || uid.includes("/")) throw new HttpsError("invalid-argument", "`uid` is required.");
+  return { link: await accounts.createSetPasswordLink(actorUid, uid) };
+});
+
 export const setAccountDisabled = onCallTyped("setAccountDisabled", async (request) => {
   const actorUid = await assertStaff(request.auth?.uid);
   const uid = String(request.data?.uid ?? "");
@@ -141,25 +149,10 @@ export const setAccountDisabled = onCallTyped("setAccountDisabled", async (reque
 });
 
 // ----------------------------
-// Debrief d'un hackathon (fondateur ; resultats aussi par le staff)
+// Leaderboard et jury (staff). Les resultats d'equipe (Debrief), les avis entre
+// pairs, les notes du jury et les picks se saisissent par les formulaires de
+// l'evenement (SPECS §2) : `submitFormResponse`.
 // ----------------------------
-
-export const myChallengeTasks = onCallTyped("myChallengeTasks", async (request) => {
-  const uid = assertSignedIn(request.auth?.uid);
-  return { tasks: await challenges.myChallengeTasks(uid, request.data?.batchId) };
-});
-
-export const submitPeerRatings = onCallTyped("submitPeerRatings", async (request) => {
-  const uid = assertSignedIn(request.auth?.uid);
-  return { saved: await challenges.submitPeerRatings(uid, request.data?.eventId, request.data?.ratings) };
-});
-
-export const submitTeamResults = onCallTyped("submitTeamResults", async (request) => {
-  const uid = assertSignedIn(request.auth?.uid);
-  const { eventId, teamId, ...results } = request.data ?? {};
-  await challenges.submitTeamResults(uid, eventId, teamId, results);
-  return { ok: true as const };
-});
 
 export const setEventRanking = onCallTyped("setEventRanking", async (request) => {
   const actorUid = await assertStaff(request.auth?.uid);
@@ -167,41 +160,15 @@ export const setEventRanking = onCallTyped("setEventRanking", async (request) =>
   return { ok: true as const };
 });
 
-// ----------------------------
-// Jury par lien prive : le staff cree et revoque ; le jure, sans compte, note
-// ----------------------------
-
-export const createJudge = onCallTyped("createJudge", async (request) => {
+export const resetJuryLink = onCallTyped("resetJuryLink", async (request) => {
   const actorUid = await assertStaff(request.auth?.uid);
-  return judges.createJudge(actorUid, request.data ?? {});
-});
-
-export const revokeJudge = onCallTyped("revokeJudge", async (request) => {
-  const actorUid = await assertStaff(request.auth?.uid);
-  await judges.revokeJudge(actorUid, request.data?.eventId, request.data?.judgeId);
+  await judges.resetJuryLink(actorUid, request.data?.eventId);
   return { ok: true as const };
 });
 
-export const getJudgeSheet = onCallTyped("getJudgeSheet", (request) => judges.getJudgeSheet(request.data ?? {}));
-
-export const submitJudgeScores = onCallTyped("submitJudgeScores", async (request) => {
-  await judges.submitJudgeScores(request.data ?? {});
-  return { ok: true as const };
-});
-
-// ----------------------------
-// Choix prives d'un evenement (mutual picks, speed dating)
-// ----------------------------
-
-export const setEventPicks = onCallTyped("setEventPicks", async (request) => {
+export const deleteJuryScore = onCallTyped("deleteJuryScore", async (request) => {
   const actorUid = await assertStaff(request.auth?.uid);
-  await picks.setEventPicks(actorUid, request.data?.eventId, request.data?.picks);
-  return { ok: true as const };
-});
-
-export const submitPicks = onCallTyped("submitPicks", async (request) => {
-  const uid = assertSignedIn(request.auth?.uid);
-  await picks.submitPicks(uid, request.data?.eventId, request.data?.pickedFounderIds);
+  await judges.deleteJuryScore(actorUid, request.data?.eventId, request.data?.evaluationId);
   return { ok: true as const };
 });
 
@@ -209,11 +176,10 @@ export const submitPicks = onCallTyped("submitPicks", async (request) => {
 // Formulaires publics (page /forms/[formId], sans compte)
 // ----------------------------
 // Ouverts a tous : le repondant n'a pas de compte (SPECS §3.5). Connecte, son
-// compte sert d'identite (fondateur rattache au batch).
+// compte sert d'identite (fondateur rattache au batch) ; un formulaire `account`
+// l'exige, un formulaire de jury demande le secret du lien.
 
-export const getPublicForm = onCallTyped("getPublicForm", (request) =>
-  forms.getPublicForm(request.auth?.uid ?? null, request.data?.formId),
-);
+export const getPublicForm = onCallTyped("getPublicForm", (request) => forms.getPublicForm(request.auth?.uid ?? null, request.data ?? {}));
 
 export const submitFormResponse = onCallTyped("submitFormResponse", (request) =>
   forms.submitFormResponse(request.auth?.uid ?? null, request.data ?? {}),
@@ -222,6 +188,47 @@ export const submitFormResponse = onCallTyped("submitFormResponse", (request) =>
 /** Staff : valide ou refuse une valeur en attente d'une reponse. */
 export const decideFormWrite = onCallTyped("decideFormWrite", async (request) =>
   forms.decideFormWrite(await assertStaff(request.auth?.uid), request.data ?? {}),
+);
+
+// ----------------------------
+// Declencheurs : updates du jeudi -> metricSnapshots + kpiSeries ; resultats
+// d'equipe -> metricSnapshots + leaderboard ; notes du jury -> leaderboard
+// ----------------------------
+// Declencheurs Firestore : dans la region de la base (europe-west9), que
+// firebase-tools exige pour un declencheur Firestore. Regle : shared/kpis.ts.
+const FIRESTORE_TRIGGER_REGION = "europe-west9";
+
+export const onCheckinWritten = onDocumentWritten(
+  { document: `${COL.checkins}/{checkinId}`, region: FIRESTORE_TRIGGER_REGION },
+  (event) => kpis.onCheckinWritten(event.data?.before.data(), event.data?.after.data()),
+);
+
+export const onStartupUpdated = onDocumentUpdated(
+  { document: `${COL.startups}/{startupId}`, region: FIRESTORE_TRIGGER_REGION },
+  (event) => kpis.onStartupUpdated(event.params.startupId, event.data?.before.data(), event.data?.after.data()),
+);
+
+// Resultats d'equipe et notes du jury, quel que soit l'ecrivain (formulaire, staff,
+// API) : releves de metriques, puis leaderboard (services/teamResults.ts).
+export const onSubmissionWritten = onDocumentWritten(
+  { document: `${COL.events}/{eventId}/${SUB.submissions}/{teamId}`, region: FIRESTORE_TRIGGER_REGION },
+  (event) =>
+    teamResults.onSubmissionChange(
+      event.params.eventId,
+      event.params.teamId,
+      (event.data?.before.data() as Submission | undefined) ?? null,
+      (event.data?.after.data() as Submission | undefined) ?? null,
+    ),
+);
+
+export const onEvaluationWritten = onDocumentWritten(
+  { document: `${COL.events}/{eventId}/${SUB.evaluations}/{evaluationId}`, region: FIRESTORE_TRIGGER_REGION },
+  (event) =>
+    teamResults.onEvaluationChange(
+      event.params.eventId,
+      (event.data?.before.data() as Evaluation | undefined) ?? null,
+      (event.data?.after.data() as Evaluation | undefined) ?? null,
+    ),
 );
 
 // ----------------------------

@@ -39,6 +39,8 @@ export const COL = {
   eventStats: "eventStats",
   forms: "forms",
   formResponses: "formResponses",
+  /** « J'ai repondu » d'un fondateur, par formulaire (son « To do ») : lui-meme + staff. */
+  formCompletions: "formCompletions",
   fieldSuggestions: "fieldSuggestions",
   completeness: "completeness",
   // Evaluation interne
@@ -113,6 +115,7 @@ export const docIds = {
     `${startupId}_${weekStartDayString}_${founderId}`,
   completeness: (owner: TargetKind, targetId: string) => `${owner}_${targetId}`,
   sessionRating: (eventId: string, founderId: string) => `${eventId}_${founderId}`,
+  formCompletion: (formId: string, founderId: string) => `${formId}_${founderId}`,
   /** Une appartenance par fondateur, equipe et date de debut. */
   teamMembership: (teamId: string, founderId: string, startDayString: string) => `${teamId}_${founderId}_${startDayString}`,
   /** Un releve par sujet, metrique, jour et phase : un import rejoue retombe sur le meme document. */
@@ -140,6 +143,7 @@ export const docPaths = {
   membership: (batchId: string, uid: string) => `${COL.batchMemberships}/${docIds.membership(batchId, uid)}`,
   list: (listKey: string) => `${COL.lists}/${listKey}`,
   form: (formId: string) => `${COL.forms}/${formId}`,
+  formVersion: (formId: string, version: number) => `${COL.forms}/${formId}/${SUB.versions}/${version}`,
   mentor: (mentorId: string) => `${COL.mentors}/${mentorId}`,
   person: (personId: string) => `${COL.people}/${personId}`,
   founder: (founderId: string) => `${COL.founders}/${founderId}`,
@@ -151,6 +155,8 @@ export const docPaths = {
   startup: (startupId: string) => `${COL.startups}/${startupId}`,
   startupProfile: (startupId: string) => `${COL.startups}/${startupId}/${SUB.private}/${PRIVATE_DOC.profile}`,
   startupInternal: (startupId: string) => `${COL.startups}/${startupId}/${SUB.private}/${PRIVATE_DOC.internal}`,
+  /** Courbes des indicateurs, recalculees par le declencheur des updates (shared/kpis.ts). */
+  kpiSeries: (startupId: string) => `${COL.kpiSeries}/${startupId}`,
   checkin: (startupId: string, weekStartDayString: string, founderId: string) =>
     `${COL.checkins}/${docIds.checkin(startupId, weekStartDayString, founderId)}`,
   attendance: (eventId: string, founderId: string) => `${COL.events}/${eventId}/${SUB.attendance}/${founderId}`,
@@ -162,9 +168,9 @@ export const docPaths = {
   leaderboard: (eventId: string) => `${COL.leaderboards}/${eventId}`,
   picks: (eventId: string, founderId: string) => `${COL.picks}/${docIds.picks(eventId, founderId)}`,
   sessionRating: (eventId: string, founderId: string) => `${COL.sessionRatings}/${docIds.sessionRating(eventId, founderId)}`,
-  /** Jure sans compte (empreinte du secret de son lien) : staff seulement, jamais lu par l'API (SPECS §4.8). */
-  judge: (eventId: string, judgeId: string) => `${COL.events}/${eventId}/${SUB.judges}/${judgeId}`,
-  judges: (eventId: string) => `${COL.events}/${eventId}/${SUB.judges}`,
+  formCompletion: (formId: string, founderId: string) => `${COL.formCompletions}/${docIds.formCompletion(formId, founderId)}`,
+  /** Le lien partage du jury (son secret) : staff seulement, jamais lu par l'API (SPECS §4.8). */
+  juryLink: (eventId: string) => `${COL.events}/${eventId}/${SUB.judges}/link`,
   /** Ecrit par la callable du Debrief ; jamais lu par l'API (SPECS §4.8). */
   peerRating: (eventId: string, raterFounderId: string, rateeFounderId: string) =>
     `${COL.events}/${eventId}/${SUB.peerRatings}/${docIds.peerRating(raterFounderId, rateeFounderId)}`,

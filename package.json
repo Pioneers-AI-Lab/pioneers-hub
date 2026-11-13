@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:emu": "NEXT_PUBLIC_USE_EMULATORS=true NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-pioneers-hub NEXT_PUBLIC_FIREBASE_API_KEY=demo-key NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=demo-pioneers-hub.firebaseapp.com next dev",
+    "dev:emu": "NEXT_PUBLIC_USE_EMULATORS=true NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-pioneers-hub NEXT_PUBLIC_FIREBASE_API_KEY=demo-key NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=demo-pioneers-hub.firebaseapp.com NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=demo-pioneers-hub.appspot.com next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

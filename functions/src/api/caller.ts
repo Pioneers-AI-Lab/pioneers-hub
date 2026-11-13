@@ -28,8 +28,12 @@ import { loadAccount, type Account } from "./viewer";
 
 export type Caller = Account & {
   uid: string;
-  /** Source inscrite au journal d'audit. `function` : une ecriture faite par le serveur pour un tiers (reponse de formulaire). */
-  via: Extract<AuditSource, "api" | "mcp" | "function">;
+  /**
+   * Source inscrite au journal d'audit. `function` : une ecriture faite par le
+   * serveur pour un tiers (reponse de formulaire) ; `ui` : une action de
+   * l'interface (callable), avec les droits du compte connecte.
+   */
+  via: Extract<AuditSource, "api" | "mcp" | "function" | "ui">;
   apiKeyId: string | null;
 };
 
@@ -58,6 +62,11 @@ async function callerFromApiKey(key: string): Promise<Resolved> {
   if (apiKey.revokedDateISOString) throw unauthorized("revoked_api_key", "This API key has been revoked.");
   touchLastUsed(doc.ref, apiKey.lastUsedDateISOString);
   return { apiKeyId: doc.id, ...(await loadAccount(apiKey.ownerUid)) };
+}
+
+/** L'appelant d'une callable de l'interface : le compte connecte, ses droits relus. */
+export async function uiCaller(uid: string): Promise<Caller> {
+  return { ...(await loadAccount(uid)), uid, via: "ui", apiKeyId: null };
 }
 
 async function callerFromIdToken(token: string): Promise<Resolved> {

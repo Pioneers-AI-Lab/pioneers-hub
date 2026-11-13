@@ -5,13 +5,15 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Anchor, Button, Divider, Group, PasswordInput, Stack, Text, TextInput } from "@mantine/core";
 import { useAuth } from "@/context/AuthContext";
-import { authErrorMessage, registerWithEmail } from "@/lib/auth";
+import { authErrorMessage, registerWithEmail, sendResetPasswordEmail } from "@/lib/auth";
 import { paths, safeNext, withNext } from "@/lib/paths";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { PageLoader } from "@/components/ui/PageLoader";
 
 // Creation de compte par email. Le compte recoit un lien de confirmation :
 // l'accueil attend la confirmation avant de rattacher le profil.
+// Email deja pris (souvent un compte invite par le staff, sans mot de passe) :
+// on envoie le lien « choisir mon mot de passe » a cette adresse.
 function RegisterForm() {
   const { firebaseUser, isLoading, signInWithGoogle } = useAuth();
   const router = useRouter();
@@ -22,6 +24,7 @@ function RegisterForm() {
   // Pendant la creation, le compte existe AVANT que le nom et l'email de
   // confirmation soient partis : on ne redirige qu'a la fin.
   const [creating, setCreating] = useState(false);
+  const [resetSentTo, setResetSentTo] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && firebaseUser && !creating) router.replace(next ?? paths.home());
@@ -43,8 +46,12 @@ function RegisterForm() {
       router.replace(next ?? paths.home());
     } catch (err) {
       setCreating(false);
-      setError(authErrorMessage(err));
       setBusy(null);
+      // Envoi du lien refuse : le message d'origine (« Sign in instead ») reste juste.
+      const email = form.email.trim().toLowerCase();
+      const inUse = (err as { code?: string }).code === "auth/email-already-in-use";
+      if (inUse && (await sendResetPasswordEmail(email).then(() => true, () => false))) setResetSentTo(email);
+      else setError(authErrorMessage(err));
     }
   };
 
@@ -60,6 +67,27 @@ function RegisterForm() {
   };
 
   if (isLoading || (firebaseUser && !creating)) return <PageLoader />;
+
+  if (resetSentTo) {
+    return (
+      <AuthCard
+        title="Check your inbox"
+        footer={
+          <Anchor className="tap-link" component={Link} href={withNext(paths.signIn(), next)} inherit>
+            Back to sign in
+          </Anchor>
+        }
+      >
+        <Text>
+          An account already exists for <Text span fw={600} inherit>{resetSentTo}</Text>, often created for you by the
+          Pioneers team. We just emailed you a link to choose your password. Look in your spam folder too.
+        </Text>
+        <Text size="sm" c="dimmed">
+          If this is a Google address, you can also use Continue with Google with the same email.
+        </Text>
+      </AuthCard>
+    );
+  }
 
   return (
     <AuthCard

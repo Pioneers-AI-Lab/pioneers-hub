@@ -36,6 +36,11 @@ type AuthValue = {
    */
   signOut: (redirectTo?: string) => Promise<void>;
   /**
+   * Vrai apres « Sign out », jusqu'a la connexion suivante : la page quittee ne
+   * devient pas le retour (`?next=`) du compte suivant (BlockedState).
+   */
+  hasSignedOut: boolean;
+  /**
    * Relit le compte et son jeton (apres la confirmation de l'email, faite dans
    * un autre onglet) : `emailVerified` et le jeton lu par les regles a jour.
    */
@@ -75,12 +80,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null | undefined>(undefined);
   // `reload()` modifie le compte EN PLACE : sans ce compteur, React ne verrait rien.
   const [userVersion, setUserVersion] = useState(0);
+  const [hasSignedOut, setHasSignedOut] = useState(false);
 
   useEffect(
     () =>
       onAuthStateChanged(auth, (nextUser) => {
         setFirebaseUser(nextUser);
-        if (nextUser) upsertUserDoc(nextUser).catch((err) => console.error("users/{uid} upsert failed", err));
+        if (nextUser) {
+          setHasSignedOut(false);
+          upsertUserDoc(nextUser).catch((err) => console.error("users/{uid} upsert failed", err));
+        }
       }),
     [],
   );
@@ -116,6 +125,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await signInWithPopup(auth, googleProvider);
       },
       signOut: async (redirectTo = paths.signIn()) => {
+        // Avant la deconnexion : la page courante, refusee a l'instant, ne doit pas renvoyer vers elle-meme.
+        setHasSignedOut(true);
         await firebaseSignOut(auth);
         router.replace(redirectTo);
       },
@@ -125,10 +136,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await auth.currentUser.getIdToken(true);
         setUserVersion((v) => v + 1);
       },
+      hasSignedOut,
     };
     // `userVersion` : le meme objet compte, relu (voir plus haut).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firebaseUser, userDoc.data, userDoc.isLoading, viewer, memberships.data, memberships.isLoading, userVersion, router]);
+  }, [firebaseUser, userDoc.data, userDoc.isLoading, viewer, memberships.data, memberships.isLoading, userVersion, hasSignedOut, router]);
 
   return <AuthContextProvider value={value}>{children}</AuthContextProvider>;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { canReadFounderDirectory, canReadFounderProfile, isInsider } from "@shared/access";
+import { canEditFounderProfile, canReadFounderDirectory, canReadFounderProfile, isInsider, isViewerFounder } from "@shared/access";
 import type {
   Attendance,
   Founder,
@@ -49,11 +49,13 @@ type FounderValue = {
   signals: WithId<ScoreSignals> | null;
   /** Formulaires de motivation et d'objectifs, semaine par semaine (le fondateur, staff et IC). */
   weeks: WithId<FounderWeek>[];
-  /** Presence a chaque seance, `parentId` = l'evenement (staff et IC). */
+  /** Presence a chaque seance, `parentId` = l'evenement (staff et IC, le fondateur la sienne : son To do en depend). */
   attendance: WithParent<Attendance>[];
   canSeeDirectory: boolean;
   /** Le visiteur est ce fondateur : il peut modifier son profil. */
   isSelf: boolean;
+  /** Le visiteur peut modifier ce profil (lui-meme ou le staff). */
+  canEdit: boolean;
   isDetailsLoading: boolean;
 };
 
@@ -81,7 +83,8 @@ export function FounderProvider({ children, founderId: explicitId }: { children:
   const stats = useDocListener(canSeeInternal ? refs.founderStats(founderId) : null);
   const signals = useDocListener(canSeeInternal ? refs.scoreSignals("founder", founderId) : null);
   const weeks = useQueryListener(canSeeProfile ? queries.weeksOfFounder(batch.id, founderId) : null);
-  const attendance = useQueryListener(canSeeInternal ? queries.attendanceOfFounder(founderId) : null);
+  const isSelf = isViewerFounder(viewerFounderId, founderId);
+  const attendance = useQueryListener(canSeeInternal || isSelf ? queries.attendanceOfFounder(founderId) : null);
 
   const found = founder.data !== null && founder.data.batchId === batch.id;
 
@@ -99,7 +102,8 @@ export function FounderProvider({ children, founderId: explicitId }: { children:
             weeks: [...weeks.data].sort((a, b) => b.weekStartDayString.localeCompare(a.weekStartDayString)),
             attendance: attendance.data,
             canSeeDirectory,
-            isSelf: viewerFounderId === founderId,
+            isSelf,
+            canEdit: canEditFounderProfile(role, viewerFounderId, founderId),
             isDetailsLoading: directory.isLoading || profile.isLoading || internal.isLoading,
           }
         : null,
@@ -115,8 +119,10 @@ export function FounderProvider({ children, founderId: explicitId }: { children:
       weeks.data,
       attendance.data,
       canSeeDirectory,
+      role,
       viewerFounderId,
       founderId,
+      isSelf,
       directory.isLoading,
       profile.isLoading,
       internal.isLoading,

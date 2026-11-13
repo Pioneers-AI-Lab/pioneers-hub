@@ -1,16 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Anchor, Button, Stack, Text, TextInput } from "@mantine/core";
 import { authErrorMessage, sendResetPasswordEmail } from "@/lib/auth";
 import { paths } from "@/lib/paths";
 import { AuthCard } from "@/components/auth/AuthCard";
+import { PageLoader } from "@/components/ui/PageLoader";
 
 // Mot de passe oublie. Le message de succes est le meme que le compte existe
-// ou non : la page ne dit pas quels emails ont un compte.
-export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState("");
+// ou non : la page ne dit pas quels emails ont un compte. `?email=` : l'email
+// deja tape sur la page de connexion.
+function ForgotPasswordForm() {
+  const [email, setEmail] = useState(useSearchParams().get("email") ?? "");
   const [busy, setBusy] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,5 +71,14 @@ export default function ForgotPasswordPage() {
         </Text>
       )}
     </AuthCard>
+  );
+}
+
+export default function ForgotPasswordPage() {
+  // `useSearchParams` suspend pendant le pre-rendu (cacheComponents).
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <ForgotPasswordForm />
+    </Suspense>
   );
 }

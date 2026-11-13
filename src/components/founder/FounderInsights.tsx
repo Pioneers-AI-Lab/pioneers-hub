@@ -16,6 +16,7 @@ import { Field, FieldGrid } from "@/components/ui/Field";
 import { LinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 import { ScoreHeadline } from "@/components/insights/ScoreBar";
+import { ATTENDANCE_STYLE } from "@/components/event/eventLabels";
 import { useFounderLinks } from "./FounderLink";
 import { ChartCard } from "@/components/charts/ChartCard";
 import { ScoreBreakdown } from "@/components/charts/ScoreBreakdown";
@@ -152,13 +153,6 @@ export function FounderTeams() {
     </Section>
   );
 }
-
-const ATTENDANCE_STYLE: Record<AttendanceStatus, { label: string; color: string }> = {
-  present: { label: "Present", color: "var(--mantine-color-pioneers-6)" },
-  in_office: { label: "In office", color: "var(--mantine-color-teal-7)" },
-  late: { label: "Late", color: "var(--mantine-color-yellow-7)" },
-  absent: { label: "Absent", color: "var(--mantine-color-dark-5)" },
-};
 
 /** Presence : le taux, puis une case par seance (calendrier du dashboard). */
 export function FounderAttendance() {

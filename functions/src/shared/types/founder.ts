@@ -281,6 +281,16 @@ export type FounderStats = BatchScoped & {
 export const isPickable = (f: Pick<Founder, "batchId" | "status" | "archivedDateISOString">, batchId: string): boolean =>
   f.batchId === batchId && f.status !== "left" && f.archivedDateISOString === null;
 
+/**
+ * Un fondateur qui suit le programme du batch : choisissable, et pas un
+ * cofondateur exterieur au batch. Les `alumni` en sont (un batch termine garde
+ * ses fondateurs) : c'est a eux que s'adressent formulaires et relances.
+ */
+export const isBatchParticipant = (
+  f: Pick<Founder, "batchId" | "status" | "archivedDateISOString" | "isExternalFounder">,
+  batchId: string,
+): boolean => isPickable(f, batchId) && !f.isExternalFounder;
+
 export type Picks = BatchScoped & {
   eventId: string;
   founderId: string;

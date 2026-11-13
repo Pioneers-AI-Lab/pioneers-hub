@@ -1,5 +1,5 @@
 {
-  "_doc": "Evenements du batch Fall 2026 (Pioneers Accelerator), a importer plus tard dans `events` (pas encore en base). Champs alignes sur `PioneersEvent` (functions/src/shared/types/event.ts) ; les heures `startTime`/`endTime` sont en heure de Paris (UTC+1), `startDateISOString` en UTC. `criteria` et les metriques par defaut viennent du modele (`templateKey`, presets/eventTemplates.ts) ; `metrics` ici remplace celles du modele quand il est renseigne. Champs non importes : `key`, `dayString`, `endDayString`, `startTime`, `endTime`, `dateHint`, `schedule`, `dataToCollect`, `source`. `dataToCollect.status` : ok = stocke et saisissable ; partial = stocke en texte libre ; missing_capture = la base sait stocker, pas encore d'outil de saisie ; missing_structure = pas de place dans la base.",
+  "_doc": "Evenements du batch Fall 2026 (Pioneers Accelerator), a importer plus tard dans `events` (pas encore en base). Champs alignes sur `PioneersEvent` (functions/src/shared/types/event.ts) ; les heures `startTime`/`endTime` sont en heure de Paris (UTC+1), `startDateISOString` en UTC. Modele standard (SPECS §2) : l'evenement ne porte ni grille ni metriques ; scripts/import-events.mjs cree ses formulaires (shared/eventForms.ts) : le Debrief d'un hackathon avec `metrics` (sinon celles du modele), le jury et les picks en brouillon, et les modeles de `forms` en brouillon. Champs non importes : `key`, `dayString`, `endDayString`, `startTime`, `endTime`, `dateHint`, `schedule`, `dataToCollect`, `source`. `dataToCollect.status` : ok = stocke et saisissable ; partial = stocke en texte libre ; missing_capture = la base sait stocker, pas encore d'outil de saisie ; missing_structure = pas de place dans la base.",
   "programId": "accelerator",
   "batchId": "fall-2026",
   "sources": [
@@ -205,7 +205,10 @@
           "status": "ok"
         }
       ],
-      "source": "brief"
+      "source": "brief",
+      "forms": [
+        "founder_introductions"
+      ]
     },
     {
       "key": "fa26-lunch-roulette-11-16",
@@ -632,13 +635,17 @@
           "status": "ok"
         }
       ],
-      "source": "email, brief"
+      "source": "email, brief",
+      "forms": [
+        "exercise_feedback"
+      ]
     },
     {
       "key": "fa26-hackathon-2-phone-agents",
       "name": "Hackathon 2: Phone Agents",
       "kind": "team_challenge",
       "templateKey": "hackathon",
+      "rankingMetricKey": "conversationsDone",
       "stage": null,
       "topic": "Build a voice agent that calls businesses to test the pain and book meetings. Winner: most real conversations and meetings booked.",
       "dayString": "2026-11-19",
@@ -669,8 +676,8 @@
           "unit": null
         },
         {
-          "key": "realConversations",
-          "label": "Real conversations",
+          "key": "conversationsDone",
+          "label": "Conversations done",
           "unit": null
         },
         {
@@ -712,7 +719,10 @@
           "status": "missing_capture"
         }
       ],
-      "source": "email, brief"
+      "source": "email, brief",
+      "forms": [
+        "exercise_feedback"
+      ]
     },
     {
       "key": "fa26-hackathon-3-distribution-machine",
@@ -744,8 +754,8 @@
       ],
       "metrics": [
         {
-          "key": "signups",
-          "label": "Signups",
+          "key": "accountsCreated",
+          "label": "Accounts created",
           "unit": null
         },
         {
@@ -796,7 +806,10 @@
           "status": "missing_capture"
         }
       ],
-      "source": "email, brief"
+      "source": "email, brief",
+      "forms": [
+        "exercise_feedback"
+      ]
     },
     {
       "key": "fa26-week-1-retro",
@@ -833,7 +846,10 @@
           "status": "ok"
         }
       ],
-      "source": "brief"
+      "source": "brief",
+      "forms": [
+        "weekly_feedback"
+      ]
     },
     {
       "key": "fa26-hackathon-4-agent-agency",
@@ -865,13 +881,13 @@
       ],
       "metrics": [
         {
-          "key": "moneyCollected",
-          "label": "Money collected",
+          "key": "amountPaid",
+          "label": "Amount paid",
           "unit": "EUR"
         },
         {
-          "key": "signedCommitments",
-          "label": "Signed commitments",
+          "key": "loisSigned",
+          "label": "LOIs signed",
           "unit": null
         }
       ],
@@ -946,13 +962,13 @@
       ],
       "metrics": [
         {
-          "key": "users",
-          "label": "Users",
+          "key": "accountsCreated",
+          "label": "Accounts created",
           "unit": null
         },
         {
-          "key": "revenue",
-          "label": "Revenue",
+          "key": "amountPaid",
+          "label": "Amount paid",
           "unit": "EUR"
         },
         {
@@ -961,8 +977,13 @@
           "unit": null
         },
         {
-          "key": "firstCustomers",
-          "label": "Paying or signed customers",
+          "key": "closedWon",
+          "label": "Deals won",
+          "unit": null
+        },
+        {
+          "key": "loisSigned",
+          "label": "LOIs signed",
           "unit": null
         }
       ],
@@ -1378,8 +1399,8 @@
       "guests": [],
       "metrics": [
         {
-          "key": "conversations",
-          "label": "Customer conversations",
+          "key": "conversationsDone",
+          "label": "Conversations done",
           "unit": null
         }
       ],

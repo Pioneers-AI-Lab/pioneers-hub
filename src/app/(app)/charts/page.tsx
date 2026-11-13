@@ -89,7 +89,7 @@ export default function ChartsGalleryPage() {
         </ChartCard>
         <ChartCard>
           <MetricAreaChart
-            title="Total revenue (€)"
+            title="Total amount paid (€)"
             points={[
               { label: week(4), value: 42000 },
               { label: week(5), value: 100000 },
@@ -112,7 +112,7 @@ export default function ChartsGalleryPage() {
 
       <Text className="label">Startups overview (mock page of the dashboard)</Text>
       <ChartCard title="Traction · TrendLine">
-        <TrendLine label="Interviews" points={[{ label: "W1", value: 6 }, { label: "W2", value: 14 }, { label: "W3", value: 22 }]} />
+        <TrendLine label="Conversations" points={[{ label: "W1", value: 6 }, { label: "W2", value: 14 }, { label: "W3", value: 22 }]} />
         <TrendLine label="Active users" points={[{ label: "W1", value: 40 }, { label: "W2", value: 90 }, { label: "W3", value: 143 }]} />
         <TrendLine label="MRR (€)" points={[{ label: "W1", value: 0 }, { label: "W2", value: 200 }, { label: "W3", value: 750 }]} format={(v) => `€${v}`} color={CHART_COLORS.green} />
       </ChartCard>

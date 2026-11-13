@@ -81,6 +81,12 @@ service cloud.firestore {
       return isBatchMember(batchId) && viewerFounderId(batchId) == founderId;
     }
 
+    // Le profil `founderId` est celui du compte du visiteur (une requete doit
+    // filtrer `founderId ==` son profil).
+    function isOwnFounder(founderId) {
+      return signedIn() && founderData(founderId).uid == request.auth.uid;
+    }
+
     // Le visiteur est l'un des fondateurs `founderIds` de ce batch.
     function isViewerFounderIn(batchId, founderIds) {
       return isBatchMember(batchId) && founderIds.hasAny([viewerFounderId(batchId)]);
@@ -134,10 +140,26 @@ service cloud.firestore {
         && getAfter(founderPath(person.founderIds[person.founderIds.size() - 1])).data.uid == request.auth.uid;
     }
 
+    // `key` change dans ce lot.
+    function changed(key) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny([key]);
+    }
+
+    // Vignette d'une photo (128 px) : une data URL JPEG, petite ; `null` = photo retiree.
+    function isThumbnail(value) {
+      return value == null || (value.size() < 40000 && value.matches('data:image/jpeg;base64,[A-Za-z0-9+/=]+'));
+    }
+
+    // Grande photo deposee depuis « Mon profil » : l'URL a jeton d'un fichier
+    // `founders/{founderId}/photo-*.jpg` (meme motif que storage.rules) ; `null` = retiree.
+    function isFounderPhotoUrl(founderId, value) {
+      return value == null || value.matches('https?://[^/]+/v0/b/[^/]+/o/founders%2F' + founderId + '%2Fphoto-[A-Za-z0-9_-]+[.]jpg[?]alt=media&token=[A-Za-z0-9-]+');
+    }
+
     // Une copie (`private/directory`) ecrite par le fondateur egale l'original
     // dans `people`, ecrit dans le meme lot.
     function copyMatches(personId, key) {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([key])
+      return !changed(key)
         || request.resource.data.get(key, null) == getAfter(personPath(personId)).data.get(key, null);
     }
 
@@ -173,9 +195,10 @@ service cloud.firestore {
         && request.resource.data.uid == request.auth.uid
         && (emailMatches(resource.data) || claimsLastFounderOf(resource.data))
         && onlyChanges(['uid']);
-      // Coordonnees modifiees par la personne (FOUNDER_SELF_EDITABLE.person).
+      // Coordonnees (FOUNDER_SELF_EDITABLE.person) et photo (FOUNDER_PHOTO_FIELDS.person) modifiees par la personne.
       allow update: if signedIn() && resource.data.uid == request.auth.uid
-        && onlyChanges(['phone', 'whatsapp', 'linkedinUrl']);
+        && onlyChanges(['phone', 'whatsapp', 'linkedinUrl', 'photoUrl'])
+        && (!changed('photoUrl') || isThumbnail(request.resource.data.photoUrl));
     }
 
     match /batchMemberships/{membershipId} {
@@ -270,6 +293,12 @@ service cloud.firestore {
       // « Mon profil » (FOUNDER_SELF_EDITABLE.founder).
       allow update: if isViewerFounder(resource.data.batchId, founderId)
         && onlyChanges(['hardSkills', 'industries', 'rolesICouldTake', 'publicProfileConsent']);
+      // Photo deposee depuis « Mon profil » (FOUNDER_PHOTO_FIELDS) : la vignette
+      // egale celle de `people` (meme lot), la grande photo est dans SON dossier Storage.
+      allow update: if isViewerFounder(resource.data.batchId, founderId)
+        && onlyChanges(['photoUrl', 'coverPhotoUrl'])
+        && copyMatches(resource.data.personId, 'photoUrl')
+        && (!changed('coverPhotoUrl') || isFounderPhotoUrl(founderId, request.resource.data.coverPhotoUrl));
 
       match /private/{docId} {
         allow read: if
@@ -368,18 +397,21 @@ service cloud.firestore {
       }
 
       // Notes du jury et presences : staff + investors IC. Les jures (sans
-      // compte) ecrivent par callable (`submitJudgeScores`, lien prive).
+      // compte) ecrivent par le formulaire de jury (`submitFormResponse`, lien partage).
       match /evaluations/{evaluationId} {
         allow read: if isInsider();
         allow write: if isStaff();
       }
 
+      // Presences : le fondateur lit la sienne (son To do ne propose pas les
+      // formulaires d'un evenement ou il etait absent).
       match /attendance/{founderId} {
-        allow read: if isInsider();
+        allow read: if isInsider() || isOwnFounder(resource.data.founderId);
         allow write: if isStaff();
       }
 
-      // Jetons des jures, avis entre pairs individuels : staff seulement.
+      // Lien partage du jury (`judges/link`, son secret), avis entre pairs
+      // individuels : staff seulement.
       match /judges/{judgeId} {
         allow read, write: if isStaff();
       }
@@ -415,7 +447,7 @@ service cloud.firestore {
     // Requetes de groupe (fiche fondateur, fiche startup) : presences d'un
     // fondateur sur toutes les seances, notes recues par une startup.
     match /{path=**}/attendance/{founderId} {
-      allow read: if isInsider();
+      allow read: if isInsider() || isOwnFounder(resource.data.founderId);
     }
     match /{path=**}/evaluations/{evaluationId} {
       allow read: if isInsider();
@@ -434,12 +466,18 @@ service cloud.firestore {
       }
     }
 
+    // Reponses brutes : staff seulement (SPECS §4.4, decision du 12/11). Une
+    // valeur reliee a un champ prend les droits du document ou elle est ecrite.
     match /formResponses/{responseId} {
-      // Les investors IC lisent tout SAUF le feedback entre pairs : une requete
-      // IC doit donc filtrer `formKind != 'peer_feedback'`.
-      allow read: if isStaff()
-        || (isInvestorIc() && resource.data.formKind != 'peer_feedback');
-      allow write: if isStaff();
+      allow read, write: if isStaff();
+    }
+
+    // « J'ai repondu » (To do) : le fondateur lui-meme + staff. Ecrit par la
+    // callable submitFormResponse seulement. La requete d'un fondateur filtre
+    // `batchId` et `founderId` (comme `picks`, ecrits par le formulaire Picks).
+    match /formCompletions/{completionId} {
+      allow read: if isStaff() || isViewerFounder(resource.data.batchId, resource.data.founderId);
+      allow write: if false;
     }
 
     // Suggestions de Claude (MCP) : staff, qui les accepte ou les rejette.

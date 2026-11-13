@@ -1,18 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { Box, Button, Group, Modal, SegmentedControl, Select, Stack, Text } from "@mantine/core";
+import { useClipboard } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import {
   GENERATOR_PRESETS,
-  GROUP_SIZE_MAX,
   GROUP_SIZE_MIN,
+  GROUP_SIZES,
+  assignLeaders,
+  buildLeaderCounts,
   buildPairHistory,
   generateGroups,
+  leaderIdOf,
+  type GeneratorInput,
   pairKey,
   scoreGroups,
 } from "@shared/teamGenerator";
+import { matchingOf } from "@shared/events";
 import type { EventTeam, Founder, WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminEvent } from "@/context/AdminEventContext";
@@ -21,6 +27,7 @@ import { paths } from "@/lib/paths";
 import { publishTeams, refreshPublicNames, saveDraftTeams, type DraftTeam } from "@/lib/teamsAdmin";
 import { TEAM_TOOLS, type TeamToolMode } from "@/components/admin/teamModes";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PageLoader } from "@/components/ui/PageLoader";
 import { ButtonRow, Row, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 
@@ -30,21 +37,48 @@ import { Empty, Section } from "@/components/ui/Section";
 // Participants (les partis sont exclus), taille, contraintes, tirage, retouche
 // a la main (toucher une personne puis une autre pour les echanger, ou
 // « Move here »), verrouillage, brouillon, publication.
+// Chaque groupe a un leader (rotation, `assignLeaders`) : le staff peut en
+// designer un autre ; un groupe qui perd le sien (echange, depart) en retire un.
 // Les contraintes « keep apart / together » valent pour la session de travail :
 // elles ne sont pas enregistrees.
 
-const SIZES = Array.from({ length: GROUP_SIZE_MAX - GROUP_SIZE_MIN + 1 }, (_, i) => String(GROUP_SIZE_MIN + i));
 
 type Pair = [string, string];
 
 const toDrafts = (teams: WithId<EventTeam>[]): DraftTeam[] =>
-  teams.map((t) => ({ name: t.name, memberIds: [...t.memberIds], locked: t.locked }));
+  teams.map((t) => ({ name: t.name, memberIds: [...t.memberIds], leaderId: leaderIdOf(t), locked: t.locked }));
 
-export function TeamGenerator({ mode }: { mode: TeamToolMode }) {
-  const { event, teams } = useAdminEvent();
+type DrawInput = Omit<GeneratorInput, "groupSize" | "fixedGroups">;
+
+/** Un tirage : les groupes verrouilles restent tels quels, les autres sont tires puis numerotes. */
+function drawGroups(groups: DraftTeam[], groupSize: number, input: DrawInput, groupLabel: string): DraftTeam[] {
+  const locked = groups.filter((g) => g.locked);
+  const result = generateGroups({ ...input, groupSize, fixedGroups: locked.map((g, i) => ({ key: String(i), memberIds: g.memberIds })) });
+  const next = [...locked, ...result.groups.map((memberIds) => ({ name: "", memberIds, leaderId: null, locked: false }))];
+  return next.map((g, i) => ({ ...g, name: g.locked && g.name ? g.name : `${groupLabel} ${i + 1}` }));
+}
+
+/** « Alice Martin (leader) » : le nom, marque s'il mene le groupe. */
+const withLeaderMark = (name: string, isLeader: boolean) => (isLeader ? `${name} (leader)` : name);
+
+export function TeamGenerator() {
+  const { isLoading } = useAdmin();
+  const { event, teams, matching } = useAdminEvent();
   const isPublished = teams.some((t) => t.publishedDateISOString !== null);
   // L'espace de travail part des equipes enregistrees a l'ouverture, puis garde
-  // son etat (contraintes, selection) a chaque enregistrement du brouillon.
+  // son etat (contraintes, selection) a chaque enregistrement du brouillon : il
+  // attend donc les fondateurs et l'historique du batch.
+  if (isLoading) return <PageLoader />;
+  // Le mode vient du matching de l'evenement (SPECS §2), plus de son type.
+  if (!matching || event.archivedDateISOString !== null) {
+    return (
+      <>
+        <PageHeader back={{ href: paths.adminEvent(event.id), label: event.name }} title="Draw" />
+        <Empty>{event.archivedDateISOString ? "This event is archived." : "This event has no matching: add teams or tables on its page."}</Empty>
+      </>
+    );
+  }
+  const mode = matching.mode;
   return isPublished ? <PublishedTeams mode={mode} /> : <GeneratorWorkspace key={event.id} mode={mode} />;
 }
 
@@ -56,27 +90,12 @@ function PublishedTeams({ mode }: { mode: TeamToolMode }) {
   const { event, teams } = useAdminEvent();
   const nameOf = (id: string) => foundersById.get(id)?.name ?? id;
   const publishedOn = teams.find((t) => t.publishedDateISOString)?.publishedDateISOString ?? null;
-  // Lunch roulette : un lien public (sans compte) remplace le texte a coller.
-  const hasPublicPage = mode === "matching";
-  const publicPath = paths.lunchRoulette(event.id);
-  const missingNames = hasPublicPage && teams.some((t) => !t.memberNames || t.memberNames.length !== t.memberIds.length);
+  // Un lien public (sans compte) a partager dans le channel du batch.
+  const publicPath = paths.groups(event.id);
+  const missingNames = teams.some((t) => !t.memberNames || t.memberNames.length !== t.memberIds.length);
   const [isFixing, setIsFixing] = useState(false);
 
-  const copyText = async (text: string, done: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      notifications.show({ message: done });
-    } catch {
-      notifications.show({ color: "red", message: `Copy failed. Copy it by hand: ${text.slice(0, 120)}` });
-    }
-  };
-  const copy = () =>
-    hasPublicPage
-      ? copyText(`${window.location.origin}${publicPath}`, "Link copied. Share it in the batch channel.")
-      : copyText(
-          [`*${event.name}*`, ...teams.map((t) => `${t.name}: ${t.memberIds.map(nameOf).join(", ")}`)].join("\n"),
-          "Copied. Paste it in the batch channel.",
-        );
+  const clipboard = useClipboard({ timeout: 1500 });
 
   const fixNames = async () => {
     setIsFixing(true);
@@ -95,37 +114,39 @@ function PublishedTeams({ mode }: { mode: TeamToolMode }) {
       <EventHeader mode={mode} />
       <Text size="sm" c="dimmed">
         Published {formatDateTime(publishedOn)}. Founders see their {tool.groupWord}, and the pairs count for the next draws.
-        {hasPublicPage && " Anyone with the link sees the tables, with first names and last initials only."}
+        Anyone with the link sees the {tool.groupWord}s, with first names and last initials only.
       </Text>
       {missingNames && (
-        <Section title="Public page" hint="These tables were published before the public page existed: their names are missing there.">
+        <Section title="Public page" hint={`These ${tool.groupWord}s were published before the public page existed: their names are missing there.`}>
           <Button variant="default" loading={isFixing} onClick={fixNames}>
             Add names to the public page
           </Button>
         </Section>
       )}
-      <Section title={`${tool.groupLabel}s · ${teams.length}`}>
+      <Section title={`${tool.groupLabel}s · ${teams.length}`} hint={tool.leaderReminder}>
         <RowList>
-          {teams.map((t) => (
-            <Row key={t.id} title={t.name} subtitle={t.memberIds.map(nameOf).join(", ")} meta={String(t.memberIds.length)} />
-          ))}
+          {teams.map((t) => {
+            const leaderId = leaderIdOf(t);
+            return (
+              <Row
+                key={t.id}
+                title={t.name}
+                subtitle={t.memberIds.map((id) => withLeaderMark(nameOf(id), id === leaderId)).join(", ")}
+                meta={String(t.memberIds.length)}
+              />
+            );
+          })}
         </RowList>
       </Section>
       <Box className="savebar">
-        {hasPublicPage ? (
-          <Group grow gap="xs">
-            <Button size="md" variant="default" component={Link} href={publicPath} target="_blank">
-              Open
-            </Button>
-            <Button size="md" onClick={copy}>
-              Copy public link
-            </Button>
-          </Group>
-        ) : (
-          <Button size="md" fullWidth variant="default" onClick={copy}>
-            Copy for Slack
+        <Group grow gap="xs">
+          <Button size="md" variant="default" component={Link} href={publicPath} target="_blank">
+            Open
           </Button>
-        )}
+          <Button size="md" onClick={() => clipboard.copy(`${window.location.origin}${publicPath}`)}>
+            {clipboard.copied ? "Copied" : "Copy public link"}
+          </Button>
+        </Group>
       </Box>
     </>
   );
@@ -136,7 +157,7 @@ function EventHeader({ mode }: { mode: TeamToolMode }) {
   const { event } = useAdminEvent();
   return (
     <PageHeader
-      back={{ href: tool.listHref(), label: tool.title }}
+      back={{ href: paths.adminEvent(event.id), label: `${event.name} · ${tool.title}` }}
       title={event.name}
       subtitle={[formatDateTime(event.startDateISOString), event.location].filter(Boolean).join(" · ")}
     />
@@ -149,36 +170,45 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
   const tool = TEAM_TOOLS[mode];
   const preset = GENERATOR_PRESETS[mode];
   const { founders, foundersById, teamMemberships, eventsById } = useAdmin();
-  const { event, teams } = useAdminEvent();
+  const { event, teams, absentIds, matching } = useAdminEvent();
 
   // Les partis gardent leur historique mais ne sont plus proposes (SPECS §4.1).
   const eligible = useMemo(() => founders.filter((f) => f.status !== "left"), [founders]);
-  const [groups, setGroups] = useState<DraftTeam[]>(() => toDrafts(teams));
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
-    const placed = teams.flatMap((t) => t.memberIds);
-    return new Set(placed.length > 0 ? placed : eligible.map((f) => f.id));
-  });
-  const [size, setSize] = useState(String(event.teamSize?.max ?? preset.defaultSize));
-  const [keepApart, setKeepApart] = useState<Pair[]>([]);
-  const [keepTogether, setKeepTogether] = useState<Pair[]>([]);
-  const [picked, setPicked] = useState<string | null>(null);
-  const [showParticipants, setShowParticipants] = useState(teams.length === 0);
-  const [isDirty, setIsDirty] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [confirmPublish, setConfirmPublish] = useState(false);
-
-  const history = useMemo(
-    () => buildPairHistory(teamMemberships, (id) => eventsById.get(id)?.kind ?? null, event.id),
-    [teamMemberships, eventsById, event.id],
+  // Le mode du matching de chaque evenement passe : equipes et tables ne comptent pas pareil.
+  const modeOfEvent = useCallback((id: string) => {
+    const e = eventsById.get(id);
+    return e ? (matchingOf(e)?.mode ?? null) : null;
+  }, [eventsById]);
+  const leaderCounts = useMemo(
+    () => buildLeaderCounts(teamMemberships, modeOfEvent, mode, event.id),
+    [teamMemberships, modeOfEvent, mode, event.id],
   );
+  const history = useMemo(() => buildPairHistory(teamMemberships, modeOfEvent, event.id), [teamMemberships, modeOfEvent, event.id]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
+    // Un nouveau tirage part des presents (les absents releves sont decoches).
+    const placed = teams.flatMap((t) => t.memberIds);
+    return new Set(placed.length > 0 ? placed : eligible.filter((f) => !absentIds.has(f.id)).map((f) => f.id));
+  });
   const participants = useMemo(
     () => eligible.filter((f) => selectedIds.has(f.id)).map((f) => ({ id: f.id, category: f.profileCategory })),
     [eligible, selectedIds],
   );
-  const scoringInput = { participants, history, rules: preset.rules, keepApart, keepTogether, groupWord: tool.groupWord };
+  const [size, setSize] = useState(String(matching?.size.max ?? preset.defaultSize));
+  // Taille du tirage affiche, enregistree avec lui dans le matching de l'evenement.
+  const [drawnSize, setDrawnSize] = useState(Number(size));
+  const [keepApart, setKeepApart] = useState<Pair[]>([]);
+  const [keepTogether, setKeepTogether] = useState<Pair[]>([]);
+  const drawInput: DrawInput = { participants, history, rules: preset.rules, keepApart, keepTogether, groupWord: tool.groupWord };
+  // Un brouillon d'avant les leaders en recoit a l'ouverture : a enregistrer.
+  const [groups, setGroups] = useState<DraftTeam[]>(() => assignLeaders(toDrafts(teams), leaderCounts));
+  const [picked, setPicked] = useState<string | null>(null);
+  const [showParticipants, setShowParticipants] = useState(teams.length === 0);
+  const [isDirty, setIsDirty] = useState(() => groups.length !== teams.length || groups.some((g, i) => g.leaderId !== leaderIdOf(teams[i])));
+  const [isSaving, setIsSaving] = useState(false);
+  const [confirmPublish, setConfirmPublish] = useState(false);
   const report = scoreGroups(
     groups.map((g) => g.memberIds),
-    scoringInput,
+    drawInput,
   );
 
   const placed = new Set(groups.flatMap((g) => g.memberIds));
@@ -186,19 +216,13 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
   const nameOf = (id: string) => foundersById.get(id)?.name ?? id;
 
   const update = (next: DraftTeam[]) => {
-    setGroups(next);
+    setGroups(assignLeaders(next, leaderCounts));
     setIsDirty(true);
   };
 
   const draw = () => {
-    const locked = groups.filter((g) => g.locked);
-    const result = generateGroups({
-      ...scoringInput,
-      groupSize: Number(size),
-      fixedGroups: locked.map((g, i) => ({ key: String(i), memberIds: g.memberIds })),
-    });
-    const next = [...locked, ...result.groups.map((memberIds) => ({ name: "", memberIds, locked: false }))];
-    update(next.map((g, i) => ({ ...g, name: g.locked && g.name ? g.name : `${tool.groupLabel} ${i + 1}` })));
+    update(drawGroups(groups, Number(size), drawInput, tool.groupLabel));
+    setDrawnSize(Number(size));
     setPicked(null);
   };
 
@@ -246,8 +270,16 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
     if (!picked) return;
     update([
       ...groups.map((g) => ({ ...g, memberIds: g.memberIds.filter((m) => m !== picked) })).filter((g) => g.memberIds.length > 0),
-      { name: `${tool.groupLabel} ${groups.length + 1}`, memberIds: [picked], locked: false },
+      { name: `${tool.groupLabel} ${groups.length + 1}`, memberIds: [picked], leaderId: null, locked: false },
     ]);
+    setPicked(null);
+  };
+
+  const pickedIndex = picked ? groupIndexOf(picked) : -1;
+  const pickedGroup = groups[pickedIndex] as DraftTeam | undefined;
+  const makeLeader = () => {
+    if (!picked) return;
+    update(groups.map((g, i) => (i === pickedIndex ? { ...g, leaderId: picked } : g)));
     setPicked(null);
   };
 
@@ -258,8 +290,8 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
     try {
       // Numerotation continue : l'id d'equipe suit la position.
       const drafts = groups.map((g) => ({ ...g, memberIds: [...g.memberIds] }));
-      if (publish) await publishTeams(event, drafts, teams, nameOf);
-      else await saveDraftTeams(event, drafts, teams);
+      if (publish) await publishTeams(event, drafts, teams, nameOf, drawnSize);
+      else await saveDraftTeams(event, drafts, teams, drawnSize);
       setIsDirty(false);
       setConfirmPublish(false);
       notifications.show({ message: publish ? `${tool.groupLabel}s published` : "Draft saved" });
@@ -281,7 +313,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
             {showParticipants ? "Hide" : "Edit"}
           </Button>
         }
-        hint="Untick the founders who are absent today. Founders who left the program are not listed."
+        hint={`Untick the founders who are absent today${absentIds.size > 0 ? ` (${absentIds.size} marked absent in the event's attendance, already unticked)` : ""}. Founders who left the program are not listed.`}
       >
         {showParticipants && (
           <>
@@ -320,7 +352,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
       </Section>
 
       <Section title={`${tool.groupLabel} size`}>
-        <SegmentedControl fullWidth value={size} onChange={setSize} data={SIZES} />
+        <SegmentedControl fullWidth value={size} onChange={setSize} data={GROUP_SIZES} />
       </Section>
 
       <PairEditor
@@ -360,6 +392,9 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
               {line}
             </Text>
           ))}
+          <Text size="sm" c="dimmed" mt="xs">
+            {tool.leaderReminder}
+          </Text>
           <Stack gap="md" mt="xs">
             {groups.map((g, index) => (
               <Box key={index} pb="sm" style={{ borderBottom: "1px solid var(--mantine-color-dark-5)" }}>
@@ -368,7 +403,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
                     {g.name} <Text span c="dimmed" size="sm" className="num">· {g.memberIds.length}</Text>
                   </Text>
                   <Group gap={4} wrap="nowrap">
-                    {picked && !g.locked && groupIndexOf(picked) !== index && (
+                    {picked && !g.locked && pickedIndex !== index && (
                       <Button size="compact-sm" variant="light" onClick={() => moveHere(index)}>
                         Move here
                       </Button>
@@ -385,7 +420,8 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
                       founder={foundersById.get(id)}
                       fallback={id}
                       isPicked={picked === id}
-                      disabled={g.locked || (picked !== null && picked !== id && groups[groupIndexOf(picked)]?.locked === true)}
+                      isLeader={g.leaderId === id}
+                      disabled={g.locked || (picked !== id && pickedGroup?.locked === true)}
                       onClick={() => tapMember(id)}
                     />
                   ))}
@@ -393,6 +429,11 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
               </Box>
             ))}
           </Stack>
+          {picked && pickedGroup && pickedGroup.leaderId !== picked && (
+            <Button variant="subtle" size="compact-sm" onClick={makeLeader} w="fit-content">
+              Make {nameOf(picked)} leader
+            </Button>
+          )}
           {picked && (
             <Button variant="subtle" size="compact-sm" onClick={newGroup} w="fit-content">
               Put {nameOf(picked)} in a new {tool.groupWord}
@@ -433,8 +474,8 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
         <Stack>
           <Text size="sm">
             Founders will see their {tool.groupWord}, and each pair counts in the history of the next draws. Published{" "}
-            {tool.groupWord}s can no longer be changed here.
-            {mode === "matching" && " You then get a public link to share: first names and last initials only."}
+            {tool.groupWord}s can no longer be changed here. You then get a public link to share: first names and last initials
+            only.
           </Text>
           <Button size="md" fullWidth loading={isSaving} onClick={() => save(true)}>
             Publish
@@ -451,19 +492,21 @@ function MemberButton({
   founder,
   fallback,
   isPicked,
+  isLeader = false,
   disabled,
   onClick,
 }: {
   founder: WithId<Founder> | undefined;
   fallback: string;
   isPicked: boolean;
+  isLeader?: boolean;
   disabled?: boolean;
   onClick: () => void;
 }) {
   const tag = founder?.profileCategory ? PROFILE_CATEGORY_LABEL[founder.profileCategory] : "?";
   return (
     <Button size="sm" variant={isPicked ? "filled" : "default"} disabled={disabled} onClick={onClick} styles={{ label: { gap: 6 } }}>
-      {founder?.name ?? fallback}
+      {withLeaderMark(founder?.name ?? fallback, isLeader)}
       <Text span size="xs" c={isPicked ? "white" : "dimmed"} ml={6}>
         {tag}
       </Text>

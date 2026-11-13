@@ -1,4 +1,4 @@
-import { DB_FIELDS, parseDbField, type DbFieldKey, type ValueSpec } from "@shared/fieldRegistry";
+import { DB_FIELDS, getFieldDef, parseDbField, type DbFieldKey, type ValueSpec } from "@shared/fieldRegistry";
 
 // ----------------------------
 // Import CSV : vers quels champs une colonne peut aller
@@ -13,8 +13,11 @@ const IMPORT_DOCS = new Set(["person", "founder", "founderDirectory", "founderPr
 export type ImportFieldKey = DbFieldKey;
 export type ImportTarget = "fullName" | "email" | ImportFieldKey;
 
-export const IMPORT_FIELD_KEYS = (Object.keys(DB_FIELDS) as DbFieldKey[]).filter((key) =>
-  IMPORT_DOCS.has(parseDbField(key).doc),
+/** Les photos ne s'importent pas en CSV : une URL Airtable expire (scripts/import-fa26.mjs les depose dans Storage). */
+const NOT_IMPORTED = new Set<DbFieldKey>(["person.photoUrl", "founder.coverPhotoUrl"]);
+
+export const IMPORT_FIELD_KEYS = (Object.keys(DB_FIELDS) as DbFieldKey[]).filter(
+  (key) => IMPORT_DOCS.has(parseDbField(key).doc) && !NOT_IMPORTED.has(key),
 );
 
 const DOC_GROUP: Record<string, string> = {
@@ -27,11 +30,11 @@ const DOC_GROUP: Record<string, string> = {
 export function targetLabel(target: ImportTarget): string {
   if (target === "fullName") return "Full name";
   if (target === "email") return "Email";
-  return DB_FIELDS[target].label;
+  return getFieldDef(target).label;
 }
 
 export function targetSpec(target: ImportFieldKey): ValueSpec {
-  return DB_FIELDS[target].value;
+  return getFieldDef(target).value;
 }
 
 /** Options du menu de correspondance, groupees par document. */
@@ -44,7 +47,7 @@ export function targetOptions() {
   for (const key of IMPORT_FIELD_KEYS) {
     const group = DOC_GROUP[parseDbField(key).doc];
     if (!groups.has(group)) groups.set(group, []);
-    groups.get(group)!.push({ value: key, label: DB_FIELDS[key].label });
+    groups.get(group)!.push({ value: key, label: getFieldDef(key).label });
   }
   return [...groups.entries()].map(([group, items]) => ({ group, items }));
 }
@@ -116,6 +119,6 @@ export function guessTarget(header: string): ImportTarget | null {
   if (ALIASES[key]) return ALIASES[key];
   if (key.startsWith("doyouconfirmyourenrol") || key.startsWith("iconfirmmyenrol")) return "founderProfile.enrolmentConfirmed";
   // Libelle exact d'un champ du registre (« Hard skills », « Years of experience »...).
-  const byLabel = IMPORT_FIELD_KEYS.find((k) => norm(DB_FIELDS[k].label) === key);
+  const byLabel = IMPORT_FIELD_KEYS.find((k) => norm(getFieldDef(k).label) === key);
   return byLabel ?? null;
 }

@@ -80,7 +80,10 @@ export type Membership = BatchScoped & {
   teamId: string;
   /** Evenement d'origine ; `null` pour une startup formee hors evenement. */
   eventId: string | null;
-  /** Role : `tech_lead`, `presenter`, `deck_maker` (equipe d'evenement), titre (startup). */
+  /**
+   * Role : `tech_lead`, `presenter`, `deck_maker`, `leader` (equipe d'evenement), titre (startup).
+   * `leader` sert a la rotation des leaders (`buildLeaderCounts`).
+   */
   role: string | null;
   startDayString: DayString;
   /** `null` tant que le fondateur est dans l'equipe. */

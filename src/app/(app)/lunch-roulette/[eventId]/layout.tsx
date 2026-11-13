@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { PublicRouletteProvider } from "@/context/PublicRouletteContext";
+import { PublicTeamsProvider } from "@/context/PublicTeamsContext";
 
 // Apercu du lien partage (Slack, WhatsApp...) : une banniere fixe. Le serveur
 // Next ne lit aucune donnee, l'apercu ne porte donc pas le nom de l'evenement.
@@ -27,5 +27,5 @@ export const metadata: Metadata = {
 };
 
 export default function PublicLunchRouletteLayout({ children }: LayoutProps<"/lunch-roulette/[eventId]">) {
-  return <PublicRouletteProvider>{children}</PublicRouletteProvider>;
+  return <PublicTeamsProvider>{children}</PublicTeamsProvider>;
 }

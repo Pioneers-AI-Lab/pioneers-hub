@@ -21,7 +21,7 @@ import type {
   BatchStats,
   Checkin,
   Evaluation,
-  Judge,
+  JuryLink,
   FounderStats,
   FounderWeek,
   KpiSeries,
@@ -31,6 +31,7 @@ import type {
   ClosedList,
   EventTeam,
   Form,
+  FormCompletion,
   FormResponse,
   FormVersion,
   Founder,
@@ -47,6 +48,7 @@ import type {
   Startup,
   StartupInternal,
   StartupProfile,
+  Submission,
   User,
   WithId,
 } from "@shared/types";
@@ -152,11 +154,19 @@ export const refs = {
   eventTeams: (eventId: string) => colRef<EventTeam>(COL.events, eventId, SUB.teams),
   /** Presences d'une seance : staff et investors IC (regle `attendance`). */
   eventAttendance: (eventId: string) => colRef<Attendance>(COL.events, eventId, SUB.attendance),
-  /** Staff et investors IC, sauf le feedback entre pairs (regle `formResponses`). */
+  attendance: (eventId: string, founderId: string) => docRef<Attendance>(docPaths.attendance(eventId, founderId)),
+  /** Reponses brutes : staff seulement (regle `formResponses`). */
   formResponses: () => colRef<FormResponse>(COL.formResponses),
+  /** Le fondateur lui-meme et le staff (regle `formCompletions`). */
+  formCompletions: () => colRef<FormCompletion>(COL.formCompletions),
   eventTeam: (eventId: string, teamId: string) => docRef<EventTeam>(COL.events, eventId, SUB.teams, teamId),
-  /** Staff seulement (regle `judges`). */
-  eventJudges: (eventId: string) => colRef<Judge>(COL.events, eventId, SUB.judges),
+  /** Resultats des equipes : publics (regle `submissions`), ecrits par le Debrief, le staff ou l'API. */
+  eventSubmissions: (eventId: string) => colRef<Submission>(COL.events, eventId, SUB.submissions),
+  /** Le lien partage du jury : staff seulement (regle `judges`). */
+  juryLink: (eventId: string) => docRef<JuryLink>(docPaths.juryLink(eventId)),
+  submission: (eventId: string, teamId: string) => docRef<Submission>(docPaths.submission(eventId, teamId)),
+  /** Notes d'un evenement : staff et investors IC (regle `evaluations`). */
+  eventEvaluations: (eventId: string) => colRef<Evaluation>(COL.events, eventId, SUB.evaluations),
   teamMembership: (membershipId: string) => docRef<Membership>(COL.memberships, membershipId),
 } as const;
 
@@ -237,13 +247,6 @@ export const queries = {
     query: query(refs.claimRequests(), whereField<ClaimRequest>("uid", "==", uid)),
   }),
 
-  claimRequestsOfBatch: (batchId: string) => ({
-    key: `claimRequests:batch=${batchId}`,
-    query: query(refs.claimRequests(), whereField<ClaimRequest>("batchId", "==", batchId)),
-  }),
-
-  /** Tous les comptes (staff). */
-  allUsers: () => ({ key: "users:all", query: query(refs.users(), limit(1000)) }),
 
   /** Les cles d'API d'un compte (staff : regle `apiKeys`). L'empreinte est lue, jamais la cle. */
   myApiKeys: (uid: string) => ({
@@ -283,7 +286,7 @@ export const queries = {
     ),
   }),
 
-  /** Presences d'un fondateur sur toutes les seances (staff et IC). */
+  /** Presences d'un fondateur sur toutes les seances (staff et IC, le fondateur les siennes). */
   attendanceOfFounder: (founderId: string) => ({
     key: `attendance:founder=${founderId}`,
     query: query(refs.allAttendance(), whereField<Attendance>("founderId", "==", founderId)),
@@ -327,10 +330,10 @@ export const queries = {
     query: query(refs.teamMemberships(), whereField<Membership>("batchId", "==", batchId)),
   }),
 
-  /** Jures d'un evenement : staff seulement (regle `judges`). */
-  judgesOfEvent: (eventId: string) => ({
-    key: `judges:event=${eventId}`,
-    query: query(refs.eventJudges(eventId)),
+  /** Notes du jury d'un evenement : staff et investors IC (regle `evaluations`). */
+  evaluationsOfEvent: (eventId: string) => ({
+    key: `evaluations:event=${eventId}`,
+    query: query(refs.eventEvaluations(eventId)),
   }),
 
   /** Equipes d'un evenement, publiees ou non : staff et investors IC seulement (regle `teams`). */
@@ -339,16 +342,32 @@ export const queries = {
     query: query(refs.eventTeams(eventId)),
   }),
 
+  /** Resultats des equipes d'un evenement (un document par equipe, id = teamId). */
+  submissionsOfEvent: (eventId: string) => ({
+    key: `submissions:event=${eventId}`,
+    query: query(refs.eventSubmissions(eventId)),
+  }),
+
   /** Equipes publiees d'un evenement : la regle `teams` exige ce filtre d'un visiteur sans role. */
   publishedTeamsOfEvent: (eventId: string) => ({
     key: `teams:event=${eventId}:published`,
     query: query(refs.eventTeams(eventId), whereField<EventTeam>("publishedDateISOString", "!=", null)),
   }),
 
-  /** Mes choix dans ce batch : la regle `picks` exige ces deux filtres d'un fondateur. */
-  myPicks: (batchId: string, founderId: string) => ({
-    key: `picks:batch=${batchId}:founder=${founderId}`,
-    query: query(refs.picks(), whereField<Picks>("batchId", "==", batchId), whereField<Picks>("founderId", "==", founderId)),
+  /** Les formulaires auxquels j'ai repondu dans ce batch : la regle `formCompletions` exige ces deux filtres. */
+  myFormCompletions: (batchId: string, founderId: string) => ({
+    key: `formCompletions:batch=${batchId}:founder=${founderId}`,
+    query: query(
+      refs.formCompletions(),
+      whereField<FormCompletion>("batchId", "==", batchId),
+      whereField<FormCompletion>("founderId", "==", founderId),
+    ),
+  }),
+
+  /** Les formulaires d'un evenement (lisibles de tous : la page de l'evenement, son administration). */
+  formsOfEvent: (eventId: string) => ({
+    key: `forms:event=${eventId}`,
+    query: query(refs.forms(), whereField<Form>("eventId", "==", eventId)),
   }),
 
   /** Tous les choix d'un evenement (staff). */
@@ -367,6 +386,17 @@ export const queries = {
   attendanceOfEvent: (eventId: string) => ({
     key: `attendance:event=${eventId}`,
     query: query(refs.eventAttendance(eventId)),
+  }),
+
+  /** Les picks clos du batch : le fondateur y relit ses choix (« To do »). */
+  closedPicksOfBatch: (batchId: string) => ({
+    key: `forms:batch=${batchId}:picks:closed`,
+    query: query(
+      refs.forms(),
+      whereField<Form>("batchId", "==", batchId),
+      whereField<Form>("kind", "==", "picks"),
+      whereField<Form>("status", "==", "closed"),
+    ),
   }),
 
   openFormsOfBatch: (batchId: string) => ({

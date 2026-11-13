@@ -23,16 +23,17 @@ export type BlockedReason = keyof typeof COPY;
  * par ici (LevelGate, gardes staff et admin). Un visiteur NON CONNECTE qui
  * tombe sur un refus est envoye a `/signin?next=<cette page>`, et la page de
  * connexion (ou d'inscription) le ramene ensuite ici. Un visiteur connecte sans
- * droit voit « Access restricted ».
+ * droit voit « Access restricted ». Juste apres « Sign out », pas de `next` :
+ * le compte suivant ne doit pas atterrir sur la page du precedent.
  */
 export function BlockedState({ reason, backHref }: { reason: BlockedReason; backHref: string }) {
   const router = useRouter();
-  const { firebaseUser, isLoading } = useAuth();
+  const { firebaseUser, isLoading, hasSignedOut } = useAuth();
   const needsSignIn = reason === "forbidden" && !isLoading && !firebaseUser;
 
   useEffect(() => {
-    if (needsSignIn) router.replace(paths.signIn(`${window.location.pathname}${window.location.search}`));
-  }, [needsSignIn, router]);
+    if (needsSignIn) router.replace(paths.signIn(hasSignedOut ? undefined : `${window.location.pathname}${window.location.search}`));
+  }, [needsSignIn, hasSignedOut, router]);
 
   // Tant qu'on ne sait pas qui est le visiteur, un refus n'est pas encore un verdict.
   if (reason === "forbidden" && (isLoading || needsSignIn)) return <PageLoader />;

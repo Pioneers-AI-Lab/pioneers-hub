@@ -1,7 +1,9 @@
 import { writeBatch } from "firebase/firestore";
 import { FOUNDER_SELF_EDITABLE } from "@shared/access";
 import type { Founder, FounderDirectory, FounderProfile, WithId } from "@shared/types";
-import { db } from "@/lib/firebase";
+import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import { db, storage } from "@/lib/firebase";
+import type { PreparedPhoto } from "@/lib/photo";
 import { refs } from "@/lib/firestore/refs";
 
 // ----------------------------
@@ -43,4 +45,63 @@ export async function saveMyProfile(founder: WithId<Founder>, patch: MyProfilePa
     batch.set(refs.founderProfile(founder.id), patch.profile, { merge: true });
   }
   await batch.commit();
+}
+
+/** Le chemin Storage d'une photo deposee depuis « Mon profil » (`founders/{id}/photo-*.jpg`), d'apres son URL. */
+function uploadedPhotoPath(url: string | null | undefined, founderId: string): string | null {
+  const encoded = url?.match(/\/o\/([^?]+)/)?.[1];
+  const path = encoded ? decodeURIComponent(encoded) : null;
+  return path && new RegExp(`^founders/${founderId}/photo-[A-Za-z0-9_-]+\\.jpg$`).test(path) ? path : null;
+}
+
+/** Les erreurs Storage et Firestore d'une photo, en clair (affichees par `useAction`). */
+function photoError(err: unknown): Error {
+  const code = (err as { code?: string }).code;
+  if (code === "storage/retry-limit-exceeded") return new Error("The photo could not be sent: storage is unreachable. Check your connection and try again.");
+  if (code === "storage/unauthorized" || code === "permission-denied") return new Error("You are not allowed to change this photo.");
+  return err instanceof Error ? err : new Error(String(err));
+}
+
+/**
+ * Ecrit la photo d'un fondateur, ou la retire (`null`) : la vignette dans
+ * `people` (l'original) et sur la fiche (copie), avec la grande photo, en un lot
+ * (regles : `copyMatches`, `isThumbnail`, `isFounderPhotoUrl`). Seule la fiche de
+ * CE batch recoit la copie : les regles refusent celle d'un autre batch, ou le
+ * compte n'est pas membre. La photo deposee qu'elle remplace est ensuite
+ * supprimee de Storage sans l'attendre (au mieux) : son URL ne sert plus. Celle
+ * de l'import (`cover.jpg`) reste, ecrite hors regles.
+ * La fiche ne change pas de `updatedDateISOString` : le formulaire ouvert
+ * (cle sur cette date) garde ce qui est en cours de saisie.
+ */
+async function commitPhoto(founder: WithId<Founder>, thumbnail: string | null, coverPhotoUrl: string | null) {
+  const previous = uploadedPhotoPath(founder.coverPhotoUrl, founder.id);
+  const batch = writeBatch(db);
+  batch.set(refs.person(founder.personId), { photoUrl: thumbnail, updatedDateISOString: new Date().toISOString() }, { merge: true });
+  batch.set(refs.founder(founder.id), { photoUrl: thumbnail, coverPhotoUrl }, { merge: true });
+  await batch.commit();
+  if (previous) void deleteObject(storageRef(storage, previous)).catch(() => undefined);
+}
+
+/**
+ * Nouvelle photo (« Mon profil », fondateur ou staff) : la grande photo dans
+ * Storage (`founders/{id}/photo-<horodatage>.jpg`, une URL par version), puis
+ * `commitPhoto`.
+ */
+export async function saveProfilePhoto(founder: WithId<Founder>, photo: PreparedPhoto) {
+  try {
+    const file = storageRef(storage, `founders/${founder.id}/photo-${Date.now().toString(36)}.jpg`);
+    await uploadBytes(file, photo.cover, { contentType: "image/jpeg", cacheControl: "public, max-age=31536000" });
+    await commitPhoto(founder, photo.thumbnail, await getDownloadURL(file));
+  } catch (err) {
+    throw photoError(err);
+  }
+}
+
+/** Retire la photo (vignette et grande photo) : le profil redevient incomplet (« HD photo »). */
+export async function removeProfilePhoto(founder: WithId<Founder>) {
+  try {
+    await commitPhoto(founder, null, null);
+  } catch (err) {
+    throw photoError(err);
+  }
 }

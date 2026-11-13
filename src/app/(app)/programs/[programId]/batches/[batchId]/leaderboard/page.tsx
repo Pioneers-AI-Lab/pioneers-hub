@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Avatar, Stack, Text } from "@mantine/core";
-import { EVENT_KIND_FEATURES, type EvaluationTargetType, type EventMetric, type LeaderboardRow } from "@shared/types";
+import Link from "next/link";
+import { Anchor, Avatar, Stack, Text } from "@mantine/core";
+import { juryTargetOf } from "@shared/events";
+import type { EvaluationTargetType, EventMetric, LeaderboardRow } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useEvents } from "@/context/EventsContext";
 import { useFounders } from "@/context/FoundersContext";
@@ -26,7 +28,8 @@ export default function LeaderboardPage() {
   const { events, isLoading: isEventsLoading } = useEvents();
   const { leaderboardsByEventId, isHidden, isLoading } = useLeaderboards();
 
-  const ranked = events.filter((e) => EVENT_KIND_FEATURES[e.kind].leaderboard).reverse();
+  // Un evenement classe : celui dont le leaderboard existe (un jury ou une metrique le classe, SPECS §2).
+  const ranked = events.filter((e) => leaderboardsByEventId.has(e.id)).reverse();
   const back = { href: paths.batch(program.id, batch.id), label: "Home" };
   const isReady = !isLoading && !isEventsLoading;
 
@@ -58,6 +61,11 @@ export default function LeaderboardPage() {
             id={event.id}
             title={`${event.name} · ${formatDay(event.startDateISOString.slice(0, 10), true)}`}
             hint={board?.metric ? `Ranked by ${board.metric.label.toLowerCase()}` : undefined}
+            right={
+              <Anchor component={Link} href={paths.event(program.id, batch.id, event.id)} size="sm" className="tap-link">
+                Event
+              </Anchor>
+            }
           >
             {!board || board.rows.length === 0 ? (
               <Empty>No scores yet.</Empty>
@@ -70,7 +78,7 @@ export default function LeaderboardPage() {
                       key={row.targetId}
                       row={row}
                       metric={board.metric ?? null}
-                      target={EVENT_KIND_FEATURES[event.kind].evaluationTarget}
+                      target={juryTargetOf(event)}
                     />
                   ))}
               </RowList>

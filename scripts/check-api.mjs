@@ -84,7 +84,7 @@ const call = async (key, name, args) => {
   check(typeof init.body.result?.instructions === "string", "instructions sent");
   const list = await mcp(key, "tools/list", {});
   const names = list.body.result?.tools?.map((t) => t.name);
-  check(names?.length === 5, `tools/list: ${names?.join(", ")}`, list.body);
+  check(names?.length === 7, `staff tools/list: ${names?.join(", ")}`, list.body);
   const catalogueChars = JSON.stringify(list.body.result.tools).length;
   console.log(`     catalogue ~${Math.round(catalogueChars / 4)} tokens`);
 
@@ -133,12 +133,24 @@ const call = async (key, name, args) => {
 
   // update du jeudi : document cree a la demande
   const monday = "2026-11-16";
-  t = await call(key, "pioneers_set_fields", { subjects: { startupId, founderId: founder.id, weekStartDayString: "2026-11-17" }, values: { "checkin.revenue": 1200 } });
+  t = await call(key, "pioneers_set_fields", { subjects: { startupId, founderId: founder.id, weekStartDayString: "2026-11-17" }, values: { "checkin.totalAmountPaid": 1200 } });
   check(t.isError && /Monday/.test(t.data), "a non-Monday week is refused", t.data);
-  t = await call(key, "pioneers_set_fields", { subjects: { startupId, founderId: founder.id, weekStartDayString: monday }, values: { "checkin.revenue": 1200, "checkin.moral": 8 } });
+  t = await call(key, "pioneers_set_fields", { subjects: { startupId, founderId: founder.id, weekStartDayString: monday }, values: { "checkin.totalAmountPaid": 1200, "checkin.moral": 8 } });
   t = await call(key, "pioneers_set_fields", { planId: t.data.planId });
   const checkin = (await getFirestore().doc(`checkins/${startupId}_${monday}_${founder.id}`).get()).data();
-  check(checkin?.revenue === 1200 && checkin?.batchId === "fall-2026" && Array.isArray(checkin?.attachmentUrls), "checkin created with structure and defaults", checkin);
+  check(checkin?.totalAmountPaid === 1200 && checkin?.batchId === "fall-2026" && Array.isArray(checkin?.attachmentUrls), "checkin created with structure and defaults", checkin);
+
+  // modele standard (SPECS §2) : une metrique d'equipe s'ecrit en champ imbrique ; avis, picks et notes du jury : formulaire seulement
+  t = await call(key, "pioneers_set_fields", { subjects: { eventId: "demo-hackathon-1", teamId: "team-b" }, values: { "submission.metrics.callsMade": 7 } });
+  t = await call(key, "pioneers_set_fields", { planId: t.data.planId });
+  const teamB = (await getFirestore().doc("events/demo-hackathon-1/submissions/team-b").get()).data();
+  check(teamB?.metrics?.callsMade === 7 && teamB.recordedSource === "staff" && Array.isArray(teamB.proofUrls), "a team metric is written nested, marked staff", teamB);
+  t = await call(key, "pioneers_set_fields", { subjects: { eventId: "demo-hackathon-1", teamId: "team-b" }, values: { "submission.metrics.Calls-made": 7 } });
+  check(t.isError && /unknown_field/.test(t.data), "a malformed metric key is refused", t.data);
+  t = await call(key, "pioneers_set_fields", { subjects: { eventId: "demo-hackathon-2", founderId: founder.id }, values: { "picks.pickedFounderIds": ["chloe-demo"] } });
+  check(t.isError && /form_only/.test(t.data), "picks are only written by their form", t.data);
+  t = await call(key, "pioneers_list", { object: "fields" });
+  check(!t.isError && !t.data.items.some((f) => /^(picks|peerRating|evaluation)\./.test(f.dbField)) && t.data.items.some((f) => f.dbField === "submission.metrics.<key>"), "fields list: families, no private documents", t.data.items?.length);
 
   // copies de `people` : WhatsApp vers le Profile Book, nom affiche vers la fiche fondateur
   t = await call(key, "pioneers_set_fields", {
@@ -203,6 +215,82 @@ const call = async (key, name, args) => {
     Object.keys(spec.paths ?? {}),
   );
 
+  // ---- Creer un evenement et un formulaire (staff) ----
+  t = await call(key, "pioneers_create_event", { batchId: "fall-2026", name: "Office hour", startDateISOString: "2026-11-19T15:00:00+01:00" });
+  check(!t.isError && t.data.preview.event.kind === "session" && t.data.preview.event.forms.length === 0 && !t.data.preview.event.matching, "a blank event: no matching, no forms", t.data);
+  t = await call(key, "pioneers_create_event", { batchId: "fall-2026", name: "Office hour", startDateISOString: "2026-11-19T15:00:00+01:00", startupIds: ["nope"], kind: "meeting" });
+  check(t.isError && /startup_not_found/.test(t.data), "create_event refuses an unknown startup", t.data);
+  t = await call(key, "pioneers_create_event", {
+    batchId: "fall-2026",
+    kind: "meeting",
+    name: "Office hour Lumen x Mia",
+    startDateISOString: "2026-11-19T15:00:00+01:00",
+    endDateISOString: "2026-11-19T15:45:00+01:00",
+    startupIds: [startupId],
+    mentorIds: ["mia-mentor"],
+  });
+  check(!t.isError && t.data.planId && t.data.preview.event.mentors?.[0] === "Mia Mentor", "create_event previews an office hour with its mentor", t.data);
+  t = await call(key, "pioneers_create_event", { planId: t.data.planId });
+  const eventId = t.data.result?.eventId;
+  const createdEvent = eventId ? (await getFirestore().doc(`events/${eventId}`).get()).data() : null;
+  check(
+    createdEvent?.kind === "meeting" && createdEvent?.mentorIds?.includes("mia-mentor") && createdEvent?.startupIds?.includes(startupId) && createdEvent?.status === "scheduled" && createdEvent?.startDateISOString === "2026-11-19T14:00:00.000Z",
+    "create_event writes the event (mentor, startup, UTC start)",
+    createdEvent,
+  );
+  t = await call(key, "pioneers_create_event", { batchId: "fall-2026", templateKey: "pitch_day", name: "Pitch day 1", startDateISOString: "2026-11-27T14:00:00+01:00", status: "draft" });
+  check(!t.isError && t.data.preview.event.scoringCriteria?.length > 0, "a model copies its scoring grid", t.data);
+  // Un template est un pack : l'evenement, son matching et ses formulaires, nes comme lui.
+  t = await call(key, "pioneers_create_event", { batchId: "fall-2026", templateKey: "hackathon", name: "Pack check", startDateISOString: "2026-11-30T09:30:00+01:00" });
+  check(!t.isError && t.data.preview.event.matching === "teams of 3" && t.data.preview.event.forms.some((f) => /Debrief \(open\)/.test(f)), "a hackathon pack previews its teams and forms", t.data);
+  t = await call(key, "pioneers_create_event", { planId: t.data.planId });
+  {
+    const packId = t.data?.result?.eventId;
+    const packEvent = packId ? (await getFirestore().doc(`events/${packId}`).get()).data() : null;
+    const packForms = packId ? await getFirestore().collection("forms").where("eventId", "==", packId).get() : null;
+    check(
+      packEvent?.matching?.mode === "challenge" && packEvent.endDateISOString > packEvent.startDateISOString && packForms?.size >= 2 && packForms.docs.every((d) => d.get("status") === "open"),
+      "the pack writes its matching and its published forms",
+      { matching: packEvent?.matching, forms: packForms?.docs.map((d) => [d.get("kind"), d.get("status")]) },
+    );
+  }
+
+  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", templateKey: "session_feedback" });
+  check(t.isError && /eventId/.test(t.data), "a feedback model needs its event", t.data);
+  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", title: "x", questions: [{ type: "text", label: "Q", dbField: "founder.nope" }] });
+  check(t.isError && /unknown_field/.test(t.data), "create_form refuses an unknown field", t.data);
+  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", title: "Anonymous", identityCheck: "anonymous", questions: [{ type: "long_text", label: "Intro", dbField: "founderDirectory.introduceYourself" }] });
+  check(t.isError && /invalid_form/.test(t.data), "an anonymous form cannot write to a founder field (editor rule)", t.data);
+  t = await call(key, "pioneers_create_form", {
+    batchId: "fall-2026",
+    title: "Masterclass feedback",
+    eventId,
+    publish: true,
+    questions: [
+      { type: "rating", label: "How useful was it?", required: true, scale: { min: 1, max: 5 } },
+      { type: "long_text", label: "One thing you will apply" },
+      { type: "single_choice", label: "Would you come again?", options: ["Yes", "No"] },
+    ],
+  });
+  check(!t.isError && t.data.planId && t.data.preview.form.questions.length === 3, "create_form previews 3 questions", t.data);
+  t = await call(key, "pioneers_create_form", { planId: t.data.planId });
+  const newForm = t.data.result;
+  const formDoc = newForm?.formId ? (await getFirestore().doc(`forms/${newForm.formId}`).get()).data() : null;
+  const v1 = newForm?.formId ? await getFirestore().doc(`forms/${newForm.formId}/versions/1`).get() : null;
+  check(formDoc?.status === "open" && formDoc?.version === 1 && formDoc?.opensDateISOString && v1?.exists && /\/forms\//.test(newForm.url ?? ""), "a published form is open, versioned and has its link", { newForm, formDoc });
+  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", templateKey: "debrief" });
+  check(t.isError && /eventId/.test(t.data), "a debrief needs its event", t.data);
+  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", templateKey: "debrief", eventId: "demo-hackathon-1" });
+  check(
+    !t.isError && t.data.preview.form.identityCheck === "account" && t.data.preview.form.questions.some((q) => q.writesTo === "peerRating.rating" && q.about === "each_teammate"),
+    "a debrief previews its peer rating, for each teammate",
+    t.data,
+  );
+  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", templateKey: "weekly_update" });
+  t = await call(key, "pioneers_create_form", { planId: t.data.planId });
+  const draft = (await getFirestore().doc(`forms/${t.data.result?.formId}`).get()).data();
+  check(draft?.status === "draft" && draft?.version === 0 && draft?.questions?.length > 0, "a model form is created as a draft by default", draft);
+
   // ---- Droits par role : chacun voit et ecrit ce que l'app lui permet ----
   const keyFor = async (uid) => (await callable("createApiKey", await idToken(uid), { name: `${uid} check` })).result?.key;
   const [adaKey, icKey, lpKey, strangerKey] = await Promise.all(["ada-1", "ic-1", "lp-1", "stranger-1"].map(keyFor));
@@ -237,6 +325,9 @@ const call = async (key, name, args) => {
   check(!t.isError && t.data.planId, "founder may change own phone", t.data);
   g = await rest(adaKey, "/v1/notes", { method: "POST", body: JSON.stringify({ targetType: "founder", targetId: "ada-example", body: "x" }) });
   check(g.status === 403, "founder cannot add a note through /v1");
+  g = await rest(adaKey, "/v1/events", { method: "POST", body: JSON.stringify({ batchId: "fall-2026", kind: "meeting", name: "x", startDateISOString: "2026-11-19T15:00:00+01:00" }) });
+  check(g.status === 403, "founder cannot create an event");
+  check(!adaTools.includes("pioneers_create_event") && !adaTools.includes("pioneers_create_form"), "create tools do not exist for a founder");
 
   // Investor IC : tout en lecture, rien en ecriture
   const icTools = (await mcp(icKey, "tools/list", {})).body.result?.tools?.map((t) => t.name) ?? [];
@@ -310,7 +401,7 @@ const call = async (key, name, args) => {
   check(r.status === 200 && tokens.access_token?.startsWith("pha_") && tokens.refresh_token?.startsWith("phr_"), "token: code exchanged with PKCE", tokens);
 
   const oauthList = await mcp(tokens.access_token, "tools/list", {});
-  check(oauthList.status === 200 && oauthList.body.result?.tools?.length === 5, "MCP works with the OAuth access token", oauthList.body);
+  check(oauthList.status === 200 && oauthList.body.result?.tools?.length === 7, "MCP works with the OAuth access token", oauthList.body);
   r = await fetch(`${HOSTING}/v1/me`, { headers: { authorization: `Bearer ${tokens.access_token}` } });
   check(r.status === 401, "an OAuth token is refused on /v1 (audience is /mcp)");
 

@@ -15,6 +15,7 @@
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { createRequire } from "node:module";
 
 const PROJECT_ID = "demo-pioneers-hub";
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8180";
@@ -96,7 +97,7 @@ batch.set(db.doc(`batches/${BATCH_ID}`), {
   ...stamps,
   archivedDateISOString: null,
   programId: PROGRAM_ID,
-  name: "Fall 2026",
+  name: "fa26",
   startDayString: "2026-11-16",
   endDayString: null,
   status: "active",
@@ -223,7 +224,7 @@ batch.set(db.doc("scoreSignals/founder_ada-example"), {
 batch.set(db.doc("kpiSeries/lumen"), {
   ...scoped,
   memberIds: ["ada-example", "ben-sample"],
-  series: { revenue: [{ weekStartDayString: "2026-11-16", value: 0 }] },
+  series: { totalAmountPaid: [{ weekStartDayString: "2026-11-16", value: 0 }] },
   computedDateISOString: now,
 });
 batch.set(db.doc("notes/demo-note"), {
@@ -275,6 +276,20 @@ batch.set(
   db.doc("formResponses/demo-weekly"),
   formResponse("demo-weekly-form", "weekly_update", { founderId: "ada-example", startupId: "lumen" }),
 );
+// « J'ai repondu » du « To do », ecrit par submitFormResponse avec la reponse.
+for (const [formId, formKind, responseId] of [
+  ["demo-peer-form", "peer_feedback", "demo-peer"],
+  ["demo-weekly-form", "weekly_update", "demo-weekly"],
+]) {
+  batch.set(db.doc(`formCompletions/${formId}_ada-example`), {
+    ...scoped,
+    formId,
+    founderId: "ada-example",
+    formKind,
+    responseId,
+    completedDateISOString: now,
+  });
+}
 
 // ---- Identites, suivi dans le temps (fictifs) --------------------------------
 
@@ -309,18 +324,26 @@ batch.set(db.doc("checkins/lumen_2026-11-16_ada-example"), {
   founderId: "ada-example",
   memberIds: ["ada-example", "ben-sample"],
   weekStartDayString: "2026-11-16",
-  interviews: 12,
-  activeUsers: 3,
-  totalUsers: 5,
-  revenue: 0,
-  totalRevenue: 0,
-  outbound: 40,
+  messagesSent: 40,
+  callsMade: 25,
+  conversationsDone: 12,
+  meetingsBooked: 4,
+  demosDone: 2,
+  proposalsSent: 1,
+  closedWon: 0,
   featuresShipped: 2,
+  totalAmountPaid: 0,
+  mrr: 0,
+  payingCustomers: 0,
+  totalUsers: 5,
+  activeUsers: 3,
   moral: 8,
-  goalOutreach: 60,
-  goalInterviews: 15,
-  goalNewUsers: 5,
-  goalRevenue: 0,
+  goalMessagesSent: 60,
+  goalConversationsDone: 15,
+  goalAccountsCreated: 5,
+  goalAmountPaid: 0,
+  revenue: null,
+  totalRevenue: null,
   goals: null,
   obstacle: "Demo obstacle",
   learned: null,
@@ -356,13 +379,13 @@ batch.set(db.doc("memberships/lumen_ada-example_2026-11-25"), {
   endDayString: null,
   endReason: null,
 });
-batch.set(db.doc("metricSnapshots/lumen_revenue_2026-11-16"), {
+batch.set(db.doc("metricSnapshots/lumen_totalAmountPaid_2026-11-16"), {
   ...scoped,
   subjectType: "startup",
   subjectId: "lumen",
   founderIds: ["ada-example", "ben-sample"],
   eventId: null,
-  metric: "revenue",
+  metric: "totalAmountPaid",
   value: 0,
   dayString: "2026-11-16",
   phase: null,
@@ -400,8 +423,6 @@ const event = (id, data) =>
     startupIds: [],
     signUpUrl: null,
     resourceUrl: null,
-    criteria: [],
-    metrics: [],
     evaluationTargetType: null,
     teamSize: null,
     leaderboardRevealDateISOString: null,
@@ -414,12 +435,8 @@ event("demo-hackathon-1", {
   status: "completed",
   evaluationTargetType: "team",
   teamSize: { min: 2, max: 3 },
-  metrics: [
-    { key: "callsMade", label: "Calls made", unit: null },
-    { key: "meetingsBooked", label: "Meetings booked", unit: null },
-  ],
 });
-// Hackathon en cours, avec sa grille : le jury par lien prive (check-rules).
+// Hackathon en cours : son formulaire de jury (grille) et son lien partage (check-rules).
 event("demo-hackathon-2", {
   kind: "team_challenge",
   name: "Hackathon 2: Demo Calls",
@@ -427,12 +444,47 @@ event("demo-hackathon-2", {
   status: "live",
   evaluationTargetType: "team",
   teamSize: { min: 2, max: 2 },
-  criteria: [
-    { key: "execution", label: "Execution", min: 1, max: 5, weight: 2 },
-    { key: "pitch", label: "Pitch", min: 1, max: 5, weight: 1 },
-  ],
-  metrics: [{ key: "realConversations", label: "Real conversations", unit: null }],
 });
+
+// Les formulaires des hackathons (SPECS §2, modele standard) : le Debrief porte les
+// metriques, le formulaire de jury la grille, le formulaire Picks les choix. Construits
+// par le code partage compile (`npm run emulators` le compile avant), comme Admin.
+const require = createRequire(import.meta.url);
+const { newForm, firstPublication } = require("../functions/lib/shared/forms.js");
+const openForm = (id, input, tweak = (f) => f) => {
+  const { form } = firstPublication(newForm({ ...scoped, event: { kind: "team_challenge", templateKey: null }, ...input }), now);
+  batch.set(db.doc(`forms/${id}`), { ...tweak(form), ...stamps });
+};
+openForm("demo-debrief-1", {
+  templateKey: "debrief",
+  eventId: "demo-hackathon-1",
+  defaults: {
+    metrics: [
+      { key: "callsMade", label: "Calls made", unit: null },
+      { key: "meetingsBooked", label: "Meetings booked", unit: null },
+    ],
+  },
+});
+openForm("demo-debrief-2", {
+  templateKey: "debrief",
+  eventId: "demo-hackathon-2",
+  defaults: { metrics: [{ key: "conversationsDone", label: "Conversations done", unit: null }] },
+});
+openForm("demo-jury-2", {
+  templateKey: "jury",
+  eventId: "demo-hackathon-2",
+  defaults: {
+    criteria: [
+      { key: "execution", label: "Execution", min: 1, max: 5, weight: 2 },
+      { key: "pitch", label: "Pitch", min: 1, max: 5, weight: 1 },
+    ],
+  },
+});
+// Mutual picks, top 2.
+openForm("demo-picks-2", { templateKey: "picks", eventId: "demo-hackathon-2" }, (f) => ({
+  ...f,
+  questions: f.questions.map((q) => ({ ...q, picker: { entity: "founder", maxItems: 2 } })),
+}));
 for (const [id, name, memberIds] of [
   ["team-c", "Team Demo C", ["ada-example", "ben-sample"]],
   ["team-d", "Team Demo D", ["chloe-demo", "dan-placeholder"]],
@@ -448,6 +500,10 @@ for (const [id, name, memberIds] of [
   });
 }
 event("demo-masterclass", { kind: "session", name: "Masterclass: Demo pricing", startDateISOString: inDays(2, 14), status: "scheduled" });
+// Presence a la masterclass : Ada presente, Ben absent (le fondateur lit la sienne).
+for (const [founderId, status] of [["ada-example", "present"], ["ben-sample", "absent"]]) {
+  batch.set(db.doc(`events/demo-masterclass/attendance/${founderId}`), { founderId, status, markedByUid: "staff-1", markedDateISOString: now });
+}
 batch.set(db.doc("events/demo-hackathon-1/teams/team-a"), {
   name: "Team Demo A",
   memberIds: ["ada-example", "chloe-demo"],
@@ -500,7 +556,6 @@ batch.set(db.doc("forms/demo-weekly-form"), {
   status: "open",
   opensDateISOString: now,
   deadlineDateISOString: inDays(1, 18),
-  recurrenceRule: null,
 });
 
 await batch.commit();

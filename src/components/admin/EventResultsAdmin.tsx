@@ -1,53 +1,105 @@
 "use client";
 
 import { useState } from "react";
-import { Button, CopyButton, MultiSelect, SegmentedControl, Select, Stack, Text, TextInput } from "@mantine/core";
-import { JUDGE_LIMITS, PICKS_LIMITS } from "@shared/callables";
-import { defaultPicksQuestion } from "@shared/presets/eventTemplates";
-import { EVENT_KIND_FEATURES, PICKS_MAX, isPickable, judgeLinkState, juryTarget, openPicks } from "@shared/types";
+import { useRouter } from "next/navigation";
+import { Button, CopyButton, Group, SegmentedControl, Select, Stack, Text } from "@mantine/core";
+import { FORM_TEMPLATES, type FormTemplateKey } from "@shared/presets/formTemplates";
+import { formState } from "@shared/forms";
+import { activeQuestions, isPickable, type Evaluation, type Form, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminEvent } from "@/context/AdminEventContext";
 import { useAction } from "@/hooks/useAction";
 import { useQueryListener } from "@/hooks/useFirestoreListener";
 import { call } from "@/lib/firebase";
 import { queries } from "@/lib/firestore/refs";
-import { formatDateTime, fromLocalInput, toLocalInput } from "@/lib/format";
+import { formatDateTime, metricValue } from "@/lib/format";
+import { createForm, setFormStatus } from "@/lib/formsAdmin";
 import { paths } from "@/lib/paths";
 import { mutualPairs } from "@/lib/picks";
-import { Row, RowList } from "@/components/ui/Rows";
+import { FORM_KIND_LABELS, FORM_STATE_LABELS } from "@/components/admin/formLabels";
+import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
+import { ButtonRow, LinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 
 // ----------------------------
-// Admin d'un evenement : apres les equipes, ce qui fait son resultat
+// Admin d'un evenement : ses formulaires et ce qui fait son resultat
 // ----------------------------
-// Monte sous le generateur (admin/challenge-teams/[eventId] et
-// admin/lunch-roulette/[eventId]) ; chaque bloc suit la mecanique. Tout
-// passe par des callables (journalisees) : le serveur recalcule le leaderboard
-// et lui seul connait le secret d'un lien de jure, rendu une fois a la creation.
+// Monte par la page de l'evenement (EventEditor). Chaque bloc suit ce qui est
+// attache (SPECS §2) : toute saisie est un FORMULAIRE de l'evenement (Debrief,
+// jury, picks, feedback), cree ici depuis un modele puis regle dans l'editeur ;
+// le Debrief et les avis entre pairs demandent un matching.
+// Les metriques sont les questions du Debrief, la grille celles du jury.
+// Le leaderboard est recalcule par le serveur ; le jury a un seul lien
+// partage, que le staff recopie ou remplace, et se verrouille en fermant son
+// formulaire.
 
 const JURY = "__jury__";
 
+/** Les modeles de formulaire proposes pour un evenement ; le Debrief, seulement avec un matching. */
+const EVENT_FORM_TEMPLATES: FormTemplateKey[] = ["debrief", "jury", "picks", "exercise_feedback", "session_feedback", "founder_introductions", "weekly_feedback"];
+
 export function EventResultsAdmin() {
-  const { event } = useAdminEvent();
+  const { matching, metrics, criteria, juryForm } = useAdminEvent();
   return (
     <>
-      {EVENT_KIND_FEATURES[event.kind].leaderboard && <RankingSection />}
-      {juryTarget(event.kind) &&
-        (event.criteria.length > 0 ? (
-          <JurySection />
-        ) : (
-          <Section title="Jury">
-            <Empty>This event has no scoring grid, so there is nothing for a jury to score.</Empty>
-          </Section>
-        ))}
+      <FormsSection />
+      {(metrics.length > 0 || criteria.length > 0) && <RankingSection />}
+      {matching && metrics.length > 0 && <ResultsSection />}
+      {juryForm && <JurySection juryForm={juryForm} />}
       <PicksSection />
     </>
   );
 }
 
-/** Ce qui classe le leaderboard : les notes du jury, ou une metrique de l'evenement. */
+/** Les formulaires de l'evenement, et ceux a creer depuis un modele. */
+function FormsSection() {
+  const router = useRouter();
+  const { event, forms, matching } = useAdminEvent();
+  const { batch } = useAdmin();
+  const { isBusy, run } = useAction();
+  const nowISO = new Date().toISOString();
+  const offered = EVENT_FORM_TEMPLATES.filter((key) => key !== "debrief" || matching !== null);
+
+  const create = async (templateKey: FormTemplateKey) => {
+    const id = await run(() => createForm({ programId: batch.programId, batchId: batch.id, templateKey, eventId: event.id, event }), "Draft created");
+    if (id) router.push(paths.adminForm(id));
+  };
+
+  return (
+    <Section
+      title={`Forms · ${forms.length}`}
+      hint="Everything founders and the jury enter for this event is a form: the debrief (team results, a word on each teammate), the jury, the picks, feedback. Create one from a model, then adjust its questions."
+    >
+      {forms.length > 0 && (
+        <RowList>
+          {forms.map((f) => {
+            const state = formState(f, nowISO);
+            return (
+              <LinkRow
+                key={f.id}
+                href={paths.adminForm(f.id)}
+                title={f.title}
+                subtitle={FORM_KIND_LABELS[f.kind]}
+                meta={<Text size="sm" c={state === "open" ? "pioneers" : "dimmed"}>{FORM_STATE_LABELS[state]}</Text>}
+              />
+            );
+          })}
+        </RowList>
+      )}
+      <Group gap="xs">
+        {offered.map((key) => (
+          <Button key={key} variant="default" disabled={isBusy} onClick={() => void create(key)}>
+            New {FORM_TEMPLATES[key].label.toLowerCase()}
+          </Button>
+        ))}
+      </Group>
+    </Section>
+  );
+}
+
+/** Ce qui classe le leaderboard : les notes du jury, ou une metrique du Debrief. */
 function RankingSection() {
-  const { event } = useAdminEvent();
+  const { event, metrics } = useAdminEvent();
   const { isBusy, run } = useAction();
   const value = event.rankingMetricKey ?? JURY;
 
@@ -56,9 +108,9 @@ function RankingSection() {
     void run(() => call("setEventRanking")({ eventId: event.id, metricKey: next === JURY ? null : next }), "Leaderboard updated");
   };
 
-  const options = [{ value: JURY, label: "Jury scores" }, ...event.metrics.map((m) => ({ value: m.key, label: m.label }))];
+  const options = [{ value: JURY, label: "Jury scores" }, ...metrics.map((m) => ({ value: m.key, label: m.label }))];
   return (
-    <Section title="Leaderboard" hint="What ranks the teams. A number comes from the results each team enters in its debrief.">
+    <Section title="Leaderboard" hint="What ranks the teams. A number is a metric question of the debrief, entered by each team.">
       {options.length <= 3 ? (
         <SegmentedControl fullWidth maw={480} data={options} value={value} onChange={change} disabled={isBusy} />
       ) : (
@@ -68,88 +120,26 @@ function RankingSection() {
   );
 }
 
-/** Les jures de l'evenement : un lien prive chacun, sans compte. */
-function JurySection() {
-  const { event, teams } = useAdminEvent();
-  const judges = useQueryListener(queries.judgesOfEvent(event.id));
-  const { isBusy, run } = useAction();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [excluded, setExcluded] = useState<string[]>([]);
-  /** Le lien du dernier jure cree : son secret n'est plus jamais relisible ensuite. */
-  const [created, setCreated] = useState<{ name: string; url: string } | null>(null);
+/** Les resultats de chaque equipe publiee (Debrief), a ouvrir pour les corriger. */
+function ResultsSection() {
+  const { event, teams, submissionsByTeamId, metrics } = useAdminEvent();
+  const published = teams.filter((t) => t.publishedDateISOString !== null);
+  const entered = published.filter((t) => submissionsByTeamId.get(t.id)?.submittedDateISOString).length;
 
-  const create = async () => {
-    const res = await run(
-      () => call("createJudge")({ eventId: event.id, name, email: email.trim() || null, excludedTargetIds: excluded }),
-      `Link ready for ${name}`,
-    );
-    if (!res) return;
-    setCreated({ name, url: `${window.location.origin}${paths.judge(event.id, res.data.judgeId)}#${res.data.key}` });
-    setName("");
-    setEmail("");
-    setExcluded([]);
-  };
-
-  const now = new Date().toISOString();
   return (
-    <Section title={`Jury · ${judges.data.length}`} hint="One private link per judge, no account needed. It stops working the day after the event, or when you revoke it.">
-      <Stack gap="sm" maw={480}>
-        <TextInput label="Judge's name" maxLength={JUDGE_LIMITS.name} value={name} onChange={(e) => setName(e.currentTarget.value)} />
-        <TextInput label="Email" description="Optional, for your records." type="email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
-        <MultiSelect
-          label="Teams this judge cannot score"
-          description="Their own team, for instance."
-          data={teams.filter((t) => t.publishedDateISOString !== null).map((t) => ({ value: t.id, label: t.name }))}
-          value={excluded}
-          onChange={setExcluded}
-          searchable
-        />
-        <Button size="md" fullWidth loading={isBusy} disabled={!name.trim()} onClick={create}>
-          Create the link
-        </Button>
-        {created && (
-          <Stack gap={6}>
-            <Text size="sm">Link for {created.name}. Copy it now: it cannot be shown again.</Text>
-            <Text size="sm" c="dimmed" style={{ overflowWrap: "anywhere" }}>
-              {created.url}
-            </Text>
-            <CopyButton value={created.url}>
-              {({ copied, copy }) => (
-                <Button variant="default" w="fit-content" onClick={copy}>
-                  {copied ? "Copied" : "Copy the link"}
-                </Button>
-              )}
-            </CopyButton>
-          </Stack>
-        )}
-      </Stack>
-      {judges.data.length > 0 && (
+    <Section title={`Results · ${entered} of ${published.length}`} hint="What each team entered in its debrief. Open a team to enter or correct its numbers.">
+      {published.length === 0 ? (
+        <Empty>Teams show up here once they are published.</Empty>
+      ) : (
         <RowList>
-          {[...judges.data]
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((j) => {
-              const state = judgeLinkState(j, now);
-              return (
-                <Row
-                  key={j.id}
-                  title={j.name}
-                  subtitle={state === "active" ? `Until ${formatDateTime(j.expiresDateISOString)}` : state === "revoked" ? "Revoked" : "Expired"}
-                  meta={
-                    state === "active" ? (
-                      <Button
-                        variant="subtle"
-                        color="gray"
-                        disabled={isBusy}
-                        onClick={() => void run(() => call("revokeJudge")({ eventId: event.id, judgeId: j.id }), `${j.name}'s link revoked`)}
-                      >
-                        Revoke
-                      </Button>
-                    ) : undefined
-                  }
-                />
-              );
-            })}
+          {published.map((t) => {
+            const values = submissionsByTeamId.get(t.id)?.metrics ?? {};
+            const summary = metrics
+              .filter((m) => values[m.key] !== undefined)
+              .map((m) => `${metricValue(m, values[m.key])} ${m.label.toLowerCase()}`)
+              .join(" · ");
+            return <LinkRow key={t.id} href={paths.adminEventTeam(event.id, t.id)} title={t.name} subtitle={summary || "No results yet"} />;
+          })}
         </RowList>
       )}
     </Section>
@@ -157,66 +147,158 @@ function JurySection() {
 }
 
 /**
- * Les choix prives de l'evenement : les mutual picks (hackathon de 3 jours),
- * le « qui t'a marque » d'un speed dating. Le staff ouvre, ferme, et voit les
- * choix reciproques, a apparier en premier.
+ * Le jury : son formulaire (grille), un lien partage (sans compte), les notes
+ * recues, le verrou (fermer le formulaire). Une feuille papier se saisit en
+ * ouvrant le lien et en tapant le nom du jure.
+ */
+function JurySection({ juryForm }: { juryForm: WithId<Form> }) {
+  const { event, teams, juryLink, evaluations, criteria } = useAdminEvent();
+  const { isBusy, run } = useAction();
+  const [isResetting, setResetting] = useState(false);
+  const [selected, setSelected] = useState<WithId<Evaluation> | null>(null);
+
+  const isPublished = juryForm.version > 0;
+  const juryState = formState(juryForm, new Date().toISOString());
+  const isOpen = juryState === "open";
+  const url = juryLink ? `${window.location.origin}${paths.juryForm(juryForm.id, juryLink.secret)}` : null;
+  const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  const targetLabel = (id: string) => teamName.get(id) ?? id;
+  const judgesCount = new Set(evaluations.map((e) => e.evaluatorId)).size;
+
+  const resetLink = async () => {
+    if (await run(() => call("resetJuryLink")({ eventId: event.id }), juryLink ? "New link ready" : "Link ready")) setResetting(false);
+  };
+  const remove = async (e: WithId<Evaluation>) => {
+    if (await run(() => call("deleteJuryScore")({ eventId: event.id, evaluationId: e.id }), "Score deleted")) setSelected(null);
+  };
+
+  return (
+    <Section
+      title={`Jury · ${judgesCount} ${judgesCount === 1 ? "judge" : "judges"}`}
+      right={<Text size="sm" c={isOpen ? "pioneers" : "dimmed"}>{juryState === "closed" ? "Locked" : FORM_STATE_LABELS[juryState]}</Text>}
+      hint="One link for the whole jury, no account needed: each judge picks or types their name, then scores every team. A founder cannot score their own team. For a paper sheet, open the link and type the judge's name."
+    >
+      <Stack gap="sm" maw={480}>
+        <LinkRow
+          href={paths.adminForm(juryForm.id)}
+          title="Scoring grid"
+          subtitle={criteria.length ? criteria.map((c) => `${c.label} (${c.weight})`).join(" · ") : "No rating question yet"}
+        />
+        {!isPublished && <Text size="sm" c="dimmed">Publish the jury form to open the scores.</Text>}
+        {url ? (
+          <>
+            <Text size="sm" c="dimmed" style={{ overflowWrap: "anywhere" }}>
+              {url}
+            </Text>
+            <Group gap="xs">
+              <CopyButton value={url}>
+                {({ copied, copy }) => (
+                  <Button variant="default" onClick={copy}>
+                    {copied ? "Copied" : "Copy the link"}
+                  </Button>
+                )}
+              </CopyButton>
+              <Button variant="subtle" color="gray" onClick={() => setResetting(true)}>
+                New link
+              </Button>
+            </Group>
+          </>
+        ) : (
+          <Button size="md" fullWidth loading={isBusy} onClick={resetLink}>
+            Create the jury link
+          </Button>
+        )}
+        {isPublished && (
+          <>
+            <Button
+              variant="default"
+              fullWidth
+              disabled={isBusy}
+              onClick={() => void run(() => setFormStatus(juryForm.id, juryState === "closed" ? "open" : "closed"), juryState === "closed" ? "Scores open again" : "Scores locked")}
+            >
+              {juryState === "closed" ? "Unlock scores" : "Lock scores"}
+            </Button>
+            <Text size="xs" c="dimmed">
+              {juryState === "closed"
+                ? "Locked: nobody can add or change a score. Unlocking opens the jury form again."
+                : "Locking closes the jury form: nobody can add or change a score until you unlock it."}
+            </Text>
+          </>
+        )}
+      </Stack>
+
+      {evaluations.length === 0 ? (
+        <Empty>No scores yet.</Empty>
+      ) : (
+        <RowList>
+          {evaluations.map((e) => (
+            <ButtonRow
+              key={e.id}
+              onClick={() => setSelected(e)}
+              title={e.evaluatorName}
+              subtitle={[targetLabel(e.targetId), criteria.map((c) => e.scores[c.key] ?? "-").join(" ")].join(" · ")}
+            />
+          ))}
+        </RowList>
+      )}
+
+      <ResponsiveDialog opened={isResetting} onClose={() => setResetting(false)} title="New jury link">
+        <Stack>
+          <Text size="sm" c="dimmed">
+            The current link stops working at once: share the new one with the jury. Scores already given stay.
+          </Text>
+          <Button size="md" fullWidth loading={isBusy} onClick={resetLink}>
+            Make a new link
+          </Button>
+        </Stack>
+      </ResponsiveDialog>
+
+      <ResponsiveDialog
+        opened={selected !== null}
+        onClose={() => setSelected(null)}
+        title={selected ? `${selected.evaluatorName} · ${targetLabel(selected.targetId)}` : "Score"}
+      >
+        {selected && (
+          <Stack>
+            <RowList>
+              {criteria.map((c) => (
+                <Row key={c.key} title={c.label} meta={selected.scores[c.key] === undefined ? "-" : `${selected.scores[c.key]} / ${c.max}`} />
+              ))}
+            </RowList>
+            {selected.comment && <Text size="sm">{selected.comment}</Text>}
+            <Text size="xs" c="dimmed">
+              Last saved {formatDateTime(selected.updatedDateISOString)}
+            </Text>
+            <Button size="md" fullWidth color="red" variant="light" loading={isBusy} onClick={() => void remove(selected)}>
+              Delete this score
+            </Button>
+          </Stack>
+        )}
+      </ResponsiveDialog>
+    </Section>
+  );
+}
+
+/**
+ * Les choix prives de l'evenement (questions « picks » de ses formulaires) :
+ * les mutual picks (hackathon de 3 jours), le « qui t'a marque » d'un speed
+ * dating. Le staff voit les choix reciproques, a apparier en premier. Ouvrir
+ * ou clore les choix, c'est ouvrir ou fermer leur formulaire.
  */
 function PicksSection() {
-  const { event } = useAdminEvent();
+  const { event, forms } = useAdminEvent();
   const { batch, founders, foundersById } = useAdmin();
-  const picks = useQueryListener(queries.picksOfEvent(event.id));
-  const { isBusy, run } = useAction();
-  const current = event.picks;
-  const [question, setQuestion] = useState(current?.question ?? defaultPicksQuestion(event.kind));
-  const [max, setMax] = useState(String(current?.max ?? 3));
-  // Vide : ouvert jusqu'a la fermeture par le staff.
-  const [closes, setCloses] = useState(toLocalInput(current?.closesDateISOString ?? null));
-  const isOpen = openPicks(event, new Date().toISOString()) !== null;
-
-  const save = (open: boolean) =>
-    void run(
-      () =>
-        call("setEventPicks")({
-          eventId: event.id,
-          picks: open ? { question, max: Number(max), closesDateISOString: fromLocalInput(closes) } : null,
-        }),
-      open ? "Picks open" : "Picks closed",
-    );
+  // Les choix ne s'ecrivent que par un formulaire « picks » : sans lui, rien a lire.
+  const hasPicksForm = forms.some((f) => activeQuestions(f).some((q) => q.dbField === "picks.pickedFounderIds"));
+  const picks = useQueryListener(hasPicksForm ? queries.picksOfEvent(event.id) : null);
+  if (!hasPicksForm) return null;
 
   const mutual = mutualPairs(picks.data);
   const nameOf = (id: string) => foundersById.get(id)?.name ?? id;
   const pickable = founders.filter((f) => isPickable(f, batch.id)).length;
 
   return (
-    <Section
-      title="Picks"
-      hint="Private choices, ranked. Founders find them in their To do while they are open; only the staff sees them."
-      right={<Text size="sm" c={isOpen ? "pioneers" : "dimmed"}>{isOpen ? "Open" : "Closed"}</Text>}
-    >
-      <Stack gap="sm" maw={480}>
-        <TextInput label="Question" maxLength={PICKS_LIMITS.question} value={question} onChange={(e) => setQuestion(e.currentTarget.value)} />
-        <Stack gap={6}>
-          <Text size="sm" fw={500}>
-            Picks per founder
-          </Text>
-          <SegmentedControl fullWidth data={Array.from({ length: PICKS_MAX }, (_, i) => String(i + 1))} value={max} onChange={setMax} />
-        </Stack>
-        <TextInput
-          label="Closes"
-          description="Empty: open until you close it."
-          type="datetime-local"
-          value={closes}
-          onChange={(e) => setCloses(e.currentTarget.value)}
-        />
-        <Button size="md" fullWidth loading={isBusy} disabled={!question.trim()} onClick={() => save(true)}>
-          {current ? "Save and keep open" : "Open the picks"}
-        </Button>
-        {current && (
-          <Button variant="default" fullWidth disabled={isBusy} onClick={() => save(false)}>
-            Close the picks
-          </Button>
-        )}
-      </Stack>
+    <Section title="Picks" hint="Private choices, ranked, from the picks question of this event's forms. Only the staff sees them.">
       <Text size="sm" c="dimmed">
         {picks.data.length} of {pickable} founders picked · {mutual.length} mutual {mutual.length === 1 ? "pair" : "pairs"}
       </Text>

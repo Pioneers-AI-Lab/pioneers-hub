@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { Box, Collapse, Group, Stack, Text, UnstyledButton } from "@mantine/core";
+import { IconChevronRight } from "@tabler/icons-react";
 import { score10 } from "@/lib/format";
 import { CHART_COLORS } from "./ChartCard";
 
@@ -9,8 +10,8 @@ import { CHART_COLORS } from "./ChartCard";
 // Detail d'un score (fiche fondateur, « Score breakdown — click to expand »)
 // ----------------------------
 // Une ligne par composante : initiale, nom, poids, valeur sur 10, mini barre.
-// Un appui deplie les signaux qui l'expliquent. Sans fleche (pas d'icone) : la
-// ligne entiere est le bouton, « Hide » / « Details » le dit en texte.
+// Un appui deplie les signaux qui l'expliquent : la ligne entiere est le bouton,
+// un chevron (tourne vers le bas une fois ouvert) signale les lignes depliables.
 
 export type BreakdownRow = {
   key: string;
@@ -25,6 +26,8 @@ export type BreakdownRow = {
 
 export function ScoreBreakdown({ rows }: { rows: BreakdownRow[] }) {
   const [open, setOpen] = useState<string | null>(null);
+  // Colonne du chevron reservee sur toutes les lignes des qu'une en a un : les valeurs restent alignees.
+  const anyDetails = rows.some((r) => r.details);
   return (
     <Stack gap={0}>
       {rows.map((r) => {
@@ -55,10 +58,17 @@ export function ScoreBreakdown({ rows }: { rows: BreakdownRow[] }) {
                 <Box w={56} h={5} bg={CHART_COLORS.track} style={{ borderRadius: 99, overflow: "hidden", flexShrink: 0 }}>
                   <Box h="100%" w={`${(r.value ?? 0) * 10}%`} bg={CHART_COLORS.primary} style={{ borderRadius: 99 }} />
                 </Box>
-                {canOpen && (
-                  <Text size="xs" c="dimmed" w={44} ta="right">
-                    {isOpen ? "Hide" : "Details"}
-                  </Text>
+                {anyDetails && (
+                  <IconChevronRight
+                    size={14}
+                    color="var(--mantine-color-dimmed)"
+                    style={{
+                      flexShrink: 0,
+                      visibility: canOpen ? undefined : "hidden",
+                      transform: isOpen ? "rotate(90deg)" : undefined,
+                      transition: "transform 150ms ease",
+                    }}
+                  />
                 )}
               </Group>
             </UnstyledButton>

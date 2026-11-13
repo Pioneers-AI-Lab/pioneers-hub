@@ -5,13 +5,14 @@ import Link from "next/link";
 import { Button, Group, Text, TextInput, Textarea, VisuallyHidden } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import type { PublicChoice, PublicForm, PublicFormQuestion } from "@shared/callables";
-import { FORM_ANSWER_MAX } from "@shared/formRules";
-import { normalizeHttpUrl } from "@shared/text";
-import type { FormAnswer, FormResponseStatus } from "@shared/types";
+import { FORM_ANSWER_MAX, ratingScale } from "@shared/formRules";
+import { needsAccount as needsAccountFor, type FormResponseStatus } from "@shared/types";
 import { call } from "@/lib/firebase";
 import { errorMessage } from "@/lib/errors";
 import { formatDateTime, searchKey } from "@/lib/format";
 import { paths } from "@/lib/paths";
+import { markAnonymousFormDone } from "@/hooks/useAnonymousFormsDone";
+import { draftsFromPrefill, newSubmissionId, problemOf, toAnswers, type Draft, type Drafts } from "@/components/forms/formDrafts";
 import styles from "./TypeForm.module.css";
 
 // ----------------------------
@@ -42,10 +43,6 @@ type Step =
   | { kind: "question"; question: PublicFormQuestion; number: number }
   | { kind: "done" };
 
-/** Ce que le repondant a saisi, avant nettoyage : un nombre reste du texte tant qu'on le tape. */
-type Draft = string | number | string[];
-type Drafts = Record<string, Draft | undefined>;
-
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 /** Au-dela, une liste se cherche plutot qu'elle ne se parcourt. */
 const SEARCH_FROM = 8;
@@ -53,41 +50,6 @@ const ANONYMOUS_NOTE = "Anonymous: your name is not recorded.";
 const NAME_QUESTION = "Who are you?";
 
 const cx = (...classes: (string | false | null | undefined)[]) => classes.filter(Boolean).join(" ");
-
-/**
- * Identite de l'envoi, tiree une fois par ouverture de la page : un second
- * appui sur « Submit » (ou un reseau qui rejoue) retombe sur la meme reponse
- * cote serveur au lieu d'en creer une seconde.
- */
-function newSubmissionId(): string {
-  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-const isEmpty = (value: Draft | undefined) =>
-  value === undefined || (typeof value === "string" && !value.trim()) || (Array.isArray(value) && value.length === 0);
-
-const parseNumber = (value: Draft) => Number(String(value).trim().replace(",", "."));
-
-/** Ce qui empeche de passer a la suite (la meme regle est verifiee par le serveur). */
-function problemOf(q: PublicFormQuestion, value: Draft | undefined): string | null {
-  if (isEmpty(value)) return q.required ? "Please answer this question." : null;
-  if (q.type === "number" && !Number.isFinite(parseNumber(value!))) return "Enter a number.";
-  if ((q.type === "link" || q.type === "file") && !normalizeHttpUrl(String(value))) return "Enter a web address, e.g. https://...";
-  return null;
-}
-
-/** Les reponses, a la forme que lit le serveur ; les questions sans reponse sont omises. */
-function toAnswers(questions: PublicFormQuestion[], drafts: Drafts): Record<string, FormAnswer> {
-  const out: Record<string, FormAnswer> = {};
-  for (const q of questions) {
-    const value = drafts[q.id];
-    if (isEmpty(value)) continue;
-    out[q.id] = q.type === "number" ? parseNumber(value!) : typeof value === "string" ? value.trim() : value!;
-  }
-  return out;
-}
 
 /** Touche d'une note : 1 a 9, et 0 pour 10, quand l'echelle tient sur un clavier. */
 const ratingShortcut = (n: number, scale: { min: number; max: number }) =>
@@ -97,10 +59,10 @@ const stepLabel = (step: Step, form: PublicForm) =>
   step.kind === "question" ? step.question.label : step.kind === "name" ? NAME_QUESTION : step.kind === "done" ? "Thank you" : form.title;
 
 export function TypeForm({ form }: { form: PublicForm }) {
-  const needsAccount = form.identityCheck === "email_code" && !form.viewerFounderId;
+  const needsAccount = needsAccountFor(form.identityCheck) && !form.viewerFounderId;
   const canAnswer = (form.state === "open" || form.state === "draft") && !needsAccount;
   const isPreview = form.state === "draft";
-  const asksName = form.identityCheck !== "anonymous" && !form.viewerFounderId;
+  const asksName = form.identityCheck === "select_name" && !form.viewerFounderId;
 
   const steps: Step[] = [
     { kind: "intro" },
@@ -114,7 +76,7 @@ export function TypeForm({ form }: { form: PublicForm }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
   const [leaving, setLeaving] = useState<{ index: number; isForward: boolean } | null>(null);
-  const [drafts, setDrafts] = useState<Drafts>({});
+  const [drafts, setDrafts] = useState<Drafts>(() => draftsFromPrefill(form.prefill));
   const [respondent, setRespondent] = useState<string | null>(form.viewerFounderId);
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -174,9 +136,11 @@ export function TypeForm({ form }: { form: PublicForm }) {
         formId: form.formId,
         version: form.version,
         submissionId,
-        respondentFounderId: who,
-        answers: toAnswers(form.questions, current),
+        respondent: who ? { founderId: who } : null,
+        answers: toAnswers(current, (key) => form.questions.find((q) => q.id === key)?.type),
       });
+      // Le serveur ne sait pas qui a envoye une reponse anonyme : ce navigateur la retire du « To do ».
+      if (form.identityCheck === "anonymous" && form.viewerFounderId) markAnonymousFormDone(form.viewerFounderId, form.formId);
       setStatus(data.status);
       goTo(doneIndex);
     } catch (err) {
@@ -236,7 +200,7 @@ export function TypeForm({ form }: { form: PublicForm }) {
       case "intro":
         return (
           <>
-            {form.batchName && <p className={styles.eyebrow}>{form.batchName}</p>}
+            {(form.event || form.batchName) && <p className={styles.eyebrow}>{[form.batchName, form.event?.name].filter(Boolean).join(" · ")}</p>}
             <h1 className={styles.title}>{form.title}</h1>
             {form.description && <p className={styles.description}>{form.description}</p>}
             <IntroNotes form={form} needsAccount={needsAccount} />
@@ -344,7 +308,7 @@ export function TypeForm({ form }: { form: PublicForm }) {
           ),
         };
       case "rating": {
-        const scale = q.scale ?? { min: 1, max: 5 };
+        const scale = ratingScale(q);
         const values = Array.from({ length: scale.max - scale.min + 1 }, (_, i) => scale.min + i);
         return {
           hint: null,
@@ -388,15 +352,19 @@ export function TypeForm({ form }: { form: PublicForm }) {
       }
       case "entity_picker": {
         const max = q.picker?.maxItems ?? 1;
+        const isFounder = q.picker?.entity === "founder";
+        // On ne se choisit pas soi-meme : le nom choisi a l'etape « Who are you? » sort de la liste.
+        const choices = (q.picker ? (form.choices[q.picker.entity] ?? []) : []).filter((c) => !isFounder || c.value !== respondent);
         return {
           hint: null,
           field: (
             <>
-              {max > 1 && <p className={styles.note}>Choose up to {max}.</p>}
+              {max > 1 && <p className={styles.note}>Choose up to {max}{isFounder ? ", your first choice first" : ""}.</p>}
               <ChoiceList
-                choices={q.picker ? (form.choices[q.picker.entity] ?? []) : []}
+                choices={choices}
                 selected={Array.isArray(value) ? value : []}
                 multiple={max > 1}
+                ranked={isFounder && max > 1}
                 onPick={(v) => (max > 1 ? toggle(q.id, v, max) : pickOne(q.id, [v]))}
                 searchLabel={q.label}
               />
@@ -458,7 +426,14 @@ export function TypeForm({ form }: { form: PublicForm }) {
 }
 
 function IntroNotes({ form, needsAccount }: { form: PublicForm; needsAccount: boolean }) {
-  if (form.state === "closed") return <p className={styles.note}>This form is closed. It no longer accepts answers.</p>;
+  if (form.state === "closed") {
+    return (
+      <>
+        <p className={styles.note}>This form is closed. It no longer accepts answers.</p>
+        <GivenAnswers form={form} />
+      </>
+    );
+  }
   if (form.state === "not_open_yet") return <p className={styles.note}>This form is not open yet. Come back later.</p>;
   if (needsAccount) {
     return (
@@ -478,6 +453,29 @@ function IntroNotes({ form, needsAccount }: { form: PublicForm; needsAccount: bo
     form.state === "draft" ? "Draft: you are previewing it. Publish the form to collect answers." : null,
   ].filter(Boolean);
   return lines.length > 0 ? <p className={styles.note}>{lines.join(" · ")}</p> : null;
+}
+
+/** Les reponses deja donnees d'un formulaire clos (picks : ses choix, dans l'ordre), pour les relire. */
+function GivenAnswers({ form }: { form: PublicForm }) {
+  const given = form.questions.flatMap((q) => {
+    const value = form.prefill[q.id];
+    if (value === undefined || value === null) return [];
+    const labelOf = (v: string) => (q.picker ? form.choices[q.picker.entity]?.find((c) => c.value === v)?.label : undefined) ?? v;
+    const text = Array.isArray(value) ? value.map((v, i) => (q.picker ? `${i + 1}. ${labelOf(v)}` : v)).join(q.picker ? ", " : "\n") : String(value);
+    return [{ id: q.id, label: q.label, text }];
+  });
+  if (given.length === 0) return null;
+  return (
+    <>
+      {given.map((g) => (
+        <p key={g.id} className={styles.note}>
+          <strong>{g.label}</strong>
+          <br />
+          {g.text}
+        </p>
+      ))}
+    </>
+  );
 }
 
 function QuestionHeading({
@@ -516,12 +514,15 @@ function ChoiceList({
   choices,
   selected,
   multiple = false,
+  ranked = false,
   onPick,
   searchLabel,
 }: {
   choices: PublicChoice[];
   selected: string[];
   multiple?: boolean;
+  /** Choix classes (picks) : le rang de chaque choix s'affiche, dans l'ordre du clic. */
+  ranked?: boolean;
   onPick: (value: string) => void;
   searchLabel: string;
 }) {
@@ -554,6 +555,7 @@ function ChoiceList({
         {visible.map((c, i) => {
           const isSelected = selected.includes(c.value);
           const letter = !isSearchable ? LETTERS[i] : undefined;
+          const rank = ranked && isSelected ? selected.indexOf(c.value) + 1 : null;
           return (
             <button
               key={c.value}
@@ -564,7 +566,7 @@ function ChoiceList({
               data-shortcut={letter}
               onClick={() => onPick(c.value)}
             >
-              {letter && <span className={styles.key}>{letter}</span>}
+              {rank !== null ? <span className={cx(styles.key, "num")}>{rank}</span> : letter && <span className={styles.key}>{letter}</span>}
               <span className={styles.choiceText}>
                 {c.label}
                 {c.hint && <span className={styles.choiceHint}>{c.hint}</span>}

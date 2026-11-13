@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { Caller } from "../api/caller";
 import { badRequest } from "../api/errors";
 import { applyPlan, previewPlan, type Operation } from "../services/operations";
+import { createEvent } from "../services/eventCreate";
+import { createForm } from "../services/formCreate";
 import { addNote } from "../services/notes";
 import { setFields } from "../services/fields";
 import { getObject, GetInput, listObjects, ListInput, whoami } from "../services/read";
@@ -122,6 +124,21 @@ const TOOLS: Tool[] = [
     description:
       "Adds an internal note (meeting notes, office hour, observation) to a startup or a founder. A startup note is also " +
       "attached to its members. Visible to staff and IC investors only.",
+  }),
+  writeTool(createEvent, {
+    name: "pioneers_create_event",
+    title: "Create event",
+    description:
+      "Creates an event in a batch: blank (an office hour: kind `meeting`), or from a model, a pack that also creates its " +
+      "matching and forms (a hackathon: teams, debrief, jury, feedback), with the startups and mentors concerned. `scheduled` shows it to founders and publishes its forms.",
+  }),
+  writeTool(createForm, {
+    name: "pioneers_create_form",
+    title: "Create form",
+    description:
+      "Creates a form from a model (weekly update, session feedback...) or from your questions. A question can write its " +
+      "answer to a database field (list `fields`). Created as a draft to review in Admin > Forms, or published at once " +
+      "with `publish: true` (the result gives the link to share).",
   }),
 ];
 

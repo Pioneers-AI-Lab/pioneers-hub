@@ -23,8 +23,16 @@
 // premieres semaines du batch, a corriger si besoin.
 
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { applicationDefault, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+
+// Cles de metriques standard et courbes : code partage compile (`npm --prefix functions run build`).
+const require = createRequire(import.meta.url);
+const { CHECKIN_GOALS, CHECKIN_METRICS, standardEventMetric, standardEventMetricKey } = require("../functions/lib/shared/presets/standardMetrics.js");
+const { kpiSeriesFrom, weeklyMaxima } = require("../functions/lib/shared/kpis.js");
+/** Les compteurs SP26 (lOICount, userInterviews...) sous leur cle standard. */
+const standardMetrics = (metrics) => Object.fromEntries(Object.entries(metrics ?? {}).map(([k, v]) => [standardEventMetricKey(k), v]));
 
 const [bundlePath, ...flags] = process.argv.slice(2);
 if (!bundlePath) throw new Error("usage: node scripts/import-sp26.mjs <bundle.json> [--prod]");
@@ -87,7 +95,7 @@ const set = (path, data) => {
 set(`batches/${BATCH_ID}`, {
   ...stamps,
   programId: PROGRAM_ID,
-  name: "Spring 2026",
+  name: "sp26",
   startDayString: "2026-02-16",
   endDayString: "2026-05-22",
   status: "completed",
@@ -218,27 +226,25 @@ for (const sp of startupProfiles.values()) {
   // Updates du jeudi (un par semaine et par startup dans le dashboard : rattache au premier membre).
   const weeks = weeksOf(sp.id);
   const owner = memberIds[0];
-  const series = {};
+  const checkins = [];
   for (const w of weeks) {
     if (!owner) break;
-    set(`checkins/${sp.id}_${w.weekStart}_${owner}`, {
+    const path = `checkins/${sp.id}_${w.weekStart}_${owner}`;
+    const data = {
       ...scoped,
       startupId: sp.id,
       memberIds,
       founderId: owner,
       weekStartDayString: w.weekStart,
-      interviews: num(w.interviews),
-      activeUsers: num(w.activeUsers),
+      // Cles standard (shared/presets/standardMetrics.ts) : le pipeline n'existait pas en SP26.
+      ...Object.fromEntries([...CHECKIN_METRICS, ...CHECKIN_GOALS].map((key) => [key, null])),
+      conversationsDone: num(w.interviews),
       totalUsers: num(w.totalUsers),
+      activeUsers: num(w.activeUsers),
+      moral: num(w.moral),
+      // Historique de definition inconnue, garde tel quel.
       revenue: num(w.revenue),
       totalRevenue: num(w.totalRevenue),
-      outbound: null,
-      featuresShipped: null,
-      moral: num(w.moral),
-      goalOutreach: null,
-      goalInterviews: null,
-      goalNewUsers: null,
-      goalRevenue: null,
       goals: text(w.goals),
       obstacle: text(w.obstacle),
       learned: text(w.learned),
@@ -246,16 +252,12 @@ for (const sp of startupProfiles.values()) {
       helpNeeded: null,
       attachmentUrls: [],
       updatedDateISOString: now,
-    });
-    for (const key of ["interviews", "activeUsers", "totalUsers", "revenue", "totalRevenue", "moral"]) {
-      if (num(w[key]) === null) continue;
-      (series[key] ??= []).push({ weekStartDayString: w.weekStart, value: w[key] });
-    }
+    };
+    set(path, data);
+    checkins.push({ path, data });
   }
-  if (owner) {
-    for (const points of Object.values(series)) points.sort((a, b) => a.weekStartDayString.localeCompare(b.weekStartDayString));
-    set(`kpiSeries/${sp.id}`, { ...scoped, startupId: sp.id, memberIds, series, computedDateISOString: now });
-  }
+  // Memes courbes que le declencheur `onCheckinWritten` (shared/kpis.ts).
+  if (owner) set(`kpiSeries/${sp.id}`, { ...scoped, startupId: sp.id, memberIds, series: kpiSeriesFrom(weeklyMaxima(checkins)), computedDateISOString: now });
 
   // Sous-scores du dashboard (sur 10). Les ponderations s'appliquent a l'affichage.
   const s = startupScores[sp.id];
@@ -618,9 +620,9 @@ for (const [label, day] of Object.entries(DAYS)) {
     programWeek: "Week 1",
     criteria: [criterion("overall", "Overall"), criterion("traction", "Traction"), criterion("execution", "Execution"), criterion("proofLevel", "Proof level"), criterion("insights", "Insights")],
     metrics: [
-      { key: "interviews", label: "Interviews", unit: null },
-      { key: "coldCalls", label: "Cold calls", unit: null },
-      { key: "textOutreach", label: "Text outreach", unit: null },
+      standardEventMetric("conversationsDone"),
+      standardEventMetric("callsMade"),
+      standardEventMetric("messagesSent"),
     ],
     evaluationTargetType: "team",
   });
@@ -643,7 +645,7 @@ for (const [label, day] of Object.entries(DAYS)) {
         scores,
         overall: num(e.score),
         score: m === null ? null : m * 2,
-        submission: submission({ metrics: clean({ interviews: e.interviews, coldCalls: e.coldCalls, textOutreach: e.textOutreach }) }),
+        submission: submission({ metrics: clean(standardMetrics({ interviews: e.interviews, coldCalls: e.coldCalls, textOutreach: e.textOutreach })) }),
       });
     }),
   );
@@ -711,12 +713,12 @@ for (const [label, day] of Object.entries(DAYS)) {
       criterion("actualValidation", "Actual validation"),
     ],
     metrics: [
-      { key: "lOICount", label: "LOIs", unit: null },
-      { key: "revenue", label: "Revenue", unit: "EUR" },
-      { key: "userInterviews", label: "User interviews", unit: null },
-      { key: "coldCalls", label: "Cold calls", unit: null },
+      standardEventMetric("loisSigned"),
+      standardEventMetric("amountPaid"),
+      standardEventMetric("conversationsDone"),
+      standardEventMetric("callsMade"),
       { key: "emailSubscribers", label: "Email subscribers", unit: null },
-      { key: "activeUsers", label: "Active users", unit: null },
+      standardEventMetric("activeUsers"),
     ],
     evaluationTargetType: "team",
   });
@@ -745,7 +747,7 @@ for (const [label, day] of Object.entries(DAYS)) {
         comment: h.comments,
         submission: submission({
           deliverables: Object.fromEntries(Object.entries(h.checklist ?? {}).filter(([k]) => DELIVERABLE[k]).map(([k, v]) => [DELIVERABLE[k], v === true])),
-          metrics: clean(h.stats),
+          metrics: clean(standardMetrics(h.stats)),
         }),
       }),
     ),

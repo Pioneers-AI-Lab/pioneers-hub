@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { Anchor, Group, SimpleGrid, Stack, Text } from "@mantine/core";
-import { STARTUP_SUBSCORES, STARTUP_WEIGHTING_HINT, type MetricKey, type StartupSubScore } from "@shared/types";
+import { STARTUP_SUBSCORES, STARTUP_WEIGHTING_HINT, type Checkin, type MetricKey, type StartupSubScore } from "@shared/types";
+import { criterionLabel } from "@shared/presets/eventTemplates";
+import { STANDARD_METRICS, withUnit, type StandardMetricKey } from "@shared/presets/standardMetrics";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
 import { useEvents } from "@/context/EventsContext";
@@ -56,19 +58,51 @@ export function StartupScoreSection() {
 
 const euro = (v: number) => `€${integer(v)}`;
 
+type Chart = { key: MetricKey; title: string; format: (v: number) => string; unitPrefix: string };
+
+/** Une courbe d'une cle du dictionnaire : son libelle, et l'euro s'il en a l'unite. */
+const standardChart = (key: StandardMetricKey & MetricKey, title?: string): Chart => {
+  const m = STANDARD_METRICS[key];
+  const eur = m.unit === "EUR";
+  return { key, title: title ?? withUnit(m.label, eur ? "€" : null), format: eur ? euro : integer, unitPrefix: eur ? "€" : "" };
+};
+
+/** Courbes : totaux a date, puis les conversations de chaque semaine. Le revenu SP26 (definition inconnue) s'il existe. */
+const CHARTS: Chart[] = [
+  standardChart("totalAmountPaid"),
+  standardChart("mrr"),
+  standardChart("payingCustomers"),
+  standardChart("totalUsers"),
+  standardChart("activeUsers"),
+  standardChart("conversationsDone", "Conversations per week"),
+  { key: "totalRevenue", title: "Total revenue (€, Spring 2026)", format: euro, unitPrefix: "€" },
+];
+
+/** La ligne de chiffres d'un update : le pipeline de la semaine, puis les totaux. */
+const CHECKIN_NUMBERS: { key: keyof Checkin & MetricKey; text: (v: number) => string }[] = [
+  { key: "callsMade", text: (v) => `${integer(v)} calls` },
+  { key: "conversationsDone", text: (v) => `${integer(v)} conversations` },
+  { key: "meetingsBooked", text: (v) => `${integer(v)} meetings booked` },
+  { key: "demosDone", text: (v) => `${integer(v)} demos` },
+  { key: "proposalsSent", text: (v) => `${integer(v)} proposals` },
+  { key: "closedWon", text: (v) => `${integer(v)} won` },
+  { key: "totalAmountPaid", text: (v) => `${euro(v)} paid to date` },
+  { key: "mrr", text: (v) => `MRR ${euro(v)}` },
+  { key: "payingCustomers", text: (v) => `${integer(v)} paying customers` },
+  { key: "activeUsers", text: (v) => `${integer(v)} active users` },
+  { key: "revenue", text: (v) => `Revenue ${euro(v)}` },
+  { key: "moral", text: (v) => `morale ${v}/10` },
+];
+
 /** Les courbes de traction (comme la reference : Total users, Total revenue), puis chaque semaine. */
 export function WeeklyUpdates() {
   const { checkins, kpis, canSeeProfile } = useStartup();
   if (!canSeeProfile || checkins.length === 0) return null;
 
-  const series = (key: MetricKey) =>
-    (kpis?.series[key] ?? []).map((p) => ({ label: formatDay(p.weekStartDayString, true), value: p.value }));
-  const charts = [
-    { key: "totalUsers" as const, title: "Total users", format: integer },
-    { key: "totalRevenue" as const, title: "Total revenue (€)", format: euro, unitPrefix: "€" },
-    { key: "activeUsers" as const, title: "Active users", format: integer },
-    { key: "interviews" as const, title: "Interviews per week", format: integer },
-  ].filter((c) => series(c.key).length > 0);
+  const charts = CHARTS.map((c) => ({
+    ...c,
+    points: (kpis?.series[c.key] ?? []).map((p) => ({ label: formatDay(p.weekStartDayString, true), value: p.value })),
+  })).filter((c) => c.points.length > 0);
 
   return (
     <Section title={`Traction · ${checkins.length} weekly updates`}>
@@ -76,19 +110,15 @@ export function WeeklyUpdates() {
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           {charts.map((c) => (
             <ChartCard key={c.key}>
-              <MetricAreaChart title={c.title} points={series(c.key)} format={c.format} unitPrefix={"unitPrefix" in c ? c.unitPrefix : ""} />
+              <MetricAreaChart title={c.title} points={c.points} format={c.format} unitPrefix={c.unitPrefix} />
             </ChartCard>
           ))}
         </SimpleGrid>
       )}
       <Stack gap="lg" mt="xs">
         {checkins.map((c) => {
-          const numbers = [
-            c.revenue !== null ? `Revenue ${integer(c.revenue)}` : null,
-            c.activeUsers !== null ? `${integer(c.activeUsers)} active users` : null,
-            c.interviews !== null ? `${integer(c.interviews)} interviews` : null,
-            c.moral !== null ? `morale ${c.moral}/10` : null,
-          ].filter(Boolean);
+          // Un update de Spring 2026 n'a pas les champs du pipeline (absents, pas `null`).
+          const numbers = CHECKIN_NUMBERS.flatMap(({ key, text }) => (typeof c[key] === "number" ? [text(c[key])] : []));
           return (
             <Stack key={c.id} gap="xs" pb="md" style={{ borderBottom: "1px solid var(--mantine-color-dark-4)" }}>
               <Text fw={600}>Week of {formatDay(c.weekStartDayString, true)}</Text>
@@ -129,13 +159,16 @@ export function PitchEvaluations() {
     return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
   };
   const latest = sessions[0];
+  // La grille d'une seance : les criteres notes (la grille vit dans le formulaire de jury, SPECS §2), sur 5.
+  const gridOf = (evals: typeof evaluations) =>
+    [...new Set(evals.flatMap((e) => Object.keys(e.scores)))].map((key) => ({ key, label: criterionLabel(key), max: 5 }));
 
   return (
     <Section title="Pitches" hint="Jury scores out of 5, per criterion.">
       {latest && (
         <ChartCard title={`Latest · ${latest.event.name}`}>
           <ScoreRadar
-            axes={latest.event.criteria.map((c) => ({ label: c.label.split(/[ /]/)[0], value: avg(latest.evals, c.key) }))}
+            axes={gridOf(latest.evals).map((c) => ({ label: c.label.split(/[ /]/)[0], value: avg(latest.evals, c.key) }))}
             max={5}
             color="orange.5"
             h={200}
@@ -164,7 +197,7 @@ export function PitchEvaluations() {
                 </Text>
               </Group>
               <Stack gap={6}>
-                {event.criteria.map((c) => {
+                {gridOf(evals).map((c) => {
                   const v = avg(evals, c.key);
                   return (
                     <Group key={c.key} justify="space-between" gap="xs" wrap="nowrap">

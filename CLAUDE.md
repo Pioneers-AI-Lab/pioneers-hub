@@ -26,6 +26,9 @@ npm run init:prod     # documents de depart du projet reel (rejouable, n'ecrase 
 npm run grant -- <email> staff|investor ic|investor portfolio|mentor|none   # role d'un compte, reel
 node scripts/import-sp26.mjs <bundle.json> --prod   # import du batch Spring 2026 (paquet hors depot, donnees personnelles)
 node scripts/import-fa26.mjs <lien-airtable> --prod [--dry-run]   # batch Fall 2026 depuis la vue partagee du Profile Book (lien hors depot)
+node scripts/import-events.mjs "Week 1" [--prod]   # evenements de data/events.json ET leurs formulaires (a blanc sans --prod, n'ecrase jamais)
+node scripts/migrate-standard-forms.mjs <batchId> [--prod]   # modele standard : anciens metrics/criteria/picks -> formulaires (a blanc sans --prod)
+node scripts/migrate-metric-keys.mjs <batchId> [--prod]   # cles de metriques standard (SPECS A.5), a blanc sans --prod ; puis backfill-kpis.mjs
 npx firebase deploy --only storage --project prod   # regles Storage (tout refuse : lecture par URL a jeton)
 npm run typecheck     # route types + front + functions
 npm run lint
@@ -45,7 +48,10 @@ verifier un build a cote d'un `next dev` : `NEXT_DIST_DIR=.next-emu next build` 
 Donnees : batch `spring-2026` (termine) importe du dashboard spring2026.thepioneer.vc (ids Airtable,
 reimport sans perte des rattachements). Batch `fall-2026` importe le 12/11 de la vue partagee
 « Pioneers Profile Book - FA26 » (32 fondateurs, ids Airtable, sans email : rattachement par /claim).
-Reimport : un profil reclame garde son rattachement et ses valeurs non vides ; les photos viennent toujours de l'import.
+Noms affiches des batchs : `fa26` et `sp26` (comme sur Slack) ; les ids restent `fall-2026` / `spring-2026`.
+Evenements de la semaine 1 importes le 12/11 (id = `key` de data/events.json ; sans heure connue : brouillon a 09:00, masque aux fondateurs).
+Reimport : un profil reclame garde son rattachement, ses valeurs non vides et sa photo (meme retiree) ; l'import ne touche que les photos des profils non reclames.
+Photo depuis « Mon profil » (fondateur ou staff) : `founders/{id}/photo-*.jpg` (storage.rules), vignette + `coverPhotoUrl` en un lot, croix pour la retirer.
 Photos et logos : vignettes JPEG 128 px en `data:` URL dans `photoUrl` / `logoUrl` (avatars).
 Grandes photos dans Storage (bucket `pioneers-3627c.firebasestorage.app`, europe-west9, cree le 12/11) :
 `founders/{id}/cover.jpg` (800 px au plus), URL a jeton dans `founders.coverPhotoUrl` (couverture des
@@ -79,16 +85,67 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   Le plan (`planFieldWrites`) a un mode `partial` (un champ fautif est ecarte, pas l'appel : formulaires)
   et un `hold` (calcule, pas ecrit : validation du staff). /v1 et le MCP restent en « tout ou rien ».
   Une URL sans protocole est completee (`shared/text.ts#normalizeHttpUrl`).
-- **Formulaires publics** (`/forms/[formId]`, sans compte, une question par ecran : `components/forms/TypeForm`) :
-  callables `getPublicForm` (noms du batch en nom court) et `submitFormResponse` (`services/forms.ts`,
-  id de reponse deterministe par ouverture de page, ecritures via `planFieldWrites` en mode partiel).
-- **Jamais lus par l'API** : `peerRatings`, `picks`, `judges`, `apiKeys`, `writePlans` (SPECS §4.8).
+- **Evenement = point d'entree** (SPECS §2, decision du 13/11) : son type (`kind`) n'est qu'une ETIQUETTE ; les
+  outils viennent de ce qui est attache : `event.matching` (0 ou 1 : mode `challenge` = equipes, `matching` = tables,
+  taille ; groupes dans `teams`) et ses formulaires. Un evenement d'avant sans le champ le deduit de son type et de
+  `teamSize` : TOUJOURS lire `matchingOf(event)` (shared/events.ts) ; cible du jury `juryTargetOf` (groupes du
+  matching, sinon startups) ; leaderboard des qu'une grille de jury ou une metrique classe. Un modele
+  (presets/eventTemplates.ts) est un PACK : evenement (etiquette, duree, heure) + matching + formulaires, crees ensemble
+  (`eventFormsPlan` : publies si l'evenement est programme, brouillons sinon) par Admin > Events > New (blank |
+  template, reglages facon agenda, « Create » / fleche « Create as draft », `lib/eventsAdmin.ts#createEventPack`),
+  `create_event` et l'import. Staff : `/admin/events/{id}` = la page hub (reglages, presence, matching, formulaires,
+  classement, resultats, jury, picks), `/admin/events/{id}/matching` (TeamGenerator), `/admin/events/{id}/teams/{teamId}`
+  (resultats). `/admin/challenge-teams/**` et `/admin/lunch-roulette/**` redirigent. Tous : `/programs/…/batches/…/events/{id}`
+  (`EventPageContext` : infos, mon groupe, formulaires a faire / fait / ferme, leaderboard) ; `EventRow` y mene.
+  Page publique des groupes : `/groups/{id}` (`/lunch-roulette/{id}` et `/challenge-teams/{id}` montrent la meme).
+- **Modele standard** (SPECS §2, decision du 12/11) : un evenement = une entree d'agenda + un tirage de groupes
+  (`teams`) + des FORMULAIRES. Toute saisie passe par un formulaire rattache a l'evenement : le Debrief d'un
+  hackathon (metriques = questions `submission.metrics.<cle>`, avis = `peerRating.*`), le jury
+  (`evaluation.scores.<cle>`, poids sur la question), les picks (`picks.pickedFounderIds`). L'evenement ne porte
+  ni `metrics` ni `criteria` ni `picks` (seulement `rankingMetricKey`) ; `shared/forms.ts#juryCriteria` /
+  `eventMetrics` les relisent dans ses formulaires. Stockage type inchange (submissions, peerRatings,
+  evaluations, picks). Formulaires d'un evenement crees par `shared/eventForms.ts` (import, migration) ou depuis
+  sa page d'admin (modeles `debrief`, `jury`, `picks`, `founder_introductions`...).
+- **Formulaires publics** (`/forms/[formId]`, une question par ecran : `components/forms/TypeForm` ; formulaire a
+  portee : `components/forms/FormSheet`, une page) : callables `getPublicForm` (noms du batch en nom court ; avec
+  `respondent`, ses cibles et, identite prouvee, ses reponses deja donnees `prefill`) et `submitFormResponse`
+  (`services/forms.ts`, id de reponse deterministe par envoi, ecritures via `planFieldWrites` en mode partiel,
+  groupees par cible). Portee d'une question (`scope`) : `self`, `team` (equipe publiee du repondant, une reponse
+  commune), `each_teammate`, `each_target` (equipes notees sauf la sienne) ; reponse par cible sous
+  `question@cible`, cibles calculees par le serveur. Identites : `select_name`, `account` (connexion obligatoire,
+  `email_code` = ancien nom), `jury_link`, `anonymous`. `formResponses` : staff seulement.
+- **Jury** : le formulaire de jury de l'evenement (identite `jury_link`), par UN lien partage
+  `/forms/{formId}#secret`, sans compte (decision du 12/11) ; secret en clair dans `events/{id}/judges/link` (staff
+  seulement, recopiable ; `resetJuryLink` le remplace). Le jure choisit son nom (invites, noms deja venus noter,
+  fondateurs du batch en nom court, aucun email) ou le saisit (`services/jury.ts`) : id `founder-{founderId}` ou
+  `jury-{empreinte du nom normalise}` ; un fondateur ne voit pas sa propre equipe. Verrou = formulaire ferme ;
+  `deleteJuryScore` supprime une note (entiere dans l'audit). Staff : Admin > Events > evenement
+  (Forms, Jury). Feuille papier : ouvrir le lien connecte, taper le nom.
+- **Series des indicateurs** : declencheurs Firestore `onCheckinWritten` (`checkins/{id}`) et `onStartupUpdated`
+  (`startups/{id}`, equipe changee), en **europe-west9** (region de la base, exigee pour un declencheur Firestore).
+  Tout ecrivain d'un update du jeudi est couvert. Regle pure `shared/kpis.ts#planStartupKpis` : par indicateur
+  (`checkin.*` a `indicator`) et par semaine, le MAXIMUM entre fondateurs (SPECS §12 q7) -> `kpiSeries/{startupId}`
+  et un releve `metricSnapshots/{startupId}_{metric}_{lundi}` (`self_reported`, `sourcePath` = l'update du maximum).
+  Un releve d'une autre source au meme id n'est jamais touche. Rattrapage :
+  `node scripts/backfill-kpis.mjs <batchId> [--prod]` (a blanc sans `--prod` ; emulateurs avec `FIRESTORE_EMULATOR_HOST`).
+  Resultats d'equipe et jury, quel que soit l'ecrivain (Debrief, staff, API) : `onSubmissionWritten` (releves
+  `metricSnapshots`, source `recordedSource` de la soumission, puis leaderboard, `services/teamResults.ts`) et
+  `onEvaluationWritten` (leaderboard), en europe-west9.
+- **Jamais lus par l'API** : `peerRatings`, `picks`, `judges`, `apiKeys`, `writePlans` (SPECS §4.8). Avis, picks
+  et notes du jury ne s'ecrivent que par leur formulaire (`DOC_KINDS[...].formOnly`, refus `form_only`).
 - **OAuth 2.1** (`functions/src/oauth`, connecteur claude.ai et Claude Code) : decouverte RFC 9728 / 8414, enregistrement
   dynamique, `/oauth/authorize` -> page front `/oauth/consent` (callables `oauthDescribeRequest` / `oauthDecide`),
   `/oauth/token` avec PKCE S256. Acces 1 h, rafraichissement 30 j a rotation ; un code ou un rafraichissement rejoue
   revoque l'autorisation. Secrets stockes par empreinte. Qui peut accepter : `canUseApi` (shared/access.ts), la regle
   de l'API. Hosting a une reecriture explicite `/.well-known/**` (l'emulateur ne passe pas les chemins a point par `**`).
 - Adresse a donner a Claude : `https://pioneers-hub-api.web.app/mcp`.
+- **Calendrier d'un batch** : `GET /calendar/{batchId}.ics`, public (les evenements le sont), iCalendar construit par
+  `shared/calendar.ts` ; seuls les evenements publies ouverts a tout le batch (`isBatchCalendarEvent`) : les rendez-vous
+  a audience restreinte (office hours...) n'y sont pas. A l'ecran, `EventsContext` les montre a leurs seuls invites
+  (`shared/access.ts#canSeeEvent`, appliquee aussi par l'API), au staff et aux investors. Filtre d'affichage
+  seulement : la regle `events` laisse tout lire (listes d'invites comprises).
+  Cache CDN 10 min, `DTSTAMP` = derniere modification (ETag stable, 304). Bouton « Add to calendar » de l'accueil du
+  batch (abonnement Apple / Google / Outlook, `components/event/AddToCalendar.tsx`).
 - Spec OpenAPI 3.1 publique `GET /v1/openapi.json` (`api/openapi.ts`), tiree des memes contrats zod ; seule reponse
   cachee au CDN. Adresses publiques et longueur du nom de cle : `shared/api.ts`. Table des types REST : `REST_OBJECTS`.
 - Page `/api-docs` (menu du compte, `canUseApi`) : brancher Claude, creer / revoquer ses cles (`ApiKeysContext`),
@@ -106,9 +163,23 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
 - `shared/access.ts` : qui voit quoi, en logique pure. **Miroir de `firestore.rules`** :
   modifier l'un, c'est modifier l'autre (puis `npm run check:rules`).
 - `shared/callables.ts` : contrat nom -> `{ req, res }` de chaque callable.
-- `shared/presets/eventTemplates.ts` : modeles d'evenements (grille, metriques). Le type d'un evenement
-  est sa MECANIQUE (`team_challenge`, `pitch`, `matching`, `session`, `meeting`), pas son nom.
-- `shared/fieldRegistry.ts` : registre des champs ecrivables par formulaire, import ou MCP (`dbField`).
+- `shared/presets/eventTemplates.ts` : modeles d'evenements = packs (etiquette, duree, heure, matching, formulaires ;
+  grille et metriques PAR DEFAUT de ses formulaires). Le type d'un evenement est une ETIQUETTE (`team_challenge`,
+  `pitch`, `matching`, `session`, `meeting`) : rien ne se decide sur lui (voir « Evenement = point d'entree »). `shared/presets/formTemplates.ts` : modeles de formulaires (Debrief, Jury, Picks
+  construits depuis l'evenement, `build`). `shared/eventForms.ts` : les formulaires d'un evenement (import, migration).
+- `shared/events.ts` : LA construction d'un document `events` (`newEvent` : Admin > Events, outils de tirage,
+  scripts/import-events.mjs) et ce que voient les fondateurs (`isPublishedEvent`). Admin > Events
+  (`/admin/events`) : creer (en brouillon), regler, archiver / restaurer (`lib/eventsAdmin.ts`, ecriture staff directe).
+  Presence : `/admin/events/{id}/attendance` (`AttendanceSheet`, `lib/attendanceAdmin.ts`) ; present par defaut, le
+  premier geste enregistre tous les attendus. LA regle : `shared/attendance.ts` (`eventRoster` : attendus, statuts,
+  non marques ; `absentFounderIds`). Un absent sort de l'audience des formulaires (`formRules` `addressees`, To do du
+  fondateur, qui lit SA presence : regle `isOwnFounder`), du tirage (TeamGenerator), de la liste des noms et des choix
+  de fondateurs (`getPublicForm`), et un pick qui le vise est refuse (`submitFormResponse`).
+- `shared/presets/standardMetrics.ts` : LE dictionnaire des metriques du pipeline et de la traction (SPECS annexe A.5) :
+  une notion = une cle, la meme dans `checkin.*` et `submission.metrics.*`. Flux = participe passe (`callsMade`),
+  total = sans (`totalUsers`, `mrr`). Anciennes cles : `EVENT_METRIC_RENAMES`, `CHECKIN_FIELD_RENAMES`.
+- `shared/fieldRegistry.ts` : registre des champs ecrivables par formulaire, import ou MCP (`dbField`), avec deux
+  familles a cle libre et stable : `submission.metrics.<cle>`, `evaluation.scores.<cle>` (ecrites imbriquees).
 
 Regles de `shared/` : jamais d'import de `firebase`, `firebase-admin` ou de Node.
 Aucune date en `Timestamp` : `dayString` (`YYYY-MM-DD`) ou `dateISOString` (ISO complet),
@@ -122,20 +193,23 @@ document ENTIER, jamais un champ) :
 | `founders/{id}` | public si `publicProfileConsent`, sinon fondateurs du batch + staff + investors |
 | `founders/{id}/private/directory` | fondateurs du batch + staff + investors (champs du Profile Book) |
 | `founders/{id}/private/profile` | le fondateur lui-meme + staff + investors IC (age, date de naissance) |
+| `formCompletions/{formId}_{founderId}`, `picks` | le fondateur lui-meme + staff (« J'ai repondu » et picks, ecrits par `submitFormResponse` ; jamais pour un formulaire anonyme) |
 | `founders/{id}/private/internal`, `founderStats`, `notes`, `assessments`, `eloMatches` | staff + investors IC |
 | `startups/{id}` | public |
 | `startups/{id}/private/profile`, `kpiSeries` | membres + staff + investors |
 | `startups/{id}/private/internal` | staff + investors IC |
 | `scores/*` (sous-scores, ponderes a l'affichage) | staff + investors (IC et portfolio) |
-| `events/*/peerRatings`, `events/*/judges`, `apiKeys`, `auditLogs` | staff |
+| `events/{id}` | public, listes d'invites comprises (`canSeeEvent` ne filtre que l'affichage) |
+| `events/*/peerRatings`, `events/*/judges`, `formResponses`, `apiKeys`, `auditLogs` | staff (l'auteur relit ses avis donnes) |
 
 Rattachement d'un compte (SPECS §3.1, `lib/accounts.ts`) : a la connexion, l'accueil (`app/(app)/page.tsx`)
 essaie l'email VERIFIE du compte contre `people.email` / `altEmails` et rattache en un lot
 (fondateur, `batchMemberships`, personne, compte) ; les regles verifient le lot. Sinon `/claim`
 (« comme Tricount », decision du 11/11) : le compte choisit son batch puis un profil non reclame,
 et il est rattache tout de suite (`claimProfile`). Email verifie obligatoire, un profil par batch.
-Le staff voit chaque rattachement dans Staff > Access et peut delier. `claimRequests` (validation
-par le staff) reste pour les cas a trancher.
+Le staff voit chaque rattachement dans Admin > Founder profiles (`/admin/profiles`, par batch) et peut lier ou delier ;
+delier libere aussi la personne et le compte s'il n'en tient plus rien (aucun autre profil, ni fiche mentor ou investor :
+`lib/accounts.ts#unlinkFounder`). `claimRequests` (ancienne validation par le staff) : plus rien ne les cree, aucune en base.
 Le fondateur modifie lui-meme les champs de `FOUNDER_SELF_EDITABLE` (shared/access.ts, miroir
 des regles `update`) ; WhatsApp et LinkedIn s'ecrivent dans `people` ET leur copie, en un lot.
 
@@ -157,8 +231,8 @@ d'acces en v1. Collections a plat avec `programId` / `batchId`.
 | Annuaire (grille) | `.../founders/layout.tsx` | `FounderDirectoriesContext` (mode liste / grille ; `private/directory` de chaque fondateur une fois la grille ouverte) | `FounderDirectory` |
 | Startup | `.../startups/[startupId]/layout.tsx` | `StartupContext` | `Startup`, `StartupProfile`, `StartupInternal` |
 | Batch (suite) | idem batch | `EventsContext`, `ListsContext`, `CohortContext` (batchStats + scores), `LeaderboardsContext` | `PioneersEvent`, `ClosedList`, `BatchStats`, `Score`, `Leaderboard` |
-| Moi | `.../me/layout.tsx`, `.../todo/layout.tsx` | `MeGate` -> `FounderContext` (id du rattachement) + `OpenFormsContext` | |
-| Staff | `.../staff/layout.tsx` | `StaffContext` (garde : role `staff`) | `User`, `ClaimRequest` |
+| Moi | `.../(mine)/layout.tsx` (groupe de `me/` et `todo/`) | `MeGate` -> `FounderContext` (id du rattachement) + `FormsToFillContext` (formulaires qui me restent : audience `formConcernsFounder`, `formCompletions`, anonymes retenus par le navigateur ; Debrief et picks remplis restent modifiables tant qu'ils sont ouverts) ; `hooks/useTodoItems` les range (picks, hackathons, formulaires : page To do, resume en haut de SA fiche). « Me » = sa fiche `/founders/{son id}` (`founders/[founderId]/layout.tsx` monte les memes Providers via `SelfProviders` quand c'est la sienne) ; `/me` et `/me/edit` ne font que rediriger | |
+| Admin | `app/(app)/admin/layout.tsx` | `AdminContext` (garde : role `staff` ; batch de travail choisi par `BatchPicker`, retenu sur le compte ; demandes de rattachement en attente, tous batchs) | `Batch`, `Founder`, `PioneersEvent`, `Form`, `ClaimRequest` |
 | Rattachement | `app/(app)/claim/layout.tsx` | `ClaimContext` | `Founder`, `ClaimRequest` |
 
 Regles :
@@ -193,13 +267,14 @@ Regles :
 ## Interface : mobile d'abord (decision du 11/11)
 
 - Theme sombre force, bleu `#0DB0F5` reserve a l'element actif et a l'action principale.
-- Minimaliste : du texte, des filets, peu de cadres. **Pas d'icone** sauf manque de place,
-  **jamais d'emoji**.
+- Minimaliste : du texte, des filets, peu de cadres. **Pas d'icone** sauf manque de place ou chevron
+  de depliage (`ScoreBreakdown` : `>` tourne vers le bas une fois ouvert), **jamais d'emoji**.
 - Aucune table : des lignes empilees (`components/ui/Rows.tsx` : `LinkRow`, `ButtonRow`, `Row`),
   cibles tactiles de 60 px. Titres : `PageHeader` ; blocs : `Section` ; valeurs : `Field`
   (masque si vide).
 - Dans un batch : onglets en bas sur mobile, en haut des 48em (`BatchShell`). Les onglets
-  dependent du role (fondateur : To do, Me ; staff : Staff).
+  dependent du role (fondateur : To do, Me). Aucun onglet staff : TOUS les outils du staff sont dans
+  `/admin` (decision du 13/11) : Access (comptes), Founder profiles, Events, Forms, Import founders, Batch settings.
 - Champs de saisie en 16 px (sinon iOS zoome) : taille `md` par defaut (theme.ts). Boutons
   d'action principaux `size="md"`, pleine largeur sur mobile ; enregistrement dans `.savebar`.
 - Verifier en 390 px de large : aucun debordement horizontal.

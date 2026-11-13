@@ -60,7 +60,9 @@ const MESSAGES: Record<string, string> = {
   "auth/weak-password": "Choose a password of at least 6 characters.",
   "auth/wrong-password": "Wrong email or password.",
   "auth/user-not-found": "Wrong email or password.",
-  "auth/invalid-credential": "Wrong email or password. If you signed up with Google, use Continue with Google.",
+  "auth/invalid-credential":
+    "Wrong email or password. If you signed up with Google, use Continue with Google. Invited by the Pioneers team? Use Forgot password to choose yours.",
+  "auth/user-disabled": "This account is blocked. Contact the Pioneers team.",
   "auth/too-many-requests": "Too many attempts. Wait a few minutes and try again.",
   "auth/popup-blocked": "Your browser blocked the sign-in window. Allow pop-ups for this site and try again.",
   "auth/network-request-failed": "No connection. Check your network and try again.",

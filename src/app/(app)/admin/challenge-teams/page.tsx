@@ -1,5 +1,7 @@
-import { TeamEventsPage } from "@/components/admin/TeamEventsPage";
+import { redirect } from "next/navigation";
+import { paths } from "@/lib/paths";
 
-export default function ChallengeTeamsPage() {
-  return <TeamEventsPage mode="challenge" />;
+// Ancienne adresse : les evenements et leur matching sont dans Admin > Events (decision du 13/11).
+export default function Page() {
+  redirect(paths.adminEvents());
 }

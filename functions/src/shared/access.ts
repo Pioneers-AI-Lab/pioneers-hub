@@ -1,4 +1,4 @@
-import type { Founder, FounderDirectory, FounderProfile, InvestorAccess, Person, Startup, User, UserRole } from "./types";
+import type { Founder, FounderDirectory, FounderProfile, InvestorAccess, PioneersEvent, Person, Startup, User, UserRole } from "./types";
 
 // ----------------------------
 // Qui voit quoi : la regle, en logique pure (SPECS §6.2)
@@ -65,6 +65,7 @@ export function roleInBatch(viewer: Viewer | null, viewerFounderId: string | nul
  *                           -> liste des fondateurs, private/directory, memberships
  *   self ou insider         le fondateur lui-meme, staff, investors IC
  *                           -> private/profile, founderWeeks, sessionRatings, people
+ *   self ou staff           le fondateur lui-meme, staff -> picks, formCompletions
  *   membres ou investors    membres de la startup, staff, investors
  *                           -> startups/private/profile, kpiSeries, checkins, metricSnapshots
  *   staff ou investors      -> scores
@@ -85,6 +86,27 @@ export const isInsiderViewer = (viewer: Viewer | null): boolean => isInsider(rol
 export const isInvestor = (role: BatchRole): boolean => role === "investor_ic" || role === "investor_portfolio";
 
 export const isStaffOrInvestor = (role: BatchRole): boolean => role === "staff" || isInvestor(role);
+
+/**
+ * Un evenement a audience restreinte (`audience: "guests"` : office hours, visio
+ * de mentorat) ne se montre qu'a ses invites et aux membres des startups
+ * concernees (meme regle qu'`invitedFounderIds`, types/event.ts) ; le staff et
+ * les investors voient tout. Regle d'AFFICHAGE, appliquee par l'interface
+ * (`EventsContext`), l'API (`services/read.ts`) et le calendrier : les documents
+ * `events` restent lisibles de tous (firestore.rules).
+ */
+export function canSeeEvent(
+  role: BatchRole,
+  viewerFounderId: string | null,
+  viewerStartupId: string | null,
+  event: Pick<PioneersEvent, "audience" | "guestFounderIds" | "startupIds">,
+): boolean {
+  if (event.audience === "batch" || isStaffOrInvestor(role)) return true;
+  return (
+    (viewerFounderId !== null && event.guestFounderIds.includes(viewerFounderId)) ||
+    (viewerStartupId !== null && event.startupIds.includes(viewerStartupId))
+  );
+}
 
 export function isStartupMember(viewerFounderId: string | null, startup: Pick<Startup, "memberIds">): boolean {
   return viewerFounderId !== null && startup.memberIds.includes(viewerFounderId);
@@ -155,6 +177,18 @@ export const FOUNDER_SELF_EDITABLE = {
 };
 
 /**
+ * Photo deposee depuis « Mon profil », par les regles seulement (miroir des
+ * regles `people` et `founders` « Photo ») : la vignette (`photoUrl`, data URL
+ * JPEG, recopiee sur la fiche) et la grande photo (`coverPhotoUrl`, URL Storage
+ * de `founders/{id}/photo-*.jpg`). Hors de FOUNDER_SELF_EDITABLE : l'API ne
+ * laisse pas un fondateur pointer sa photo vers une URL quelconque.
+ */
+export const FOUNDER_PHOTO_FIELDS = {
+  person: ["photoUrl"],
+  founder: ["photoUrl", "coverPhotoUrl"],
+} as const satisfies { person: readonly (keyof Person)[]; founder: readonly (keyof Founder)[] };
+
+/**
  * La carte d'un fondateur (`founders/{id}`) : le batch, le staff et les investors ;
  * sinon seulement si elle est publique (consentement) ou pas encore reclamee
  * (liste « choisir mon profil »). Regle `founders` read.
@@ -179,6 +213,13 @@ export function isSelfEditable(kind: string, field: string): boolean {
 /** Le visiteur est le fondateur `founderId` de ce batch (il peut modifier son profil). */
 export const isViewerFounder = (viewerFounderId: string | null, founderId: string): boolean =>
   viewerFounderId !== null && viewerFounderId === founderId;
+
+/**
+ * Modifier le profil d'un fondateur : le staff (regles : `allow write: if isStaff()`)
+ * ou le fondateur lui-meme, sur « Mon profil » (FOUNDER_SELF_EDITABLE).
+ */
+export const canEditFounderProfile = (role: BatchRole, viewerFounderId: string | null, founderId: string): boolean =>
+  role === "staff" || isViewerFounder(viewerFounderId, founderId);
 
 
 // ----------------------------

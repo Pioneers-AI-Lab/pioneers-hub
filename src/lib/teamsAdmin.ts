@@ -1,11 +1,11 @@
 import { writeBatch } from "firebase/firestore";
+import { matchingOf } from "@shared/events";
 import { publicShortName } from "@shared/access";
 import { docIds } from "@shared/collections";
-import { EVENT_TEMPLATES, type EventTemplateKey } from "@shared/presets/eventTemplates";
-import { EVENT_KIND_FEATURES, type EventTeam, type Membership, type PioneersEvent, type WithId } from "@shared/types";
+import { LEADER_ROLE, rolesWithLeader, teamSizeFor } from "@shared/teamGenerator";
+import type { EventTeam, Membership, PioneersEvent, WithId } from "@shared/types";
 import { db } from "@/lib/firebase";
 import { refs } from "@/lib/firestore/refs";
-import { createDoc } from "@/lib/firestore/write";
 
 // ----------------------------
 // Equipes d'un challenge, groupes de lunch roulette (staff, SPECS §4.1)
@@ -24,54 +24,14 @@ import { createDoc } from "@/lib/firestore/write";
 // Une equipe de brouillon qui disparait d'un nouveau tirage est effacee : ce
 // n'est pas de l'historique (rien n'a ete publie ni attribue).
 
-export type DraftTeam = { name: string; memberIds: string[]; locked: boolean };
+/** `leaderId` : le leader tire (ou choisi par le staff), membre du groupe. */
+export type DraftTeam = { name: string; memberIds: string[]; leaderId: string | null; locked: boolean };
 
 /** Nom complet d'un fondateur, pour en tirer le nom public (prenom + initiale). */
 export type FullNameOf = (founderId: string) => string;
 
 /** Id d'equipe unique sur tout le batch : l'id d'appartenance en depend (`docIds.teamMembership`). */
 export const teamIdFor = (eventId: string, index: number) => `${eventId}-t${index + 1}`;
-
-export async function createTeamEvent(input: {
-  programId: string;
-  batchId: string;
-  templateKey: EventTemplateKey;
-  name: string;
-  startDateISOString: string;
-  location: string | null;
-  teamSize: { min: number; max: number };
-}): Promise<string> {
-  const template = EVENT_TEMPLATES[input.templateKey];
-  return createDoc<PioneersEvent>(refs.events(), {
-    programId: input.programId,
-    batchId: input.batchId,
-    archivedDateISOString: null,
-    kind: template.kind,
-    name: input.name,
-    // La grille et les metriques du modele sont COPIEES (eventTemplates.ts).
-    templateKey: input.templateKey,
-    stage: template.stage,
-    topic: null,
-    startDateISOString: input.startDateISOString,
-    endDateISOString: null,
-    location: input.location,
-    programWeek: null,
-    isMilestone: false,
-    audience: "batch",
-    guests: [],
-    guestFounderIds: [],
-    mentorIds: [],
-    startupIds: [],
-    signUpUrl: null,
-    resourceUrl: null,
-    status: "scheduled",
-    criteria: template.criteria,
-    metrics: template.metrics,
-    evaluationTargetType: EVENT_KIND_FEATURES[template.kind].evaluationTarget,
-    teamSize: input.teamSize,
-    leaderboardRevealDateISOString: null,
-  });
-}
 
 function assertNotPublished(existing: WithId<EventTeam>[]) {
   if (existing.some((t) => t.publishedDateISOString !== null))
@@ -97,7 +57,7 @@ function writeTeams(
       memberIds: draft.memberIds,
       // Noms publics seulement a la publication : un brouillon n'est lu que du staff.
       memberNames: fullNameOf ? draft.memberIds.map((id) => publicShortName(fullNameOf(id))) : null,
-      roles: previous?.roles ?? {},
+      roles: rolesWithLeader(previous?.roles ?? {}, draft.memberIds, draft.leaderId),
       locked: publishedDateISOString !== null || draft.locked,
       publishedDateISOString,
       startupId: previous?.startupId ?? null,
@@ -106,11 +66,22 @@ function writeTeams(
   for (const team of existing) if (!keep.has(team.id)) batch.delete(refs.eventTeam(eventId, team.id));
 }
 
-/** Enregistre le tirage en brouillon (non publie). */
-export async function saveDraftTeams(event: WithId<PioneersEvent>, drafts: DraftTeam[], existing: WithId<EventTeam>[]) {
+/**
+ * La taille du matching suit celle du dernier tirage enregistre : la page de
+ * l'evenement et le prochain tirage la relisent.
+ */
+function writeTeamSize(batch: ReturnType<typeof writeBatch>, event: WithId<PioneersEvent>, groupSize: number) {
+  const matching = matchingOf(event);
+  if (!matching || matching.size.max === groupSize) return;
+  batch.set(refs.event(event.id), { matching: { ...matching, size: teamSizeFor(groupSize) }, updatedDateISOString: new Date().toISOString() }, { merge: true });
+}
+
+/** Enregistre le tirage en brouillon (non publie), tire en groupes de `groupSize`. */
+export async function saveDraftTeams(event: WithId<PioneersEvent>, drafts: DraftTeam[], existing: WithId<EventTeam>[], groupSize: number) {
   assertNotPublished(existing);
   const batch = writeBatch(db);
   writeTeams(batch, event.id, drafts, existing, null, null);
+  writeTeamSize(batch, event, groupSize);
   await batch.commit();
 }
 
@@ -120,6 +91,7 @@ export async function publishTeams(
   drafts: DraftTeam[],
   existing: WithId<EventTeam>[],
   fullNameOf: FullNameOf,
+  groupSize: number,
 ) {
   assertNotPublished(existing);
   if (drafts.length === 0) throw new Error("There is nothing to publish.");
@@ -129,6 +101,7 @@ export async function publishTeams(
 
   const batch = writeBatch(db);
   writeTeams(batch, event.id, drafts, existing, now, fullNameOf);
+  writeTeamSize(batch, event, groupSize);
   drafts.forEach((draft, index) => {
     const teamId = teamIdFor(event.id, index);
     for (const founderId of draft.memberIds) {
@@ -141,7 +114,7 @@ export async function publishTeams(
         kind: "event_team",
         teamId,
         eventId: event.id,
-        role: null,
+        role: founderId === draft.leaderId ? LEADER_ROLE : null,
         startDayString,
         endDayString,
         endReason: null,

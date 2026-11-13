@@ -23,11 +23,14 @@
 // Rejouable : les ids sont les ids Airtable des lignes (`founders/{recId}`,
 // `people/person-{recId}`), chaque ecriture remplace le document du meme id.
 // Un profil deja reclame garde son rattachement et ce que le fondateur a
-// rempli : ses valeurs non vides l'emportent sur celles d'Airtable.
+// rempli : ses valeurs non vides l'emportent sur celles d'Airtable. Sa photo
+// est la sienne (deposee, remplacee ou retiree depuis « Mon profil ») : l'import
+// n'y touche plus, ni dans Firestore ni dans Storage.
 //
 // Correspondance avec le modele : SPECS §6.1 et functions/src/shared/types.
 
 import { createHash, randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
 import { applicationDefault, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -150,25 +153,23 @@ const claimedPeople = new Map(
     .map((d) => [d.id.slice("person-".length), d.data()]),
 );
 const isEmpty = (v) => v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
-/**
- * Les photos viennent toujours de l'import : une photo changee recoit un
- * nouveau jeton, l'ancienne URL ne sert plus.
- */
-const IMPORT_OWNED = new Set(["photoUrl", "coverPhotoUrl"]);
+/** Photo d'un profil reclame : celle du fondateur telle quelle, meme retiree (`null`). */
+const FOUNDER_OWNED = new Set(["photoUrl", "coverPhotoUrl"]);
 /** Profil reclame : ce que le fondateur a rempli (non vide) l'emporte sur l'import. */
 const keepFilled = (imported, current) => {
   if (!current) return imported;
   const merged = Object.fromEntries(
-    Object.entries(imported).map(([k, v]) => [k, IMPORT_OWNED.has(k) || isEmpty(current[k]) ? v : current[k]]),
+    Object.entries(imported).map(([k, v]) => [k, FOUNDER_OWNED.has(k) ? (current[k] ?? null) : isEmpty(current[k]) ? v : current[k]]),
   );
   if ("updatedDateISOString" in imported) merged.updatedDateISOString = now;
   return merged;
 };
 
-// ---- Photos, 6 a la fois -----------------------------------------------------------
+// ---- Photos, 6 a la fois (pas celles des profils reclames : voir plus haut) ---------
 const photos = new Map();
-for (let i = 0; i < rows.length; i += 6) {
-  const chunk = rows.slice(i, i + 6);
+const unclaimedRows = rows.filter((r) => !claimed.has(r.id));
+for (let i = 0; i < unclaimedRows.length; i += 6) {
+  const chunk = unclaimedRows.slice(i, i + 6);
   (await Promise.all(chunk.map((r) => photosOf(r.id, r)))).forEach((p, j) => photos.set(chunk[j].id, p));
 }
 
@@ -186,7 +187,8 @@ for (const r of rows) {
   const name = text(cell(r, COL.name));
   const [firstName, ...rest] = name.split(/\s+/);
   const personId = `person-${id}`;
-  const { photoUrl, coverPhotoUrl } = photos.get(id);
+  // Profil reclame : `keepFilled` garde sa photo, ces valeurs ne servent pas.
+  const { photoUrl, coverPhotoUrl } = photos.get(id) ?? { photoUrl: null, coverPhotoUrl: null };
   if (coverPhotoUrl) covers += 1;
 
   set(`people/${personId}`, keepFilled({
@@ -266,24 +268,32 @@ for (const r of rows) {
   set(`founders/${id}/private/internal`, { eloScore: null, eloMatchesCount: 0 });
 }
 
-// ---- Listes fermees : competences et secteurs du batch ----------------------------------
+// ---- Listes fermees : competences et secteurs du batch, avec leurs couleurs ------------
+// Couleur de l'option Airtable sans sa nuance (`tealDark`, `blueBright` -> `teal`,
+// `blue`), si elle est une teinte connue (TAG_COLORS, lu dans le modele compile :
+// `npm --prefix functions run build`). Elle s'applique aussi aux valeurs deja
+// connues (listes SP26).
+const TAG_COLORS = new Set(createRequire(import.meta.url)("../functions/lib/shared/types/system.js").TAG_COLORS);
+const tagColor = (airtableColor) => {
+  const base = airtableColor?.match(/^[a-z]+/)?.[0];
+  return TAG_COLORS.has(base) ? base : null;
+};
 const added = {};
 for (const [key, label, column] of [
   ["hardSkills", "Hard skills", COL.hardSkills],
   ["industries", "Industries", COL.industries],
 ]) {
-  const ref = db.doc(`lists/${key}`);
-  const current = (await ref.get()).data();
+  const colors = new Map(Object.values(column.typeOptions?.choices ?? {}).map((c) => [c.name, tagColor(c.color)]));
+  const current = (await db.doc(`lists/${key}`).get()).data();
   const known = new Set((current?.items ?? []).map((i) => i.value));
   const fresh = [...new Set(rows.flatMap((r) => multi(r, column)))].filter((v) => !known.has(v)).sort();
+  const items = [...(current?.items ?? []), ...fresh.map((v) => ({ value: v, label: v, group: null, archived: false }))].map((i) => {
+    const color = colors.get(i.value);
+    return color ? { ...i, color } : i;
+  });
   added[key] = fresh.length;
-  if (fresh.length) {
-    set(`lists/${key}`, {
-      key,
-      label: current?.label ?? label,
-      items: [...(current?.items ?? []), ...fresh.map((v) => ({ value: v, label: v, group: null, archived: false }))],
-      updatedDateISOString: now,
-    });
+  if (JSON.stringify(items) !== JSON.stringify(current?.items)) {
+    set(`lists/${key}`, { key, label: current?.label ?? label, items, updatedDateISOString: now });
   }
 }
 

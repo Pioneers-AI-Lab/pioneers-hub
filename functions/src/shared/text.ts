@@ -12,6 +12,16 @@ export const searchKey = (value: string) =>
     .toLowerCase()
     .trim();
 
+/** Une cle stable tiree d'un libelle : « Calls made » -> `callsMade`, unique parmi `taken` (qu'elle complete). */
+export function camelKey(label: string, taken: Set<string>): string {
+  const words = searchKey(label).split(/[^a-z0-9]+/).filter(Boolean);
+  const base = words.map((w, i) => (i === 0 ? w : w[0].toUpperCase() + w.slice(1))).join("") || "key";
+  let key = base;
+  for (let n = 2; taken.has(key); n++) key = `${base}${n}`;
+  taken.add(key);
+  return key;
+}
+
 /**
  * Une adresse web complete (`https://` ajoute si besoin), ou `null` si ce
  * n'en est pas une : « linkedin.com/in/ada » se tape sans le protocole.

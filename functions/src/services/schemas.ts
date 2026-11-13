@@ -6,10 +6,28 @@ import { z } from "zod";
 
 /** Le JSON Schema d'ENTREE d'un contrat zod : celui des outils MCP et de la spec OpenAPI. */
 export function toInputJsonSchema(schema: z.ZodType): Record<string, unknown> {
-  const json = z.toJSONSchema(schema, { io: "input" }) as Record<string, unknown>;
+  const json = z.toJSONSchema(schema, {
+    io: "input",
+    // ⛔️ Le catalogue MCP se relit a chaque tour : on n'y met que ce qui guide
+    // le modele. La regex d'une date ISO (~150 jetons par champ) et les bornes
+    // par defaut d'un entier n'apprennent rien que `format` et le type ne
+    // disent deja ; le serveur valide de toute facon avec zod.
+    override: (ctx) => {
+      const js = ctx.jsonSchema as Record<string, unknown>;
+      if (js.format === "date-time") delete js.pattern;
+      if (js.minimum === Number.MIN_SAFE_INTEGER) delete js.minimum;
+      if (js.maximum === Number.MAX_SAFE_INTEGER) delete js.maximum;
+    },
+  }) as Record<string, unknown>;
   delete json.$schema;
   return json;
 }
+
+/** Un instant ISO 8601 avec fuseau, rendu en UTC (`...Z`) : la forme de tous les `...DateISOString`. */
+export const isoDateTime = z.iso
+  .datetime({ offset: true })
+  .transform((d) => new Date(d).toISOString())
+  .describe("ISO 8601 with a time zone, e.g. 2026-11-19T15:00:00+01:00.");
 
 /** Jour calendaire `YYYY-MM-DD`, et un vrai jour (`2026-13-45` est refuse). */
 export const dayString = z
@@ -17,25 +35,6 @@ export const dayString = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
   .refine((d) => !Number.isNaN(Date.parse(`${d}T00:00:00Z`)), "not a real date");
 
-const PARIS_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" });
+// Jours a Paris : logique pure (`Intl`), dans shared/dates.ts.
+export { parisDay, parisToday } from "../shared/dates";
 
-/** Le jour a Paris, `YYYY-MM-DD`, d'un instant ISO (le serveur tourne en UTC). */
-export const parisDay = (iso: string) => PARIS_DAY.format(new Date(iso));
-
-/** Le lundi (`YYYY-MM-DD`) de la semaine de l'instant `iso`, a Paris (logique partagee avec le front). */
-export { parisMonday } from "../shared/formRules";
-
-/** Le jour a Paris, `YYYY-MM-DD` (le serveur tourne en UTC). */
-export const parisToday = () => PARIS_DAY.format(new Date());
-
-/** La fin (23:59:59, heure de Paris, heure d'ete comprise) du jour qui suit l'instant `iso`. */
-export function parisEndOfNextDay(iso: string): string {
-  const next = new Date(`${parisDay(iso)}T12:00:00Z`);
-  next.setUTCDate(next.getUTCDate() + 1);
-  const offset =
-    new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Paris", timeZoneName: "longOffset" })
-      .formatToParts(next)
-      .find((p) => p.type === "timeZoneName")
-      ?.value.replace("GMT", "") || "Z";
-  return new Date(`${next.toISOString().slice(0, 10)}T23:59:59${offset}`).toISOString();
-}

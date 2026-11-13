@@ -4,6 +4,7 @@ import { getFirestore, type Transaction } from "firebase-admin/firestore";
 import { COL } from "../shared/collections";
 import type { AccountAccess, AccountRow } from "../shared/callables";
 import { USER_ROLES, type BatchMembership, type User, type UserRole } from "../shared/types";
+import { FRONTEND_BASE_URL } from "../api/config";
 import { writeUiAudit } from "./audit";
 
 // ----------------------------
@@ -45,6 +46,12 @@ async function assertKeepsStaff(tx: Transaction, actorUid: string, targetUid: st
   }
 }
 
+/**
+ * Jamais connecte : aucun fournisseur (compte invite, cree sans mot de passe ;
+ * l'emulateur lui donne pourtant une date de connexion) ou aucune connexion notee.
+ */
+const neverSignedIn = (u: UserRecord) => u.providerData.length === 0 || !u.metadata.lastSignInTime;
+
 export async function listAccounts(): Promise<AccountRow[]> {
   const authUsers: UserRecord[] = [];
   let pageToken: string | undefined;
@@ -77,7 +84,7 @@ export async function listAccounts(): Promise<AccountRow[]> {
         emailVerified: u.emailVerified,
         providers: u.providerData.map((p) => p.providerId),
         createdDateISOString: new Date(u.metadata.creationTime).toISOString(),
-        lastSignInDateISOString: u.metadata.lastSignInTime ? new Date(u.metadata.lastSignInTime).toISOString() : null,
+        lastSignInDateISOString: neverSignedIn(u) ? null : new Date(u.metadata.lastSignInTime).toISOString(),
         roles: user?.roles ?? [],
         investorAccess: user?.investorAccess ?? null,
         personId: user?.personId ?? null,
@@ -87,12 +94,16 @@ export async function listAccounts(): Promise<AccountRow[]> {
     .sort((a, b) => (a.email ?? a.uid).localeCompare(b.email ?? b.uid));
 }
 
-export async function setAccountAccess(actorUid: string, uid: string, access: AccountAccess): Promise<void> {
-  await getAuth()
+/** Le compte Firebase Auth, ou un refus `not-found`. */
+const getAccount = (uid: string) =>
+  getAuth()
     .getUser(uid)
     .catch(() => {
       throw new HttpsError("not-found", "No such account.");
     });
+
+export async function setAccountAccess(actorUid: string, uid: string, access: AccountAccess): Promise<void> {
+  await getAccount(uid);
   const ref = db().doc(`${COL.users}/${uid}`);
   await db().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -140,4 +151,22 @@ export async function setAccountDisabled(actorUid: string, uid: string, disabled
   // Bloque : les sessions en cours tombent au prochain rafraichissement du jeton.
   if (disabled) await getAuth().revokeRefreshTokens(uid);
   await writeUiAudit(null, actorUid, disabled ? "account.disable" : "account.enable", `${COL.users}/${uid}`, { disabled });
+}
+
+/**
+ * Lien « choisir mon mot de passe » d'un compte qui ne s'est jamais connecte
+ * (invite) : le staff le transmet lui-meme. Refuse pour un compte deja utilise,
+ * sinon le staff pourrait se donner l'acces au compte d'un autre (« Forgot
+ * password » reste a la personne). Le lien n'est jamais journalise.
+ */
+export async function createSetPasswordLink(actorUid: string, uid: string): Promise<string> {
+  const user = await getAccount(uid);
+  if (!user.email) throw new HttpsError("failed-precondition", "This account has no email.");
+  if (user.disabled) throw new HttpsError("failed-precondition", "This account is blocked: allow sign-in first.");
+  if (!neverSignedIn(user)) {
+    throw new HttpsError("failed-precondition", "This account has already signed in: they can use Forgot password on the sign-in page.");
+  }
+  const link = await getAuth().generatePasswordResetLink(user.email, { url: `${FRONTEND_BASE_URL}/signin` });
+  await writeUiAudit(null, actorUid, "account.setPasswordLink", `${COL.users}/${uid}`, { email: user.email });
+  return link;
 }

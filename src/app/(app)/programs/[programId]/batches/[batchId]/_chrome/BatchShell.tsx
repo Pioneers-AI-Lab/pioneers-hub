@@ -22,11 +22,11 @@ const ROLE_LABEL: Record<BatchRole, string | null> = {
 // ----------------------------
 // Mobile : barre d'onglets fixee en bas (a portee de pouce), texte seul.
 // Tablette et ordinateur : la meme liste en onglets sous l'en-tete.
-// Les onglets dependent du role : un fondateur a « To do » et « Me », le staff
-// a « Staff ».
+// Les onglets dependent du role : un fondateur a « To do » et « Me ». Les outils
+// du staff sont tous dans /admin (menu du compte), pas sous un batch.
 export function BatchShell({ children }: { children: ReactNode }) {
   const { program } = useProgram();
-  const { batch, role } = useBatch();
+  const { batch, role, viewerFounderId } = useBatch();
   const pathname = usePathname();
   const base = paths.batch(program.id, batch.id);
 
@@ -37,13 +37,16 @@ export function BatchShell({ children }: { children: ReactNode }) {
     ...(role === "founder"
       ? [
           { label: "To do", href: paths.todo(program.id, batch.id) },
-          { label: "Me", href: paths.me(program.id, batch.id) },
+          // « Me » : sa propre fiche, la meme page que celle des autres fondateurs.
+          { label: "Me", href: viewerFounderId ? paths.founder(program.id, batch.id, viewerFounderId) : paths.me(program.id, batch.id) },
         ]
       : []),
-    ...(role === "staff" ? [{ label: "Staff", href: paths.staff(program.id, batch.id) }] : []),
   ];
-  const isActive = (tab: (typeof tabs)[number]) =>
+  const matches = (tab: (typeof tabs)[number]) =>
     tab.exact ? pathname === tab.href : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+  // L'onglet le plus precis gagne : sa propre fiche (/founders/{moi}) est « Me », pas « Founders ».
+  const activeHref = tabs.filter(matches).sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
+  const isActive = (tab: (typeof tabs)[number]) => tab.href === activeHref;
   const roleLabel = ROLE_LABEL[role];
 
   return (

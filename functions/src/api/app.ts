@@ -1,12 +1,19 @@
 import { randomUUID } from "node:crypto";
 import express, { Router, type Request } from "express";
+import { getFirestore } from "firebase-admin/firestore";
+import { batchCalendar, isBatchCalendarEvent } from "../shared/calendar";
+import { COL } from "../shared/collections";
+import type { Batch, PioneersEvent } from "../shared/types";
 import { mcpRouter } from "../mcp";
 import { oauthRouter } from "../oauth/router";
+import { createEvent } from "../services/eventCreate";
+import { createForm } from "../services/formCreate";
 import { addNote } from "../services/notes";
 import { setFields } from "../services/fields";
 import { runOperation, type Operation } from "../services/operations";
 import { getObject, GetInput, listObjects, ListInput, REST_OBJECTS, whoami } from "../services/read";
 import { requireCaller } from "./caller";
+import { FRONTEND_BASE_URL } from "./config";
 import { openApiDocument } from "./openapi";
 import { errorHandler, notFound, route } from "./errors";
 
@@ -46,6 +53,39 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+// Calendrier d'un batch (shared/calendar.ts) : public, comme les evenements
+// (regle `events` : lecture pour tous). Sans authentification, et le meme pour
+// tous : DEUXIEME EXCEPTION a `no-store`, le CDN le garde 10 minutes (un
+// calendrier abonne relit toutes les quelques heures de toute facon).
+app.get(
+  "/calendar/:file",
+  route(async (req, res) => {
+    const batchId = String(req.params.file).replace(/\.ics$/, "");
+    const db = getFirestore();
+    const [batch, snap] = await Promise.all([
+      db.collection(COL.batches).doc(batchId).get(),
+      db.collection(COL.events).where("batchId", "==", batchId).get(),
+    ]);
+    const data = batch.data() as Batch | undefined;
+    if (!data || data.archivedDateISOString !== null) throw notFound("batch_not_found", `No batch \`${batchId}\`.`);
+    const events = snap.docs
+      .map((d) => ({ ...(d.data() as PioneersEvent), id: d.id }))
+      .filter(isBatchCalendarEvent)
+      .sort((a, b) => a.startDateISOString.localeCompare(b.startDateISOString));
+    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600, stale-while-revalidate=3600");
+    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    res.setHeader("Content-Disposition", `inline; filename="${batchId}.ics"`);
+    res.send(
+      batchCalendar({
+        batchName: data.name,
+        // Meme chemin que `paths.batch` (src/lib/paths.ts), que les fonctions n'importent pas.
+        url: `${FRONTEND_BASE_URL}/programs/${data.programId}/batches/${batchId}`,
+        events,
+      }),
+    );
+  }),
+);
+
 // OAuth AVANT tout ce qui exige un justificatif : on le lit pour en obtenir un.
 app.use(oauthRouter);
 app.use("/mcp", mcpRouter);
@@ -73,6 +113,8 @@ function writeRoute(op: Operation) {
 
 v1.post("/fields", writeRoute(setFields));
 v1.post("/notes", writeRoute(addNote));
+v1.post("/events", writeRoute(createEvent));
+v1.post("/forms", writeRoute(createForm));
 
 v1.get(
   "/me",

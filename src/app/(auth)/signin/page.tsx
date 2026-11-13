@@ -93,7 +93,7 @@ function SignInForm() {
               onChange={(e) => setPassword(e.currentTarget.value)}
             />
             <Group justify="flex-end">
-              <Anchor className="tap-link" component={Link} href={paths.forgotPassword()} size="sm" c="dimmed">
+              <Anchor className="tap-link" component={Link} href={paths.forgotPassword(email.trim() || undefined)} size="sm" c="dimmed">
                 Forgot password?
               </Anchor>
             </Group>
