@@ -50,6 +50,20 @@ export type TemplateContext = {
   sessions?: readonly RetroSession[];
 };
 
+/**
+ * Quand un formulaire d'evenement s'ouvre et jusqu'a quand on peut y repondre a
+ * temps (decision du 14/11) : il s'ouvre pendant l'evenement, par defaut 15
+ * minutes avant sa fin (on le voit a la conclusion, on ne l'oublie pas), et son
+ * echeance tombe 24 h apres son ouverture. Apres l'echeance, il reste ouvert
+ * tant que le staff ne le ferme pas ; une reponse en retard compte comme manquee
+ * dans Engagement.
+ */
+export type FormTiming = {
+  opens: "start" | "before_end";
+  deadline: "before_end" | "day_after_opening" | "none";
+};
+export const DEFAULT_FORM_TIMING: FormTiming = { opens: "before_end", deadline: "day_after_opening" };
+
 export type FormTemplate = {
   label: string;
   kind: FormKind;
@@ -61,6 +75,8 @@ export type FormTemplate = {
   needsEvent: boolean;
   /** Il parle de l'equipe du repondant (Submission, Peer rating) : seulement pour un evenement a equipes de travail. */
   needsWorkTeams?: boolean;
+  /** Son ouverture et son echeance dans un evenement ; `DEFAULT_FORM_TIMING` sinon. */
+  timing?: FormTiming;
   questions: FormQuestion[];
   /** Questions construites depuis l'evenement (Debrief, jury, picks) ; `questions` sinon. */
   build?: (ctx: TemplateContext) => FormQuestion[];
@@ -146,6 +162,8 @@ export const FORM_TEMPLATES = {
     identityCheck: "account",
     needsEvent: true,
     needsWorkTeams: true,
+    // Le travail de l'equipe se rend avant la fin du hackathon : la deadline du bareme.
+    timing: { opens: "start", deadline: "before_end" },
     questions: [],
     build: ({ metrics, submissionFields }) => {
       const fields = submissionFields ?? DEFAULT_SUBMISSION_FIELDS;
@@ -188,6 +206,8 @@ export const FORM_TEMPLATES = {
     description: "Score each team on every criterion. You can come back and correct your scores until the jury is locked.",
     identityCheck: "jury_link",
     needsEvent: true,
+    // Les jures notent pendant l'evenement ; le verrou, c'est la fermeture du formulaire.
+    timing: { opens: "start", deadline: "none" },
     questions: [],
     build: ({ criteria }) => [
       ...criteria.map(criterionQuestion),
@@ -346,6 +366,8 @@ export const FORM_TEMPLATES = {
     description: "Anonymous, 3 minutes. Rate each session of the week, then tell us what to keep and what to change.",
     identityCheck: "anonymous",
     needsEvent: true,
+    // Rempli sur place, pendant la retro.
+    timing: { opens: "start", deadline: "day_after_opening" },
     questions: [],
     build: ({ sessions }) => [
       ...(sessions ?? []).map((s) => q(`session_${s.id}`, { type: "rating", label: s.label })),

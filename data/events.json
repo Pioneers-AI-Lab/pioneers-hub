@@ -612,9 +612,6 @@
         "tieBreaks": []
       },
       "formSettings": {
-        "debrief": {
-          "deadline": "11:15"
-        },
         "peer_rating": {
           "opens": "11:30"
         }
@@ -1057,9 +1054,6 @@
         ]
       },
       "formSettings": {
-        "debrief": {
-          "deadline": "11:15"
-        },
         "peer_rating": {
           "opens": "11:30"
         }

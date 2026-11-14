@@ -789,6 +789,13 @@ export async function submitFormResponse(
     const writes = planned.flatMap((p) => p.writes);
     const unmatched = planned.flatMap((p) => p.unmatched);
 
+    // « J'ai repondu » de chaque fondateur concerne (le repondant, ou toute son equipe pour la
+    // Submission) : la date de la PREMIERE reponse se garde (Engagement), la derniere s'ajoute.
+    const completionFounderIds =
+      respondent?.founderId && !judge ? (ctx.team !== null && isTeamForm(questions) ? ctx.team.memberIds : [respondent.founderId]) : [];
+    const completionRefs = completionFounderIds.map((id) => db().doc(docPaths.formCompletion(formId, id)));
+    const previousCompletions = completionRefs.length ? await tx.getAll(...completionRefs) : [];
+
     // Toutes les lectures sont faites : on ecrit.
     for (const p of planned) p.commit?.(tx);
     const answeredTargets = new Set([...answers.keys()].flatMap((k) => parseAnswerKey(k).targetId ?? []));
@@ -817,24 +824,22 @@ export async function submitFormResponse(
     // Le « To do » du fondateur (qui ne lit pas `formResponses`). Un formulaire
     // anonyme n'a pas de repondant : rien ne le rattache au fondateur. Un jury
     // n'est le « To do » de personne.
-    if (respondent?.founderId && !judge) {
-      // Un formulaire de l'equipe (la Submission) est fait pour toute l'equipe : un
-      // coequipier a repondu pour tous. Un formulaire par fondateur, pour lui seul.
-      const teamForm = ctx.team !== null && isTeamForm(questions);
-      const founderIds = teamForm ? ctx.team!.memberIds : [respondent.founderId];
-      for (const founderId of founderIds) {
-        const completion: FormCompletion = {
-          programId: form.programId,
-          batchId: form.batchId,
-          formId,
-          founderId,
-          formKind: form.kind,
-          responseId: responseRef.id,
-          completedDateISOString: nowISO,
-        };
-        tx.set(db().doc(docPaths.formCompletion(formId, founderId)), completion);
-      }
-    }
+    // Un formulaire de l'equipe (la Submission) est fait pour toute l'equipe : un
+    // coequipier a repondu pour tous. Un formulaire par fondateur, pour lui seul.
+    completionFounderIds.forEach((founderId, i) => {
+      const previous = previousCompletions[i]?.data() as FormCompletion | undefined;
+      const completion: FormCompletion = {
+        programId: form.programId,
+        batchId: form.batchId,
+        formId,
+        founderId,
+        formKind: form.kind,
+        responseId: responseRef.id,
+        completedDateISOString: nowISO,
+        firstCompletedDateISOString: previous ? (previous.firstCompletedDateISOString ?? previous.completedDateISOString) : nowISO,
+      };
+      tx.set(completionRefs[i], completion);
+    });
     writeAudit(tx, formCaller(actorUid), {
       action: "submit_form_response",
       targetPath: responseRef.path,

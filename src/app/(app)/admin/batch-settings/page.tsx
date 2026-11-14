@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { Box, Button, Group, SegmentedControl, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { isSlackChannelId, isSlackTeamId } from "@shared/slackLinks";
+import { isSlackChannelId, isSlackTeamId, normalizeSlackId } from "@shared/slackLinks";
 import type { Batch, BatchStatus, LeaderboardVisibility, WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAction } from "@/hooks/useAction";
@@ -46,8 +46,8 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
   const [milestones, setMilestones] = useState(batch.milestones);
   const [slackTeamId, setSlackTeamId] = useState(batch.settings.slackTeamId ?? "");
   const [slackChannelId, setSlackChannelId] = useState(batch.settings.slackChannelId ?? "");
-  const teamId = slackTeamId.trim().toUpperCase() || null;
-  const channelId = slackChannelId.trim().toUpperCase() || null;
+  const teamId = normalizeSlackId(slackTeamId);
+  const channelId = normalizeSlackId(slackChannelId);
   const teamError = teamId && !isSlackTeamId(teamId) ? "A workspace ID starts with T, like T0123ABCD." : null;
   const channelError = channelId && !isSlackChannelId(channelId) ? "A channel ID starts with C (or G), like C0123ABCD." : null;
   const [isSaving, setIsSaving] = useState(false);

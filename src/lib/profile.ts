@@ -5,6 +5,7 @@ import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from "fi
 import { db, storage } from "@/lib/firebase";
 import type { PreparedPhoto } from "@/lib/photo";
 import { refs } from "@/lib/firestore/refs";
+import { addSlackUserIdWrites } from "@/lib/slackAdmin";
 
 // ----------------------------
 // « Mon profil » : ecriture par le fondateur lui-meme
@@ -21,8 +22,11 @@ export type MyProfilePatch = {
   profile: Pick<FounderProfile, typeof FOUNDER_SELF_EDITABLE.founderProfile>;
 };
 
-/** `canWriteIdentity` : la personne est rattachee a ce compte (sinon WhatsApp et LinkedIn sont refuses). */
-export async function saveMyProfile(founder: WithId<Founder>, patch: MyProfilePatch, canWriteIdentity: boolean) {
+/**
+ * `canWriteIdentity` : la personne est rattachee a ce compte (sinon WhatsApp et LinkedIn sont refuses).
+ * `slackUserId` (staff seulement) : ecrit dans le meme lot ; `undefined` = inchange.
+ */
+export async function saveMyProfile(founder: WithId<Founder>, patch: MyProfilePatch, canWriteIdentity: boolean, slackUserId?: string | null) {
   const now = new Date().toISOString();
   const batch = writeBatch(db);
   if (Object.keys(patch.founder).length > 0) {
@@ -44,6 +48,7 @@ export async function saveMyProfile(founder: WithId<Founder>, patch: MyProfilePa
   if (Object.keys(patch.profile).length > 0) {
     batch.set(refs.founderProfile(founder.id), patch.profile, { merge: true });
   }
+  if (slackUserId !== undefined) addSlackUserIdWrites(batch, founder, slackUserId, now);
   await batch.commit();
 }
 

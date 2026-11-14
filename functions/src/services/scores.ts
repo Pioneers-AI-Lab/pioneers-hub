@@ -136,7 +136,8 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
     const event = eventById.get(m.eventId);
     if (event && isWorkTeamEvent(event)) pushTo(workTeams, `${m.eventId}/${m.teamId}`, m.founderId);
   }
-  const completedAt = new Map(completions.map((c) => [docIds.formCompletion(c.formId, c.founderId), c.completedDateISOString]));
+  // La premiere reponse compte pour « a temps » ; la derniere n'est que l'information.
+  const completedAt = new Map(completions.map((c) => [docIds.formCompletion(c.formId, c.founderId), c.firstCompletedDateISOString ?? c.completedDateISOString]));
   const formsOnTime = new Map(founders.map((f) => [f.id, { onTime: 0, expected: 0 }]));
   for (const form of forms) {
     const deadline = form.deadlineDateISOString;

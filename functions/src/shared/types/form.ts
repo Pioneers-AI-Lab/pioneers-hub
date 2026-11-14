@@ -379,9 +379,11 @@ export type FormCompletion = BatchScoped & {
   formId: string;
   founderId: string;
   formKind: FormKind;
-  /** Derniere reponse envoyee (une page rouverte et renvoyee la remplace). */
+  /** Derniere reponse envoyee (une page rouverte et renvoyee la remplace) : l'information. */
   responseId: string;
   completedDateISOString: DateISOString;
+  /** Premiere reponse : c'est elle qui compte pour « rempli a temps » (Engagement, decision du 14/11). Absente des plus anciennes. */
+  firstCompletedDateISOString?: DateISOString;
 };
 
 // ---- fieldSuggestions/{suggestionId} -----------------------------------------

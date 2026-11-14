@@ -552,6 +552,14 @@ console.log("hackathon submission and peer rating (forms)");
     const peer = await publicForm(ada.functions, PEER);
     if (form.prefill.metric_callsMade !== 42 || peer.prefill["peerRating@chloe-demo"] !== 4 || !form.canResubmit) throw new Error(JSON.stringify(form.prefill));
   });
+  await expectOk("a new answer keeps the date of the first one (Engagement)", async () => {
+    const before = (await adb.doc(`formCompletions/${FORM}_ada-example`).get()).data();
+    await submitForm(ada.functions, FORM, { ...results, notes: "Corrected." });
+    const after = (await adb.doc(`formCompletions/${FORM}_ada-example`).get()).data();
+    if (!before?.firstCompletedDateISOString || after?.firstCompletedDateISOString !== before.firstCompletedDateISOString || after.completedDateISOString <= before.completedDateISOString) {
+      throw new Error(JSON.stringify({ before, after }));
+    }
+  });
   await expectCallableError("founder rates someone outside her team", "invalid-argument", () =>
     submitForm(ada.functions, PEER, { "peerRating@chloe-demo": 4, "peerRating@ben-sample": 5 }),
   );

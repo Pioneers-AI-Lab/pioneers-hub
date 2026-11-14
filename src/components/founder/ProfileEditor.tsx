@@ -17,8 +17,10 @@ import {
   Textarea,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { isSlackUserId, normalizeSlackId } from "@shared/slackLinks";
 import type { ExistingCoFounders, FounderDirectory, ListKey } from "@shared/types";
 import { useAuth } from "@/context/AuthContext";
+import { useBatch } from "@/context/BatchContext";
 import { useFounder } from "@/context/FounderContext";
 import { useLists } from "@/context/ListsContext";
 import { saveMyProfile, type MyProfilePatch } from "@/lib/profile";
@@ -34,7 +36,8 @@ import { Section } from "@/components/ui/Section";
 // Seuls les champs de FOUNDER_SELF_EDITABLE (shared/access.ts) sont proposes,
 // et seuls les champs MODIFIES sont envoyes : rien n'ecrase une valeur que le
 // fondateur n'a pas touchee. Le staff ne touche pas au consentement a la page
-// publique : c'est le choix du fondateur.
+// publique : c'est le choix du fondateur. Le staff seul voit et saisit l'id
+// Slack (section « Staff only », hors completude du profil).
 
 type EditorProps = {
   /** Ou revenir (et aller apres l'enregistrement). */
@@ -59,6 +62,8 @@ type Draft = {
   founder: Required<MyProfilePatch["founder"]>;
   directory: Required<MyProfilePatch["directory"]>;
   profile: Required<MyProfilePatch["profile"]>;
+  /** Staff seulement : `people.slackUserId` et sa copie (lib/slackAdmin.ts). */
+  slackUserId: string | null;
 };
 
 function changed<T extends Record<string, unknown>>(initial: T, current: T): Partial<T> {
@@ -155,6 +160,7 @@ export function ProfileEditor({ back }: EditorProps) {
             industriesToExplore: directory.industriesToExplore ?? [],
           },
           profile: { housingSupport: profile?.housingSupport ?? null, tShirtSize: profile?.tShirtSize ?? null },
+          slackUserId: directory.slackUserId ?? null,
         };
 
   if (!initial) {
@@ -173,6 +179,8 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
   const router = useRouter();
   const { user } = useAuth();
   const { founder, isSelf } = useFounder();
+  const { role } = useBatch();
+  const isStaff = role === "staff";
   const degrees = useLists().values("degrees");
   // Le staff ecrit `people` (regles) ; le fondateur, seulement s'il est rattache a sa personne.
   const canWriteIdentity = !isSelf || user?.personId === founder.personId;
@@ -191,12 +199,14 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
     directory: changed(initial.directory as Record<string, unknown>, dir as Record<string, unknown>) as Partial<FounderDirectory>,
     profile: changed(initial.profile, draft.profile),
   };
-  const dirty = Object.keys(patch.founder).length + Object.keys(patch.directory).length + Object.keys(patch.profile).length > 0;
+  const slackChanged = isStaff && draft.slackUserId !== initial.slackUserId;
+  const slackInvalid = slackChanged && draft.slackUserId !== null && !isSlackUserId(draft.slackUserId);
+  const dirty = slackChanged || Object.keys(patch.founder).length + Object.keys(patch.directory).length + Object.keys(patch.profile).length > 0;
 
   const save = async () => {
     setIsSaving(true);
     try {
-      await saveMyProfile(founder, patch, canWriteIdentity);
+      await saveMyProfile(founder, patch, canWriteIdentity, slackChanged ? draft.slackUserId : undefined);
       notifications.show({ message: "Profile saved" });
       router.push(back.href);
     } catch (err) {
@@ -294,6 +304,19 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
         </Stack>
       </Section>
 
+      {isStaff && (
+        <Section title="Staff only" hint="Only the Pioneers team sees this. Not part of profile completeness.">
+          <TextInput
+            label="Slack member ID"
+            description="In Slack: their profile, then Copy member ID."
+            placeholder="U0123ABCD"
+            value={draft.slackUserId ?? ""}
+            onChange={(e) => setDraft((d) => ({ ...d, slackUserId: normalizeSlackId(e.currentTarget.value) }))}
+            error={slackInvalid ? "Starts with U (or W), like U0123ABCD." : undefined}
+          />
+        </Section>
+      )}
+
       {isSelf && (
         <Section title="Visibility">
           <Switch
@@ -307,7 +330,7 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
       )}
 
       <Box className="savebar">
-        <Button size="md" fullWidth disabled={!dirty} loading={isSaving} onClick={save}>
+        <Button size="md" fullWidth disabled={!dirty || slackInvalid} loading={isSaving} onClick={save}>
           {dirty ? "Save changes" : "No changes"}
         </Button>
       </Box>

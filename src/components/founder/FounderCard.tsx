@@ -17,8 +17,8 @@ import { PageLoader } from "@/components/ui/PageLoader";
 import { LinkRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 import { Tags } from "@/components/ui/Tags";
+import { UpcomingEvents } from "@/components/event/UpcomingEvents";
 import { QuickContacts } from "./QuickContacts";
-import { SlackMemberIdField } from "./SlackMemberIdField";
 import { FounderAttendance, FounderNetwork, FounderPerformance, FounderTeams, FounderWeeks } from "./FounderInsights";
 
 const STATUS_LABEL: Record<FounderStatus, string> = {
@@ -33,12 +33,12 @@ const list = (values: readonly string[] | null | undefined) => (values && values
 
 const yesNo = (v: boolean | null | undefined) => (v === true ? "Yes" : v === false ? "No" : null);
 
-
 /**
  * La fiche d'un fondateur, section par section selon ce que le role peut lire
  * (FounderContext n'a ouvert que les documents autorises). Sert a la fiche et
  * a « Me » (sa propre fiche). `selfSections` (To do, Coming up) ne s'affiche que
  * sur SA fiche, sous les Providers qu'il lit (SelfProviders, monte par le layout).
+ * Sur la fiche d'un autre, le staff voit ses prochains evenements (prives compris).
  */
 export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
   const { program } = useProgram();
@@ -99,7 +99,7 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
         </Text>
       )}
 
-      {isSelf && selfSections}
+      {isSelf ? selfSections : role === "staff" && <UpcomingEvents limit={5} founder={founder} />}
 
       {startup && (
         <Section title="Startup">
@@ -156,7 +156,6 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
               </Field>
               <Field label="Based in">{[directory.country, directory.nationality && `${directory.nationality} national`].filter(Boolean).join(" · ")}</Field>
             </FieldGrid>
-            {role === "staff" && <SlackMemberIdField key={directory.slackUserId ?? "none"} founder={founder} current={directory.slackUserId ?? null} />}
           </Section>
 
           <Section title="Background">

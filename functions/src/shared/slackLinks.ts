@@ -10,6 +10,8 @@
 // Windows, iPhone, Android) ; sans application, un navigateur ne fait rien.
 // Aucun lien documente n'ouvre un message a plusieurs ni ne pre-remplit un texte.
 
+/** Un id saisi a la main : sans espaces, en majuscules ; vide = `null`. */
+export const normalizeSlackId = (value: string) => value.trim().toUpperCase() || null;
 /** Espace de travail : `T` + majuscules et chiffres. */
 export const isSlackTeamId = (value: string) => /^T[A-Z0-9]{6,}$/.test(value);
 /** Membre : `U…`, ou `W…` (Enterprise Grid). */

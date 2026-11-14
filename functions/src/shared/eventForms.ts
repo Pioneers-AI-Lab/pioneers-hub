@@ -2,7 +2,15 @@ import { docPaths } from "./collections";
 import { isUpcomingEvent, isWorkTeamEvent } from "./events";
 import { firstPublication, newForm, type FormData } from "./forms";
 import { eventTemplateOf } from "./presets/eventTemplates";
-import { FORM_TEMPLATES, templateQuestions, type FormTemplate, type FormTemplateKey, type RetroSession, type SubmissionFieldKey } from "./presets/formTemplates";
+import {
+  DEFAULT_FORM_TIMING,
+  FORM_TEMPLATES,
+  templateQuestions,
+  type FormTemplate,
+  type FormTemplateKey,
+  type RetroSession,
+  type SubmissionFieldKey,
+} from "./presets/formTemplates";
 import type { Criterion, EventMetric, FormVersion, PioneersEvent } from "./types";
 
 // ----------------------------
@@ -58,6 +66,27 @@ type EventForPlan = Pick<
   "programId" | "batchId" | "kind" | "templateKey" | "startDateISOString" | "endDateISOString" | "status" | "matching" | "teamSize"
 >;
 
+const MINUTE = 60_000;
+const shift = (iso: string, minutes: number) => new Date(Date.parse(iso) + minutes * MINUTE).toISOString();
+
+/** L'ouverture et l'echeance d'un formulaire dans son evenement (`FormTiming`), sauf dates donnees. */
+function formDatesOf(templateKey: FormTemplateKey, event: EventForPlan, given: EventFormDates) {
+  const timing = (FORM_TEMPLATES[templateKey] as FormTemplate).timing ?? DEFAULT_FORM_TIMING;
+  const end = event.endDateISOString ?? event.startDateISOString;
+  // 15 minutes avant la fin, jamais avant le debut (un evenement tres court).
+  const beforeEnd = shift(end, -15) < event.startDateISOString ? event.startDateISOString : shift(end, -15);
+  const opens = given.opensDateISOString ?? (timing.opens === "start" ? event.startDateISOString : beforeEnd);
+  const deadline =
+    given.deadlineDateISOString !== undefined
+      ? given.deadlineDateISOString
+      : timing.deadline === "before_end"
+        ? beforeEnd
+        : timing.deadline === "day_after_opening"
+          ? shift(opens, 24 * 60)
+          : null;
+  return { opens, deadline };
+}
+
 export function eventFormsPlan(eventId: string, event: EventForPlan, options: EventFormsOptions, nowISO: string): EventFormPlan[] {
   const legacy = options.legacy ?? {};
   const isPast = !isUpcomingEvent(event, nowISO);
@@ -78,13 +107,11 @@ export function eventFormsPlan(eventId: string, event: EventForPlan, options: Ev
   // Comme l'evenement : publie (ouvert a son debut), en brouillon, ou ferme s'il est passe.
   const eventStatus = isPast ? "closed" : event.status === "draft" ? "draft" : "open";
   return [...wanted].map((templateKey) => {
-    const dates = options.formDates?.[templateKey] ?? {};
-    const status = dates.draft && eventStatus === "open" ? "draft" : eventStatus;
-    let extra: Parameters<typeof newForm>[1] = {
-      // Publie : ouvert a son heure (le debut de l'evenement par defaut). Brouillon : le staff l'ouvrira.
-      opensDateISOString: status === "open" ? (dates.opensDateISOString ?? event.startDateISOString) : (dates.opensDateISOString ?? null),
-      deadlineDateISOString: dates.deadlineDateISOString ?? null,
-    };
+    const given = options.formDates?.[templateKey] ?? {};
+    const status = given.draft && eventStatus === "open" ? "draft" : eventStatus;
+    // Publie ou brouillon, il porte ses dates : publie plus tard, il s'ouvre a son heure (ou tout de suite si elle est passee).
+    const { opens, deadline } = formDatesOf(templateKey, event, given);
+    let extra: Parameters<typeof newForm>[1] = { opensDateISOString: opens, deadlineDateISOString: deadline };
     if (templateKey === "picks" && legacy.picks) {
       // La question, le nombre de choix et la cloture de l'ancienne demande ; ouverte des maintenant.
       const { question, max, closesDateISOString } = legacy.picks;
