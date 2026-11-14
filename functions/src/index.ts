@@ -163,6 +163,13 @@ export const setEventRanking = onCallTyped("setEventRanking", async (request) =>
   return { ok: true as const };
 });
 
+export const setEventScoring = onCallTyped("setEventScoring", async (request) => {
+  const actorUid = await assertStaff(request.auth?.uid);
+  const { batchId, published } = await leaderboards.setEventScoring(actorUid, request.data?.eventId, request.data?.scoring);
+  if (published) await scores.recomputeBatchScores(batchId).catch((e) => console.error("recomputeBatchScores after scoring", e));
+  return { ok: true as const };
+});
+
 export const publishEventRanking = onCallTyped("publishEventRanking", async (request) => {
   const actorUid = await assertStaff(request.auth?.uid);
   const { batchId } = await leaderboards.publishEventRanking(actorUid, request.data?.eventId, request.data?.publish);

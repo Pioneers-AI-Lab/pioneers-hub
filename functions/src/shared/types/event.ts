@@ -216,6 +216,9 @@ export type ScoringItem = {
   tieBreakOnly?: boolean;
 };
 
+/** Un element tel que le staff le regle : sa cle est celle de sa variable (`setEventScoring`). */
+export type ScoringItemInput = Omit<ScoringItem, "key">;
+
 /** Le bareme d'un evenement : ses elements, puis les cles d'element qui departagent, dans l'ordre. */
 export type EventScoring = { items: ScoringItem[]; tieBreaks: string[] };
 

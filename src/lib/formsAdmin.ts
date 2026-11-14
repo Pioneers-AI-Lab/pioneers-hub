@@ -1,7 +1,7 @@
 import { writeBatch } from "firebase/firestore";
 import { deriveAttachments, formProblems, versionedSnapshot } from "@shared/formRules";
 import { formVersion, newForm, type NewFormInput } from "@shared/forms";
-import type { Form, WithId } from "@shared/types";
+import type { Form, FormQuestion, WithId } from "@shared/types";
 import { db } from "@/lib/firebase";
 import { refs } from "@/lib/firestore/refs";
 import { createDoc, patchDoc } from "@/lib/firestore/write";
@@ -29,6 +29,24 @@ export type FormDraft = Pick<
   | "opensDateISOString"
   | "deadlineDateISOString"
 > & { attachments?: Form["attachments"] };
+
+/** Les reglages modifiables d'un formulaire, tels qu'il est enregistre. */
+export const draftOf = (form: Form): FormDraft => ({
+  kind: form.kind,
+  title: form.title,
+  description: form.description,
+  questions: form.questions,
+  approval: form.approval,
+  identityCheck: form.identityCheck,
+  eventId: form.eventId,
+  status: form.status,
+  opensDateISOString: form.opensDateISOString,
+  deadlineDateISOString: form.deadlineDateISOString,
+});
+
+/** Ajoute une question a un formulaire (nouvelle version s'il est publie). */
+export const appendQuestion = (form: WithId<Form>, question: FormQuestion) =>
+  saveForm(form, { ...draftOf(form), questions: [...form.questions, question] }, { publish: false });
 
 export async function createForm(input: NewFormInput): Promise<string> {
   return createDoc<Form>(refs.forms(), newForm(input));

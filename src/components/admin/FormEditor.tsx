@@ -34,12 +34,12 @@ import {
 import { formState } from "@shared/forms";
 import { EVENT_TEMPLATES } from "@shared/presets/eventTemplates";
 import { EVENT_METRIC_RENAMES, STANDARD_METRICS, standardEventMetricKey } from "@shared/presets/standardMetrics";
-import { camelKey } from "@shared/text";
+import { keyFromLabel } from "@shared/text";
 import { needsAccount, scopeOf, type Form, type FormApproval, type FormFieldType, type FormIdentityCheck, type FormKind, type FormQuestion, type PickerEntity, type QuestionScope, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminForm } from "@/context/AdminFormContext";
 import { formatDateTime, fromLocalInput, toLocalInput } from "@/lib/format";
-import { archiveForm, duplicateForm, saveForm, type FormDraft } from "@/lib/formsAdmin";
+import { archiveForm, draftOf, duplicateForm, saveForm, type FormDraft } from "@/lib/formsAdmin";
 import { paths } from "@/lib/paths";
 import {
   APPROVAL_OPTIONS,
@@ -95,12 +95,6 @@ const FAMILY_CHOICES: Record<FieldFamily, { group: string; noun: string }> = {
 /** Valeur de la liste pour « nouvelle cle » d'une famille. */
 const NEW_KEY = (family: FieldFamily) => `${family}.__new__`;
 
-/** Une cle de famille tiree d'un libelle : `Calls made` -> `callsMade` (une lettre d'abord). */
-const keyFromLabel = (label: string) => {
-  const key = camelKey(label, new Set());
-  return /^[a-z]/.test(key) ? key : `m${key}`;
-};
-
 const PICKER_ENTITIES: { value: PickerEntity; label: string }[] = [
   { value: "founder", label: "Founder" },
   { value: "startup", label: "Startup" },
@@ -110,19 +104,6 @@ const PICKER_ENTITIES: { value: PickerEntity; label: string }[] = [
 ];
 
 const newQuestionId = () => `q_${Math.random().toString(36).slice(2, 10)}`;
-
-const draftOf = (form: Form): FormDraft => ({
-  kind: form.kind,
-  title: form.title,
-  description: form.description,
-  questions: form.questions,
-  approval: form.approval,
-  identityCheck: form.identityCheck,
-  eventId: form.eventId,
-  status: form.status,
-  opensDateISOString: form.opensDateISOString,
-  deadlineDateISOString: form.deadlineDateISOString,
-});
 
 const blankQuestion = (): FormQuestion => ({
   id: newQuestionId(),

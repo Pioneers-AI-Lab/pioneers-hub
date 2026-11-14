@@ -636,17 +636,21 @@ console.log("scoring: points, late submission, proof check, publication, batch s
   const EVENT = "demo-hackathon-1";
   const board = async () => (await adb.doc(`leaderboards/${EVENT}`).get()).data();
   const teamA = async () => (await board())?.rows.find((r) => r.targetId === "team-a");
-  // 40 points par rendez-vous, 1 point par appel.
-  await adb.doc(`events/${EVENT}`).update({
-    scoring: {
-      items: [
-        { key: "meetingsBooked", label: "Meetings booked", mode: "per_unit", sourceKey: "meetingsBooked", pointsPerUnit: 40 },
-        { key: "callsMade", label: "Calls made", mode: "per_unit", sourceKey: "callsMade", pointsPerUnit: 1 },
-      ],
-      tieBreaks: [],
-    },
-  });
   const staff = await clientAs("staff-1");
+  const setScoring = (fns, items) => httpsCallable(fns, "setEventScoring")({ eventId: EVENT, scoring: { items } });
+  // 40 points par rendez-vous, 1 point par appel : deux metriques de la Submission.
+  const items = [
+    { label: "Meetings booked", mode: "per_unit", sourceKey: "meetingsBooked", pointsPerUnit: 40 },
+    { label: "Calls made", mode: "per_unit", sourceKey: "callsMade", pointsPerUnit: 1 },
+  ];
+  await expectCallableError("a scoring item needs a variable of the event's forms", "invalid-argument", () =>
+    setScoring(staff.functions, [{ label: "Revenue", mode: "per_unit", sourceKey: "amountPaid", pointsPerUnit: 1 }]),
+  );
+  await expectOk("staff sets the scoring from the event page", async () => {
+    await setScoring(staff.functions, items);
+    const ev = (await adb.doc(`events/${EVENT}`).get()).data();
+    if (ev?.scoring?.items.map((i) => i.key).join() !== "meetingsBooked,callsMade" || ev.rankingMetricKey !== null) throw new Error(JSON.stringify(ev?.scoring));
+  });
   const publish = (fns, on) => httpsCallable(fns, "publishEventRanking")({ eventId: EVENT, publish: on });
   await expectOk("staff publishes the ranking: a late submission scores 0", async () => {
     await publish(staff.functions, true);
@@ -680,6 +684,9 @@ console.log("scoring: points, late submission, proof check, publication, batch s
   await deleteApp(staff.app);
   const ada = await clientAs("ada-1");
   await expectCallableError("founder publishes a ranking", "permission-denied", () => publish(ada.functions, false));
+  await expectCallableError("founder changes the scoring", "permission-denied", () =>
+    httpsCallable(ada.functions, "setEventScoring")({ eventId: EVENT, scoring: { items: [] } }),
+  );
   await expectCallableError("founder recomputes the scores", "permission-denied", () =>
     httpsCallable(ada.functions, "recomputeBatchScores")({ batchId: "fall-2026" }),
   );

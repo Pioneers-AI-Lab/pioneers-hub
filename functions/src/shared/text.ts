@@ -22,6 +22,12 @@ export function camelKey(label: string, taken: Set<string>): string {
   return key;
 }
 
+/** Une cle de famille (`submission.metrics.<cle>`, `evaluation.scores.<cle>`) tiree d'un libelle : `Calls made` -> `callsMade`, une lettre d'abord. */
+export function keyFromLabel(label: string, taken: Set<string> = new Set()): string {
+  const key = camelKey(label, taken);
+  return /^[a-z]/.test(key) ? key : `m${key}`;
+}
+
 /**
  * Une adresse web complete (`https://` ajoute si besoin), ou `null` si ce
  * n'en est pas une : « linkedin.com/in/ada » se tape sans le protocole.

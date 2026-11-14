@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, CopyButton, Group, SegmentedControl, Select, Stack, Text } from "@mantine/core";
+import { Button, CopyButton, Group, Stack, Text } from "@mantine/core";
 import { FORM_TEMPLATES, type FormTemplate, type FormTemplateKey } from "@shared/presets/formTemplates";
 import { isWorkTeamEvent } from "@shared/events";
 import { formState } from "@shared/forms";
-import { activeQuestions, isLateUnwaived, isPickable, scoringOf, type Evaluation, type EventScoring, type Form, type ScoringItem, type WithId } from "@shared/types";
+import { activeQuestions, isLateUnwaived, isPickable, type Evaluation, type Form, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminEvent } from "@/context/AdminEventContext";
 import { useAction } from "@/hooks/useAction";
@@ -18,6 +18,7 @@ import { createForm, setFormStatus } from "@/lib/formsAdmin";
 import { paths } from "@/lib/paths";
 import { mutualPairs } from "@/lib/picks";
 import { FORM_KIND_LABELS, FORM_STATE_LABELS } from "@/components/admin/formLabels";
+import { LeaderboardSection } from "@/components/admin/ScoringEditor";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, LinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
@@ -34,8 +35,6 @@ import { Empty, Section } from "@/components/ui/Section";
 // partage, que le staff recopie ou remplace, et se verrouille en fermant son
 // formulaire.
 
-const JURY = "__jury__";
-
 /** Les modeles de formulaire proposes pour un evenement ; la Submission et le Peer rating, seulement avec des equipes de travail. */
 const EVENT_FORM_TEMPLATES: FormTemplateKey[] = [
   "debrief",
@@ -50,11 +49,11 @@ const EVENT_FORM_TEMPLATES: FormTemplateKey[] = [
 ];
 
 export function EventResultsAdmin() {
-  const { event, matching, metrics, criteria, juryForm } = useAdminEvent();
+  const { matching, metrics, juryForm } = useAdminEvent();
   return (
     <>
       <FormsSection />
-      {scoringOf(event) ? <ScoringSection scoring={scoringOf(event)!} /> : (metrics.length > 0 || criteria.length > 0) && <RankingSection />}
+      <LeaderboardSection />
       {matching && metrics.length > 0 && <ResultsSection />}
       {juryForm && <JurySection juryForm={juryForm} />}
       <PicksSection />
@@ -104,71 +103,6 @@ function FormsSection() {
           </Button>
         ))}
       </Group>
-    </Section>
-  );
-}
-
-/** Le pourquoi des points d'un element, en clair. */
-function scoringItemRule(item: ScoringItem): string {
-  if (item.mode === "per_unit") return `${item.pointsPerUnit ?? 1} pt per unit`;
-  if (item.mode === "proportional") return `best team gets ${item.maxPoints ?? 0}, others in proportion`;
-  return item.maxPoints ? `jury, out of ${item.maxPoints}` : "jury";
-}
-
-/**
- * Un evenement a bareme (SPECS §4.2) : ses elements, puis la publication du
- * classement, une fois les preuves verifiees. Publier relance aussi le calcul
- * des scores du batch.
- */
-function ScoringSection({ scoring }: { scoring: EventScoring }) {
-  const { event } = useAdminEvent();
-  const { isBusy, run } = useAction();
-  const isPublished = event.leaderboardRevealDateISOString !== null;
-  const publish = (on: boolean) =>
-    void run(() => call("publishEventRanking")({ eventId: event.id, publish: on }), on ? "Ranking published" : "Ranking unpublished");
-
-  return (
-    <Section
-      title="Leaderboard"
-      hint={
-        isPublished
-          ? `Published ${formatDateTime(event.leaderboardRevealDateISOString!)}: founders see the ranking.`
-          : "Founders see the ranking once you publish it, after checking the proofs. A late submission scores 0."
-      }
-    >
-      <RowList>
-        {scoring.items.map((item) => (
-          <Row key={item.key} title={item.label} subtitle={item.tieBreakOnly ? `Tie-break · ${scoringItemRule(item)}` : scoringItemRule(item)} />
-        ))}
-      </RowList>
-      <Group mt="sm">
-        <Button size="md" loading={isBusy} variant={isPublished ? "default" : "filled"} onClick={() => publish(!isPublished)}>
-          {isPublished ? "Unpublish ranking" : "Publish ranking"}
-        </Button>
-      </Group>
-    </Section>
-  );
-}
-
-/** Ce qui classe le leaderboard : les notes du jury, ou une metrique de la Submission. */
-function RankingSection() {
-  const { event, metrics } = useAdminEvent();
-  const { isBusy, run } = useAction();
-  const value = event.rankingMetricKey ?? JURY;
-
-  const change = (next: string | null) => {
-    if (!next || next === value) return;
-    void run(() => call("setEventRanking")({ eventId: event.id, metricKey: next === JURY ? null : next }), "Leaderboard updated");
-  };
-
-  const options = [{ value: JURY, label: "Jury scores" }, ...metrics.map((m) => ({ value: m.key, label: m.label }))];
-  return (
-    <Section title="Leaderboard" hint="What ranks the teams. A number is a metric question of the submission, entered by each team.">
-      {options.length <= 3 ? (
-        <SegmentedControl fullWidth maw={480} data={options} value={value} onChange={change} disabled={isBusy} />
-      ) : (
-        <Select maw={480} data={options} value={value} onChange={change} disabled={isBusy} allowDeselect={false} />
-      )}
     </Section>
   );
 }

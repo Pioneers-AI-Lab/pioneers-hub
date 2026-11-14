@@ -14,9 +14,11 @@ import {
   type LeaderboardRow,
   type Submission,
 } from "../shared/types";
-import { compareTeamPoints, normalizeToBest, scoreTeams } from "../shared/scoringRules";
+import { z } from "zod";
+import { FAMILY_KEY } from "../shared/fieldRegistry";
+import { compareTeamPoints, normalizeToBest, scoreTeams, scoringFrom, scoringProblems } from "../shared/scoringRules";
 import { writeUiAudit } from "./audit";
-import { cleanId } from "./clean";
+import { cleanId, invalidArgument } from "./clean";
 import { loadEvent, scoredTargets } from "./events";
 
 // ----------------------------
@@ -185,6 +187,46 @@ export async function publishEventRanking(actorUid: string, eventIdRaw: unknown,
   });
   await recomputeLeaderboard(eventId);
   return { batchId };
+}
+
+const ScoringItemSchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  mode: z.enum(["per_unit", "proportional", "criterion"]),
+  sourceKey: z.string().regex(FAMILY_KEY),
+  pointsPerUnit: z.number().finite().min(0).max(1_000_000).nullish(),
+  maxPoints: z.number().finite().min(0).max(1_000_000).nullish(),
+  tieBreakOnly: z.boolean().optional(),
+});
+const ScoringSchema = z.object({ items: z.array(ScoringItemSchema).max(20) });
+
+/**
+ * Staff : le bareme d'un evenement (Admin > Events > Leaderboard). Chaque
+ * element vise une variable des formulaires de l'evenement ; les departages
+ * sont ses elements « tie-break only », dans l'ordre. Un bareme vide le retire :
+ * le classement revient aux notes du jury (ou a la metrique choisie). Journalise,
+ * puis recalcul du classement ; l'appelant recalcule les scores s'il est publie.
+ */
+export async function setEventScoring(actorUid: string, eventIdRaw: unknown, scoringRaw: unknown): Promise<{ batchId: string; published: boolean }> {
+  const eventId = cleanId(eventIdRaw, "eventId");
+  const parsed = ScoringSchema.safeParse(scoringRaw ?? { items: [] });
+  if (!parsed.success) throw invalidArgument("scoring", `${parsed.error.issues[0]?.message ?? "invalid"}.`);
+  const scoring = scoringFrom(parsed.data.items);
+  const result = await db().runTransaction(async (tx) => {
+    const [event, forms] = await Promise.all([loadEvent(tx, eventId), formsOf(tx, eventId)]);
+    if (scoring) {
+      const problems = scoringProblems(scoring, eventMetrics(forms), juryCriteria(forms));
+      if (problems.length) throw new HttpsError("invalid-argument", problems[0]);
+    }
+    const path = docPaths.event(eventId);
+    // Sans bareme, le classement est toujours public : la publication repart de zero.
+    const patch = scoring ? { scoring, rankingMetricKey: null } : { scoring: null, leaderboardRevealDateISOString: null };
+    tx.update(db().doc(path), { ...patch, updatedDateISOString: new Date().toISOString() });
+    writeUiAudit(tx, actorUid, "event.setScoring", path, { before: event.scoring ?? null, after: scoring });
+    // Un classement publie compte dans les scores du batch : avant comme apres, ils suivent.
+    return { batchId: event.batchId, published: event.leaderboardRevealDateISOString !== null };
+  });
+  await recomputeLeaderboard(eventId);
+  return result;
 }
 
 /** Staff : ce qui classe l'evenement (notes du jury, ou une metrique de sa Submission), puis recalcul. */

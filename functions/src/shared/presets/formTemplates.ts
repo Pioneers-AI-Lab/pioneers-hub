@@ -92,7 +92,7 @@ const checkinQuestion = (key: CheckinMetricKey | CheckinGoalKey): FormQuestion =
 };
 
 /** Un critere du jury : une note pour chaque equipe, dans `evaluation.scores.<cle>`, avec son poids. */
-const criterionQuestion = (c: Criterion): FormQuestion =>
+export const criterionQuestion = (c: Criterion): FormQuestion =>
   q(`criterion_${c.key}`, {
     type: "rating",
     label: c.label,

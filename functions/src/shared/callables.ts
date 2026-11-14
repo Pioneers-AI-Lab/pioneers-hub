@@ -16,6 +16,7 @@ import type {
   InvestorAccess,
   PickerEntity,
   QuestionScope,
+  ScoringItemInput,
   UserRole,
 } from "./types";
 
@@ -225,6 +226,15 @@ export type Callables = {
    */
   publishEventRanking: {
     req: { eventId: string; publish: boolean };
+    res: { ok: true };
+  };
+  /**
+   * Staff : le bareme d'un evenement (elements et departages), verifie contre
+   * les variables de ses formulaires ; `items` vide le retire. Journalise, puis
+   * recalcul du classement (et des scores du batch s'il est publie).
+   */
+  setEventScoring: {
+    req: { eventId: string; scoring: { items: ScoringItemInput[] } };
     res: { ok: true };
   };
   /** Staff : recalcule les scores du batch (SPECS §5.5), comme chaque nuit. */
