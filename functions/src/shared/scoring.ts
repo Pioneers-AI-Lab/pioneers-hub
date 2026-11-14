@@ -18,7 +18,7 @@ import {
 // Les sous-scores et leurs signaux sont ceux du dashboard Spring 2026
 // (InvestorDashboard `lib/scoring.ts`, `lib/startup-scoring.ts`, seuils
 // identiques) ; seules les sources changent (decision du 13/11) :
-//   Engagement   presence, formulaires remplis a temps, completude du profil
+//   Engagement   presence 50 %, formulaires remplis a temps 30 %, completude du profil 20 % (decision du 14/11)
 //   Execution    score normalise de son equipe a chaque hackathon (meilleure = 10)
 //   Likability   interet recu (picks, interet et « je travaille avec »),
 //                moyenne des peer ratings recus, « teamed up »
@@ -94,13 +94,13 @@ export function computeFounderScore(i: FounderScoreInputs): ComputedScore<Founde
   const engagement: ScoreSignal[] = [];
   if (i.attendance.total > 0) {
     const rate = i.attendance.attended / i.attendance.total;
-    engagement.push(sig("Attendance rate", `${pct(rate)} (${i.attendance.attended}/${i.attendance.total})`, rate * 10));
+    engagement.push(sig("Attendance rate", `${pct(rate)} (${i.attendance.attended}/${i.attendance.total})`, rate * 10, 0.5));
   }
   if (i.formsOnTime.expected > 0) {
     const rate = i.formsOnTime.onTime / i.formsOnTime.expected;
-    engagement.push(sig("Forms on time", `${i.formsOnTime.onTime}/${i.formsOnTime.expected}`, rate * 10));
+    engagement.push(sig("Forms on time", `${i.formsOnTime.onTime}/${i.formsOnTime.expected}`, rate * 10, 0.3));
   }
-  engagement.push(sig("Profile completeness", pct(i.profileCompleteness), i.profileCompleteness * 10));
+  engagement.push(sig("Profile completeness", pct(i.profileCompleteness), i.profileCompleteness * 10, 0.2));
 
   const execution = i.hackathonScores.map((s, n) => sig(`Hackathon ${n + 1} (team, best = 100)`, `${Math.round(s)}/100`, s / 10));
 
