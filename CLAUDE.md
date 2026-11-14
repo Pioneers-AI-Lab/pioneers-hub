@@ -18,6 +18,8 @@ dictionnaire des donnees annexe A, champs Airtable SP26 annexe B).
 npm run dev           # app sur le projet REEL pioneers-3627c (.env.local)
 npm run emulators     # Auth 9199, Firestore 8180, Functions 5101, UI 4100 (projet demo-pioneers-hub)
 npm run seed          # donnees fictives dans les emulateurs (dans un 2e terminal)
+npm run emulators:local   # emulateurs qui gardent leurs donnees (.emulator-data/, ignore par git : donnees personnelles)
+npm run pull:prod     # COPIE la prod (lecture seule) dans les emulateurs lances, qu'il vide : memes donnees, memes comptes et uid ; puis dev:emu (« local db » en jaune pres du logo)
 npm run dev:emu       # app sur les emulateurs (ignore .env.local)
 npm run check:rules   # emulateurs + seed + verification des regles role par role (code de sortie)
 npm run check:api     # API /v1 + MCP de bout en bout, emulateurs decales de +200 (tourne a cote de `emulators`)
@@ -27,6 +29,8 @@ npm run grant -- <email> staff|investor ic|investor portfolio|mentor|none   # ro
 node scripts/import-sp26.mjs <bundle.json> --prod   # import du batch Spring 2026 (paquet hors depot, donnees personnelles)
 node scripts/import-fa26.mjs <lien-airtable> --prod [--dry-run]   # batch Fall 2026 depuis la vue partagee du Profile Book (lien hors depot)
 node scripts/import-events.mjs "Week 1" [--prod]   # evenements de data/events.json ET leurs formulaires (a blanc sans --prod, n'ecrase jamais)
+node scripts/sync-events.mjs "Week 1" [--prod]     # MET A JOUR les evenements sur data/events.json (agenda, bareme, matching sans equipes), recree les formulaires sans reponse, archive `archived`
+node scripts/elo-rank.mjs <batchId> [--prod] [--rounds 8]   # Elo des profils par Claude (claude-opus-5-5, ANTHROPIC_API_KEY ; a blanc sans --prod : aucun appel)
 node scripts/migrate-standard-forms.mjs <batchId> [--prod]   # modele standard : anciens metrics/criteria/picks -> formulaires (a blanc sans --prod)
 node scripts/migrate-metric-keys.mjs <batchId> [--prod]   # cles de metriques standard (SPECS A.5), a blanc sans --prod ; puis backfill-kpis.mjs
 npx firebase deploy --only storage --project prod   # regles Storage (tout refuse : lecture par URL a jeton)
@@ -38,9 +42,15 @@ npm run build
 Projet reel : `pioneers-3627c` (alias `prod` dans .firebaserc ; `default` reste le projet de demo,
 un `firebase deploy` sans `--project prod` ne touche donc rien). Firestore est en `europe-west9`
 (Paris), pas en `eur3`. Les scripts admin utilisent les Application Default Credentials.
-Cloud Functions : deployees le 11/11 (`api`, `health`, `createApiKey`, `revokeApiKey`, `oauthDescribeRequest`, `oauthDecide`,
-europe-west4) avec le site Hosting
-`pioneers-hub-api` : `npx firebase deploy --only functions,hosting --project prod`. Images de conteneur purgees apres 1 jour.
+Cloud Functions : toutes deployees le 14/11 (callables et `api` en europe-west4, declencheurs Firestore en europe-west9,
+`nightlyScores` chaque nuit a 2:00 Paris) avec le site Hosting `pioneers-hub-api` :
+`npx firebase deploy --only functions,hosting --project prod --force` (`--force` supprime les fonctions retirees du code).
+Un tout premier deploiement de declencheurs peut echouer (agent Eventarc pas encore autorise) : relancer quelques minutes apres.
+Images de conteneur purgees apres 1 jour (europe-west4 et europe-west9).
+Verifications a cote des emulateurs de dev (ports et +200 pris) : `CHECK_PORT_OFFSET=1000 node scripts/emulators-check-config.mjs`
+puis `firebase emulators:exec --config .firebase-check.json ...` ; check-rules a alors besoin de `FUNCTIONS_EMULATOR_HOST=127.0.0.1:6101`.
+Scores (SPECS §5.5) : `services/scores.ts` (formules pures `shared/scoring.ts`, bareme `shared/scoringRules.ts`) ecrit `scores`,
+`scoreSignals`, `founderStats` ; jamais pour un batch `settings.scoresSource: "imported"` (spring-2026).
 Un seul `next dev` par dossier (Next 16) : arreter `dev:emu` avant `dev`, et inversement. Pour
 verifier un build a cote d'un `next dev` : `NEXT_DIST_DIR=.next-emu next build` puis
 `NEXT_DIST_DIR=.next-emu next start` (Next ajoute alors `.next-emu` au tsconfig : ne pas le commiter).
@@ -49,7 +59,7 @@ Donnees : batch `spring-2026` (termine) importe du dashboard spring2026.thepione
 reimport sans perte des rattachements). Batch `fall-2026` importe le 12/11 de la vue partagee
 « Pioneers Profile Book - FA26 » (32 fondateurs, ids Airtable, sans email : rattachement par /claim).
 Noms affiches des batchs : `fa26` et `sp26` (comme sur Slack) ; les ids restent `fall-2026` / `spring-2026`.
-Evenements de la semaine 1 importes le 12/11 (id = `key` de data/events.json ; sans heure connue : brouillon a 09:00, masque aux fondateurs).
+Evenements de la semaine 1 : planning valide (24 evenements) synchronise le 14/11 par scripts/sync-events.mjs, avec leurs 12 formulaires.
 Reimport : un profil reclame garde son rattachement, ses valeurs non vides et sa photo (meme retiree) ; l'import ne touche que les photos des profils non reclames.
 Photo depuis « Mon profil » (fondateur ou staff) : `founders/{id}/photo-*.jpg` (storage.rules), vignette + `coverPhotoUrl` en un lot, croix pour la retirer.
 Photos et logos : vignettes JPEG 128 px en `data:` URL dans `photoUrl` / `logoUrl` (avatars).

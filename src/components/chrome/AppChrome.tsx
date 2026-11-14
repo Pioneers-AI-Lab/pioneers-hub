@@ -9,6 +9,7 @@ import { canUseApi, isStaffViewer } from "@shared/access";
 import { useAuth } from "@/context/AuthContext";
 import { paths } from "@/lib/paths";
 import { BOTTOM_SHEET_STYLES, MOBILE_QUERY } from "@/components/ui/ResponsiveDialog";
+import { LocalDbBadge } from "@/components/chrome/LocalDbBadge";
 
 // En-tete commun : le nom, et le visiteur (connexion ou compte). Un batch pose
 // sa propre navigation (BatchShell : onglets en bas sur mobile).
@@ -39,6 +40,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
             >
               {/* eslint-disable-next-line @next/next/no-img-element -- SVG statique, pas d'optimisation utile. */}
               <img src="/logo-pioneers-hub.svg" alt="Pioneers Hub" width={136} height={22} style={{ display: "block" }} />
+              <LocalDbBadge />
             </Anchor>
             {/* `usePathname` suspend au pre-rendu (cacheComponents) : frontiere locale. */}
             <Suspense>

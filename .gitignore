@@ -49,3 +49,6 @@ next-env.d.ts
 
 # verifications sur emulateurs decales (npm run check:api)
 .firebase-check.json
+
+# copie locale de la prod dans les emulateurs (npm run pull:prod + emulators:local) : donnees personnelles
+.emulator-data/

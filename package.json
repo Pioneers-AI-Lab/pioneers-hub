@@ -11,6 +11,8 @@
     "typecheck": "next typegen && tsc --noEmit && npm --prefix functions run typecheck",
     "emulators": "npm --prefix functions run build && firebase emulators:start --project demo-pioneers-hub",
     "seed": "node scripts/seed.mjs",
+    "emulators:local": "npm --prefix functions run build && firebase emulators:start --project demo-pioneers-hub --export-on-exit .emulator-data $([ -f .emulator-data/firebase-export-metadata.json ] && echo --import .emulator-data)",
+    "pull:prod": "node scripts/pull-prod.mjs",
     "check:rules": "npm --prefix functions run build && firebase emulators:exec --project demo-pioneers-hub --only auth,firestore,functions \"node scripts/seed.mjs && node scripts/check-rules.mjs\"",
     "check:api": "npm --prefix functions run build && node scripts/emulators-check-config.mjs && firebase emulators:exec --config .firebase-check.json --project demo-pioneers-hub --only auth,firestore,functions,hosting \"node scripts/seed.mjs > /dev/null && node scripts/check-api.mjs\"",
     "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes --project prod",
