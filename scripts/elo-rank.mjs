@@ -4,6 +4,11 @@
 // node scripts/elo-rank.mjs fall-2026                 a blanc : les groupes, sans appel au modele
 // node scripts/elo-rank.mjs fall-2026 --prod          classe et ecrit (projet REEL ; appelle Claude, payant)
 // node scripts/elo-rank.mjs fall-2026 --prod --rounds 8
+// node scripts/elo-rank.mjs fall-2026 --export groups.json             sans cle API : les groupes anonymes et le prompt, pour
+// node scripts/elo-rank.mjs fall-2026 --apply groups.json --prod       ... les classer ailleurs (Claude Code), puis appliquer l'Elo
+//
+// `--apply` lit le fichier exporte, complete d'un `results` aligne sur `groups` :
+// [{ "ranking": [{ "id": "P3", "reasoning": "..." }, ...5] }, ...] (meme forme que la reponse du modele).
 //
 // Repris de FoundersEloRanking (prompt, facteur K, duels deux a deux) : a chaque
 // tour, les fondateurs du batch sont repartis en groupes de 5 ; Claude classe
@@ -20,6 +25,7 @@
 // Il faut une cle API Anthropic (ANTHROPIC_API_KEY) ou un profil `ant auth login`.
 
 import { createRequire } from "node:module";
+import { readFileSync, writeFileSync } from "node:fs";
 import { initializeApp, applicationDefault } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import Anthropic from "@anthropic-ai/sdk";
@@ -39,6 +45,9 @@ const args = process.argv.slice(2);
 const batchId = args[0];
 const write = args.includes("--prod");
 const rounds = Number(args[args.indexOf("--rounds") + 1]) || 8;
+const flagValue = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : null);
+const exportPath = flagValue("--export");
+const applyPath = flagValue("--apply");
 if (!batchId || batchId.startsWith("--")) {
   console.error("usage: node scripts/elo-rank.mjs <batchId> [--prod] [--rounds 8]");
   process.exit(1);
@@ -188,7 +197,7 @@ const shuffle = (xs) => {
   }
   return a;
 };
-const plan = [];
+let plan = [];
 for (let r = 0; r < rounds; r++) {
   const order = shuffle(people);
   for (let i = 0; i < order.length; i += GROUP) {
@@ -201,14 +210,56 @@ for (let r = 0; r < rounds; r++) {
     plan.push(group);
   }
 }
-console.log(`${people.length} fondateurs, ${rounds} tours : ${plan.length} classements de ${GROUP} (${plan.length * 10} duels), modele ${MODEL}.`);
+
+// ---- Sans cle API : exporter les groupes, puis appliquer des classements faits ailleurs ----
+if (exportPath) {
+  const out = {
+    batchId,
+    promptVersion: PROMPT_VERSION,
+    prompt: PROMPT,
+    // Les ids anonymes et leurs fondateurs (ids seulement, ni nom ni email) : `--apply` relie les classements.
+    founderIdByAlias: Object.fromEntries(people.map((p) => [p.alias, p.founderId])),
+    profiles: Object.fromEntries(people.map((p) => [p.alias, p.text])),
+    groups: plan.map((g) => g.map((p) => p.alias)),
+  };
+  writeFileSync(exportPath, `${JSON.stringify(out, null, 2)}\n`);
+  console.log(`${plan.length} groupes de ${GROUP} exportes dans ${exportPath}.`);
+  process.exit(0);
+}
+
+let results;
+if (applyPath) {
+  const file = JSON.parse(readFileSync(applyPath, "utf8"));
+  if (file.batchId !== batchId) throw new Error(`${applyPath} est pour le batch ${file.batchId}.`);
+  const byFounderId = new Map(people.map((p) => [p.founderId, p]));
+  const personOf = (alias) => {
+    const person = byFounderId.get(file.founderIdByAlias[alias]);
+    if (!person) throw new Error(`${alias} : fondateur inconnu ou sorti du batch.`);
+    return person;
+  };
+  plan = file.groups.map((g) => g.map(personOf));
+  // Les classements du fichier, verifies comme ceux du modele ; leurs ids anonymes sont ceux du fichier.
+  results = file.groups.map((g, n) => {
+    const parsed = RankingSchema.safeParse(file.results?.[n]);
+    const ranked = parsed.success ? parsed.data.ranking.map((r) => r.id) : [];
+    if (!parsed.success || new Set(ranked).size !== GROUP || ranked.some((id) => !g.includes(id))) return null;
+    return {
+      ranked: ranked.map((a) => personOf(a).alias),
+      reasoning: parsed.data.ranking.map((r, i) => `${i + 1}. ${r.id}: ${r.reasoning}`).join("\n"),
+      model: `claude-code (${MODEL})`,
+    };
+  });
+  console.log(`${results.filter(Boolean).length}/${plan.length} classements lus dans ${applyPath}.`);
+}
+
+console.log(`${people.length} fondateurs : ${plan.length} classements de ${GROUP} (${plan.length * 10} duels), modele ${MODEL}.`);
 if (!write) {
-  console.log("A blanc : aucun appel au modele, rien d'ecrit. Ajouter --prod pour classer (appels payants a l'API Anthropic).");
+  console.log("A blanc : aucun appel au modele, rien d'ecrit. Ajouter --prod pour classer (appels payants a l'API Anthropic), ou --export / --apply.");
   process.exit(0);
 }
 
 // ---- Le classement d'un groupe par Claude ----
-const client = new Anthropic();
+const client = applyPath ? null : new Anthropic();
 
 async function rankGroup(group) {
   const ids = new Set(group.map((p) => p.alias));
@@ -246,17 +297,19 @@ async function rankGroup(group) {
 }
 
 // Les classements en parallele, par paquets ; chacun garde sa place dans le plan.
-const results = new Array(plan.length);
-let next = 0;
-await Promise.all(
-  Array.from({ length: CONCURRENCY }, async () => {
-    while (next < plan.length) {
-      const n = next++;
-      results[n] = await rankGroup(plan[n]);
-      if (n % 10 === 9) console.log(`  ~${n + 1}/${plan.length} classements`);
-    }
-  }),
-);
+if (!results) {
+  results = new Array(plan.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: CONCURRENCY }, async () => {
+      while (next < plan.length) {
+        const n = next++;
+        results[n] = await rankGroup(plan[n]);
+        if (n % 10 === 9) console.log(`  ~${n + 1}/${plan.length} classements`);
+      }
+    }),
+  );
+}
 
 const matches = [];
 for (const [n, group] of plan.entries()) {
