@@ -36,7 +36,8 @@ export const STANDARD_METRICS = {
   // ---- Pipeline (flux, dans l'ordre de l'entonnoir) ----
   messagesSent: flow("Messages sent", "Outreach messages sent: emails, DMs, texts. Not calls."),
   callsMade: flow("Calls made", "Phone or video calls you placed, answered or not."),
-  conversationsDone: flow("Conversations done", "Real conversations with a potential user or customer, discovery interviews included."),
+  // Decision du 14/11 : 60 s ou plus avec la bonne personne, partout (update du jeudi et hackathons).
+  conversationsDone: flow("Conversations done", "Real conversations of 60 seconds or more with the right person (a potential user or customer), discovery interviews included."),
   meetingsBooked: flow("Meetings booked", "Meetings scheduled with a prospect, held or not yet."),
   demosDone: flow("Demos done", "Product demos actually given to a prospect."),
   proposalsSent: flow("Proposals sent", "Proposals, quotes or contracts sent to a prospect."),
