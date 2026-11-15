@@ -22,37 +22,42 @@ import { LeaderboardSection } from "@/components/admin/ScoringEditor";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, LinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
+import { HelpBlock } from "@/components/ui/useHelp";
 
 // ----------------------------
 // Admin d'un evenement : ses formulaires et ce qui fait son resultat
 // ----------------------------
 // Monte par la page de l'evenement (EventEditor). Chaque bloc suit ce qui est
 // attache (SPECS §2) : toute saisie est un FORMULAIRE de l'evenement (Debrief,
-// jury, picks, feedback), cree ici depuis un modele puis regle dans l'editeur ;
-// le Debrief et les avis entre pairs demandent un matching.
+// jury, picks, feedback), ajoute depuis un modele (`EventFormsField` : la liste,
+// puis « Add a form » -> le modele -> son editeur, qui ramene ici) ; le Debrief
+// et les avis entre pairs demandent un matching.
 // Les metriques sont les questions du Debrief, la grille celles du jury.
 // Le leaderboard est recalcule par le serveur ; le jury a un seul lien
 // partage, que le staff recopie ou remplace, et se verrouille en fermant son
 // formulaire.
 
-/** Les modeles de formulaire proposes pour un evenement ; la Submission et le Peer rating, seulement avec des equipes de travail. */
-const EVENT_FORM_TEMPLATES: FormTemplateKey[] = [
-  "debrief",
-  "peer_rating",
-  "jury",
-  "picks",
-  "founder_introductions",
-  "week_retro",
-  "exercise_feedback",
-  "session_feedback",
-  "weekly_feedback",
-];
+/**
+ * Les modeles de formulaire proposes pour un evenement, avec ce qu'ils recueillent
+ * (pour le staff) ; la Submission et le Peer rating, seulement avec des equipes de travail.
+ */
+const EVENT_FORM_TEMPLATES: Partial<Record<FormTemplateKey, string>> = {
+  debrief: "Team results, sent by the team lead before the deadline",
+  peer_rating: "Each founder scores their teammates, in private",
+  jury: "One shared link: the jury scores every team",
+  picks: "Who stood out: private, ranked choices",
+  founder_introductions: "Intro, founders to meet, goal for the week",
+  week_retro: "Anonymous: rate the sessions, what to keep and change",
+  exercise_feedback: "How useful the exercise was",
+  session_feedback: "A rating and a word on the session",
+  weekly_feedback: "Anonymous: how the week went",
+};
 
+/** Ce qui fait le resultat de l'evenement : classement, resultats, jury, picks. */
 export function EventResultsAdmin() {
   const { matching, metrics, juryForm } = useAdminEvent();
   return (
     <>
-      <FormsSection />
       <LeaderboardSection />
       {matching && metrics.length > 0 && <ResultsSection />}
       {juryForm && <JurySection juryForm={juryForm} />}
@@ -61,28 +66,27 @@ export function EventResultsAdmin() {
   );
 }
 
-/** Les formulaires de l'evenement, et ceux a creer depuis un modele. */
-function FormsSection() {
+/** Les formulaires de l'evenement, puis « Add a form » : le modele, puis son editeur. */
+export function EventFormsField() {
   const router = useRouter();
   const { event, forms } = useAdminEvent();
   const { batch } = useAdmin();
   const { isBusy, run } = useAction();
+  const [isPicking, setPicking] = useState(false);
   const nowISO = new Date().toISOString();
-  const offered = EVENT_FORM_TEMPLATES.filter((key) => !(FORM_TEMPLATES[key] as FormTemplate).needsWorkTeams || isWorkTeamEvent(event));
+  const hasWorkTeams = isWorkTeamEvent(event);
+  const offered = (Object.keys(EVENT_FORM_TEMPLATES) as FormTemplateKey[]).filter((key) => hasWorkTeams || !(FORM_TEMPLATES[key] as FormTemplate).needsWorkTeams);
 
-  const create = async (templateKey: FormTemplateKey) => {
+  /** `null` : un formulaire vierge, rattache a l'evenement. */
+  const create = async (templateKey: FormTemplateKey | null) => {
     const id = await run(() => createForm({ programId: batch.programId, batchId: batch.id, templateKey, eventId: event.id, event }), "Draft created");
     if (id) router.push(paths.adminForm(id));
   };
 
   return (
-    <Section
-      title={`Forms · ${forms.length}`}
-      hint="Everything founders and the jury enter for this event is a form: the submission (team results, before the deadline), the peer rating (a word on each teammate), the jury, the picks, the retro. Create one from a model, then adjust its questions."
-    >
-      {forms.length > 0 && (
-        <RowList>
-          {forms.map((f) => {
+    <HelpBlock label="Forms" help="What founders and the jury enter for this event: results, ratings, scores, picks.">
+      <RowList>
+        {forms.map((f) => {
             const state = formState(f, nowISO);
             return (
               <LinkRow
@@ -94,16 +98,23 @@ function FormsSection() {
               />
             );
           })}
+        <ButtonRow onClick={() => setPicking(true)} title="Add a form" subtitle="Blank or from a model, then adjust its questions" />
+      </RowList>
+
+      <ResponsiveDialog opened={isPicking} onClose={() => setPicking(false)} title="Add a form">
+        <RowList>
+          <ButtonRow disabled={isBusy} onClick={() => void create(null)} title="Blank form" subtitle="No questions yet: write your own" />
+          {offered.map((key) => (
+            <ButtonRow key={key} disabled={isBusy} onClick={() => void create(key)} title={FORM_TEMPLATES[key].label} subtitle={EVENT_FORM_TEMPLATES[key]} />
+          ))}
         </RowList>
-      )}
-      <Group gap="xs">
-        {offered.map((key) => (
-          <Button key={key} variant="default" disabled={isBusy} onClick={() => void create(key)}>
-            New {FORM_TEMPLATES[key].label.toLowerCase()}
-          </Button>
-        ))}
-      </Group>
-    </Section>
+        {!hasWorkTeams && (
+          <Text size="xs" c="dimmed" mt="sm">
+            The submission and the peer rating need a matching in teams.
+          </Text>
+        )}
+      </ResponsiveDialog>
+    </HelpBlock>
   );
 }
 

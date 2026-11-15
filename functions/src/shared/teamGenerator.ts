@@ -72,6 +72,9 @@ export const GROUP_SIZE_MAX = 5;
 export const GROUP_SIZES = Array.from({ length: GROUP_SIZE_MAX - GROUP_SIZE_MIN + 1 }, (_, i) => String(GROUP_SIZE_MIN + i));
 
 /** L'ordre d'affichage des groupes d'un tirage : `…-t2` avant `…-t10` (ids de `teamIdFor`). */
+/** Le tirage se publie en entier : une equipe publiee, il l'est (le matching est alors fige). */
+export const isDrawPublished = (teams: readonly { publishedDateISOString: string | null }[]) => teams.some((t) => t.publishedDateISOString !== null);
+
 export const byGroupOrder = (a: { id: string }, b: { id: string }) => groupNumber(a.id) - groupNumber(b.id);
 const groupNumber = (id: string) => Number(id.match(/(\d+)$/)?.[1] ?? 0);
 

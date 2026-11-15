@@ -2,8 +2,8 @@ import { writeBatch } from "firebase/firestore";
 import { matchingOf } from "@shared/events";
 import { publicShortName } from "@shared/access";
 import { docIds } from "@shared/collections";
-import { LEADER_ROLE, rolesWithLeader, teamSizeFor } from "@shared/teamGenerator";
-import type { EventTeam, Membership, PioneersEvent, WithId } from "@shared/types";
+import { LEADER_ROLE, isDrawPublished, rolesWithLeader, teamSizeFor } from "@shared/teamGenerator";
+import type { EventMatching, EventTeam, Membership, PioneersEvent, WithId } from "@shared/types";
 import { db } from "@/lib/firebase";
 import { refs } from "@/lib/firestore/refs";
 
@@ -33,9 +33,8 @@ export type FullNameOf = (founderId: string) => string;
 /** Id d'equipe unique sur tout le batch : l'id d'appartenance en depend (`docIds.teamMembership`). */
 export const teamIdFor = (eventId: string, index: number) => `${eventId}-t${index + 1}`;
 
-function assertNotPublished(existing: WithId<EventTeam>[]) {
-  if (existing.some((t) => t.publishedDateISOString !== null))
-    throw new Error("These teams are already published: they can no longer be changed here.");
+function assertNotPublished(existing: WithId<EventTeam>[], message = "These teams are already published: they can no longer be changed here.") {
+  if (isDrawPublished(existing)) throw new Error(message);
 }
 
 function writeTeams(
@@ -74,6 +73,19 @@ function writeTeamSize(batch: ReturnType<typeof writeBatch>, event: WithId<Pione
   const matching = matchingOf(event);
   if (!matching || matching.size.max === groupSize) return;
   batch.set(refs.event(event.id), { matching: { ...matching, size: teamSizeFor(groupSize) }, updatedDateISOString: new Date().toISOString() }, { merge: true });
+}
+
+/**
+ * Change le type du matching ou le retire (`null`), jusqu'a la publication : le
+ * brouillon de tirage, fait pour l'ancien matching, est efface dans le meme lot.
+ * Un tirage publie fige le matching (historique, fiches, resultats).
+ */
+export async function replaceMatching(event: WithId<PioneersEvent>, matching: EventMatching | null, existing: WithId<EventTeam>[]) {
+  assertNotPublished(existing, "The groups are published: the matching can no longer be changed or removed.");
+  const batch = writeBatch(db);
+  for (const team of existing) batch.delete(refs.eventTeam(event.id, team.id));
+  batch.set(refs.event(event.id), { matching, updatedDateISOString: new Date().toISOString() }, { merge: true });
+  await batch.commit();
 }
 
 /** Enregistre le tirage en brouillon (non publie), tire en groupes de `groupSize`. */

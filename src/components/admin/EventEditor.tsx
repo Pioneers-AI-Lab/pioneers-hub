@@ -2,29 +2,31 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Box, Button, Group, Menu, SegmentedControl, Select, Stack, Text } from "@mantine/core";
+import { Box, Button, Group, Menu, Select, Stack, Text } from "@mantine/core";
 import { IconChevronDown } from "@tabler/icons-react";
-import { newEvent, type EventData } from "@shared/events";
+import { defaultMatching, newEvent, type EventData } from "@shared/events";
 import { EVENT_TEMPLATES, eventTemplateOf, templatesOfKind, type EventTemplateKey } from "@shared/presets/eventTemplates";
 import { FORM_TEMPLATES } from "@shared/presets/formTemplates";
-import { GENERATOR_PRESETS, GROUP_SIZES, teamSizeFor } from "@shared/teamGenerator";
-import { EVENT_KINDS, type EventStatus, type MatchingMode, type PioneersEvent, type WithId } from "@shared/types";
+import { GENERATOR_PRESETS } from "@shared/teamGenerator";
+import { EVENT_KINDS, MATCHING_MODES, type EventStatus, type MatchingMode, type PioneersEvent, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminEvent } from "@/context/AdminEventContext";
 import { useAction } from "@/hooks/useAction";
-import { createEventPack, setEventArchived, setEventMatching, updateEvent } from "@/lib/eventsAdmin";
+import { createEventPack, setEventArchived, updateEvent } from "@/lib/eventsAdmin";
+import { replaceMatching } from "@/lib/teamsAdmin";
 import { formatDateTime, fromLocalInput } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { ActionBar } from "@/components/admin/ActionBar";
 import { AttendanceLinkRow } from "@/components/admin/AttendanceSheet";
-import { EventResultsAdmin } from "@/components/admin/EventResultsAdmin";
+import { EventFormsField, EventResultsAdmin } from "@/components/admin/EventResultsAdmin";
 import { EventSettingsFields, settingsDraftOf, settingsOf, settingsProblems, type SettingsDraft } from "@/components/admin/EventSettingsFields";
 import { TEAM_TOOLS } from "@/components/admin/teamModes";
-import { EVENT_KIND_LABEL, EVENT_STATUS_OPTIONS, defaultEventStart, eventLabel } from "@/components/event/eventLabels";
+import { EVENT_KIND_LABEL, EVENT_STATUS_DESCRIPTION, EVENT_STATUS_OPTIONS, defaultEventStart, eventLabel } from "@/components/event/eventLabels";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, LinkRow, RowList } from "@/components/ui/Rows";
-import { Empty, Section } from "@/components/ui/Section";
+import { Section } from "@/components/ui/Section";
+import { HelpBlock } from "@/components/ui/useHelp";
 
 // ----------------------------
 // Admin > Events : creer un evenement, puis sa page (le point d'entree de tout
@@ -36,9 +38,12 @@ import { Empty, Section } from "@/components/ui/Section";
 // formulaires du pack publies ; la fleche a cote cree en brouillon (formulaires
 // en brouillon aussi).
 //
-// La page d'un evenement : ses reglages et son statut, puis ce qui lui est
-// attache : presence, matching (ajouter, taille, tirer, publier), formulaires,
-// classement, resultats, jury, picks (EventResultsAdmin), et l'archive.
+// La page d'un evenement, comme un formulaire : ses reglages et son statut, puis
+// ce qui lui est attache, chacun sous son libelle : presence, matching (0 ou 1,
+// une ligne qui ouvre sa fenetre : le tirage, qui regle la taille et publie ; le
+// type ; le retrait, jusqu'a la publication), formulaires (« Add a form » ->
+// vierge ou un modele -> son editeur). Ensuite ce qui fait son resultat : classement, resultats, jury,
+// picks (EventResultsAdmin), et l'archive.
 
 // ---- Creer ------------------------------------------------------------------------
 
@@ -195,18 +200,34 @@ function Hub({ event }: { event: WithId<PioneersEvent> }) {
         </Section>
       ) : (
         <>
-          <Section title="Status" hint={EVENT_STATUS_OPTIONS.find((o) => o.value === status)?.description}>
-            <Select maw={480} allowDeselect={false} value={status} onChange={(v) => v && setStatus(v as EventStatus)} data={EVENT_STATUS_OPTIONS} />
-          </Section>
-          <Section title="Event">
-            <EventSettingsFields draft={draft} onChange={setDraft} canChangeBatch={false} />
-          </Section>
-          <Section title="Attendance" hint="Take it before the draw and the event's forms: absent founders are left out.">
-            <RowList>
-              <AttendanceLinkRow eventId={event.id} />
-            </RowList>
-          </Section>
-          <MatchingSection />
+          <Box mt="md">
+            <EventSettingsFields draft={draft} onChange={setDraft} canChangeBatch={false}>
+              <Select
+                label="Status"
+                allowDeselect={false}
+                value={status}
+                onChange={(v) => v && setStatus(v as EventStatus)}
+                data={EVENT_STATUS_OPTIONS}
+                renderOption={({ option }) => (
+                  <Stack gap={0}>
+                    <Text size="sm">{option.label}</Text>
+                    <Text size="xs" c="dimmed">
+                      {EVENT_STATUS_DESCRIPTION[option.value as EventStatus]}
+                    </Text>
+                  </Stack>
+                )}
+              />
+            </EventSettingsFields>
+          </Box>
+          <Stack gap="lg" maw={560} mt="lg">
+            <HelpBlock label="Attendance" help="Absent founders are left out of the draw and the event's forms.">
+              <RowList>
+                <AttendanceLinkRow eventId={event.id} />
+              </RowList>
+            </HelpBlock>
+            <MatchingField />
+            <EventFormsField />
+          </Stack>
           <EventResultsAdmin />
           <Section title="Archive">
             <RowList>
@@ -230,66 +251,121 @@ function Hub({ event }: { event: WithId<PioneersEvent> }) {
 }
 
 /**
- * Le matching de l'evenement (0 ou 1) : son mode (equipes ou tables), sa taille,
- * le tirage et sa page publique. Sans groupes tires, il se change ou se retire.
+ * Le matching de l'evenement (0 ou 1), en une ligne qui ouvre sa fenetre
+ * (MatchingDialog) : le tirage (sa page regle la taille, tire, publie), le type,
+ * le retrait. Sans matching : « Add a matching », la meme fenetre.
  */
-function MatchingSection() {
-  const { event, matching, teams } = useAdminEvent();
-  const { isBusy, run } = useAction();
-  const published = teams.filter((t) => t.publishedDateISOString !== null);
-  const add = (mode: MatchingMode) =>
-    void run(() => setEventMatching(event.id, { mode, size: teamSizeFor(GENERATOR_PRESETS[mode].defaultSize) }), "Matching added");
+function MatchingField() {
+  const { matching, teams, isDrawPublished } = useAdminEvent();
+  const [isOpen, setOpen] = useState(false);
+  const tool = matching && TEAM_TOOLS[matching.mode];
 
-  if (!matching) {
+  return (
+    <HelpBlock label="Matching" help={tool ? `${tool.summary}.` : "Draw teams or tables from the guests. The submission and the peer rating need teams."}>
+      <RowList>
+        {matching && tool ? (
+          <ButtonRow onClick={() => setOpen(true)} title={`${tool.title} of ${matching.size.max}`} subtitle={drawStatus(teams.length, isDrawPublished, tool.groupWord)} />
+        ) : (
+          <ButtonRow onClick={() => setOpen(true)} title="Add a matching" subtitle="Teams to work together, or tables to meet new people" />
+        )}
+      </RowList>
+      <MatchingDialog opened={isOpen} onClose={() => setOpen(false)} />
+    </HelpBlock>
+  );
+}
+
+/** Ou en est le tirage : a faire, en brouillon, publie. */
+function drawStatus(count: number, isPublished: boolean, groupWord: string): string {
+  if (isPublished) return `${count} ${groupWord}s published`;
+  return count ? `Draft draw: ${count} ${groupWord}s, not published` : `${groupWord[0].toUpperCase()}${groupWord.slice(1)}s not drawn yet`;
+}
+
+/** `null` : retirer le matching. */
+type MatchingChange = { mode: MatchingMode | null };
+
+/**
+ * La fenetre du matching : ouvrir le tirage ; choisir ou changer le type (a sa
+ * taille par defaut, reglable au tirage) ; le retirer. Jusqu'a la publication :
+ * un brouillon de tirage est alors efface, apres confirmation (`replaceMatching`).
+ */
+function MatchingDialog({ opened, onClose }: { opened: boolean; onClose: () => void }) {
+  const { event, matching, teams, isDrawPublished: isPublished } = useAdminEvent();
+  const { isBusy, run } = useAction();
+  const [pending, setPending] = useState<MatchingChange | null>(null);
+  const tool = matching && TEAM_TOOLS[matching.mode];
+
+  const close = () => {
+    setPending(null);
+    onClose();
+  };
+  const apply = async (change: MatchingChange) => {
+    const next = change.mode ? defaultMatching(change.mode) : null;
+    const message = !next ? "Matching removed" : matching ? "Matching changed" : "Matching added";
+    if (await run(() => replaceMatching(event, next, teams).then(() => true), message)) close();
+  };
+  // Un brouillon de tirage serait efface : on confirme d'abord.
+  const ask = (change: MatchingChange) => (teams.length > 0 ? setPending(change) : void apply(change));
+
+  if (pending) {
+    const what = pending.mode ? `Switch to ${TEAM_TOOLS[pending.mode].title.toLowerCase()}` : "Remove the matching";
     return (
-      <Section title="Matching" hint="Groups drawn from the participants: work teams, or tables to meet new people. The submission and the peer rating need one.">
-        <Group gap="xs">
-          {(["challenge", "matching"] as const).map((mode) => (
-            <Button key={mode} variant="default" disabled={isBusy} onClick={() => add(mode)}>
-              Add {TEAM_TOOLS[mode].title.toLowerCase()}
-            </Button>
-          ))}
-        </Group>
-      </Section>
+      <ResponsiveDialog opened={opened} onClose={close} title={`${what}?`}>
+        <Stack>
+          <Text size="sm">
+            The draft draw ({teams.length} {tool!.groupWord}s) is deleted: you will draw again.
+          </Text>
+          <Button size="md" color="red" fullWidth loading={isBusy} onClick={() => void apply(pending)}>
+            {what}
+          </Button>
+          <Button variant="subtle" color="gray" disabled={isBusy} onClick={() => setPending(null)}>
+            Cancel
+          </Button>
+        </Stack>
+      </ResponsiveDialog>
     );
   }
-  const tool = TEAM_TOOLS[matching.mode];
-  const otherMode: MatchingMode = matching.mode === "challenge" ? "matching" : "challenge";
+
   return (
-    <Section title={`Matching · ${tool.title}`} hint={tool.summary}>
-      <Stack gap="sm" maw={480}>
-        <Stack gap={6}>
-          <Text size="sm" fw={500}>
-            {tool.groupLabel} size
-          </Text>
-          <SegmentedControl
-            fullWidth
-            disabled={isBusy}
-            value={String(matching.size.max)}
-            onChange={(v) => void run(() => setEventMatching(event.id, { ...matching, size: teamSizeFor(Number(v)) }), "Size saved")}
-            data={GROUP_SIZES}
-          />
-        </Stack>
-        <RowList>
-          <LinkRow
-            href={paths.adminEventMatching(event.id)}
-            title={published.length ? `${published.length} ${tool.groupWord}s published` : teams.length ? "Draft draw" : `Draw the ${tool.groupWord}s`}
-            subtitle={published.length ? "See them, enter results" : "Draw from the participants, adjust, publish"}
-          />
-          {published.length > 0 && <LinkRow href={paths.groups(event.id)} title="Public page" subtitle={`Anyone with the link finds their ${tool.groupWord}`} />}
-        </RowList>
-        {teams.length === 0 && (
-          <Group gap="xs">
-            <Button variant="subtle" color="gray" disabled={isBusy} onClick={() => void run(() => setEventMatching(event.id, { ...matching, mode: otherMode }), "Matching changed")}>
-              Switch to {TEAM_TOOLS[otherMode].title.toLowerCase()}
-            </Button>
-            <Button variant="subtle" color="gray" disabled={isBusy} onClick={() => void run(() => setEventMatching(event.id, null), "Matching removed")}>
-              Remove the matching
-            </Button>
-          </Group>
+    <ResponsiveDialog opened={opened} onClose={close} title={tool ? `${tool.title} of ${matching.size.max}` : "Add a matching"}>
+      <Stack>
+        {tool && (
+          <RowList>
+            <LinkRow
+              href={paths.adminEventMatching(event.id)}
+              title={isPublished ? `See the ${tool.groupWord}s` : "Open the draw"}
+              subtitle={drawStatus(teams.length, isPublished, tool.groupWord) + (isPublished ? "" : " · size, rules, publish")}
+            />
+          </RowList>
         )}
-        {teams.length > 0 && published.length === 0 && <Empty>The draw is saved as a draft: publish it from the draw page.</Empty>}
+        {isPublished ? (
+          <Text size="sm" c="dimmed">
+            The {tool?.groupWord}s are published: the matching can no longer be changed or removed.
+          </Text>
+        ) : (
+          <>
+            <Text size="sm" fw={500}>
+              {matching ? "Type" : "Choose a type"}
+            </Text>
+            <RowList>
+              {MATCHING_MODES.map((m) => (
+                <ButtonRow
+                  key={m}
+                  disabled={isBusy || m === matching?.mode}
+                  onClick={() => ask({ mode: m })}
+                  title={TEAM_TOOLS[m].title}
+                  subtitle={`${TEAM_TOOLS[m].summary}. ${TEAM_TOOLS[m].groupLabel}s of ${GENERATOR_PRESETS[m].defaultSize} by default.`}
+                  meta={m === matching?.mode ? <Text size="sm" c="pioneers">Current</Text> : undefined}
+                />
+              ))}
+            </RowList>
+            {matching && (
+              <Button variant="subtle" color="red" disabled={isBusy} onClick={() => ask({ mode: null })}>
+                Remove the matching
+              </Button>
+            )}
+          </>
+        )}
       </Stack>
-    </Section>
+    </ResponsiveDialog>
   );
 }

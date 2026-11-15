@@ -1,7 +1,7 @@
 import { parisDay } from "./dates";
 import { EVENT_TEMPLATES, eventTemplateOf, type EventTemplateKey } from "./presets/eventTemplates";
 import { GENERATOR_PRESETS, teamSizeFor } from "./teamGenerator";
-import type { EventGuest, EventKind, EventMatching, PioneersEvent, Timestamps } from "./types";
+import type { EventGuest, EventKind, EventMatching, MatchingMode, PioneersEvent, Timestamps } from "./types";
 
 // ----------------------------
 // Un evenement : sa construction et sa visibilite
@@ -109,12 +109,15 @@ export const defaultStartTime = (templateKey: string | null) => eventTemplateOf(
 
 type MatchingSource = Pick<PioneersEvent, "kind" | "matching" | "teamSize">;
 
+/** Un matching neuf de ce mode, a sa taille par defaut (3 par equipe, 4 par table). */
+export const defaultMatching = (mode: MatchingMode): EventMatching => ({ mode, size: teamSizeFor(GENERATOR_PRESETS[mode].defaultSize) });
+
 /** Le matching de l'evenement, `null` sans tirage. */
 export function matchingOf(event: MatchingSource): EventMatching | null {
   if (event.matching !== undefined) return event.matching;
   const mode = event.kind === "team_challenge" ? "challenge" : event.kind === "matching" ? "matching" : null;
   if (!mode) return null;
-  return { mode, size: event.teamSize ?? teamSizeFor(GENERATOR_PRESETS[mode].defaultSize) };
+  return event.teamSize ? { mode, size: event.teamSize } : defaultMatching(mode);
 }
 
 /** Des equipes de travail (challenge), pas des tables pour se rencontrer : Submission, Peer rating, coequipiers, fiche. */

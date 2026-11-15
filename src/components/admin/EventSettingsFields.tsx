@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button, Collapse, Group, MultiSelect, Select, Stack, Switch, TextInput, Textarea } from "@mantine/core";
 import { endAfter, guestCopiesOf } from "@shared/events";
 import { normalizeHttpUrl } from "@shared/text";
@@ -8,6 +8,7 @@ import type { EventAudience, EventGuest, PioneersEvent } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { fromLocalInput, toLocalInput } from "@/lib/format";
 import type { EventSettings } from "@/lib/eventsAdmin";
+import { useHelp } from "@/components/ui/useHelp";
 
 // ----------------------------
 // Les reglages d'un evenement, dans l'ordre d'un agenda (decision du 13/11)
@@ -16,7 +17,7 @@ import type { EventSettings } from "@/lib/eventsAdmin";
 // les invites de Google Calendar). Replies : lieu, description, jalon, lien
 // d'inscription, ressource. Les memes champs a la creation et sur la page d'un
 // evenement. Ni semaine du programme, ni taille d'equipe (dans le matching), ni
-// metriques (dans le Debrief).
+// metriques (dans le Debrief). « More options » est replie par defaut.
 
 export type SettingsDraft = {
   name: string;
@@ -103,20 +104,24 @@ export function EventSettingsFields({
   draft,
   onChange,
   canChangeBatch,
+  children,
 }: {
   draft: SettingsDraft;
   onChange: (next: SettingsDraft) => void;
   /** A la creation : le batch se choisit parmi les invites (il bascule le batch de travail). */
   canChangeBatch: boolean;
+  /** Champs de plus, avant « More options » (le statut, sur la page d'un evenement). */
+  children?: ReactNode;
 }) {
-  const [moreOpen, setMoreOpen] = useState(Boolean(draft.topic || draft.location || draft.signUpUrl || draft.resourceUrl || draft.isMilestone));
+  const [moreOpen, setMoreOpen] = useState(false);
+  const milestoneHelp = useHelp("Batch milestone", "Flagged in the Slack summaries.");
   const set = <K extends keyof SettingsDraft>(key: K, value: SettingsDraft[K]) => onChange({ ...draft, [key]: value });
   const minutes = minutesBetween(draft.start, draft.end);
   const durationValue = minutes !== null && DURATIONS.includes(minutes) ? String(minutes) : CUSTOM;
 
   return (
     <Stack gap="md" maw={560}>
-      <TextInput label="Name" placeholder="Add a title" size="lg" value={draft.name} onChange={(e) => set("name", e.currentTarget.value)} />
+      <TextInput label="Name" labelProps={{ size: "md" }} placeholder="Add a title" size="lg" value={draft.name} onChange={(e) => set("name", e.currentTarget.value)} />
       <Group grow align="flex-end" gap="xs" wrap="wrap">
         <TextInput
           label="Starts"
@@ -140,6 +145,7 @@ export function EventSettingsFields({
         <TextInput label="Ends" type="datetime-local" value={draft.end} onChange={(e) => set("end", e.currentTarget.value)} miw={190} />
       </Group>
       <GuestsField draft={draft} onChange={onChange} canChangeBatch={canChangeBatch} />
+      {children}
 
       <div>
         <Button variant="subtle" color="gray" px={0} onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen}>
@@ -149,7 +155,7 @@ export function EventSettingsFields({
           <Stack gap="md" pt="xs">
             <TextInput label="Location" placeholder="Station F" value={draft.location} onChange={(e) => set("location", e.currentTarget.value)} />
             <Textarea label="Description" autosize minRows={2} placeholder="What the event is about" value={draft.topic} onChange={(e) => set("topic", e.currentTarget.value)} />
-            <Switch size="md" label="Batch milestone" description="Flagged in the Slack summaries" checked={draft.isMilestone} onChange={(e) => set("isMilestone", e.currentTarget.checked)} />
+            <Switch size="md" {...milestoneHelp} checked={draft.isMilestone} onChange={(e) => set("isMilestone", e.currentTarget.checked)} />
             <TextInput label="Sign-up link" placeholder="https://" value={draft.signUpUrl} onChange={(e) => set("signUpUrl", e.currentTarget.value)} />
             <TextInput label="Resource link" placeholder="Slides, brief, recording" value={draft.resourceUrl} onChange={(e) => set("resourceUrl", e.currentTarget.value)} />
           </Stack>
@@ -167,6 +173,7 @@ export function EventSettingsFields({
 function GuestsField({ draft, onChange, canChangeBatch }: { draft: SettingsDraft; onChange: (next: SettingsDraft) => void; canChangeBatch: boolean }) {
   const { batch, batches, selectBatch, founders, foundersById, startups } = useAdmin();
   const [external, setExternal] = useState("");
+  const guestsHelp = useHelp("Guests", "The whole batch, or only some founders, startups and guests: only they see the event.");
 
   const batchValue = `batch:${batch.id}`;
   const value = [
@@ -215,8 +222,7 @@ function GuestsField({ draft, onChange, canChangeBatch }: { draft: SettingsDraft
   return (
     <Stack gap={6}>
       <MultiSelect
-        label="Guests"
-        description="The whole batch, or only some founders, startups and guests: only they see the event."
+        {...guestsHelp}
         placeholder={value.length ? undefined : "Add guests"}
         searchable
         data={data}

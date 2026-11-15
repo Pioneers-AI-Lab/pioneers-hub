@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, type ReactNode } from "react";
-import type { Attendance, Form, FormResponse, WithId } from "@shared/types";
+import type { Attendance, Form, FormResponse, PioneersEvent, WithId } from "@shared/types";
 import { queries, refs } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
 import { useDocListener, useQueryListener } from "@/hooks/useFirestoreListener";
@@ -30,6 +30,8 @@ type AdminFormValue = {
   /** Presences de l'evenement du formulaire (vide sans evenement a presence, ou formulaire anonyme). */
   attendance: WithId<Attendance>[];
   isResponsesLoading: boolean;
+  /** Son evenement, s'il en a un dans la liste de travail (un evenement archive n'y est pas). */
+  event: WithId<PioneersEvent> | undefined;
 };
 
 const [AdminFormContextProvider, useAdminForm] = createStrictContext<AdminFormValue>("AdminForm");
@@ -62,9 +64,10 @@ export function AdminFormProvider({ children }: { children: ReactNode }) {
             responses: [...responses.data].sort((a, b) => b.submittedDateISOString.localeCompare(a.submittedDateISOString)),
             attendance: attendance.data,
             isResponsesLoading: responses.isLoading || attendance.isLoading,
+            event,
           }
         : null,
-    [f, responses.data, responses.isLoading, attendance.data, attendance.isLoading],
+    [f, responses.data, responses.isLoading, attendance.data, attendance.isLoading, event],
   );
 
   // Batch archive : hors de la liste de travail, l'outil ne s'y applique plus.

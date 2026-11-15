@@ -130,6 +130,7 @@ export function FormEditor() {
 function Editor({ form }: { form: WithId<Form> }) {
   const router = useRouter();
   const { events } = useAdmin();
+  const { event } = useAdminForm();
   const [draft, setDraft] = useState<FormDraft>(() => draftOf(form));
   const [editing, setEditing] = useState<{ original: FormQuestion | null; index: number } | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -230,7 +231,8 @@ function Editor({ form }: { form: WithId<Form> }) {
   return (
     <>
       <PageHeader
-        back={{ href: paths.adminForms(), label: "Forms" }}
+        // Le formulaire d'un evenement se regle depuis sa page : on y revient (a la liste si l'evenement est archive).
+        back={event ? { href: paths.adminEvent(event.id), label: event.name } : { href: paths.adminForms(), label: "Forms" }}
         title={draft.title || "Untitled form"}
         subtitle={[
           FORM_KIND_LABELS[form.kind],
@@ -263,7 +265,7 @@ function Editor({ form }: { form: WithId<Form> }) {
       )}
 
       {form.identityCheck === "jury_link" ? (
-        <Section title="Jury link" hint="The jury link carries a secret: copy it, or make a new one, from the event's page (Admin > Challenge teams).">
+        <Section title="Jury link" hint="The jury link carries a secret: copy it, or make a new one, from the event's page (Admin > Events).">
           <Empty>Scores are locked by closing this form.</Empty>
         </Section>
       ) : (

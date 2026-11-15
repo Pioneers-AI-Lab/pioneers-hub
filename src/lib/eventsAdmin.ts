@@ -1,13 +1,13 @@
 import { doc, writeBatch } from "firebase/firestore";
 import { eventFormDocs, eventFormsPlan } from "@shared/eventForms";
 import type { EventData } from "@shared/events";
-import type { EventMatching, PioneersEvent } from "@shared/types";
+import type { PioneersEvent } from "@shared/types";
 import { db } from "@/lib/firebase";
 import { refs } from "@/lib/firestore/refs";
 import { patchDoc } from "@/lib/firestore/write";
 
 // ----------------------------
-// Evenements d'un batch (staff) : creation, reglages, matching, archivage
+// Evenements d'un batch (staff) : creation, reglages, archivage (le matching : lib/teamsAdmin.ts)
 // ----------------------------
 // Ecriture directe (regle `events` : staff). Rien n'est supprime : on archive.
 
@@ -49,9 +49,6 @@ export type EventSettings = Pick<
 >;
 
 export const updateEvent = (eventId: string, settings: Partial<EventSettings>) => patchDoc<PioneersEvent>(refs.event(eventId), settings);
-
-/** Ajoute, change ou retire (`null`) le matching de l'evenement. */
-export const setEventMatching = (eventId: string, matching: EventMatching | null) => patchDoc<PioneersEvent>(refs.event(eventId), { matching });
 
 /** Archive (sort des listes, du calendrier et des pages des fondateurs) ou restaure. */
 export const setEventArchived = (eventId: string, archived: boolean) =>

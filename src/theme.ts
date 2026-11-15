@@ -69,6 +69,8 @@ export const theme = createTheme({
     Select: inputDefaults,
     MultiSelect: inputDefaults,
     TagsInput: inputDefaults,
+    // Un bloc libelle sans champ (Matching, Forms) : meme taille de libelle que les champs.
+    InputWrapper: inputDefaults,
     // Place pour l'oeil du mot de passe (40 px : `--psi-button-size-md`, globals.css).
     PasswordInput: { defaultProps: { size: "md", rightSectionWidth: 44 } },
     SegmentedControl: { defaultProps: { radius: "md" } },

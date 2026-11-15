@@ -58,13 +58,16 @@ function drawGroups(groups: DraftTeam[], groupSize: number, input: DrawInput, gr
   return next.map((g, i) => ({ ...g, name: g.locked && g.name ? g.name : `${groupLabel} ${i + 1}` }));
 }
 
+/** Les groupes sans ces personnes ; un groupe vide disparait (le leader parti est remplace par `assignLeaders`). */
+const withoutMembers = (groups: DraftTeam[], ids: ReadonlySet<string>): DraftTeam[] =>
+  groups.map((g) => ({ ...g, memberIds: g.memberIds.filter((m) => !ids.has(m)) })).filter((g) => g.memberIds.length > 0);
+
 /** « Alice Martin (leader) » : le nom, marque s'il mene le groupe. */
 const withLeaderMark = (name: string, isLeader: boolean) => (isLeader ? `${name} (leader)` : name);
 
 export function TeamGenerator() {
   const { isLoading } = useAdmin();
-  const { event, teams, matching } = useAdminEvent();
-  const isPublished = teams.some((t) => t.publishedDateISOString !== null);
+  const { event, matching, isDrawPublished: isPublished } = useAdminEvent();
   // L'espace de travail part des equipes enregistrees a l'ouverture, puis garde
   // son etat (contraintes, selection) a chaque enregistrement du brouillon : il
   // attend donc les fondateurs et l'historique du batch.
@@ -184,26 +187,28 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
     [teamMemberships, modeOfEvent, mode, event.id],
   );
   const history = useMemo(() => buildPairHistory(teamMemberships, modeOfEvent, event.id), [teamMemberships, modeOfEvent, event.id]);
+  // Le choix du staff (ceux du brouillon, sinon tout le batch) ; la presence fait
+  // foi par-dessus, en direct : un absent releve n'est jamais « In » (`isIn`).
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
-    // Un nouveau tirage part des presents (les absents releves sont decoches).
     const placed = teams.flatMap((t) => t.memberIds);
-    return new Set(placed.length > 0 ? placed : eligible.filter((f) => !absentIds.has(f.id)).map((f) => f.id));
+    return new Set(placed.length > 0 ? placed : eligible.map((f) => f.id));
   });
-  const participants = useMemo(
-    () => eligible.filter((f) => selectedIds.has(f.id)).map((f) => ({ id: f.id, category: f.profileCategory })),
-    [eligible, selectedIds],
-  );
+  const isIn = useCallback((id: string) => selectedIds.has(id) && !absentIds.has(id), [selectedIds, absentIds]);
+  const inFounders = useMemo(() => eligible.filter((f) => isIn(f.id)), [eligible, isIn]);
+  const participants = useMemo(() => inFounders.map((f) => ({ id: f.id, category: f.profileCategory })), [inFounders]);
   const [size, setSize] = useState(String(matching?.size.max ?? preset.defaultSize));
   // Taille du tirage affiche, enregistree avec lui dans le matching de l'evenement.
   const [drawnSize, setDrawnSize] = useState(Number(size));
   const [keepApart, setKeepApart] = useState<Pair[]>([]);
   const [keepTogether, setKeepTogether] = useState<Pair[]>([]);
   const drawInput: DrawInput = { participants, history, rules: preset.rules, keepApart, keepTogether, groupWord: tool.groupWord };
-  // Un brouillon d'avant les leaders en recoit a l'ouverture : a enregistrer.
-  const [groups, setGroups] = useState<DraftTeam[]>(() => assignLeaders(toDrafts(teams), leaderCounts));
+  const [groups, setGroups] = useState<DraftTeam[]>(() => assignLeaders(withoutMembers(toDrafts(teams), absentIds), leaderCounts));
   const [picked, setPicked] = useState<string | null>(null);
   const [showParticipants, setShowParticipants] = useState(teams.length === 0);
-  const [isDirty, setIsDirty] = useState(() => groups.length !== teams.length || groups.some((g, i) => g.leaderId !== leaderIdOf(teams[i])));
+  // A enregistrer : un leader attribue a l'ouverture, ou un absent retire du brouillon.
+  const [isDirty, setIsDirty] = useState(
+    () => groups.length !== teams.length || groups.some((g, i) => g.leaderId !== leaderIdOf(teams[i]) || g.memberIds.length !== teams[i].memberIds.length),
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [confirmPublish, setConfirmPublish] = useState(false);
   const report = scoreGroups(
@@ -220,6 +225,14 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
     setIsDirty(true);
   };
 
+  // Un absent releve pendant que la page est ouverte (autre onglet, retour
+  // arriere) quitte aussi son groupe : le brouillon change, il est a enregistrer.
+  const [syncedAbsentIds, setSyncedAbsentIds] = useState(absentIds);
+  if (syncedAbsentIds !== absentIds) {
+    setSyncedAbsentIds(absentIds);
+    if (groups.some((g) => g.memberIds.some((m) => absentIds.has(m)))) update(withoutMembers(groups, absentIds));
+  }
+
   const draw = () => {
     update(drawGroups(groups, Number(size), drawInput, tool.groupLabel));
     setDrawnSize(Number(size));
@@ -231,7 +244,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
     if (next.has(id)) {
       next.delete(id);
       // Retire aussi la personne de son groupe (absente ce jour-la).
-      if (placed.has(id)) update(groups.map((g) => ({ ...g, memberIds: g.memberIds.filter((m) => m !== id) })).filter((g) => g.memberIds.length > 0));
+      if (placed.has(id)) update(withoutMembers(groups, new Set([id])));
     } else next.add(id);
     setSelectedIds(next);
   };
@@ -269,7 +282,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
   const newGroup = () => {
     if (!picked) return;
     update([
-      ...groups.map((g) => ({ ...g, memberIds: g.memberIds.filter((m) => m !== picked) })).filter((g) => g.memberIds.length > 0),
+      ...withoutMembers(groups, new Set([picked])),
       { name: `${tool.groupLabel} ${groups.length + 1}`, memberIds: [picked], leaderId: null, locked: false },
     ]);
     setPicked(null);
@@ -313,7 +326,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
             {showParticipants ? "Hide" : "Edit"}
           </Button>
         }
-        hint={`Untick the founders who are absent today${absentIds.size > 0 ? ` (${absentIds.size} marked absent in the event's attendance, already unticked)` : ""}. Founders who left the program are not listed.`}
+        hint={`Untick the founders who won't take part. Absent founders come from the event's attendance${absentIds.size > 0 ? ` (${absentIds.size} today)` : ""}: change them there. Founders who left the program are not listed.`}
       >
         {showParticipants && (
           <>
@@ -336,12 +349,14 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
               {eligible.map((f) => (
                 <ButtonRow
                   key={f.id}
+                  // Un absent se remet present dans la presence de l'evenement, pas ici.
+                  disabled={absentIds.has(f.id)}
                   onClick={() => toggleParticipant(f.id)}
                   title={f.name}
                   subtitle={categoryLabel(f)}
                   meta={
-                    <Text size="sm" fw={600} c={selectedIds.has(f.id) ? "pioneers" : "dimmed"}>
-                      {selectedIds.has(f.id) ? "In" : "Out"}
+                    <Text size="sm" fw={600} c={isIn(f.id) ? "pioneers" : "dimmed"}>
+                      {absentIds.has(f.id) ? "Absent" : isIn(f.id) ? "In" : "Out"}
                     </Text>
                   }
                 />
@@ -360,14 +375,14 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
         hint="Never in the same group."
         pairs={keepApart}
         onChange={setKeepApart}
-        candidates={eligible.filter((f) => selectedIds.has(f.id))}
+        candidates={inFounders}
       />
       <PairEditor
         title="Keep together"
         hint="Co-founders already formed: always in the same group."
         pairs={keepTogether}
         onChange={setKeepTogether}
-        candidates={eligible.filter((f) => selectedIds.has(f.id))}
+        candidates={inFounders}
       />
 
       <Section title="Rules" hint={tool.rulesHint}>

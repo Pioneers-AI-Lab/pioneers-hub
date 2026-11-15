@@ -39,7 +39,7 @@ export function AttendanceLinkRow({ eventId }: { eventId: string }) {
   return (
     <LinkRow
       href={paths.adminEventAttendance(eventId)}
-      title="Attendance"
+      title="Attendance sheet"
       subtitle={isLoading || !roster ? "…" : attendanceSummary(roster)}
     />
   );

@@ -24,6 +24,7 @@ export const EVENT_STATUS_OPTIONS: { value: EventStatus; label: string; descript
 ];
 
 export const EVENT_STATUS_LABEL = Object.fromEntries(EVENT_STATUS_OPTIONS.map((o) => [o.value, o.label])) as Record<EventStatus, string>;
+export const EVENT_STATUS_DESCRIPTION = Object.fromEntries(EVENT_STATUS_OPTIONS.map((o) => [o.value, o.description])) as Record<EventStatus, string>;
 
 /** Debut propose a la creation, pour un champ `datetime-local` : demain a l'heure du modele. */
 export function defaultEventStart(templateKey: string | null): string {

@@ -4,7 +4,7 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { eventMetrics, juryCriteria } from "@shared/forms";
 import { absentFounderIds } from "@shared/attendance";
 import { matchingOf } from "@shared/events";
-import { byGroupOrder } from "@shared/teamGenerator";
+import { byGroupOrder, isDrawPublished } from "@shared/teamGenerator";
 import {
   isJuryForm,
   type Criterion,
@@ -44,6 +44,8 @@ type AdminEventValue = {
   /** Son matching (`matchingOf`), `null` sans tirage. */
   matching: EventMatching | null;
   teams: WithId<EventTeam>[];
+  /** Le tirage est publie (`isDrawPublished`) : equipes en lecture seule, matching fige. */
+  isDrawPublished: boolean;
   isTeamsLoading: boolean;
   /** Resultats saisis, par equipe (vide si la mecanique n'a pas de soumissions). */
   submissionsByTeamId: Map<string, WithId<Submission>>;
@@ -91,6 +93,7 @@ export function AdminEventProvider({ backHref, children }: { backHref: string; c
       event: event.data,
       matching: matchingOf(event.data),
       teams: [...teams.data].sort(byGroupOrder),
+      isDrawPublished: isDrawPublished(teams.data),
       isTeamsLoading: teams.isLoading,
       submissionsByTeamId: new Map(submissions.data.map((s) => [s.id, s])),
       juryLink: juryLink.data,
