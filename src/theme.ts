@@ -5,8 +5,14 @@ import touch from "@/components/ui/touch.module.css";
 // Theme Pioneers (sombre, mobile d'abord)
 // ----------------------------
 // Charte : bleu `#0DB0F5` sur fond noir, reserve a l'action principale et a
-// l'element actif. Polices Mantine par defaut (decision du 11/11) ; les
-// chiffres en colonnes s'alignent avec `className="num"` (chiffres tabulaires).
+// l'element actif ; bleu clair `pioneers.3` pour les titres de section
+// (`SectionTitle`). Les chiffres en colonnes s'alignent avec `className="num"`.
+//
+// Typographie (demandes du 15/11) : Eina 04 Light pour le texte, Eina 04
+// SemiBold pour les titres et tout ce qui est en gras, IBM Plex Mono pour les
+// sur-titres en capitales (`.label`, globals.css). Fichiers et plages de
+// graisses : app/layout.tsx. Pas d'Eina Regular ni Medium : une graisse 400
+// s'affiche en Light, 500 et plus en SemiBold.
 //
 // Regles d'interface (decision du 11/11) :
 // - minimaliste : du texte, des filets, peu de cadres ; pas d'icone sauf manque
@@ -32,10 +38,11 @@ const pioneers: MantineColorsTuple = [
 
 // Gris neutres tirant vers le noir. Mantine lit : [0-2] texte, [3] texte
 // estompe, [4] bordures, [5] survol, [6] fond des champs, [7] fond de page.
+// Texte [0-2] un peu plus clair que d'ordinaire : le Light est fin sur fond noir.
 const dark: MantineColorsTuple = [
-  "#D4D5D8",
-  "#B4B6BA",
-  "#8F9197",
+  "#E6E7EA",
+  "#C0C2C6",
+  "#9A9CA2",
   "#6B6E75",
   "#2A2C31",
   "#1E1F23",
@@ -45,6 +52,8 @@ const dark: MantineColorsTuple = [
   "#030304",
 ];
 
+const eina = "var(--font-eina), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+
 // Taille 16 px pour tout ce qui se saisit.
 const inputDefaults = { defaultProps: { size: "md" } } as const;
 
@@ -53,7 +62,14 @@ export const theme = createTheme({
   primaryShade: 6,
   colors: { pioneers, dark },
   black: "#0A0A0C",
+  fontFamily: eina,
+  fontFamilyMonospace: "var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace",
+  // Deux graisses seulement : le texte en Light, le reste en SemiBold.
+  fontWeights: { regular: "300", medium: "600", bold: "600" },
+  // Eina Light est fin : pas de texte sous 13 px (le `xs` de Mantine fait 12 px).
+  fontSizes: { xs: "0.8125rem" },
   headings: {
+    fontFamily: eina,
     fontWeight: "600",
     sizes: {
       h1: { fontSize: "1.75rem", lineHeight: "1.2" },

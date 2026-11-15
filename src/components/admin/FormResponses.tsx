@@ -1,8 +1,7 @@
 "use client";
 
 import { memo, useMemo, useState } from "react";
-import { Button, Group, Progress, Stack, Text } from "@mantine/core";
-import { useClipboard } from "@mantine/hooks";
+import { Button, Group, Stack, Text } from "@mantine/core";
 import { enumOptions, getFieldDef, listKeyOf, type DbFieldKey } from "@shared/fieldRegistry";
 import { formAudience, formNeedsTeam, responseProgress, type AudienceBasis } from "@shared/formRules";
 import { isPerTarget, parseAnswerKey, scopeOf, type FormAnswer, type FormQuestion, type FormResponse, type ListKey, type WithId } from "@shared/types";
@@ -12,6 +11,7 @@ import { useLists } from "@/context/ListsContext";
 import { useAction } from "@/hooks/useAction";
 import { call } from "@/lib/firebase";
 import { formatDateTime } from "@/lib/format";
+import { CompletionProgress } from "@/components/admin/CompletionProgress";
 import { RESPONSE_STATUS, WRITE_STATUS } from "@/components/admin/formLabels";
 import { Field } from "@/components/ui/Field";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
@@ -41,7 +41,6 @@ const BASIS_LABEL: Record<AudienceBasis, (eventName: string) => string> = {
 export const FormResponses = memo(function FormResponses() {
   const { form, responses, attendance, isResponsesLoading } = useAdminForm();
   const { founders, foundersById, eventsById, teamMemberships } = useAdmin();
-  const clipboard = useClipboard({ timeout: 1500 });
   const [openId, setOpenId] = useState<string | null>(null);
 
   const event = form.eventId ? (eventsById.get(form.eventId) ?? null) : null;
@@ -66,7 +65,6 @@ export const FormResponses = memo(function FormResponses() {
   const nameOf = (founderId: string | null) => (founderId ? (foundersById.get(founderId)?.name ?? founderId) : "Anonymous");
   /** Le repondant d'une reponse : le fondateur, ou le jure (nom choisi ou saisi). */
   const respondentOf = (r: FormResponse) => (r.respondentFounderId ? nameOf(r.respondentFounderId) : (r.respondentName ?? "Anonymous"));
-  const missingNames = progress.missing.map(nameOf).join(", ");
   const basisLabel = audience.kind === "founders" ? BASIS_LABEL[audience.basis](event?.name ?? "the event") : null;
   const opened = responses.find((r) => r.id === openId) ?? null;
 
@@ -87,34 +85,13 @@ export const FormResponses = memo(function FormResponses() {
             {progress.responses} {progress.responses === 1 ? "answer" : "answers"}
           </Text>
         ) : (
-          <Stack gap={6}>
-            <Text size="xl" fw={600} className="num">
-              {progress.answered.length} / {audience.founderIds.length}
-              <Text span size="sm" c="dimmed" fw={400} ml="xs">
-                {basisLabel}
-              </Text>
-            </Text>
-            <Progress value={audience.founderIds.length ? (progress.answered.length / audience.founderIds.length) * 100 : 0} size="sm" />
-            {progress.outside.length > 0 && (
-              <Text size="sm" c="dimmed">
-                Also answered, outside this list: {progress.outside.map(nameOf).join(", ")}.
-              </Text>
-            )}
-          </Stack>
-        )}
-
-        {progress.missing.length > 0 && (
-          <Stack gap="xs">
-            <Text size="sm" fw={600}>
-              Not answered yet ({progress.missing.length})
-            </Text>
-            <Text size="sm">{missingNames}</Text>
-            <Group>
-              <Button variant="default" size="md" onClick={() => clipboard.copy(missingNames)}>
-                {clipboard.copied ? "Copied" : "Copy names"}
-              </Button>
-            </Group>
-          </Stack>
+          <CompletionProgress
+            doneNames={progress.answered.map(nameOf)}
+            missingNames={progress.missing.map(nameOf)}
+            basisLabel={basisLabel ?? ""}
+            missingTitle="Not answered yet"
+            outsideNote={progress.outside.length > 0 ? `Also answered, outside this list: ${progress.outside.map(nameOf).join(", ")}.` : undefined}
+          />
         )}
 
         {responses.length === 0 ? (

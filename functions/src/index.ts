@@ -1,5 +1,5 @@
 // ----------------------------
-// Cloud Functions de Pioneers Hub
+// Cloud Functions de Pioneers Founder Hub
 // ----------------------------
 // Region `europe-west4` (RGPD : hebergement UE). Chaque callable est declaree
 // dans shared/callables.ts, puis implementee ici avec `onCallTyped`, pour que

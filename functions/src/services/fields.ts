@@ -1,5 +1,6 @@
 import { getFirestore, type DocumentSnapshot, type Transaction } from "firebase-admin/firestore";
 import { z } from "zod";
+import { APP_NAME } from "../shared/brand";
 import { docPaths } from "../shared/collections";
 import {
   DB_FIELDS,
@@ -25,7 +26,7 @@ import {
   type TrackingDocKind,
   type ValueSpec,
 } from "../shared/fieldRegistry";
-import { emptySubmission, type ClosedList, type FormAnswer, type Founder, type Person, type Startup } from "../shared/types";
+import { emptySubmission, readDirectory, type ClosedList, type FormAnswer, type Founder, type Person, type Startup } from "../shared/types";
 import { isSelfEditable, isStaffViewer, isViewerFounder } from "../shared/access";
 import type { Caller } from "../api/caller";
 import { ApiError, badRequest, forbidden, notFound } from "../api/errors";
@@ -257,6 +258,13 @@ function normalizeEnum({ key, def }: FieldMeta, value: FormAnswer, lists: Map<st
   return Array.isArray(value) ? [...new Set(value.map(normalize))] : normalize(value as string);
 }
 
+/** La valeur en base d'un champ ; l'annuaire se lit par `readDirectory` (Education ancien texte -> liste, fusionnee sans perte). */
+function currentValue(kind: DocKind, snap: DocumentSnapshot, field: string): unknown {
+  if (kind !== "founderDirectory") return snap.get(field);
+  const data = snap.data();
+  return data && readDirectory(data)[field];
+}
+
 /** 4. Ce qui change, champ par champ, selon la regle d'ecriture du registre. */
 function diff(
   fields: FieldMeta[],
@@ -267,7 +275,7 @@ function diff(
   const changes: FieldChange[] = [];
   const patches = new Map<DocKind, Record<string, unknown>>();
   for (const { key, kind, field, def } of fields) {
-    const current = targets.get(kind)!.get(field) as unknown;
+    const current = currentValue(kind, targets.get(kind)!, field);
     const incoming = values.get(key);
     let after: unknown = incoming;
     let reason: string | undefined;
@@ -298,7 +306,7 @@ function diff(
 /** Avis entre pairs, picks, notes du jury : seulement par leur formulaire, qui a verifie la cible. */
 function assertNotFormOnly(fields: FieldMeta[]) {
   const formOnly = fields.find(({ kind }) => isFormOnly(kind));
-  if (formOnly) throw forbidden("form_only", `\`${formOnly.key}\` is private: it is only written by its form in the hub.`);
+  if (formOnly) throw forbidden("form_only", `\`${formOnly.key}\` is private: it is only written by its form in ${APP_NAME}.`);
 }
 
 function assertSelfEditableFields(caller: Caller, fields: FieldMeta[]) {

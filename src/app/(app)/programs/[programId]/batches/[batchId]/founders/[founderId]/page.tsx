@@ -1,7 +1,6 @@
 "use client";
 
-import { Alert, Anchor, Button, Group, Text } from "@mantine/core";
-import Link from "next/link";
+import { Alert, Button, Group, Text } from "@mantine/core";
 import { useBatch } from "@/context/BatchContext";
 import { useFounder } from "@/context/FounderContext";
 import { useProgram } from "@/context/ProgramContext";
@@ -11,6 +10,7 @@ import { formatDay } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { FounderCard } from "@/components/founder/FounderCard";
 import { MeSections } from "@/components/founder/MeSections";
+import { BackButton } from "@/components/ui/PageHeader";
 
 /** La fiche d'un fondateur. Sur la sienne (« Me »), il voit en plus To do et Coming up. */
 export default function FounderPage() {
@@ -19,9 +19,7 @@ export default function FounderPage() {
   const { founder } = useFounder();
   return (
     <>
-      <Anchor component={Link} href={paths.founders(program.id, batch.id)} size="sm" c="dimmed" mb="md" className="tap-link">
-        All founders
-      </Anchor>
+      <BackButton href={paths.founders(program.id, batch.id)} label="All founders" mb="md" />
       {founder.archivedDateISOString !== null && <ArchivedNotice />}
       <FounderCard selfSections={<MeSections />} />
     </>

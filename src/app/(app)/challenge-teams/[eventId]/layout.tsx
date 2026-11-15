@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { APP_NAME } from "@shared/brand";
 import { PublicTeamsProvider } from "@/context/PublicTeamsContext";
 
 // Equipes publiees d'un challenge, lien partage (sans compte). Comme la lunch
@@ -6,9 +7,9 @@ import { PublicTeamsProvider } from "@/context/PublicTeamsContext";
 // pas le nom de l'evenement.
 
 export const metadata: Metadata = {
-  title: "Challenge teams · Pioneers Hub",
+  title: "Challenge teams",
   description: "Find your team.",
-  openGraph: { title: "Challenge teams", description: "Find your team.", siteName: "Pioneers Hub", type: "website" },
+  openGraph: { title: "Challenge teams", description: "Find your team.", siteName: APP_NAME, type: "website" },
 };
 
 export default function PublicChallengeTeamsLayout({ children }: LayoutProps<"/challenge-teams/[eventId]">) {

@@ -1,5 +1,5 @@
 // ----------------------------
-// Texte saisi : recherche et adresses web
+// Texte saisi : recherche, adresses web, listes
 // ----------------------------
 // Logique pure, partagee par le front (recherche, formulaires) et le serveur
 // (API, registre des champs, callables) : une seule regle des deux cotes.
@@ -42,4 +42,38 @@ export function normalizeHttpUrl(value: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Un chemin de l'app (`/programs/…`), jamais une adresse d'un autre site (`//site`, `https://…`). */
+export const isAppPath = (value: string): boolean => value.startsWith("/") && !value.startsWith("//");
+
+/**
+ * Separateurs d'une liste dont une entree peut contenir une virgule ou un tiret
+ * (Education : « Grenoble INP - Phelma - Data Science, AI & Deep Learning » reste
+ * une entree). Declares sur le champ par le registre (`separators` d'un `textList`).
+ */
+export const ENTRY_SEPARATORS: readonly string[] = [";", " · "];
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Une liste saisie en un seul texte (Education : « HEC Paris; ESSEC » ou
+ * « South Dakota State University · ESADE MBA ») -> une entree par element,
+ * decoupee sur `separators` SEULEMENT (par defaut `ENTRY_SEPARATORS`). Espaces
+ * retires, entrees vides et doublons exacts ecartes, ordre garde. Un tableau
+ * (deja une liste) n'est pas redecoupe ; toute autre valeur donne `[]`. Lit
+ * aussi une ancienne valeur texte, le temps de la migration
+ * (scripts/migrate-education-tags.mjs).
+ */
+export function splitTextList(value: unknown, separators: readonly string[] = ENTRY_SEPARATORS): string[] {
+  const pattern = separators.length ? new RegExp(separators.map(escapeRegExp).join("|")) : null;
+  const parts =
+    typeof value === "string"
+      ? pattern
+        ? value.split(pattern)
+        : [value]
+      : Array.isArray(value)
+        ? value.filter((v): v is string => typeof v === "string")
+        : [];
+  return [...new Set(parts.map((p) => p.trim()).filter(Boolean))];
 }

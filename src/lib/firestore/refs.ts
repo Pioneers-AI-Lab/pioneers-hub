@@ -13,10 +13,12 @@ import {
   type WhereFilterOp,
 } from "firebase/firestore";
 import { COL, SUB, docIds, docPaths } from "@shared/collections";
+import { readDirectory } from "@shared/types";
 import type {
   ApiKey,
   Attendance,
   Batch,
+  BatchTask,
   BatchMembership,
   BatchStats,
   Checkin,
@@ -35,6 +37,7 @@ import type {
   FormResponse,
   FormVersion,
   Founder,
+  FounderConnections,
   FounderDirectory,
   FounderInternal,
   FounderProfile,
@@ -49,6 +52,7 @@ import type {
   StartupInternal,
   StartupProfile,
   Submission,
+  TaskCompletion,
   User,
   WithId,
 } from "@shared/types";
@@ -61,7 +65,8 @@ import { db } from "@/lib/firebase";
 // convertisseur : une lecture rend directement `WithId<T>` (l'id du document
 // est ajoute, jamais stocke), sans `as Founder` a chaque appel.
 
-function converter<T>(): FirestoreDataConverter<WithId<T>, DocumentData> {
+/** `read` : la forme lue d'un document qui a change de forme (`readDirectory`). */
+function converter<T>(read: (data: WithId<T>) => WithId<T> = (data) => data): FirestoreDataConverter<WithId<T>, DocumentData> {
   return {
     toFirestore(model) {
       // L'id vit dans le chemin, pas dans le document.
@@ -70,7 +75,7 @@ function converter<T>(): FirestoreDataConverter<WithId<T>, DocumentData> {
       return data;
     },
     fromFirestore(snapshot: QueryDocumentSnapshot) {
-      return { id: snapshot.id, ...snapshot.data() } as WithId<T>;
+      return read({ id: snapshot.id, ...snapshot.data() } as WithId<T>);
     },
   };
 }
@@ -120,9 +125,12 @@ export const refs = {
 
   founders: () => colRef<Founder>(COL.founders),
   founder: (founderId: string) => docRef<Founder>(docPaths.founder(founderId)),
-  founderDirectory: (founderId: string) => docRef<FounderDirectory>(docPaths.founderDirectory(founderId)),
+  /** Education toujours en liste, meme sur un document pas encore migre (`readDirectory`). */
+  founderDirectory: (founderId: string): DocumentReference<WithId<FounderDirectory>> =>
+    doc(db, docPaths.founderDirectory(founderId)).withConverter(converter<FounderDirectory>(readDirectory)),
   founderProfile: (founderId: string) => docRef<FounderProfile>(docPaths.founderProfile(founderId)),
   founderInternal: (founderId: string) => docRef<FounderInternal>(docPaths.founderInternal(founderId)),
+  founderConnections: (founderId: string) => docRef<FounderConnections>(docPaths.founderConnections(founderId)),
 
   startups: () => colRef<Startup>(COL.startups),
   startup: (startupId: string) => docRef<Startup>(docPaths.startup(startupId)),
@@ -170,6 +178,13 @@ export const refs = {
   /** Notes d'un evenement : staff et investors IC (regle `evaluations`). */
   eventEvaluations: (eventId: string) => colRef<Evaluation>(COL.events, eventId, SUB.evaluations),
   teamMembership: (membershipId: string) => docRef<Membership>(COL.memberships, membershipId),
+  // ---- Taches du To do ----
+  /** Taches du batch : fondateurs du batch, staff, investors (regle `batchTasks`) ; ecrites par le staff. */
+  batchTasks: () => colRef<BatchTask>(COL.batchTasks),
+  batchTask: (taskId: string) => docRef<BatchTask>(COL.batchTasks, taskId),
+  /** Coches : le fondateur lui-meme et le staff (regle `taskCompletions`). */
+  taskCompletions: () => colRef<TaskCompletion>(COL.taskCompletions),
+  taskCompletion: (taskId: string, founderId: string) => docRef<TaskCompletion>(docPaths.taskCompletion(taskId, founderId)),
 } as const;
 
 /**
@@ -408,5 +423,32 @@ export const queries = {
       whereField<Form>("batchId", "==", batchId),
       whereField<Form>("status", "==", "open"),
     ),
+  }),
+
+  // ---- Taches du To do ----
+  /** Les taches non archivees du batch (fondateur et staff) : la regle exige le filtre `batchId`. */
+  tasksOfBatch: (batchId: string) => ({
+    key: `batchTasks:batch=${batchId}:active`,
+    query: query(
+      refs.batchTasks(),
+      whereField<BatchTask>("batchId", "==", batchId),
+      whereField<BatchTask>("archivedDateISOString", "==", null),
+    ),
+  }),
+
+  /** Mes coches dans ce batch : la regle `taskCompletions` exige ces deux filtres. */
+  myTaskCompletions: (batchId: string, founderId: string) => ({
+    key: `taskCompletions:batch=${batchId}:founder=${founderId}`,
+    query: query(
+      refs.taskCompletions(),
+      whereField<TaskCompletion>("batchId", "==", batchId),
+      whereField<TaskCompletion>("founderId", "==", founderId),
+    ),
+  }),
+
+  /** Toutes les coches du batch (staff : suivi des retardataires). */
+  taskCompletionsOfBatch: (batchId: string) => ({
+    key: `taskCompletions:batch=${batchId}`,
+    query: query(refs.taskCompletions(), whereField<TaskCompletion>("batchId", "==", batchId)),
   }),
 } as const;

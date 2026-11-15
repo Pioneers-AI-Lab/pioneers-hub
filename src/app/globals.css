@@ -2,9 +2,11 @@
 
 :root {
   /* Hauteur de la barre d'onglets du bas (mobile), zone de securite comprise. */
-  --tabbar-height: calc(56px + env(safe-area-inset-bottom));
+  --tabbar-height: calc(64px + env(safe-area-inset-bottom));
   /* Marge haute du contenu sous l'en-tete (AppChrome), reprise par `.fixed-page`. */
   --app-content-pt: var(--mantine-spacing-md);
+  /* Asterisque « obligatoire » : bleu clair des titres partout (Mantine `withAsterisk`, FormSheet, TypeForm). */
+  --input-asterisk-color: var(--mantine-color-pioneers-3);
 }
 
 /* Pas de rebond elastique en bout de page (iOS, macOS) : il emportait l'en-tete
@@ -125,7 +127,9 @@ button.row {
   margin-inline: calc(50% - min(560px, 50vw - max(16px, env(safe-area-inset-left), env(safe-area-inset-right))));
 }
 
-/* Barre d'onglets du bas (mobile). */
+/* Barre d'onglets du bas (mobile) : 64 px, texte en 15 px. Jusqu'a 5 onglets
+   (fondateur) en 390 px : 78 px chacun ; un libelle trop long est coupe plutot
+   que de deborder. */
 .tabbar {
   position: fixed;
   left: 0;
@@ -139,22 +143,26 @@ button.row {
   backdrop-filter: blur(12px);
   border-top: 1px solid var(--mantine-color-dark-4);
 }
+/* Largeur = libelle + une part egale de la place restante : les ecarts entre libelles sont egaux. */
 .tabbar a {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  font-weight: 500;
+  padding-inline: 2px;
+  font-size: 15px;
+  font-weight: var(--mantine-font-weight-medium);
   color: var(--mantine-color-dark-2);
   text-decoration: none;
-  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
 }
 .tabbar a[data-active="true"] {
   color: var(--mantine-color-pioneers-6);
 }
 
-/* Onglets du haut (tablette et ordinateur). */
+/* Onglets du haut (tablette et ordinateur) : 16 px, 48 px de haut. */
 .toptabs {
   display: flex;
   gap: 4px;
@@ -163,9 +171,12 @@ button.row {
   scrollbar-width: none;
 }
 .toptabs a {
-  padding: 10px 12px;
-  font-size: 14px;
-  font-weight: 500;
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 14px;
+  font-size: 16px;
+  font-weight: var(--mantine-font-weight-medium);
   color: var(--mantine-color-dark-2);
   text-decoration: none;
   border-bottom: 2px solid transparent;
@@ -187,13 +198,25 @@ button.row {
   }
 }
 
-/* Etiquette de section : petite, en capitales, estompee. */
+/* Sur-titre d'un champ, d'une tuile, d'un score : petit, en capitales,
+   estompe, en IBM Plex Mono (l'accent de la charte ; Regular seul, d'ou 400).
+   Un titre de section, lui, est un `SectionTitle` (components/ui/Section.tsx). */
 .label {
+  font-family: var(--mantine-font-family-monospace);
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-weight: 400;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--mantine-color-dark-2);
+}
+
+/* Un bloc de page (`Section`) : un filet le separe du precedent. Le defilement
+   vers son ancre s'arrete sous l'en-tete fixe de l'AppShell. */
+.section {
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--mantine-color-dark-4);
+  scroll-margin-top: calc(var(--app-shell-header-offset, 0px) + 16px);
 }
 
 /* Barre d'enregistrement collee au bas de l'ecran (au-dessus des onglets sur mobile). */

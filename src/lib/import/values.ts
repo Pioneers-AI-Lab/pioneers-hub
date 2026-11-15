@@ -1,7 +1,7 @@
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 import type { ValueSpec } from "@shared/fieldRegistry";
-import { normalizeHttpUrl } from "@shared/text";
+import { normalizeHttpUrl, splitTextList } from "@shared/text";
 import type { ImportFieldKey } from "./targets";
 
 dayjs.extend(customParseFormat);
@@ -82,7 +82,8 @@ export function convertCell(field: ImportFieldKey, spec: ValueSpec, raw: string 
       return /.+@.+\..+/.test(value) ? { ok: true, value: value.toLowerCase() } : { ok: false, reason: `"${value}" is not an email` };
     case "textList":
     case "enumMulti": {
-      const list = splitList(value);
+      // Un champ qui declare ses separateurs (Education : une ecole peut contenir une virgule) ne coupe que sur eux.
+      const list = spec.kind === "textList" && spec.separators ? splitTextList(value, spec.separators) : splitList(value);
       return { ok: true, value: "maxItems" in spec && spec.maxItems ? list.slice(0, spec.maxItems) : list };
     }
     case "enum": {

@@ -1,4 +1,5 @@
 import { docPaths } from "./collections";
+import { ENTRY_SEPARATORS } from "./text";
 import {
   CHECKIN_GOALS,
   CHECKIN_METRICS,
@@ -319,7 +320,12 @@ export type DbFieldPath = { [K in DocKind]: `${K}.${WritableField<K>}` }[DocKind
 
 export type ValueSpec =
   | { kind: "text"; maxLength: number | null; multiline: boolean }
-  | { kind: "textList"; maxItems: number | null }
+  /**
+   * Liste de textes. `separators` : ce qui separe deux entrees saisies en un seul texte
+   * (import, formulaire, « Mon profil ») quand une virgule fait partie d'une entree ;
+   * absent, l'import coupe sur les virgules, points-virgules et retours a la ligne.
+   */
+  | { kind: "textList"; maxItems: number | null; separators?: readonly string[] }
   | { kind: "number"; min: number | null; max: number | null; integer: boolean }
   | { kind: "rating"; min: number; max: number }
   | { kind: "boolean" }
@@ -467,7 +473,8 @@ export const DB_FIELDS = {
   "person.firstName": field("First name", text(80), { expected: once("required") }),
   "person.lastName": field("Last name", text(80), { expected: once("required") }),
   "person.phone": field("Phone", { kind: "phone" }, { expected: once() }),
-  "person.whatsapp": field("WhatsApp", { kind: "phone" }, { expected: once() }),
+  // Obligatoire (decision du 15/11) : aucun numero importe, il remonte dans le To do.
+  "person.whatsapp": field("WhatsApp", { kind: "phone" }, { expected: once("required") }),
   "person.linkedinUrl": field("LinkedIn", { kind: "url" }, { expected: once("required"), mcpFillable: true }),
   "person.photoUrl": field("Photo", { kind: "files", multiple: false }, { expected: once() }),
 
@@ -498,7 +505,11 @@ export const DB_FIELDS = {
   "founderDirectory.gender": field("Gender", text(40)),
   "founderDirectory.nationality": field("Nationality", text(80), { expected: once("required") }),
   "founderDirectory.country": field("Country", text(80)),
-  "founderDirectory.education": field("Main education", text(200), { expected: once("required"), mcpFillable: true }),
+  "founderDirectory.education": field("Education", { kind: "textList", maxItems: 10, separators: ENTRY_SEPARATORS }, {
+    expected: once("required"),
+    writePolicy: "merge_unique",
+    mcpFillable: true,
+  }),
   "founderDirectory.degree": field("Degree", { kind: "enum", listKey: "degrees", values: null }, { mcpFillable: true }),
   "founderDirectory.fieldOfStudy": field("Field of study", text(120), { mcpFillable: true }),
   "founderDirectory.yearsOfXP": field("Years of experience", num(0, 60), { expected: once(), mcpFillable: true }),

@@ -9,7 +9,7 @@ import type { InvestorAccess, UserRole } from "@shared/types";
 import { useAuth } from "@/context/AuthContext";
 import { useAction } from "@/hooks/useAction";
 import { useCallable } from "@/hooks/useCallable";
-import { errorMessage } from "@/lib/errors";
+import { notifyError } from "@/lib/errors";
 import { call } from "@/lib/firebase";
 import { paths } from "@/lib/paths";
 import { ActionBar } from "@/components/admin/ActionBar";
@@ -62,7 +62,7 @@ function SetPasswordLink({ uid }: { uid: string }) {
       );
       notifications.show({ message: copied ? "Set-password link copied." : "Set-password link ready: copy it below." });
     } catch (err) {
-      notifications.show({ color: "red", message: errorMessage(err) });
+      notifyError(err);
     } finally {
       setBusy(false);
     }

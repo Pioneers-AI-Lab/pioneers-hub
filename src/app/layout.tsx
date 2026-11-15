@@ -1,13 +1,35 @@
 import type { Metadata, Viewport } from "next";
+import localFont from "next/font/local";
 import { ColorSchemeScript, mantineHtmlProps } from "@mantine/core";
 import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
 import "@mantine/charts/styles.css";
 import "./globals.css";
 import { Providers } from "./providers";
+import { APP_NAME } from "@shared/brand";
+
+// Polices de la charte Pioneers (theme.ts les lit par leurs variables CSS).
+// Eina 04 n'existe ici qu'en Light et SemiBold (pas de Regular ni de Medium) :
+// chaque fichier couvre une plage de graisses, Light jusqu'a 400 (le texte),
+// SemiBold a partir de 500 (titres, onglets, boutons, tout ce qui est en gras),
+// sans faux gras du navigateur. Plex Mono (Regular seul) couvre toutes les graisses.
+const eina = localFont({
+  src: [
+    { path: "./fonts/Eina04-Light.ttf", weight: "100 400", style: "normal" },
+    { path: "./fonts/Eina04-SemiBold.ttf", weight: "500 900", style: "normal" },
+  ],
+  variable: "--font-eina",
+});
+const plexMono = localFont({
+  src: "./fonts/IBMPlexMono-Regular.ttf",
+  weight: "100 900",
+  variable: "--font-plex-mono",
+  // Petits sur-titres seulement : pas de prechargement (134 Ko), Eina passe d'abord.
+  preload: false,
+});
 
 export const metadata: Metadata = {
-  title: "Pioneers Hub",
+  title: { default: APP_NAME, template: `%s · ${APP_NAME}` },
   description: "Founders, startups and events of the Pioneers batches.",
 };
 
@@ -23,7 +45,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" {...mantineHtmlProps}>
+    <html lang="en" {...mantineHtmlProps} className={`${eina.variable} ${plexMono.variable}`}>
       <head>
         <ColorSchemeScript forceColorScheme="dark" />
       </head>

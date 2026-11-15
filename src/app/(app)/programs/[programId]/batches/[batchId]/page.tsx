@@ -11,7 +11,8 @@ import { useCohort } from "@/context/CohortContext";
 import { useFounders } from "@/context/FoundersContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
-import { PROFILE_CATEGORY_LABEL, formatDay, formatPeriod, percent, relativeDays, score10, todayDayString } from "@/lib/format";
+import { PROFILE_CATEGORY_LABEL, formatDay, formatPeriod, percent, score10, todayDayString } from "@/lib/format";
+import { SHOW_MILESTONES, SHOW_STARTUPS_TAB } from "@/lib/features";
 import { paths } from "@/lib/paths";
 import { LinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Section } from "@/components/ui/Section";
@@ -20,15 +21,18 @@ import { ChartCard } from "@/components/charts/ChartCard";
 import { NationalityMap } from "@/components/charts/NationalityMap";
 import { ProfileDonut } from "@/components/charts/ProfileDonut";
 import { RankedBars } from "@/components/charts/RankedBars";
-import { AddToCalendarButton } from "@/components/event/AddToCalendar";
-import { UpcomingEvents } from "@/components/event/UpcomingEvents";
+import { NextSession } from "@/components/event/NextSession";
 
 // ----------------------------
 // Accueil du batch
 // ----------------------------
-// Prochain jalon, la cohorte (vue d'ensemble du dashboard Spring 2026 :
-// effectif, experience, profils, competences, nationalites), les meilleurs
-// fondateurs et startups (staff et investors), ce qui arrive, les jalons.
+// Dans l'ordre : la prochaine seance (« Next session », le prochain evenement
+// quel qu'il soit, « See all » vers l'onglet Calendar), la vue d'ensemble du
+// batch (« Batch overview », pour tous : `batchStats` est public ; effectif,
+// experience, profils, competences, nationalites), les meilleurs fondateurs et
+// startups (staff et investors), les resultats. « Coming up » et « Add to
+// calendar » vivent sur la page Calendar ; la tuile Startups et les jalons
+// sont masques (lib/features.ts).
 export default function BatchHomePage() {
   const { program } = useProgram();
   const { batch, role } = useBatch();
@@ -38,7 +42,6 @@ export default function BatchHomePage() {
   const { stats, canSeeScores, founderPerformance, startupScoreOf } = useCohort();
 
   const today = todayDayString();
-  const next = batch.milestones.find((m) => m.dayString && m.dayString >= today) ?? null;
   // Espace Slack du batch, pas un canal (le canal configure peut etre reserve au
   // staff) : pour ceux qui en font partie, pas un visiteur public.
   const slackTeamId = batch.settings.slackTeamId ?? null;
@@ -83,26 +86,16 @@ export default function BatchHomePage() {
         </Button>
       )}
 
-      {next && (
-        <Stack gap={2} mt="lg" p="md" style={{ border: "1px solid var(--mantine-color-dark-4)", borderRadius: 12 }}>
-          <span className="label">Next milestone</span>
-          <Text fz={22} fw={600}>
-            {next.label}
-          </Text>
-          <Text size="sm" c="dimmed">
-            {formatDay(next.dayString)} · <Text span c="pioneers" inherit>{relativeDays(next.dayString!)}</Text>
-          </Text>
-        </Stack>
-      )}
+      <NextSession />
 
-      <Stack mt="lg" gap={0}>
+      <Section title="Batch overview">
         <StatGrid>
           <StatTile
             label={role === "public" ? "Public profiles" : "Founders"}
             value={role === "public" ? founders.length : (stats?.founders ?? founders.length)}
             href={paths.founders(program.id, batch.id)}
           />
-          <StatTile label="Startups" value={startups.length} href={paths.startups(program.id, batch.id)} />
+          {SHOW_STARTUPS_TAB && <StatTile label="Startups" value={startups.length} href={paths.startups(program.id, batch.id)} />}
           {stats?.avgYearsOfXP !== null && stats?.avgYearsOfXP !== undefined && (
             <StatTile label="Avg years of XP" value={stats.avgYearsOfXP.toFixed(1)} />
           )}
@@ -110,51 +103,51 @@ export default function BatchHomePage() {
             <StatTile label="Repeat founders" value={percent(stats.repeatFounders)} />
           )}
         </StatGrid>
-      </Stack>
 
-      {role === "public" && (
-        <Text size="sm" c="dimmed" mt="md">
-          {firebaseUser ? (
-            // Connecte sans profil dans ce batch : se connecter n'y changerait rien.
-            <>
-              Your account is not linked to a founder profile of this batch.{" "}
-              <Anchor component={Link} href={paths.claim()} inherit>
-                Find your profile
-              </Anchor>
-            </>
-          ) : (
-            <>
-              Founders of this batch:{" "}
-              <Anchor component={Link} href={paths.signIn(paths.batch(program.id, batch.id))} inherit>
-                sign in
-              </Anchor>
-            </>
-          )}{" "}
-          to see everyone.
-        </Text>
-      )}
+        {role === "public" && (
+          <Text size="sm" c="dimmed">
+            {firebaseUser ? (
+              // Connecte sans profil dans ce batch : se connecter n'y changerait rien.
+              <>
+                Your account is not linked to a founder profile of this batch.{" "}
+                <Anchor component={Link} href={paths.claim()} inherit>
+                  Find your profile
+                </Anchor>
+              </>
+            ) : (
+              <>
+                Founders of this batch:{" "}
+                <Anchor component={Link} href={paths.signIn(paths.batch(program.id, batch.id))} inherit>
+                  sign in
+                </Anchor>
+              </>
+            )}{" "}
+            to see everyone.
+          </Text>
+        )}
 
-      {stats && (
-        <Stack gap="sm" mt="lg">
-          <ChartCard title="Profile distribution">
-            <ProfileDonut
-              slices={(["technical", "business", "hybrid"] as const).map((k) => ({
-                key: k,
-                label: PROFILE_CATEGORY_LABEL[k],
-                value: stats.profileDistribution[k] ?? 0,
-              }))}
-            />
-            <Divider color="dark.4" />
-            <RankedBars
-              bars={Object.entries(stats.skillsDistribution).map(([k, v]) => ({ key: k, label: k, value: v }))}
-              limit={6}
-            />
-          </ChartCard>
-          <ChartCard title={`Nationalities · ${Object.keys(stats.nationalities).length}`}>
-            <NationalityMap counts={stats.nationalities} />
-          </ChartCard>
-        </Stack>
-      )}
+        {stats && (
+          <>
+            <ChartCard title="Profile distribution">
+              <ProfileDonut
+                slices={(["technical", "business", "hybrid"] as const).map((k) => ({
+                  key: k,
+                  label: PROFILE_CATEGORY_LABEL[k],
+                  value: stats.profileDistribution[k] ?? 0,
+                }))}
+              />
+              <Divider color="dark.4" />
+              <RankedBars
+                bars={Object.entries(stats.skillsDistribution).map(([k, v]) => ({ key: k, label: k, value: v }))}
+                limit={6}
+              />
+            </ChartCard>
+            <ChartCard title={`Nationalities · ${Object.keys(stats.nationalities).length}`}>
+              <NationalityMap counts={stats.nationalities} />
+            </ChartCard>
+          </>
+        )}
+      </Section>
 
       {topFounders.length > 0 && (
         <Section title="Top founders" hint="Program performance, out of 10.">
@@ -190,31 +183,31 @@ export default function BatchHomePage() {
         </Section>
       )}
 
-      <UpcomingEvents limit={4} right={<AddToCalendarButton batchId={batch.id} batchName={batch.name} />} />
-
       <Section title="Results">
         <RowList>
           <LinkRow href={paths.leaderboard(program.id, batch.id)} title="Leaderboard" subtitle="Jury scores by event" />
         </RowList>
       </Section>
 
-      <Section title="Milestones">
-        <RowList>
-          {batch.milestones
-            .filter((m) => m.dayString || batch.status !== "completed")
-            .map((m) => (
-              <Row
-                key={m.key}
-                title={m.label}
-                meta={
-                  <Text size="sm" c={!m.dayString || m.dayString < today ? "dimmed" : undefined} className={m.dayString ? "num" : undefined}>
-                    {m.dayString ? formatDay(m.dayString) : "To be set"}
-                  </Text>
-                }
-              />
-            ))}
-        </RowList>
-      </Section>
+      {SHOW_MILESTONES && (
+        <Section title="Milestones">
+          <RowList>
+            {batch.milestones
+              .filter((m) => m.dayString || batch.status !== "completed")
+              .map((m) => (
+                <Row
+                  key={m.key}
+                  title={m.label}
+                  meta={
+                    <Text size="sm" c={!m.dayString || m.dayString < today ? "dimmed" : undefined} className={m.dayString ? "num" : undefined}>
+                      {m.dayString ? formatDay(m.dayString) : "To be set"}
+                    </Text>
+                  }
+                />
+              ))}
+          </RowList>
+        </Section>
+      )}
     </Stack>
   );
 }

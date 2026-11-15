@@ -141,7 +141,7 @@ for (const f of founders) {
     nationality: null,
     country: "France",
     introduceYourself: "Demo introduction.",
-    education: "Demo University",
+    education: ["Demo University"],
     degree: "MSc",
     fieldOfStudy: "Computer Science",
     yearsOfXP: 5,
@@ -563,6 +563,38 @@ batch.set(db.doc("forms/demo-weekly-form"), {
   status: "open",
   opensDateISOString: now,
   deadlineDateISOString: inDays(1, 18),
+});
+
+// ---- Shortlist et rencontres (fictives) ---------------------------------------
+// Ada a shortliste Ben et Chloe, et a rencontre Ben (elle, le staff et l'IC le voient).
+batch.set(db.doc("founders/ada-example/private/connections"), {
+  shortlistedFounderIds: ["ben-sample", "chloe-demo"],
+  metFounderIds: ["ben-sample"],
+  updatedDateISOString: now,
+});
+
+// ---- Taches du To do (fictives) ---------------------------------------------
+// Checklist commune du batch (Admin > Tasks) ; Ada a coche la premiere. Une
+// tache archivee (retiree par le staff) n'apparait plus nulle part.
+const task = (id, order, title, description, linkUrl, archived = false) =>
+  batch.set(db.doc(`batchTasks/${id}`), {
+    ...stamps,
+    ...scoped,
+    archivedDateISOString: archived ? now : null,
+    title,
+    description,
+    linkUrl,
+    order,
+  });
+task("demo-task-intro", 1, "Introduce yourself on Slack", "A short intro in the batch Slack.", "https://slack.com/");
+task("demo-task-shortlist", 2, "Finish your co-founder shortlist", "From the Founders directory.", `/programs/${PROGRAM_ID}/batches/${BATCH_ID}/founders`);
+task("demo-task-archived", 3, "Old task (archived)", null, null, true);
+batch.set(db.doc("taskCompletions/demo-task-intro_ada-example"), {
+  ...scoped,
+  taskId: "demo-task-intro",
+  founderId: "ada-example",
+  done: true,
+  updatedDateISOString: now,
 });
 
 await batch.commit();

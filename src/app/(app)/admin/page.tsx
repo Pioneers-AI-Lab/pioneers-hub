@@ -33,6 +33,7 @@ export default function AdminHomePage() {
             subtitle="Create events from a template (event, matching, forms), set them up, draw teams and tables"
           />
           <LinkRow href={paths.adminForms()} title="Forms" subtitle="Create, edit and publish forms, from templates" />
+          <LinkRow href={paths.adminTasks()} title="Tasks" subtitle="The founders' checklist in To do: add, edit, see who is late" />
           <LinkRow href={paths.adminImport()} title="Import founders" subtitle="From the onboarding CSV" />
           <LinkRow href={paths.adminBatchSettings()} title="Batch settings" subtitle="Status, milestones, leaderboard, Slack; new program or batch" />
         </RowList>

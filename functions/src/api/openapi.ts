@@ -5,6 +5,7 @@ import { AddNoteInput } from "../services/notes";
 import { SetFieldsInput } from "../services/fields";
 import { ListInput, REST_OBJECTS } from "../services/read";
 import { toInputJsonSchema } from "../services/schemas";
+import { APP_NAME } from "../shared/brand";
 import { PUBLIC_BASE_URL } from "./config";
 
 // ----------------------------
@@ -44,10 +45,10 @@ function build() {
   return {
     openapi: "3.1.0",
     info: {
-      title: "Pioneers Hub API",
+      title: `${APP_NAME} API`,
       version: "1",
       description:
-        "Read and fill the Pioneers batch database. Authenticate with a personal API key (`Authorization: Bearer ph_live_...`), created in Pioneers Hub > API & MCP. Any Pioneers Hub account can create one; it acts with the rights of its owner (what they see and may change in the app). Claude connects to the MCP server at `/mcp` (OAuth) instead.",
+        `Read and fill the Pioneers batch database. Authenticate with a personal API key (\`Authorization: Bearer ph_live_...\`), created in ${APP_NAME} > API & MCP. Any ${APP_NAME} account can create one; it acts with the rights of its owner (what they see and may change in the app). Claude connects to the MCP server at \`/mcp\` (OAuth) instead.`,
     },
     servers: [{ url: PUBLIC_BASE_URL }],
     security: [{ apiKey: [] }],

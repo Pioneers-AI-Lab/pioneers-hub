@@ -15,7 +15,7 @@ import { formatDay, integer, percent } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { Field } from "@/components/ui/Field";
 import { ExternalLinkRow, Row, RowList } from "@/components/ui/Rows";
-import { Section } from "@/components/ui/Section";
+import { Section, SubsectionTitle } from "@/components/ui/Section";
 import { ScoreBar, ScoreHeadline } from "@/components/insights/ScoreBar";
 import { ChartCard } from "@/components/charts/ChartCard";
 import { MarketBubbles } from "@/components/charts/MarketBubbles";
@@ -255,7 +255,7 @@ export function MarketAnalysisSection() {
       </Stack>
       {market.competitors.length > 0 && (
         <Stack gap={0} mt="xs">
-          <span className="label">Competitors · {market.competitors.length}</span>
+          <SubsectionTitle>Competitors · {market.competitors.length}</SubsectionTitle>
           <RowList>
             {market.competitors.map((c) => {
               const props = {
@@ -271,7 +271,7 @@ export function MarketAnalysisSection() {
       )}
       {market.sources.length > 0 && (
         <Stack gap={0} mt="xs">
-          <span className="label">Sources</span>
+          <SubsectionTitle>Sources</SubsectionTitle>
           {market.sources.map((url) => (
             <a
               key={url}

@@ -1,6 +1,9 @@
 @AGENTS.md
 
-# Pioneers Hub
+# Pioneers Founder Hub
+
+Nom affiche : `APP_NAME` (`functions/src/shared/brand.ts`, decision du 15/11), logo `public/logo-pioneers-founder-hub.svg`
+(`components/chrome/AppLogo.tsx`). Les identifiants techniques gardent `pioneers-hub`.
 
 Plateforme du batch Pioneers : programmes, batchs, fondateurs, startups, evenements.
 Specification : `../SPECS.md`, **seule source de verite** (modele §6.1, qui voit quoi §6.2, scores §5,
@@ -32,6 +35,8 @@ node scripts/import-events.mjs "Week 1" [--prod]   # evenements de data/events.j
 node scripts/sync-events.mjs "Week 1" [--prod]     # MET A JOUR les evenements sur data/events.json (agenda, bareme, matching sans equipes), recree les formulaires sans reponse, archive `archived`
 node scripts/elo-rank.mjs <batchId> [--prod] [--rounds 8]   # Elo des profils par Claude (claude-opus-5-5, ANTHROPIC_API_KEY ; a blanc sans --prod : aucun appel)
 node scripts/migrate-standard-forms.mjs <batchId> [--prod]   # modele standard : anciens metrics/criteria/picks -> formulaires (a blanc sans --prod)
+node scripts/migrate-education-tags.mjs <batchId|--all> [--prod]   # `founderDirectory.education` texte -> liste (separateurs `;` et ` · `, shared/text.ts#splitTextList), a blanc sans --prod
+node scripts/seed-tasks.mjs <batchId> [--prod]   # taches de depart du To do (Slack, LinkedIn, shortlist), a blanc sans --prod, n'ecrase jamais
 node scripts/migrate-metric-keys.mjs <batchId> [--prod]   # cles de metriques standard (SPECS A.5), a blanc sans --prod ; puis backfill-kpis.mjs
 npx firebase deploy --only storage --project prod   # regles Storage (tout refuse : lecture par URL a jeton)
 npm run typecheck     # route types + front + functions
@@ -147,7 +152,7 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   `metricSnapshots`, source `recordedSource` de la soumission, puis leaderboard, `services/teamResults.ts`) et
   `onEvaluationWritten` (leaderboard), en europe-west9. `onFormWritten` (`forms/{id}`) recalcule le leaderboard quand
   la grille du jury ou les metriques d'un formulaire changent (pas pour une date, un statut, un titre).
-- **Jamais lus par l'API** : `peerRatings`, `picks`, `judges`, `apiKeys`, `writePlans` (SPECS §4.8). Avis, picks
+- **Jamais lus par l'API** : `peerRatings`, `picks`, `judges`, `apiKeys`, `writePlans`, `founders/*/private/connections` (SPECS §4.8). Avis, picks
   et notes du jury ne s'ecrivent que par leur formulaire (`DOC_KINDS[...].formOnly`, refus `form_only`).
 - **OAuth 2.1** (`functions/src/oauth`, connecteur claude.ai et Claude Code) : decouverte RFC 9728 / 8414, enregistrement
   dynamique, `/oauth/authorize` -> page front `/oauth/consent` (callables `oauthDescribeRequest` / `oauthDecide`),
@@ -160,8 +165,8 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   a audience restreinte (office hours...) n'y sont pas. A l'ecran, `EventsContext` les montre a leurs seuls invites
   (`shared/access.ts#canSeeEvent`, appliquee aussi par l'API), au staff et aux investors. Filtre d'affichage
   seulement : la regle `events` laisse tout lire (listes d'invites comprises).
-  Cache CDN 10 min, `DTSTAMP` = derniere modification (ETag stable, 304). Bouton « Add to calendar » de l'accueil du
-  batch (abonnement Apple / Google / Outlook, `components/event/AddToCalendar.tsx`).
+  Cache CDN 10 min, `DTSTAMP` = derniere modification (ETag stable, 304). Bouton « Add to calendar » de l'onglet
+  Calendar du batch (abonnement Apple / Google / Outlook, `components/event/AddToCalendar.tsx`).
 - Spec OpenAPI 3.1 publique `GET /v1/openapi.json` (`api/openapi.ts`), tiree des memes contrats zod ; seule reponse
   cachee au CDN. Adresses publiques et longueur du nom de cle : `shared/api.ts`. Table des types REST : `REST_OBJECTS`.
 - Page `/api-docs` (menu du compte, `canUseApi`) : brancher Claude, creer / revoquer ses cles (`ApiKeysContext`),
@@ -209,6 +214,9 @@ document ENTIER, jamais un champ) :
 | `founders/{id}` | public si `publicProfileConsent`, sinon fondateurs du batch + staff + investors |
 | `founders/{id}/private/directory` | fondateurs du batch + staff + investors (champs du Profile Book) |
 | `founders/{id}/private/profile` | le fondateur lui-meme + staff + investors IC (age, date de naissance) |
+| `founders/{id}/private/connections` | le fondateur lui-meme + staff + investors IC (shortlist, met ; ecrit par lui seul, jamais par le staff ni l'API) |
+| `batchTasks/{id}` | fondateurs du batch + staff + investors (taches du To do, ecrites par le staff, archivees) |
+| `taskCompletions/{taskId}_{founderId}` | le fondateur lui-meme + staff (sa coche, ecrite par lui seul ; decocher = `done: false`) |
 | `formCompletions/{formId}_{founderId}`, `picks` | le fondateur lui-meme + staff (« J'ai repondu » et picks, ecrits par `submitFormResponse` ; jamais pour un formulaire anonyme) |
 | `founders/{id}/private/internal`, `founderStats`, `notes`, `assessments`, `eloMatches` | staff + investors IC |
 | `startups/{id}` | public |
@@ -228,6 +236,9 @@ delier libere aussi la personne et le compte s'il n'en tient plus rien (aucun au
 `lib/accounts.ts#unlinkFounder`). `claimRequests` (ancienne validation par le staff) : plus rien ne les cree, aucune en base.
 Le fondateur modifie lui-meme les champs de `FOUNDER_SELF_EDITABLE` (shared/access.ts, miroir
 des regles `update`) ; WhatsApp et LinkedIn s'ecrivent dans `people` ET leur copie, en un lot.
+WhatsApp est obligatoire (15/11). `founderDirectory.education` est une LISTE (15/11, une ecole ou un diplome par entree ; une
+ancienne valeur texte est decoupee a la lecture par `readDirectory` (shared/types/founder.ts) : convertisseur de
+`refs.founderDirectory`, `services/read.ts`, `services/fields.ts` ; separateurs `;` et ` · ` declares dans le registre).
 
 Roles : `users.roles` (`staff`, `investor`, `mentor`, cumulables) et `users.investorAccess`
 (`ic` ou `portfolio`), ecrits par le staff seulement. Un visiteur est fondateur d'un batch
@@ -242,13 +253,13 @@ d'acces en v1. Collections a plat avec `programId` / `batchId`.
 | Visiteur | `app/providers.tsx` | `context/AuthContext.tsx` | `User`, `Viewer` |
 | Programmes | `app/(app)/programs/layout.tsx` | `ProgramsContext` | `Program` |
 | Programme | `programs/[programId]/layout.tsx` | `ProgramContext` (+ ses batchs) | `Program`, `Batch` |
-| Batch + role | `.../batches/[batchId]/layout.tsx` | `BatchContext`, `FoundersContext`, `StartupsContext` | `Batch`, `BatchRole` |
+| Batch + role | `.../batches/[batchId]/layout.tsx` | `BatchContext`, `FoundersContext`, `StartupsContext` ; pour le visiteur fondateur (cible `null` sinon) : `MyConnectionsContext` (sa shortlist / ses rencontres : liste, grille, fiches, SA fiche) et `TasksContext` (taches du batch + ses coches, `hooks/useBatchTasks`) | `Batch`, `BatchRole` |
 | Fondateur | `.../founders/[founderId]/layout.tsx` | `FounderContext` | `Founder`, `FounderDirectory`, `FounderProfile`, `FounderInternal` |
-| Annuaire (grille) | `.../founders/layout.tsx` | `FounderDirectoriesContext` (mode liste / grille ; `private/directory` de chaque fondateur une fois la grille ouverte) | `FounderDirectory` |
+| Annuaire (grille) | `.../founders/layout.tsx` | `FounderDirectoriesContext` (grille par defaut, liste au choix ; `private/directory` de chaque fondateur a la premiere visite de Founders : la page appelle `ensureOpen`) | `FounderDirectory` |
 | Startup | `.../startups/[startupId]/layout.tsx` | `StartupContext` | `Startup`, `StartupProfile`, `StartupInternal` |
 | Batch (suite) | idem batch | `EventsContext`, `ListsContext`, `CohortContext` (batchStats + scores), `LeaderboardsContext` | `PioneersEvent`, `ClosedList`, `BatchStats`, `Score`, `Leaderboard` |
-| Moi | `.../(mine)/layout.tsx` (groupe de `me/` et `todo/`) | `MeGate` -> `FounderContext` (id du rattachement) + `FormsToFillContext` (formulaires qui me restent : audience `formConcernsFounder`, `formCompletions`, anonymes retenus par le navigateur ; Debrief et picks remplis restent modifiables tant qu'ils sont ouverts) ; `hooks/useTodoItems` les range (picks, hackathons, formulaires : page To do, resume en haut de SA fiche). « Me » = sa fiche `/founders/{son id}` (`founders/[founderId]/layout.tsx` monte les memes Providers via `SelfProviders` quand c'est la sienne) ; `/me` et `/me/edit` ne font que rediriger | |
-| Admin | `app/(app)/admin/layout.tsx` | `AdminContext` (garde : role `staff` ; batch de travail choisi par `BatchPicker`, retenu sur le compte ; demandes de rattachement en attente, tous batchs) | `Batch`, `Founder`, `PioneersEvent`, `Form`, `ClaimRequest` |
+| Moi | `.../(mine)/layout.tsx` (groupe de `me/` et `todo/`) | `MeGate` -> `FounderContext` (id du rattachement) + `FormsToFillContext` (formulaires qui me restent : audience `formConcernsFounder`, `formCompletions`, anonymes retenus par le navigateur ; Debrief et picks remplis restent modifiables tant qu'ils sont ouverts)  (via `TodoProviders`) ; `TasksContext` (layout du batch) ; `hooks/useTodoItems` les range (checklist : profil calcule puis taches ; picks, hackathons, formulaires : page To do, resume en haut de SA fiche). « Me » = sa fiche `/founders/{son id}` (`founders/[founderId]/layout.tsx` monte les memes Providers via `SelfProviders` quand c'est la sienne) ; `/me` et `/me/edit` ne font que rediriger | |
+| Admin | `app/(app)/admin/layout.tsx` | `AdminContext` (garde : role `staff` ; batch de travail choisi par `BatchPicker`, retenu sur le compte ; demandes de rattachement en attente, tous batchs) ; Admin > Tasks : `AdminTasksContext`, `lib/tasksAdmin.ts`, attendus = `isBatchParticipant` | `Batch`, `Founder`, `PioneersEvent`, `Form`, `ClaimRequest` |
 | Rattachement | `app/(app)/claim/layout.tsx` | `ClaimContext` | `Founder`, `ClaimRequest` |
 
 Regles :
@@ -282,19 +293,33 @@ Regles :
 
 ## Interface : mobile d'abord (decision du 11/11)
 
-- Theme sombre force, bleu `#0DB0F5` reserve a l'element actif et a l'action principale.
+- Theme sombre force, bleu `#0DB0F5` reserve a l'element actif et a l'action principale ; bleu clair
+  `pioneers.3` (`#5fcaf7`) pour les titres de section (decision du 15/11).
+- Typographie (15/11) : Eina 04 Light pour le texte, Eina 04 SemiBold pour les titres et tout ce qui est en
+  gras, IBM Plex Mono pour les sur-titres en capitales (`.label`). Fichiers dans `app/fonts/`, branches par
+  `next/font/local` (`app/layout.tsx`) et `theme.ts`. Eina Regular et Medium MANQUENT : les `@font-face`
+  couvrent des plages (Light jusqu'a 400, SemiBold a partir de 500), donc deux graisses visibles seulement
+  (un `fw={500}` s'affiche en SemiBold). Licence web Eina (Textaxis) a confirmer avec Pioneers ; TTF a convertir en woff2.
 - Minimaliste : du texte, des filets, peu de cadres. **Pas d'icone** sauf manque de place ou chevron
-  de depliage (`ScoreBreakdown` : `>` tourne vers le bas une fois ouvert), **jamais d'emoji**.
-- Aucune table : des lignes empilees (`components/ui/Rows.tsx` : `LinkRow`, `ButtonRow`, `Row`),
-  cibles tactiles de 60 px. Titres : `PageHeader` ; blocs : `Section` ; valeurs : `Field`
-  (masque si vide).
-- Dans un batch : onglets en bas sur mobile, en haut des 48em (`BatchShell`). Les onglets
+  de depliage (`ExpandChevron` de `Rows.tsx`, dessine par `ButtonRow` des `expanded` : `>` tourne vers le bas une fois ouvert) ou de retour (`BackButton`),
+  **jamais d'emoji**.
+- Aucune table : des lignes empilees (`components/ui/Rows.tsx` : `LinkRow`, `ButtonRow`, `Row`, `ActionRow` = bouton a droite hors du lien),
+  cibles tactiles de 60 px. Titres : `PageHeader` ; blocs : `Section` (filet au-dessus, titre bleu clair
+  16 px) ; titre de section ecrit a la main : `SectionTitle` (meme fichier), jamais un `.label` ; titre d'un bloc dans une
+  section (cadre de graphique, liste) : `SubsectionTitle` ; valeurs :
+  `Field` (masque si vide ; son libelle `.label` reste gris).
+- Retour : `PageHeader` `back`, ou `BackButton` (meme fichier) hors en-tete : bouton gris leger avec chevron,
+  40 px. Jamais un lien texte « All founders ».
+- Dans un batch : onglets en bas sur mobile (64 px, texte 15 px, jusqu'a 5 onglets en 390 px), en haut des
+  48em (16 px, 48 px de haut) (`BatchShell`, `.tabbar` / `.toptabs`, `--tabbar-height`). Pas d'icones. Les onglets
   dependent du role (fondateur : To do, Me). Aucun onglet staff : TOUS les outils du staff sont dans
-  `/admin` (decision du 13/11) : Access (comptes), Founder profiles, Events, Forms, Import founders, Batch settings.
+  `/admin` (decision du 13/11) : Access (comptes), Founder profiles, Events, Forms, Tasks, Import founders, Batch settings.
+  Onglets : Home, Founders, Calendar (+ To do, Me). Startups et la section Milestones de l'accueil sont MASQUES
+  par drapeau (`lib/features.ts`, decision du 15/11 : startups formees le 25/11) ; le code reste.
 - Champs de saisie en 16 px (sinon iOS zoome) : taille `md` par defaut (theme.ts). Boutons
   d'action principaux `size="md"`, pleine largeur sur mobile ; enregistrement dans `.savebar`.
 - Verifier en 390 px de large : aucun debordement horizontal.
-- Cibles tactiles >= 40 px : boutons en `md` par defaut (theme), lien isole (retour, email,
+- Cibles tactiles >= 40 px : boutons en `md` par defaut (theme), lien isole (email,
   site) avec `className="tap-link"`, ligne entiere cliquable plutot qu'un lien dans une ligne
   (`LinkRow`, `ExternalLinkRow`). Choix courts : `SegmentedControl` plutot qu'un `Select`.
 - Fenetres : `ResponsiveDialog` (feuille du bas sur mobile, fenetre centree sinon), jamais
@@ -310,6 +335,7 @@ Regles :
 ## Conventions
 
 - Interface en anglais (equipe Pioneers), commentaires et docs en francais.
-- Polices Mantine par defaut (pas d'IBM Plex Mono). Chiffres en colonnes : `className="num"` (tabular-nums).
+- Polices : Eina 04 (Light / SemiBold) et IBM Plex Mono sur `.label` (voir Interface). Chiffres en colonnes :
+  `className="num"` (tabular-nums, dans la police du texte).
 - Rien n'est supprime : on archive (`archivedDateISOString`).
 - Donnees de test : personnes fictives uniquement, emulateurs uniquement.

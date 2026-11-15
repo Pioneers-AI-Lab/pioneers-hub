@@ -14,7 +14,7 @@ import { PublicFormProvider } from "@/context/PublicFormContext";
 // formulaire. La frontiere Suspense est exigee par `useParams` (cacheComponents).
 
 export const metadata: Metadata = {
-  title: "Form · Pioneers Hub",
+  title: "Form",
   description: "Answer a Pioneers form.",
   robots: { index: false, follow: false },
 };

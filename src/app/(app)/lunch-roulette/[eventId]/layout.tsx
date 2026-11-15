@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { APP_NAME } from "@shared/brand";
 import { PublicTeamsProvider } from "@/context/PublicTeamsContext";
 
 // Apercu du lien partage (Slack, WhatsApp...) : une banniere fixe. Le serveur
@@ -9,12 +10,12 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? process.env.URL ?? "http://l
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "Lunch roulette · Pioneers Hub",
+  title: "Lunch roulette",
   description: "Find your lunch table.",
   openGraph: {
     title: "Lunch roulette",
     description: "Find your lunch table.",
-    siteName: "Pioneers Hub",
+    siteName: APP_NAME,
     type: "website",
     images: [{ url: "/lunch-roulette-banner.png", width: 2014, height: 781, alt: "Pioneers lunch roulette" }],
   },

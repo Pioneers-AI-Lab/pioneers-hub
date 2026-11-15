@@ -16,7 +16,7 @@ import { appendQuestion } from "@/lib/formsAdmin";
 import { rankedRowText } from "@/components/leaderboard/rankedRowText";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, RankNumber, Row, RowList } from "@/components/ui/Rows";
-import { Section } from "@/components/ui/Section";
+import { Section, SubsectionTitle } from "@/components/ui/Section";
 
 // ----------------------------
 // Le leaderboard d'un evenement : son bareme, ou les notes du jury
@@ -139,7 +139,7 @@ function Ranking() {
   if (!board || board.rows.length === 0) return null;
   return (
     <Stack gap="xs" mt="md">
-      <span className="label">Ranking · computed {formatDateTime(board.computedDateISOString)}</span>
+      <SubsectionTitle>Ranking · computed {formatDateTime(board.computedDateISOString)}</SubsectionTitle>
       <RowList>
         {[...board.rows]
           .sort((a, b) => a.rank - b.rank)

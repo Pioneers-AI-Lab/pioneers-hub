@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { Anchor, Avatar, Group, Stack, Text, Title } from "@mantine/core";
+import { Avatar, Group, Stack, Text, Title } from "@mantine/core";
 import type { StartupStatus } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useFounders } from "@/context/FoundersContext";
@@ -9,6 +8,7 @@ import { useProgram } from "@/context/ProgramContext";
 import { useStartup } from "@/context/StartupContext";
 import { paths } from "@/lib/paths";
 import { ExternalLink, Field, FieldGrid } from "@/components/ui/Field";
+import { BackButton } from "@/components/ui/PageHeader";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { LinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
@@ -25,9 +25,7 @@ export default function StartupPage() {
 
   return (
     <Stack gap={0}>
-      <Anchor component={Link} href={paths.startups(program.id, batch.id)} size="sm" c="dimmed" mb="md" w="fit-content" className="tap-link">
-        All startups
-      </Anchor>
+      <BackButton href={paths.startups(program.id, batch.id)} label="All startups" mb="md" />
       <Group gap="md" wrap="nowrap">
         <Avatar src={startup.logoUrl} name={startup.name} color="initials" size={64} radius="md" />
         <Stack gap={2} style={{ minWidth: 0 }}>

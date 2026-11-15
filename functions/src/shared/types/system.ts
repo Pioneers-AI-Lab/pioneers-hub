@@ -129,7 +129,7 @@ export type IdempotencyRecord = {
 // ----------------------------
 // SPECS §4.8 : « aucune cle d'acces stockee sur les ordinateurs ». Claude se
 // connecte en OAuth : la personne colle l'adresse du serveur MCP, se connecte
-// avec son compte Pioneers Hub et accepte. Les secrets (codes, jetons) ne sont
+// avec son compte Pioneers Founder Hub et accepte. Les secrets (codes, jetons) ne sont
 // stockes que par leur empreinte (id du document = sha256 du secret).
 
 /** oauthClients/{clientId} : un client enregistre dynamiquement (RFC 7591). */

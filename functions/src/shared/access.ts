@@ -62,10 +62,10 @@ export function roleInBatch(viewer: Viewer | null, viewerFounderId: string | nul
  * memes (isInsider, isStaffOrInvestor, isMemberOf...).
  *
  *   batch                   fondateurs du batch, staff, investors
- *                           -> liste des fondateurs, private/directory, memberships
+ *                           -> liste des fondateurs, private/directory, memberships, batchTasks
  *   self ou insider         le fondateur lui-meme, staff, investors IC
- *                           -> private/profile, founderWeeks, sessionRatings, people
- *   self ou staff           le fondateur lui-meme, staff -> picks, formCompletions
+ *                           -> private/profile, private/connections, founderWeeks, sessionRatings, people
+ *   self ou staff           le fondateur lui-meme, staff -> picks, formCompletions, taskCompletions
  *   membres ou investors    membres de la startup, staff, investors
  *                           -> startups/private/profile, kpiSeries, checkins, metricSnapshots
  *   staff ou investors      -> scores
@@ -115,7 +115,10 @@ export function isStartupMember(viewerFounderId: string | null, startup: Pick<St
 /** Audience « batch » : liste complete des fondateurs, `private/directory` (Profile Book), `memberships`. */
 export const canReadFounderDirectory = (role: BatchRole): boolean => role !== "public";
 
-/** Audience « self ou insider » : `private/profile`, `founderWeeks`, `sessionRatings`. */
+/**
+ * Audience « self ou insider » : `private/profile`, `private/connections` (shortlist et rencontres ; ecrites par
+ * le fondateur lui-meme seulement, jamais le staff : regle `private/{docId}`), `founderWeeks`, `sessionRatings`.
+ */
 export const canReadFounderProfile = (role: BatchRole, viewerFounderId: string | null, founderId: string): boolean =>
   isInsider(role) || viewerFounderId === founderId;
 

@@ -1,4 +1,5 @@
 import dayjs from "dayjs";
+import { parisToday } from "@shared/dates";
 
 export { searchKey } from "@shared/text";
 
@@ -22,9 +23,28 @@ export function formatDateTime(iso: string | null | undefined): string {
   return d.isValid() ? d.format("ddd D MMM, HH:mm") : iso;
 }
 
-/** Jours entiers d'aujourd'hui au jour donne (negatif si passe). */
-export function daysUntil(day: string): number {
-  return dayjs(day).startOf("day").diff(dayjs().startOf("day"), "day");
+/** Instant ISO -> `09:30` (l'heure seule, sous un titre de jour). */
+export function formatTime(iso: string | null | undefined): string {
+  if (!iso) return "-";
+  const d = dayjs(iso);
+  return d.isValid() ? d.format("HH:mm") : iso;
+}
+
+/** Jours entiers d'aujourd'hui (ou du jour `from`, `YYYY-MM-DD`) au jour donne (negatif si passe). */
+export function daysUntil(day: string, from?: string): number {
+  return dayjs(day).startOf("day").diff(dayjs(from).startOf("day"), "day");
+}
+
+/**
+ * Titre d'un jour de l'agenda (`YYYY-MM-DD`, un jour de Paris : `parisDay`), compare au jour
+ * de Paris (pas a celui du navigateur) : `Today · Sun 15 Nov`, `Tomorrow · Mon 16 Nov`, sinon
+ * `Wed 18 Nov` (annee ajoutee hors de l'annee en cours).
+ */
+export function formatDayTitle(day: string): string {
+  const today = parisToday();
+  const label = `${dayjs(day).format("ddd")} ${formatDay(day, day.slice(0, 4) === today.slice(0, 4))}`;
+  const n = daysUntil(day, today);
+  return n === 0 ? `Today · ${label}` : n === 1 ? `Tomorrow · ${label}` : label;
 }
 
 /** `in 5 days`, `today`, `tomorrow`, `3 days ago`. */

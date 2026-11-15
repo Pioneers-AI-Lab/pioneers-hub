@@ -3,6 +3,7 @@ import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { COL } from "../shared/collections";
 import { canUseApi } from "../shared/access";
+import { APP_NAME } from "../shared/brand";
 import type { ApiKey, AuditSource } from "../shared/types";
 import { ACCESS_PREFIX, resolveAccessToken } from "../oauth/store";
 import { secret, sha256 } from "./crypto";
@@ -106,7 +107,7 @@ async function resolveCaller(req: Request, via: Caller["via"]): Promise<Caller> 
       : await callerFromIdToken(token);
 
   // `canUseApi` : la politique d'acces, en un seul point (tout compte connecte aujourd'hui).
-  if (!canUseApi(resolved.viewer)) throw forbidden("not_allowed", "This account cannot use the Pioneers Hub API.");
+  if (!canUseApi(resolved.viewer)) throw forbidden("not_allowed", `This account cannot use the ${APP_NAME} API.`);
   return { ...resolved, uid: resolved.viewer.uid, via };
 }
 

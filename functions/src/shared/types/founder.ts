@@ -1,5 +1,6 @@
 import type { Archivable, BatchScoped, DateISOString, DayString, Timestamps } from "./common";
 import type { CommitmentStatus } from "./form";
+import { splitTextList } from "../text";
 
 // ----------------------------
 // Fondateur : quatre documents, quatre publics (SPECS §6.2)
@@ -141,8 +142,14 @@ export type FounderDirectory = {
   country: string | null;
   /** @source SP26 « Introduce yourself » */
   introduceYourself: string | null;
-  /** @source SP26 « Main education » */
-  education: string | null;
+  /**
+   * @source SP26 « Main education » : une entree par ecole ou diplome (decision
+   * du 15/11). Un document pas encore migre (scripts/migrate-education-tags.mjs)
+   * a encore un texte : `readDirectory` (ci-dessous) le decoupe a la lecture,
+   * dans l'app (convertisseur de `refs.founderDirectory`, lib/firestore/refs.ts)
+   * et l'API (services/read.ts, services/fields.ts).
+   */
+  education: string[];
   /** @source SP26 « Degree » */
   degree: string | null;
   /** @source SP26 « Field of study » */
@@ -175,6 +182,16 @@ export type FounderDirectory = {
   /** @source FA26 onboarding : secteurs ou il veut acquerir de l'experience. */
   industriesToExplore: string[];
 };
+
+/**
+ * Un `private/directory` tel qu'on le lit : Education toujours en liste, meme sur
+ * un document pas encore migre (ancien texte decoupe par `splitTextList`).
+ * Seule lecture de l'annuaire, cote app comme cote API.
+ */
+export const readDirectory = <T extends object>(doc: T): T => ({
+  ...doc,
+  education: splitTextList((doc as { education?: unknown }).education),
+});
 
 // ---- founders/{founderId}/private/profile ------------------------------------
 

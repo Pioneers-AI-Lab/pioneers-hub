@@ -2,11 +2,10 @@
 
 import { useCallback, useMemo, type ReactNode } from "react";
 import { Group, Stack, Text, Title } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import { isStaffViewer } from "@shared/access";
 import type { Batch, Form, Founder, Membership, PioneersEvent, Program, Startup, WithId } from "@shared/types";
 import { queries } from "@/lib/firestore/refs";
-import { errorMessage } from "@/lib/errors";
+import { notifyError } from "@/lib/errors";
 import { saveUserPreferences } from "@/lib/firestore/write";
 import { createStrictContext } from "@/lib/createStrictContext";
 import { useQueryListener } from "@/hooks/useFirestoreListener";
@@ -93,9 +92,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const selectBatch = useCallback(
     (id: string) => {
       if (!uid || id === preferredId) return;
-      saveUserPreferences(uid, { batchId: id }).catch((err: unknown) =>
-        notifications.show({ color: "red", message: errorMessage(err) }),
-      );
+      saveUserPreferences(uid, { batchId: id }).catch(notifyError);
     },
     [uid, preferredId],
   );

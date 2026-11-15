@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Anchor, Group, SegmentedControl, SimpleGrid, Stack, Text, TextInput } from "@mantine/core";
 import type { ProfileCategory } from "@shared/types";
 import { useAuth } from "@/context/AuthContext";
@@ -9,6 +9,7 @@ import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
 import { useFounderDirectories, type FoundersView } from "@/context/FounderDirectoriesContext";
 import { useFounders } from "@/context/FoundersContext";
+import { useMyConnections } from "@/context/MyConnectionsContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
 import { missingRequiredFields } from "@/lib/completeness";
@@ -21,6 +22,8 @@ import { LinkRow, RowList } from "@/components/ui/Rows";
 import { Empty } from "@/components/ui/Section";
 
 type Filter = "all" | ProfileCategory;
+/** Fondateur du batch : sa shortlist et ses rencontres (« Not met » exclut sa propre fiche). */
+type ConnectionFilter = "all" | "shortlisted" | "met" | "not_met";
 
 export default function FoundersPage() {
   const { program } = useProgram();
@@ -30,12 +33,16 @@ export default function FoundersPage() {
   const { startupsById } = useStartups();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const { founderId: myFounderId, shortlisted, met } = useMyConnections();
+  const [connectionFilter, setConnectionFilter] = useState<ConnectionFilter>("all");
   const { canSeeScores, founderPerformance } = useCohort();
   // Staff et investors : classement par Program Performance (comme le dashboard).
   const [sort, setSort] = useState<"score" | "name">("score");
   const byScore = canSeeScores && sort === "score";
   // Grille : la galerie du Profile Book (1 a 3 cartes par ligne selon la largeur).
-  const { view, setView, directoriesById, isLoading: isGridLoading } = useFounderDirectories();
+  const { view, setView, ensureOpen, directoriesById, isLoading: isGridLoading } = useFounderDirectories();
+  // Premiere visite : l'annuaire ouvre ses ecouteurs (gardes ensuite, au layout de /founders).
+  useEffect(ensureOpen, [ensureOpen]);
 
   // Texte cherchable de chaque fondateur, sans accents ni casse : calcule une fois par liste, pas a chaque frappe.
   const searchTextOf = useMemo(
@@ -46,11 +53,14 @@ export default function FoundersPage() {
     const q = searchKey(search);
     const list = founders.filter((f) => {
       if (filter !== "all" && f.profileCategory !== filter) return false;
+      if (connectionFilter === "shortlisted" && !shortlisted.has(f.id)) return false;
+      if (connectionFilter === "met" && !met.has(f.id)) return false;
+      if (connectionFilter === "not_met" && (met.has(f.id) || f.id === myFounderId)) return false;
       return !q || searchTextOf.get(f.id)!.includes(q);
     });
     if (!byScore) return list;
     return [...list].sort((a, b) => (founderPerformance(b.id) ?? -1) - (founderPerformance(a.id) ?? -1));
-  }, [founders, searchTextOf, search, filter, byScore, founderPerformance]);
+  }, [founders, searchTextOf, search, filter, connectionFilter, shortlisted, met, myFounderId, byScore, founderPerformance]);
   // Grille : les profils complets d'abord, l'ordre choisi garde dans chaque groupe.
   // Complet = aucun champ obligatoire vide (le profil prive n'en porte aucun).
   // Sans annuaire (visiteur public), on ne sait pas : ordre inchange.
@@ -62,7 +72,7 @@ export default function FoundersPage() {
 
   if (isLoading) return <PageLoader />;
 
-  /** Score (staff, investors) ou compte non rattache (staff), a droite de la ligne ou de la carte. */
+  /** Score (staff, investors), compte non rattache (staff) ou, pour un fondateur, « Shortlisted » / « Met », a droite de la ligne ou de la carte. */
   const metaOf = (founderId: string, uid: string | null) => {
     if (canSeeScores) {
       const score = founderPerformance(founderId);
@@ -73,13 +83,15 @@ export default function FoundersPage() {
       );
     }
     if (role === "staff" && !uid) return <Text size="xs" c="dimmed">Not linked</Text>;
+    const marks = [shortlisted.has(founderId) && "Shortlisted", met.has(founderId) && "Met"].filter(Boolean);
+    if (marks.length > 0) return <Text size="xs" c="dimmed">{marks.join(" · ")}</Text>;
     return undefined;
   };
   const startupNameOf = (startupId: string | null) => (startupId && startupsById.get(startupId)?.name) || null;
 
   return (
     <>
-      <PageHeader title="Founders" right={<Text c="dimmed" className="num">{founders.length}</Text>} />
+      <PageHeader title="Founders" right={<Text c="dimmed" className="num">{visible.length === founders.length ? founders.length : `${visible.length} / ${founders.length}`}</Text>} />
       {role === "public" && (
         <Text size="sm" c="dimmed" mb="md">
           Only founders who agreed to a public profile are listed.{" "}
@@ -116,6 +128,19 @@ export default function FoundersPage() {
             { value: "hybrid", label: "Hybrid" },
           ]}
         />
+        {myFounderId && (
+          <SegmentedControl
+            fullWidth
+            value={connectionFilter}
+            onChange={(v) => setConnectionFilter(v as ConnectionFilter)}
+            data={[
+              { value: "all", label: "All" },
+              { value: "shortlisted", label: "Shortlisted" },
+              { value: "met", label: "Met" },
+              { value: "not_met", label: "Not met" },
+            ]}
+          />
+        )}
         <Group gap="xs">
           {canSeeScores && (
             <SegmentedControl

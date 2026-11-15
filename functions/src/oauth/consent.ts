@@ -2,6 +2,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { COL } from "../shared/collections";
 import { canUseApi } from "../shared/access";
+import { APP_NAME } from "../shared/brand";
 import type { OAuthCode, OAuthRequest } from "../shared/types";
 import { secret, sha256 } from "../api/crypto";
 import { loadViewer } from "../api/viewer";
@@ -18,7 +19,7 @@ import { TTL, isExpired, isoIn, redirectWith } from "./store";
 // Qui peut accepter : `canUseApi` (shared/access.ts), la regle de l'API elle-meme.
 // Le refus est dit a l'ecran, avant tout clic.
 
-const CANNOT_USE = "This account cannot connect Claude to Pioneers Hub.";
+const CANNOT_USE = `This account cannot connect Claude to ${APP_NAME}.`;
 
 function requestRef(requestId: string) {
   if (!requestId || requestId.includes("/")) throw new HttpsError("invalid-argument", "`requestId` is required.");

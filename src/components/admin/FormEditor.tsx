@@ -47,6 +47,7 @@ import {
   IDENTITY_OPTIONS,
   SCOPE_LABELS,
 } from "@/components/admin/formLabels";
+import { ArchiveDialog } from "@/components/admin/ArchiveDialog";
 import { FormResponses } from "@/components/admin/FormResponses";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
@@ -604,14 +605,9 @@ function Editor({ form }: { form: WithId<Form> }) {
         />
       )}
 
-      <ResponsiveDialog opened={confirmArchive} onClose={() => setConfirmArchive(false)} title="Archive this form?">
-        <Stack>
-          <Text size="sm">The form closes and leaves the lists. Its answers and versions are kept.</Text>
-          <Button size="md" color="red" fullWidth onClick={archive}>
-            Archive
-          </Button>
-        </Stack>
-      </ResponsiveDialog>
+      <ArchiveDialog what="form" opened={confirmArchive} onClose={() => setConfirmArchive(false)} onArchive={() => void archive()}>
+        The form closes and leaves the lists. Its answers and versions are kept.
+      </ArchiveDialog>
 
       <ResponsiveDialog
         opened={confirmSave !== null}

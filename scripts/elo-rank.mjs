@@ -33,6 +33,7 @@ import { z } from "zod";
 
 const require = createRequire(import.meta.url);
 const { isBatchParticipant } = require("../functions/lib/shared/types/founder.js");
+const { splitTextList } = require("../functions/lib/shared/text.js");
 
 const PROJECT_ID = "pioneers-3627c";
 /** Appels au modele en parallele ; l'Elo, lui, se met a jour dans l'ordre des groupes. */
@@ -167,7 +168,8 @@ const people = founders.map((f, i) => {
     ["Hard skills", list(f.hardSkills)],
     ["Industries", list(f.industries)],
     ["Years of experience", d.yearsOfXP],
-    ["Education", [d.education, d.degree, d.fieldOfStudy].filter(Boolean).join(", ") || null],
+    // Education : une liste (ou un ancien texte, decoupe) ; ses entrees peuvent contenir des virgules.
+    ["Education", [splitTextList(d.education).join("; "), d.degree, d.fieldOfStudy].filter(Boolean).join(", ") || null],
     ["Notable companies", list(d.notableCompanies)],
     ["Introduce yourself", d.introduceYourself],
     ["Track record", d.trackRecord],

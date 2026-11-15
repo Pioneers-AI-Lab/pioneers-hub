@@ -6,9 +6,11 @@ import { usePathname } from "next/navigation";
 import { Anchor, AppShell, Avatar, Box, Button, Container, Drawer, Group, Menu, Stack, Text, UnstyledButton } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { canUseApi, isStaffViewer } from "@shared/access";
+import { APP_NAME } from "@shared/brand";
 import { useAuth } from "@/context/AuthContext";
 import { paths } from "@/lib/paths";
 import { BOTTOM_SHEET_STYLES, MOBILE_QUERY } from "@/components/ui/ResponsiveDialog";
+import { AppLogo } from "@/components/chrome/AppLogo";
 import { LocalDbBadge } from "@/components/chrome/LocalDbBadge";
 
 // En-tete commun : le nom, et le visiteur (connexion ou compte). Un batch pose
@@ -28,18 +30,17 @@ export function AppChrome({ children }: { children: ReactNode }) {
       >
         <Container size={760} px="md" h="100%">
           <Group h="100%" justify="space-between" wrap="nowrap">
-            {/* Logo Pioneers Hub (le meme que les pages de connexion) : symbole,
-                « pioneers » et « hub », version claire lisible sur noir. */}
+            {/* Logo Pioneers Founder Hub (le meme que les pages de connexion) : symbole,
+                « pioneers » et « Founder Hub », version claire lisible sur noir. */}
             <Anchor
               component={Link}
               href={paths.home()}
-              aria-label="Pioneers Hub"
+              aria-label={APP_NAME}
               underline="never"
               h={44}
               style={{ display: "inline-flex", alignItems: "center" }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element -- SVG statique, pas d'optimisation utile. */}
-              <img src="/logo-pioneers-hub.svg" alt="Pioneers Hub" width={136} height={22} style={{ display: "block" }} />
+              <AppLogo height={22} />
               <LocalDbBadge />
             </Anchor>
             {/* `usePathname` suspend au pre-rendu (cacheComponents) : frontiere locale. */}

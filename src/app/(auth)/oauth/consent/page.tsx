@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Stack, Text } from "@mantine/core";
+import { APP_NAME } from "@shared/brand";
 import type { CallableResponse } from "@shared/callables";
 import { useAuth } from "@/context/AuthContext";
 import { call } from "@/lib/firebase";
@@ -12,7 +13,7 @@ import { AuthCard } from "@/components/auth/AuthCard";
 import { PageLoader } from "@/components/ui/PageLoader";
 
 // ----------------------------
-// Consentement OAuth : brancher Claude sur Pioneers Hub
+// Consentement OAuth : brancher Claude sur Pioneers Founder Hub
 // ----------------------------
 // Claude (claude.ai ou Claude Code) envoie ici la personne qui connecte le
 // serveur MCP (functions/src/oauth). Elle se connecte si besoin, voit QUI
@@ -71,7 +72,7 @@ function Consent() {
     return (
       <AuthCard title="Connect Claude" subtitle={error ?? "This link is incomplete. Start the connection again from Claude."}>
         <Button size="md" fullWidth variant="default" onClick={() => router.replace(paths.home())}>
-          Back to Pioneers Hub
+          Back to {APP_NAME}
         </Button>
       </AuthCard>
     );
@@ -84,7 +85,7 @@ function Consent() {
       title="Connect Claude"
       subtitle={
         <>
-          <b>{described.clientName}</b> wants to access Pioneers Hub as <b>{firebaseUser.email}</b>.
+          <b>{described.clientName}</b> wants to access {APP_NAME} as <b>{firebaseUser.email}</b>.
         </>
       }
       footer={

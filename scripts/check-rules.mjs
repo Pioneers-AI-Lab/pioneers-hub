@@ -12,9 +12,12 @@ import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { deleteApp, initializeApp } from "firebase/app";
 import { connectAuthEmulator, getAuth, signInWithCustomToken } from "firebase/auth";
 import {
+  arrayRemove,
+  arrayUnion,
   collection,
   collectionGroup,
   connectFirestoreEmulator,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -930,6 +933,195 @@ console.log("api keys (each account reads its own)");
   await expectDenied("founder reads another account's API key", () => read(doc(db, "apiKeys/check-staff")));
   await expectDenied("founder lists all API keys", () => count(collection(db, "apiKeys")));
   await deleteApp(app);
+}
+
+// ---- Shortlist et rencontres : le fondateur lui-meme, le staff et l'IC lisent ; lui seul ecrit
+console.log("shortlist and met (founders/*/private/connections)");
+{
+  const adb = getAdminFirestore();
+  // Un fondateur d'un autre batch : jamais dans les listes d'Ada.
+  await adb.doc("founders/check-other-batch").set({
+    programId: "accelerator",
+    batchId: "other-batch",
+    name: "Olga Otherbatch",
+    uid: null,
+    publicProfileConsent: false,
+    archivedDateISOString: null,
+  });
+  const own = "founders/ada-example/private/connections";
+  const stamp = () => new Date().toISOString();
+  const ada = await clientAs("ada-1");
+  await expectOk("founder reads her own shortlist", () => read(doc(ada.db, own)));
+  await expectOk("founder shortlists a founder of her batch", () =>
+    updateDoc(doc(ada.db, own), { shortlistedFounderIds: arrayUnion("dan-placeholder"), updatedDateISOString: stamp() }),
+  );
+  await expectOk("founder removes a founder from her shortlist", () =>
+    updateDoc(doc(ada.db, own), { shortlistedFounderIds: arrayRemove("dan-placeholder"), updatedDateISOString: stamp() }),
+  );
+  await expectOk("founder marks a founder as met", () =>
+    updateDoc(doc(ada.db, own), { metFounderIds: arrayUnion("chloe-demo"), updatedDateISOString: stamp() }),
+  );
+  await expectDenied("founder shortlists herself", () =>
+    updateDoc(doc(ada.db, own), { shortlistedFounderIds: arrayUnion("ada-example"), updatedDateISOString: stamp() }),
+  );
+  await expectDenied("founder marks herself as met", () =>
+    updateDoc(doc(ada.db, own), { metFounderIds: arrayUnion("ada-example"), updatedDateISOString: stamp() }),
+  );
+  await expectDenied("founder shortlists a founder of another batch", () =>
+    updateDoc(doc(ada.db, own), { shortlistedFounderIds: arrayUnion("check-other-batch"), updatedDateISOString: stamp() }),
+  );
+  await expectDenied("founder shortlists an unknown id", () =>
+    updateDoc(doc(ada.db, own), { shortlistedFounderIds: arrayUnion("no-such-founder"), updatedDateISOString: stamp() }),
+  );
+  await expectDenied("founder adds another field", () =>
+    setDoc(doc(ada.db, own), { rank: 1 }, { merge: true }),
+  );
+  await expectDenied("founder reads another founder's shortlist", () => read(doc(ada.db, "founders/ben-sample/private/connections")));
+  await expectDenied("founder writes another founder's shortlist", () =>
+    setDoc(doc(ada.db, "founders/ben-sample/private/connections"), {
+      shortlistedFounderIds: ["chloe-demo"],
+      metFounderIds: [],
+      updatedDateISOString: stamp(),
+    }),
+  );
+  await deleteApp(ada.app);
+  // Premiere coche (document absent) : une fusion avec la seule liste, comme lib/firestore/write.ts.
+  await adb.doc("founders/check-connections-owner").set({
+    programId: "accelerator",
+    batchId: "fall-2026",
+    name: "Cora Connections",
+    uid: "check-connections-1",
+    personId: null,
+    publicProfileConsent: false,
+    archivedDateISOString: null,
+  });
+  await adb.doc("batchMemberships/fall-2026_check-connections-1").set({
+    programId: "accelerator",
+    batchId: "fall-2026",
+    uid: "check-connections-1",
+    founderId: "check-connections-owner",
+  });
+  const cora = await clientAs("check-connections-1");
+  const coraDoc = "founders/check-connections-owner/private/connections";
+  await expectDenied("founder creates her lists with her own id", () =>
+    setDoc(doc(cora.db, coraDoc), { shortlistedFounderIds: ["check-connections-owner"], metFounderIds: [], updatedDateISOString: stamp() }),
+  );
+  await expectDenied("founder creates her lists with two ids at once", () =>
+    setDoc(doc(cora.db, coraDoc), { shortlistedFounderIds: ["ada-example", "ben-sample"], metFounderIds: [], updatedDateISOString: stamp() }),
+  );
+  await expectOk("founder creates her lists (first shortlist)", () =>
+    setDoc(doc(cora.db, coraDoc), { shortlistedFounderIds: arrayUnion("ada-example"), updatedDateISOString: stamp() }, { merge: true }),
+  );
+  await expectOk("founder marks a first founder as met (list absent until now)", () =>
+    setDoc(doc(cora.db, coraDoc), { metFounderIds: arrayUnion("ben-sample"), updatedDateISOString: stamp() }, { merge: true }),
+  );
+  await deleteApp(cora.app);
+  const staff = await clientAs("staff-1");
+  await expectOk("staff reads a founder's shortlist", () => read(doc(staff.db, own)));
+  await expectDenied("staff writes a founder's shortlist", () =>
+    updateDoc(doc(staff.db, own), { shortlistedFounderIds: arrayUnion("finn-private"), updatedDateISOString: stamp() }),
+  );
+  await deleteApp(staff.app);
+  const ic = await clientAs("ic-1");
+  await expectOk("IC investor reads a founder's shortlist", () => read(doc(ic.db, own)));
+  await deleteApp(ic.app);
+  const lp = await clientAs("lp-1");
+  await expectDenied("portfolio investor reads a founder's shortlist", () => read(doc(lp.db, own)));
+  await deleteApp(lp.app);
+  const pub = await clientAs(null);
+  await expectDenied("public reads a founder's shortlist", () => read(doc(pub.db, own)));
+  await deleteApp(pub.app);
+}
+
+// ---- Taches du To do : communes au batch, cochees par chaque fondateur ---------
+console.log("tasks (To do checklist)");
+{
+  const adb = getAdminFirestore();
+  const stamp = new Date().toISOString();
+  // Une tache d'un autre batch, et la coche d'un autre fondateur (seed : demo-task-intro, cochee par Ada).
+  await adb.doc("batchTasks/check-task-other").set({
+    programId: "accelerator",
+    batchId: "other-batch",
+    title: "Other batch task",
+    description: null,
+    linkUrl: null,
+    order: 1,
+    createdDateISOString: stamp,
+    updatedDateISOString: stamp,
+    archivedDateISOString: null,
+  });
+  await adb.doc("taskCompletions/demo-task-intro_ben-sample").set({
+    programId: "accelerator",
+    batchId: "fall-2026",
+    taskId: "demo-task-intro",
+    founderId: "ben-sample",
+    done: true,
+    updatedDateISOString: stamp,
+  });
+  const tasksOf = (db) => query(collection(db, "batchTasks"), where("batchId", "==", "fall-2026"));
+  const completionsOf = (db) => query(collection(db, "taskCompletions"), where("batchId", "==", "fall-2026"));
+  const tick = (db, taskId, founderId, extra = {}) =>
+    setDoc(doc(db, `taskCompletions/${taskId}_${founderId}`), {
+      programId: "accelerator",
+      batchId: "fall-2026",
+      taskId,
+      founderId,
+      done: true,
+      updatedDateISOString: new Date().toISOString(),
+      ...extra,
+    });
+  const newTask = { programId: "accelerator", batchId: "fall-2026", title: "x", description: null, linkUrl: null, order: 9, archivedDateISOString: null };
+
+  const pub = await clientAs(null);
+  await expectDenied("public lists the tasks of the batch", () => count(tasksOf(pub.db)));
+  await deleteApp(pub.app);
+
+  // Un compte neuf : « stranger-1 » a reclame un profil de fall-2026 plus haut.
+  const stranger = await clientAs("outsider-tasks-1");
+  await expectDenied("signed-in outsider lists the tasks of the batch", () => count(tasksOf(stranger.db)));
+  await deleteApp(stranger.app);
+
+  const ada = await clientAs("ada-1");
+  await expectOk("founder lists the tasks of her batch", () => count(tasksOf(ada.db)));
+  await expectDenied("founder reads a task of another batch", () => read(doc(ada.db, "batchTasks/check-task-other")));
+  await expectDenied("founder creates a task", () => setDoc(doc(ada.db, "batchTasks/check-by-ada"), newTask));
+  await expectDenied("founder edits a task", () => setDoc(doc(ada.db, "batchTasks/demo-task-intro"), { title: "x" }, { merge: true }));
+  await expectOk("founder lists her own ticks", () =>
+    count(query(collection(ada.db, "taskCompletions"), where("batchId", "==", "fall-2026"), where("founderId", "==", "ada-example"))),
+  );
+  await expectDenied("founder lists every tick of the batch", () => count(completionsOf(ada.db)));
+  await expectDenied("founder reads another founder's tick", () => read(doc(ada.db, "taskCompletions/demo-task-intro_ben-sample")));
+  await expectOk("founder ticks a task of her batch", () => tick(ada.db, "demo-task-shortlist", "ada-example"));
+  await expectOk("founder unticks it (done: false)", () => tick(ada.db, "demo-task-shortlist", "ada-example", { done: false }));
+  await expectDenied("founder ticks for another founder", () => tick(ada.db, "demo-task-shortlist", "ben-sample"));
+  await expectDenied("founder ticks an archived task", () => tick(ada.db, "demo-task-archived", "ada-example"));
+  await expectDenied("founder ticks a task of another batch", () => tick(ada.db, "check-task-other", "ada-example"));
+  await expectDenied("founder ticks under another id", () =>
+    setDoc(doc(ada.db, "taskCompletions/demo-task-intro_x"), { programId: "accelerator", batchId: "fall-2026", taskId: "demo-task-intro", founderId: "ada-example", done: true, updatedDateISOString: stamp }),
+  );
+  await expectDenied("founder adds a field to her tick", () => tick(ada.db, "demo-task-intro", "ada-example", { score: 1 }));
+  await expectDenied("founder sets done to a non-boolean", () => tick(ada.db, "demo-task-intro", "ada-example", { done: "yes" }));
+  await expectDenied("founder deletes her tick", () => deleteDoc(doc(ada.db, "taskCompletions/demo-task-intro_ada-example")));
+  await deleteApp(ada.app);
+
+  const ic = await clientAs("ic-1");
+  await expectOk("IC investor lists the tasks of the batch", () => count(tasksOf(ic.db)));
+  await expectDenied("IC investor reads a founder's tick", () => read(doc(ic.db, "taskCompletions/demo-task-intro_ada-example")));
+  await deleteApp(ic.app);
+
+  const lp = await clientAs("lp-1");
+  await expectOk("portfolio investor lists the tasks of the batch", () => count(tasksOf(lp.db)));
+  await expectDenied("portfolio investor lists the ticks", () => count(completionsOf(lp.db)));
+  await deleteApp(lp.app);
+
+  const staff = await clientAs("staff-1");
+  await expectOk("staff creates a task", () => setDoc(doc(staff.db, "batchTasks/check-by-staff"), { ...newTask, createdDateISOString: stamp, updatedDateISOString: stamp }));
+  await expectOk("staff archives a task", () =>
+    setDoc(doc(staff.db, "batchTasks/check-by-staff"), { archivedDateISOString: stamp, updatedDateISOString: stamp }, { merge: true }),
+  );
+  await expectOk("staff lists every tick of the batch", () => count(completionsOf(staff.db)));
+  await expectDenied("staff ticks a task for a founder", () => tick(staff.db, "demo-task-shortlist", "ada-example"));
+  await deleteApp(staff.app);
 }
 
 console.log(failures === 0 ? "\nall rules checks passed" : `\n${failures} rules check(s) FAILED`);

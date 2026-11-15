@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { canSeeEvent } from "@shared/access";
 import { isUpcomingEvent } from "@shared/events";
 import type { Founder, WithId } from "@shared/types";
@@ -11,12 +10,13 @@ import { Empty, Section } from "@/components/ui/Section";
 import { EventRow } from "./EventRow";
 
 /**
- * « Coming up » : les prochains evenements que le visiteur voit (`useEvents`, deja
- * filtre par `canSeeEvent` : ceux du batch et ceux ou il est invite). Masque une
- * fois le batch termine. Accueil du batch et « Me ». Avec `founder` (le staff sur
- * la fiche d'un fondateur) : ceux que CE fondateur voit, prives compris.
+ * « Coming up », sur « Me » : les prochains evenements que le visiteur voit
+ * (`useEvents`, deja filtre par `canSeeEvent` : ceux du batch et ceux ou il est
+ * invite). L'accueil du batch a « Next session », et l'onglet Calendar tout
+ * l'agenda. Avec `founder` (le staff sur la fiche d'un fondateur) : ceux que CE
+ * fondateur voit, prives compris. Masque une fois le batch termine.
  */
-export function UpcomingEvents({ limit, right, founder }: { limit: number; right?: ReactNode; founder?: WithId<Founder> }) {
+export function UpcomingEvents({ limit, founder }: { limit: number; founder?: WithId<Founder> }) {
   const { batch } = useBatch();
   const { events, isLoading } = useEvents();
   if (batch.status === "completed") return null;
@@ -26,7 +26,7 @@ export function UpcomingEvents({ limit, right, founder }: { limit: number; right
     .slice(0, limit);
 
   return (
-    <Section title="Coming up" right={right} hint={founder ? "Their events, private ones included." : undefined}>
+    <Section title="Coming up" hint={founder ? "Their events, private ones included." : undefined}>
       {isLoading ? null : upcoming.length === 0 ? (
         <Empty>Nothing scheduled yet.</Empty>
       ) : (

@@ -1,3 +1,5 @@
+import { isAppPath } from "@shared/text";
+
 // ----------------------------
 // URL de l'application
 // ----------------------------
@@ -33,6 +35,8 @@ export const paths = {
   /** `eventId` : ouvre le classement de cet evenement (ancre de sa section). */
   leaderboard: (programId: string, batchId: string, eventId?: string) =>
     `${batchBase(programId, batchId)}/leaderboard${eventId ? `#${encodeURIComponent(eventId)}` : ""}`,
+  /** L'agenda du batch : tous les evenements que le visiteur voit, par jour. */
+  calendar: (programId: string, batchId: string) => `${batchBase(programId, batchId)}/calendar`,
   todo: (programId: string, batchId: string) => `${batchBase(programId, batchId)}/todo`,
   me: (programId: string, batchId: string) => `${batchBase(programId, batchId)}/me`,
   meEdit: (programId: string, batchId: string) => `${batchBase(programId, batchId)}/me/edit`,
@@ -68,13 +72,18 @@ export const paths = {
   adminEventMatching: (eventId: string) => `/admin/events/${eventId}/matching`,
   /** Le staff voit et corrige les resultats d'une equipe. */
   adminEventTeam: (eventId: string, teamId: string) => `/admin/events/${eventId}/teams/${teamId}`,
+  // ---- Taches du To do (staff) ----
+  /** Les taches de la checklist du batch : ajouter, modifier, retirer, suivre les retardataires. */
+  adminTasks: () => "/admin/tasks",
+  adminTaskNew: () => "/admin/tasks/new",
+  adminTask: (taskId: string) => `/admin/tasks/${taskId}`,
   /** Brancher Claude (MCP), cles d'API et reference de l'API (staff). */
   apiDocs: () => "/api-docs",
 } as const;
 
 /** `?next=` interne uniquement (jamais une redirection vers un autre site). */
 export function safeNext(value: string | null | undefined): string | null {
-  return value && value.startsWith("/") && !value.startsWith("//") ? value : null;
+  return value && isAppPath(value) ? value : null;
 }
 
 /** Garde `?next=` en passant d'une page de connexion a l'autre. */

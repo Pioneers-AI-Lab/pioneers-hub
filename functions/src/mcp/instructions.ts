@@ -6,8 +6,10 @@
 // Regles reprises de Trippple (`mcp/instructions.js`) : AUCUN CHIFFRE (un fait
 // chiffre fige dans un texte pourrit), pas de redite des descriptions d'outils.
 
+import { APP_NAME } from "../shared/brand";
+
 export const INSTRUCTIONS = [
-  "You are connected to Pioneers Hub, the database of the Pioneers accelerator: programs, batches,",
+  `You are connected to ${APP_NAME}, the database of the Pioneers accelerator: programs, batches,`,
   "founders, startups, events, notes. You act with the rights of the person who connected you: you see and change",
   "only what their role allows in the app (a founder changes their own profile; staff manage everything).",
   "",

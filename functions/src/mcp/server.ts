@@ -1,6 +1,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { Caller } from "../api/caller";
+import { APP_NAME } from "../shared/brand";
 import { FRONTEND_BASE_URL, PUBLIC_BASE_URL } from "../api/config";
 import { notFound, toApiError } from "../api/errors";
 import { toolsFor } from "./catalogue";
@@ -24,7 +25,7 @@ import { toolFailure, toolResult } from "./reply";
 // l'exige le protocole ; le meme symbole sert de favicon au domaine.
 const SERVER_INFO = {
   name: "pioneers-hub",
-  title: "Pioneers Hub",
+  title: APP_NAME,
   version: "0.1.0",
   description: "Read and fill the Pioneers batch database: founders, startups, events, notes.",
   websiteUrl: FRONTEND_BASE_URL,

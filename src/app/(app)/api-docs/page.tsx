@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { Box, Button, Code, CopyButton, Group, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { APP_NAME } from "@shared/brand";
 import { API_KEY_NAME_MAX, API_PUBLIC_URL, MCP_PUBLIC_URL, OPENAPI_PUBLIC_URL } from "@shared/api";
 import { useApiKeys } from "@/context/ApiKeysContext";
 import { call } from "@/lib/firebase";
@@ -75,8 +76,8 @@ function ConnectClaude() {
       <Label>claude.ai and Claude Desktop</Label>
       <Stack gap={6}>
         <Step n={1}>Open Settings, then Connectors, then Add custom connector.</Step>
-        <Step n={2}>Name it Pioneers Hub and paste the address above.</Step>
-        <Step n={3}>Click Connect, sign in with your Pioneers Hub account, then Allow.</Step>
+        <Step n={2}>Name it {APP_NAME} and paste the address above.</Step>
+        <Step n={3}>Click Connect, sign in with your {APP_NAME} account, then Allow.</Step>
       </Stack>
       <Text size="sm" c="dimmed">
         A connector added on claude.ai also shows up in Claude Desktop.
@@ -259,7 +260,7 @@ function ApiReference() {
 export default function ApiDocsPage() {
   return (
     <>
-      <PageHeader title="API & MCP" subtitle="Connect Claude to Pioneers Hub, or plug any tool into its API." />
+      <PageHeader title="API & MCP" subtitle={`Connect Claude to ${APP_NAME}, or plug any tool into its API.`} />
       <ConnectClaude />
       <ApiKeys />
       <ApiReference />

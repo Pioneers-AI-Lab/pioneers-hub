@@ -36,6 +36,10 @@ import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import sharp from "sharp";
 
+// Code partage compile (`npm --prefix functions run build`).
+const require = createRequire(import.meta.url);
+const { splitTextList } = require("../functions/lib/shared/text.js");
+
 const args = process.argv.slice(2);
 const shareUrl = args.find((a) => a.startsWith("https://airtable.com/"));
 const dryRun = args.includes("--dry-run");
@@ -155,6 +159,8 @@ const claimedPeople = new Map(
 const isEmpty = (v) => v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
 /** Photo d'un profil reclame : celle du fondateur telle quelle, meme retiree (`null`). */
 const FOUNDER_OWNED = new Set(["photoUrl", "coverPhotoUrl"]);
+/** Annuaire d'un profil reclame, Education encore en texte (avant migration) decoupee en liste. */
+const withEducationList = (directory) => directory && { ...directory, education: splitTextList(directory.education) };
 /** Profil reclame : ce que le fondateur a rempli (non vide) l'emporte sur l'import. */
 const keepFilled = (imported, current) => {
   if (!current) return imported;
@@ -240,7 +246,8 @@ for (const r of rows) {
     nationality: select(r, COL.nationality),
     country: null,
     introduceYourself: null,
-    education: text(cell(r, COL.education)),
+    // Une entree par ecole : seuls « ; » et « · » separent (shared/text.ts).
+    education: splitTextList(cell(r, COL.education)),
     degree: null,
     fieldOfStudy: null,
     yearsOfXP: null,
@@ -257,7 +264,7 @@ for (const r of rows) {
     coFounderTypeWanted: null,
     coFounderSkillsWanted: [],
     industriesToExplore: [],
-  }, claimedDirectories.get(id)));
+  }, withEducationList(claimedDirectories.get(id))));
   set(`founders/${id}/private/profile`, {
     age: null,
     birthDayString: null,
@@ -273,7 +280,7 @@ for (const r of rows) {
 // `blue`), si elle est une teinte connue (TAG_COLORS, lu dans le modele compile :
 // `npm --prefix functions run build`). Elle s'applique aussi aux valeurs deja
 // connues (listes SP26).
-const TAG_COLORS = new Set(createRequire(import.meta.url)("../functions/lib/shared/types/system.js").TAG_COLORS);
+const TAG_COLORS = new Set(require("../functions/lib/shared/types/system.js").TAG_COLORS);
 const tagColor = (airtableColor) => {
   const base = airtableColor?.match(/^[a-z]+/)?.[0];
   return TAG_COLORS.has(base) ? base : null;

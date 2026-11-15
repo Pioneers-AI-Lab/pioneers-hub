@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import { getFirestore } from "firebase-admin/firestore";
+import { APP_NAME } from "../shared/brand";
 import { COL } from "../shared/collections";
 import type { OAuthClient, OAuthCode, OAuthGrant, OAuthRequest, OAuthToken } from "../shared/types";
 import { secret, sha256 } from "../api/crypto";
@@ -68,7 +69,7 @@ const protectedResource = {
   authorization_servers: [PUBLIC_BASE_URL],
   scopes_supported: [SCOPE],
   bearer_methods_supported: ["header"],
-  resource_name: "Pioneers Hub",
+  resource_name: APP_NAME,
 };
 
 const authorizationServer = {

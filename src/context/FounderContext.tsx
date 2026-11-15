@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { canEditFounderProfile, canReadFounderDirectory, canReadFounderProfile, isInsider, isViewerFounder } from "@shared/access";
+import {
+  canEditFounderProfile,
+  canReadFounderDirectory,
+  canReadFounderProfile,
+  isInsider,
+  isViewerFounder,
+} from "@shared/access";
+import { readConnections, type ConnectionLists } from "@shared/types";
 import type {
   Attendance,
   Founder,
@@ -31,7 +38,8 @@ import { paths } from "@/lib/paths";
 // refuseraient (il remonterait en erreur de connexion).
 //   tous           founders/{id}
 //   batch          private/directory, equipes (memberships)
-//   lui-meme, IC   private/profile, semaines (founderWeeks)
+//   lui-meme, IC   private/profile, semaines (founderWeeks), shortlist et rencontres (private/connections ;
+//                  sur SA fiche, celles de MyConnectionsContext, deja ouvert au batch)
 //   staff, IC      private/internal, founderStats, scoreSignals, presences
 // Le score lui-meme vient de CohortContext (deja lu pour les listes).
 
@@ -51,6 +59,11 @@ type FounderValue = {
   weeks: WithId<FounderWeek>[];
   /** Presence a chaque seance, `parentId` = l'evenement (staff et IC, le fondateur la sienne : son To do en depend). */
   attendance: WithParent<Attendance>[];
+  /**
+   * Sa shortlist et ses rencontres (staff, IC) : `null` sans droit, pendant le chargement, ou sur
+   * sa propre fiche (FounderConnections lit alors `useMyConnections`) ; listes vides tant que rien n'est coche.
+   */
+  connections: ConnectionLists | null;
   canSeeDirectory: boolean;
   /** Le visiteur est ce fondateur : il peut modifier son profil. */
   isSelf: boolean;
@@ -85,6 +98,9 @@ export function FounderProvider({ children, founderId: explicitId }: { children:
   const weeks = useQueryListener(canSeeProfile ? queries.weeksOfFounder(batch.id, founderId) : null);
   const isSelf = isViewerFounder(viewerFounderId, founderId);
   const attendance = useQueryListener(canSeeInternal || isSelf ? queries.attendanceOfFounder(founderId) : null);
+  // Sa propre fiche : MyConnectionsContext (layout du batch) ecoute deja ce document.
+  const canSeeConnections = canSeeProfile && !isSelf;
+  const connections = useDocListener(canSeeConnections ? refs.founderConnections(founderId) : null);
 
   // Profil archive : introuvable, sauf pour le staff (il le restaure depuis la fiche).
   const found =
@@ -105,6 +121,7 @@ export function FounderProvider({ children, founderId: explicitId }: { children:
             signals: signals.data,
             weeks: [...weeks.data].sort((a, b) => b.weekStartDayString.localeCompare(a.weekStartDayString)),
             attendance: attendance.data,
+            connections: canSeeConnections && !connections.isLoading ? readConnections(connections.data) : null,
             canSeeDirectory,
             isSelf,
             canEdit: canEditFounderProfile(role, viewerFounderId, founderId),
@@ -122,6 +139,9 @@ export function FounderProvider({ children, founderId: explicitId }: { children:
       signals.data,
       weeks.data,
       attendance.data,
+      canSeeConnections,
+      connections.data,
+      connections.isLoading,
       canSeeDirectory,
       role,
       viewerFounderId,

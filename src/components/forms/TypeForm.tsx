@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { Button, Group, Text, TextInput, Textarea, VisuallyHidden } from "@mantine/core";
+import { APP_NAME } from "@shared/brand";
 import type { PublicChoice, PublicForm, PublicFormQuestion } from "@shared/callables";
 import { FORM_ANSWER_MAX, ratingScale } from "@shared/formRules";
 import { absentFromEventMessage } from "@shared/forms";
@@ -12,6 +13,7 @@ import { formatDateTime, searchKey } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { usePublicForm } from "@/context/PublicFormContext";
 import { markAnonymousFormDone } from "@/hooks/useAnonymousFormsDone";
+import { AppLogo } from "@/components/chrome/AppLogo";
 import {
   PENDING_NOTE,
   draftsFromPrefill,
@@ -272,12 +274,12 @@ export function TypeForm({ form }: { form: PublicForm }) {
             <h1 className={styles.title}>Thank you</h1>
             <p className={styles.description}>
               {status === "pending_approval"
-                ? "Your answers were sent. The Pioneers team reviews some of them before they update the hub."
+                ? `Your answers were sent. The Pioneers team reviews some of them before they update ${APP_NAME}.`
                 : "Your answers were sent."}
             </p>
             <Group className={styles.actions}>
               <Button component={Link} href={paths.home()} variant="default" size="md">
-                Go to Pioneers Hub
+                Go to {APP_NAME}
               </Button>
             </Group>
           </>
@@ -419,9 +421,8 @@ export function TypeForm({ form }: { form: PublicForm }) {
       </div>
 
       <header className={styles.header}>
-        <Link href={paths.home()} aria-label="Pioneers Hub" className="auth-logo">
-          {/* eslint-disable-next-line @next/next/no-img-element -- SVG statique, pas d'optimisation utile. */}
-          <img src="/logo-pioneers-hub.svg" alt="Pioneers Hub" width={173} height={28} />
+        <Link href={paths.home()} aria-label={APP_NAME} className="auth-logo">
+          <AppLogo height={28} />
         </Link>
       </header>
 

@@ -2,8 +2,8 @@
 
 import { useState, type ReactNode } from "react";
 import { Box, Collapse, Group, Stack, Text, UnstyledButton } from "@mantine/core";
-import { IconChevronRight } from "@tabler/icons-react";
 import { score10 } from "@/lib/format";
+import { ExpandChevron } from "@/components/ui/Rows";
 import { CHART_COLORS } from "./ChartCard";
 
 // ----------------------------
@@ -58,18 +58,7 @@ export function ScoreBreakdown({ rows }: { rows: BreakdownRow[] }) {
                 <Box w={56} h={5} bg={CHART_COLORS.track} style={{ borderRadius: 99, overflow: "hidden", flexShrink: 0 }}>
                   <Box h="100%" w={`${(r.value ?? 0) * 10}%`} bg={CHART_COLORS.primary} style={{ borderRadius: 99 }} />
                 </Box>
-                {anyDetails && (
-                  <IconChevronRight
-                    size={14}
-                    color="var(--mantine-color-dimmed)"
-                    style={{
-                      flexShrink: 0,
-                      visibility: canOpen ? undefined : "hidden",
-                      transform: isOpen ? "rotate(90deg)" : undefined,
-                      transition: "transform 150ms ease",
-                    }}
-                  />
-                )}
+                {anyDetails && <ExpandChevron expanded={isOpen} size={14} hidden={!canOpen} />}
               </Group>
             </UnstyledButton>
             {canOpen && (

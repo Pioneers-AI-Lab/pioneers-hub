@@ -1,5 +1,22 @@
-import { addDoc, setDoc, type CollectionReference, type DocumentReference, type PartialWithFieldValue } from "firebase/firestore";
-import type { Timestamps, User, UserPreferences, WithId } from "@shared/types";
+import {
+  addDoc,
+  arrayRemove,
+  arrayUnion,
+  setDoc,
+  type CollectionReference,
+  type DocumentReference,
+  type PartialWithFieldValue,
+} from "firebase/firestore";
+import type {
+  BatchTask,
+  FounderConnectionList,
+  FounderConnections,
+  TaskCompletion,
+  Timestamps,
+  User,
+  UserPreferences,
+  WithId,
+} from "@shared/types";
 import { refs } from "@/lib/firestore/refs";
 
 // ----------------------------
@@ -38,4 +55,34 @@ export async function createDoc<T extends Timestamps>(
 /** Fusionne des reglages dans `users/{uid}.preferences` (le compte lui-meme). */
 export async function saveUserPreferences(uid: string, preferences: Partial<UserPreferences>) {
   await setDoc(refs.user(uid), { preferences } as PartialWithFieldValue<WithId<User>>, { merge: true });
+}
+
+/**
+ * Coche ou decoche `targetFounderId` dans une liste (shortlist ou rencontres)
+ * du fondateur `ownerFounderId` (le visiteur : lui seul l'ecrit, firestore.rules).
+ * Fusion : la premiere coche cree le document avec sa seule liste.
+ */
+export async function setFounderConnection(ownerFounderId: string, list: FounderConnectionList, targetFounderId: string, on: boolean) {
+  await setDoc(
+    refs.founderConnections(ownerFounderId),
+    { [list]: on ? arrayUnion(targetFounderId) : arrayRemove(targetFounderId), updatedDateISOString: nowISO() } as PartialWithFieldValue<WithId<FounderConnections>>,
+    { merge: true },
+  );
+}
+
+// ---- Taches du To do ----
+
+/** Le fondateur coche (ou decoche) une tache de son batch : un document par tache et par fondateur. */
+export async function setTaskDone(task: WithId<BatchTask>, founderId: string, done: boolean) {
+  const ref = refs.taskCompletion(task.id, founderId);
+  const completion: WithId<TaskCompletion> = {
+    id: ref.id,
+    programId: task.programId,
+    batchId: task.batchId,
+    taskId: task.id,
+    founderId,
+    done,
+    updatedDateISOString: nowISO(),
+  };
+  await setDoc(ref, completion);
 }

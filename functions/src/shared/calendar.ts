@@ -1,4 +1,5 @@
 import { canSeeEvent } from "./access";
+import { APP_NAME } from "./brand";
 import { isPublishedEvent } from "./events";
 import type { PioneersEvent } from "./types";
 
@@ -68,7 +69,7 @@ export function batchCalendar(input: {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Pioneers//Pioneers Hub//EN",
+    `PRODID:-//Pioneers//${APP_NAME}//EN`,
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     `X-WR-CALNAME:${icsText(calendarName(input.batchName))}`,

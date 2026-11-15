@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Anchor, Box, Button, Container, Group, MultiSelect, NumberInput, SegmentedControl, Select, Stack, Text, TextInput, Textarea } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { APP_NAME } from "@shared/brand";
 import { JUDGE_LIMITS, type PublicChoice, type PublicFormQuestion } from "@shared/callables";
 import { FORM_ANSWER_MAX, ratingScale } from "@shared/formRules";
 import { absentFromEventMessage } from "@shared/forms";
@@ -343,7 +344,7 @@ function Sheet() {
       )}
       <Group mt="xl">
         <Button component={Link} href={paths.home()} variant="subtle" color="gray">
-          Go to Pioneers Hub
+          Go to {APP_NAME}
         </Button>
       </Group>
       <ResponsiveDialog opened={isConfirmingLate} onClose={() => setConfirmingLate(false)} title="Save after the deadline?">
@@ -424,7 +425,7 @@ function SheetField({
   const label = (
     <>
       {q.label}
-      {q.required && <Text span c="pioneers"> *</Text>}
+      {q.required && <Text span c="var(--input-asterisk-color)"> *</Text>}
     </>
   );
   const description = [q.description, pending ? PENDING_NOTE : null].filter(Boolean).join(" ") || undefined;

@@ -17,6 +17,7 @@ import {
 import { EVENT_METRIC_RENAMES, standardMetricOf, type StandardMetric } from "./presets/standardMetrics";
 import { absentFounderIds, eventRoster } from "./attendance";
 import { matchingOf } from "./events";
+import { splitTextList } from "./text";
 import { IDENTITY_RULES, SCOPE_RULES, activeQuestions, isBatchParticipant, isJuryForm, scopeOf } from "./types";
 import type {
   Attendance,
@@ -145,6 +146,8 @@ export const newQuestion = (id: string, input: NewQuestionInput): FormQuestion =
 export function answerToFieldValue(spec: ValueSpec, answer: FormAnswer): FormAnswer {
   if (spec.kind === "boolean") return answer === "Yes" ? true : answer === "No" ? false : answer;
   if (spec.kind === "textList" && typeof answer === "string") {
+    // Une entree par ligne ; un champ qui declare ses separateurs (Education : `;`, ` · `) coupe aussi sur eux.
+    if (spec.separators) return splitTextList(answer, ["\n", ...spec.separators]);
     return answer
       .split("\n")
       .map((line) => line.trim())

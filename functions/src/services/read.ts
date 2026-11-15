@@ -1,7 +1,7 @@
 import { getFirestore, type DocumentSnapshot } from "firebase-admin/firestore";
 import { z } from "zod";
 import { COL, docPaths, eventCollectionPaths } from "../shared/collections";
-import { LIST_KEYS, type Batch, type ClosedList, type Founder, type Note, type PioneersEvent, type Program, type Startup } from "../shared/types";
+import { LIST_KEYS, readDirectory, type Batch, type ClosedList, type Founder, type Note, type PioneersEvent, type Program, type Startup } from "../shared/types";
 import {
   canReadFounderCard,
   canReadFounderDirectory,
@@ -33,7 +33,8 @@ import { describeFields } from "./fields";
 // ⛔️ JAMAIS LUS ICI : `events/*/peerRatings` (SPECS §4.8 : Claude n'a acces
 // qu'aux agregats des avis entre pairs, `founderStats.peerRating`), `picks`
 // (mutual picks individuels), `events/*/judges` (secret du lien partage
-// du jury), `apiKeys`, `writePlans`. Aucun chemin de ce fichier ne les nomme ;
+// du jury), `apiKeys`, `writePlans`, `founders/*/private/connections` (shortlist et
+// rencontres : un outil du fondateur, lu a l'ecran seulement). Aucun chemin de ce fichier ne les nomme ;
 // les sous-collections d'evenement lues sont celles de `eventCollectionPaths`.
 //
 // ⛔️ CHAQUE OBJET EST FILTRE PAR LES DROITS DE L'APPELANT, ici et nulle part
@@ -270,7 +271,7 @@ export async function getObject(caller: Caller, input: GetInput): Promise<Record
         readIf(insider, `${COL.founderStats}/${id}`),
       ]);
       const personVisible = person && canReadPerson(role, caller.uid, person as { uid: string | null });
-      return { object, ...withId(founderSnap), person: personVisible ? person : undefined, directory, profile, internal, stats };
+      return { object, ...withId(founderSnap), person: personVisible ? person : undefined, directory: directory && readDirectory(directory), profile, internal, stats };
     }
 
     case "startup": {

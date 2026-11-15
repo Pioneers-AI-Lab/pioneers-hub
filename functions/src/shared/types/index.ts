@@ -15,3 +15,5 @@ export * from "./note";
 export * from "./mentor";
 export * from "./investor";
 export * from "./system";
+export * from "./connections";
+export * from "./task";

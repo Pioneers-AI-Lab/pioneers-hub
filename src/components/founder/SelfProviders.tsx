@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { FormsToFillProvider } from "@/context/FormsToFillContext";
 import { useFounder } from "@/context/FounderContext";
+import { TodoProviders } from "@/components/todo/TodoProviders";
 
 /**
  * Ce que lit « ce qui me reste a faire » (`useTodoItems`) : monte seulement sur
@@ -12,5 +12,5 @@ import { useFounder } from "@/context/FounderContext";
 export function SelfProviders({ children }: { children: ReactNode }) {
   const { isSelf } = useFounder();
   if (!isSelf) return children;
-  return <FormsToFillProvider>{children}</FormsToFillProvider>;
+  return <TodoProviders>{children}</TodoProviders>;
 }

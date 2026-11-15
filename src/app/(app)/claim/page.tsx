@@ -11,7 +11,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useClaim } from "@/context/ClaimContext";
 import { claimProfile } from "@/lib/accounts";
 import { needsEmailVerification } from "@/lib/auth";
-import { errorMessage } from "@/lib/errors";
+import { notifyError } from "@/lib/errors";
 import { PROFILE_CATEGORY_LABEL, formatPeriod, searchKey } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { VerifyEmailNotice } from "@/components/auth/VerifyEmailNotice";
@@ -86,7 +86,7 @@ export default function ClaimPage() {
       router.replace(paths.batch(picked.programId, picked.batchId));
     } catch (err) {
       // Profil pris entre-temps : la liste (temps reel) l'a deja retire.
-      notifications.show({ color: "red", message: errorMessage(err) });
+      notifyError(err);
       setPicked(null);
       setIsClaiming(false);
     }

@@ -18,6 +18,7 @@ import { replaceMatching } from "@/lib/teamsAdmin";
 import { formatDateTime, fromLocalInput, joinList } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { ActionBar } from "@/components/admin/ActionBar";
+import { ArchiveDialog } from "@/components/admin/ArchiveDialog";
 import { AttendanceLinkRow } from "@/components/admin/AttendanceSheet";
 import { EventFormsField, EventResultsAdmin } from "@/components/admin/EventResultsAdmin";
 import { EventSettingsFields, settingsDraftOf, settingsOf, settingsProblems, type SettingsDraft } from "@/components/admin/EventSettingsFields";
@@ -266,18 +267,11 @@ function Hub({ event }: { event: WithId<PioneersEvent> }) {
         </>
       )}
 
-      <ResponsiveDialog opened={confirmArchive} onClose={() => setConfirmArchive(false)} title="Archive this event?">
-        <Stack>
-          <Text size="sm">
-            It leaves the lists, the founders&apos; pages and the calendar.
-            {toClose.length > 0 && ` Its open forms close, and leave the founders' To do: ${titles(toClose)}.`} Its teams, results and scores are
-            kept, and you can restore it{toClose.length > 0 && ": these forms then open again"}.
-          </Text>
-          <Button size="md" color="red" fullWidth onClick={() => void archive()}>
-            Archive
-          </Button>
-        </Stack>
-      </ResponsiveDialog>
+      <ArchiveDialog what="event" opened={confirmArchive} onClose={() => setConfirmArchive(false)} onArchive={() => void archive()}>
+        It leaves the lists, the founders&apos; pages and the calendar.
+        {toClose.length > 0 && ` Its open forms close, and leave the founders' To do: ${titles(toClose)}.`} Its teams, results and scores are
+        kept, and you can restore it{toClose.length > 0 && ": these forms then open again"}.
+      </ArchiveDialog>
 
       {move && <MoveDialog event={event} next={move} isBusy={isBusy} onCancel={() => setMove(null)} onSave={saveMove} />}
     </>

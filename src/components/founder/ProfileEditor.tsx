@@ -19,11 +19,13 @@ import {
 import { notifications } from "@mantine/notifications";
 import { isSlackUserId, normalizeSlackId } from "@shared/slackLinks";
 import { normalizeHttpUrl } from "@shared/text";
+import { getFieldDef, type DbFieldKey } from "@shared/fieldRegistry";
 import type { ExistingCoFounders, FounderDirectory, ListKey } from "@shared/types";
 import { useAuth } from "@/context/AuthContext";
 import { useBatch } from "@/context/BatchContext";
 import { useFounder } from "@/context/FounderContext";
 import { useLists } from "@/context/ListsContext";
+import { isRequiredProfileField } from "@/lib/completeness";
 import { saveMyProfile, type MyProfilePatch } from "@/lib/profile";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PhotoUpload } from "./PhotoUpload";
@@ -38,7 +40,8 @@ import { Section } from "@/components/ui/Section";
 // et seuls les champs MODIFIES sont envoyes : rien n'ecrase une valeur que le
 // fondateur n'a pas touchee. Le staff ne touche pas au consentement a la page
 // publique : c'est le choix du fondateur. Le staff seul voit et saisit l'id
-// Slack (section « Staff only », hors completude du profil).
+// Slack (section « Staff only », hors completude du profil). Un champ
+// obligatoire du registre (celui qui manque dans le To do) porte l'asterisque.
 
 type EditorProps = {
   /** Ou revenir (et aller apres l'enregistrement). */
@@ -77,6 +80,19 @@ function changed<T extends Record<string, unknown>>(initial: T, current: T): Par
 
 const T_SHIRTS = ["XS", "S", "M", "L", "XL", "XXL"];
 
+/** L'asterisque des champs obligatoires, tiree du registre (src/lib/completeness.ts). */
+const req = (key: DbFieldKey) => ({ withAsterisk: isRequiredProfileField(key) });
+
+/**
+ * Touches qui separent deux entrees d'une liste, tirees des separateurs du registre
+ * (Education : une virgule fait partie du nom). `TagsInput` ne coupe que sur un
+ * caractere : « ; » ici, ` · ` a l'import et dans les formulaires.
+ */
+function splitCharsOf(key: DbFieldKey): string[] | undefined {
+  const spec = getFieldDef(key).value;
+  return spec.kind === "textList" && spec.separators ? spec.separators.filter((s) => s.length === 1) : undefined;
+}
+
 /** Oui / Non / non renseigne, en un geste. */
 function YesNo({ label, value, onChange }: { label: string; value: boolean | null; onChange: (v: boolean | null) => void }) {
   return (
@@ -105,20 +121,22 @@ function ListPicker({
   value,
   onChange,
   max,
+  withAsterisk,
 }: {
   label: string;
   listKey: ListKey;
   value: string[];
   onChange: (v: string[]) => void;
   max?: number;
+  withAsterisk?: boolean;
 }) {
   const { values } = useLists();
   const options = [...new Set([...values(listKey), ...value])];
   const description = max === undefined ? undefined : value.length >= max ? `${max} at most: remove one to choose another.` : `${max} at most.`;
   if (values(listKey).length === 0) {
-    return <TagsInput label={label} description={description} value={value} onChange={onChange} maxTags={max} placeholder="Type and press Enter" />;
+    return <TagsInput label={label} withAsterisk={withAsterisk} description={description} value={value} onChange={onChange} maxTags={max} placeholder="Type and press Enter" />;
   }
-  return <MultiSelect label={label} description={description} data={options} value={value} onChange={onChange} searchable maxValues={max} hidePickedOptions />;
+  return <MultiSelect label={label} withAsterisk={withAsterisk} description={description} data={options} value={value} onChange={onChange} searchable maxValues={max} hidePickedOptions />;
 }
 
 export function ProfileEditor({ back }: EditorProps) {
@@ -144,7 +162,7 @@ export function ProfileEditor({ back }: EditorProps) {
             nationality: directory.nationality ?? null,
             country: directory.country ?? null,
             introduceYourself: directory.introduceYourself ?? null,
-            education: directory.education ?? null,
+            education: directory.education,
             degree: directory.degree ?? null,
             fieldOfStudy: directory.fieldOfStudy ?? null,
             yearsOfXP: directory.yearsOfXP ?? null,
@@ -233,33 +251,41 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
 
       <Section title="Skills">
         <Stack>
-          <ListPicker label="Hard skills" listKey="hardSkills" value={draft.founder.hardSkills} onChange={(v) => setF("hardSkills", v)} max={3} />
-          <ListPicker label="Industries" listKey="industries" value={draft.founder.industries} onChange={(v) => setF("industries", v)} />
-          <ListPicker label="Roles I could take" listKey="positionFit" value={draft.founder.rolesICouldTake} onChange={(v) => setF("rolesICouldTake", v)} />
+          <ListPicker label="Hard skills" listKey="hardSkills" value={draft.founder.hardSkills} onChange={(v) => setF("hardSkills", v)} max={3} {...req("founder.hardSkills")} />
+          <ListPicker label="Industries" listKey="industries" value={draft.founder.industries} onChange={(v) => setF("industries", v)} {...req("founder.industries")} />
+          <ListPicker label="Roles I could take" listKey="positionFit" value={draft.founder.rolesICouldTake} onChange={(v) => setF("rolesICouldTake", v)} {...req("founder.rolesICouldTake")} />
         </Stack>
       </Section>
 
       <Section title="Contact" hint={canWriteIdentity ? undefined : "Your account is not linked to your identity yet: ask the team to change your phone, WhatsApp or LinkedIn."}>
         <Stack>
           <TextInput label="Phone" type="tel" disabled={!canWriteIdentity} value={dir.phone ?? ""} onChange={(e) => setD("phone", text(e.currentTarget.value))} />
-          <TextInput label="WhatsApp" type="tel" disabled={!canWriteIdentity} value={dir.whatsapp ?? ""} onChange={(e) => setD("whatsapp", text(e.currentTarget.value))} />
-          <TextInput label="LinkedIn" type="url" disabled={!canWriteIdentity} placeholder="https://linkedin.com/in/..." value={dir.linkedinUrl ?? ""} onChange={(e) => setD("linkedinUrl", text(e.currentTarget.value))} error={linkedinInvalid ? "Not a web address, e.g. linkedin.com/in/your-name." : undefined} />
+          <TextInput label="WhatsApp" type="tel" {...req("person.whatsapp")} disabled={!canWriteIdentity} value={dir.whatsapp ?? ""} onChange={(e) => setD("whatsapp", text(e.currentTarget.value))} />
+          <TextInput label="LinkedIn" type="url" {...req("person.linkedinUrl")} disabled={!canWriteIdentity} placeholder="https://linkedin.com/in/..." value={dir.linkedinUrl ?? ""} onChange={(e) => setD("linkedinUrl", text(e.currentTarget.value))} error={linkedinInvalid ? "Not a web address, e.g. linkedin.com/in/your-name." : undefined} />
           <TextInput label="Country" value={dir.country ?? ""} onChange={(e) => setD("country", text(e.currentTarget.value))} />
-          <TextInput label="Nationality" value={dir.nationality ?? ""} onChange={(e) => setD("nationality", text(e.currentTarget.value))} />
+          <TextInput label="Nationality" {...req("founderDirectory.nationality")} value={dir.nationality ?? ""} onChange={(e) => setD("nationality", text(e.currentTarget.value))} />
           <TextInput label="Gender" value={dir.gender ?? ""} onChange={(e) => setD("gender", text(e.currentTarget.value))} />
         </Stack>
       </Section>
 
       <Section title="About">
         <Stack>
-          <Textarea label="Introduce yourself" autosize minRows={3} value={dir.introduceYourself ?? ""} onChange={(e) => setD("introduceYourself", text(e.currentTarget.value))} />
-          <Textarea label="Track record" description="What you are most proud of, in 2 to 4 points." autosize minRows={3} value={dir.trackRecord ?? ""} onChange={(e) => setD("trackRecord", text(e.currentTarget.value))} />
+          <Textarea label="Introduce yourself" {...req("founderDirectory.introduceYourself")} autosize minRows={3} value={dir.introduceYourself ?? ""} onChange={(e) => setD("introduceYourself", text(e.currentTarget.value))} />
+          <Textarea label="Track record" {...req("founderDirectory.trackRecord")} description="What you are most proud of, in 2 to 4 points." autosize minRows={3} value={dir.trackRecord ?? ""} onChange={(e) => setD("trackRecord", text(e.currentTarget.value))} />
         </Stack>
       </Section>
 
       <Section title="Background">
         <Stack>
-          <TextInput label="Main education" value={dir.education ?? ""} onChange={(e) => setD("education", text(e.currentTarget.value))} />
+          <TagsInput
+            label="Education"
+            description="One school or degree per entry."
+            splitChars={splitCharsOf("founderDirectory.education")}
+            {...req("founderDirectory.education")}
+            value={dir.education}
+            onChange={(v) => setD("education", v)}
+            placeholder="Type and press Enter"
+          />
           <Select
             label="Degree"
             data={[...new Set([...degrees, ...(dir.degree ? [dir.degree] : [])])]}
@@ -270,14 +296,14 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
           />
           <TextInput label="Field of study" value={dir.fieldOfStudy ?? ""} onChange={(e) => setD("fieldOfStudy", text(e.currentTarget.value))} />
           <NumberInput label="Years of experience" min={0} max={60} value={dir.yearsOfXP ?? ""} onChange={(v) => setD("yearsOfXP", typeof v === "number" ? v : null)} />
-          <TagsInput label="Notable companies" value={dir.notableCompanies} onChange={(v) => setD("notableCompanies", v)} placeholder="Type and press Enter" />
+          <TagsInput label="Notable companies" {...req("founderDirectory.notableCompanies")} value={dir.notableCompanies} onChange={(v) => setD("notableCompanies", v)} placeholder="Type and press Enter" />
           <TextInput label="Main startup in 2025" value={dir.mainStartup2025 ?? ""} onChange={(e) => setD("mainStartup2025", text(e.currentTarget.value))} />
         </Stack>
       </Section>
 
       <Section title="Looking for">
         <Stack>
-          <Textarea label="What I am interested in working on" autosize minRows={2} value={dir.interestedInWorkingOn ?? ""} onChange={(e) => setD("interestedInWorkingOn", text(e.currentTarget.value))} />
+          <Textarea label="What I am interested in working on" {...req("founderDirectory.interestedInWorkingOn")} autosize minRows={2} value={dir.interestedInWorkingOn ?? ""} onChange={(e) => setD("interestedInWorkingOn", text(e.currentTarget.value))} />
           <YesNo label="Looking for a co-founder" value={dir.lookingForCoFounder} onChange={(v) => setD("lookingForCoFounder", v)} />
           <TextInput label="Type of co-founder wanted" value={dir.coFounderTypeWanted ?? ""} onChange={(e) => setD("coFounderTypeWanted", text(e.currentTarget.value))} />
           <ListPicker label="Skills wanted in a co-founder" listKey="hardSkills" value={dir.coFounderSkillsWanted} onChange={(v) => setD("coFounderSkillsWanted", v)} />

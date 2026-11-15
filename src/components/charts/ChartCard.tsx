@@ -1,12 +1,14 @@
 import type { ReactNode } from "react";
 import { Group, Paper, Stack } from "@mantine/core";
+import { SubsectionTitle } from "@/components/ui/Section";
 
 // ----------------------------
 // Le cadre commun des graphiques
 // ----------------------------
 // Reprend les cartes du dashboard Spring 2026 (fond legerement plus clair que
 // la page, filet, coins arrondis) avec les jetons du theme : `dark.6` pour le
-// fond, `dark.4` pour le filet, rayon `md`, etiquette `.label`.
+// fond, `dark.4` pour le filet, rayon `md`, titre de sous-section
+// (`SubsectionTitle` : la carte vit dans une `Section`).
 
 export function ChartCard({ title, right, children }: { title?: ReactNode; right?: ReactNode; children: ReactNode }) {
   return (
@@ -14,7 +16,7 @@ export function ChartCard({ title, right, children }: { title?: ReactNode; right
       <Stack gap="sm">
         {(title || right) && (
           <Group justify="space-between" gap="xs" wrap="nowrap">
-            {title && <span className="label">{title}</span>}
+            {title && <SubsectionTitle>{title}</SubsectionTitle>}
             {right}
           </Group>
         )}

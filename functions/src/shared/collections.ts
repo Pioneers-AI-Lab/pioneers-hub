@@ -71,10 +71,15 @@ export const COL = {
   oauthCodes: "oauthCodes",
   oauthGrants: "oauthGrants",
   oauthTokens: "oauthTokens",
+  // ---- Taches du To do (checklist du batch) ----
+  /** Taches communes du batch : fondateurs du batch + staff + investors ; ecrites par le staff. */
+  batchTasks: "batchTasks",
+  /** Coche d'un fondateur (`{taskId}_{founderId}`) : lui-meme + staff ; ecrite par lui-meme. */
+  taskCompletions: "taskCompletions",
 } as const;
 
 export const SUB = {
-  /** founders/{id}/private/{directory|profile|internal}, startups/{id}/private/{profile|internal} */
+  /** founders/{id}/private/{directory|profile|internal|connections}, startups/{id}/private/{profile|internal} */
   private: "private",
   teams: "teams",
   submissions: "submissions",
@@ -96,6 +101,8 @@ export const PRIVATE_DOC = {
   profile: "profile",
   /** Donnees internes. Staff + investors IC. */
   internal: "internal",
+  /** Fondateur : sa shortlist et ses rencontres. Le fondateur lui-meme + staff + investors IC ; ecrit par lui seul. */
+  connections: "connections",
 } as const;
 
 /**
@@ -130,6 +137,11 @@ export const docIds = {
   mentorship: (startupId: string, mentorId: string) => `${startupId}_${mentorId}`,
   mentorFeedback: (eventId: string, founderId: string) => `${eventId}_${founderId}`,
   portfolioReport: (startupId: string, monthString: string) => `${startupId}_${monthString}`,
+  // ---- Taches du To do ----
+  /** Une coche par tache et par fondateur. */
+  taskCompletion: (taskId: string, founderId: string) => `${taskId}_${founderId}`,
+  /** Tache de depart (scripts/seed-tasks.mjs) : rejouee, elle retombe sur le meme document. */
+  starterTask: (batchId: string, key: string) => `${batchId}_${key}`,
 } as const;
 
 /**
@@ -150,6 +162,8 @@ export const docPaths = {
   founderDirectory: (founderId: string) => `${COL.founders}/${founderId}/${SUB.private}/${PRIVATE_DOC.directory}`,
   founderProfile: (founderId: string) => `${COL.founders}/${founderId}/${SUB.private}/${PRIVATE_DOC.profile}`,
   founderInternal: (founderId: string) => `${COL.founders}/${founderId}/${SUB.private}/${PRIVATE_DOC.internal}`,
+  /** Shortlist et rencontres du fondateur ; jamais lu par l'API. */
+  founderConnections: (founderId: string) => `${COL.founders}/${founderId}/${SUB.private}/${PRIVATE_DOC.connections}`,
   founderWeek: (founderId: string, weekStartDayString: string) =>
     `${COL.founderWeeks}/${docIds.founderWeek(founderId, weekStartDayString)}`,
   startup: (startupId: string) => `${COL.startups}/${startupId}`,
@@ -176,6 +190,9 @@ export const docPaths = {
     `${COL.events}/${eventId}/${SUB.peerRatings}/${docIds.peerRating(raterFounderId, rateeFounderId)}`,
   metricSnapshot: (subjectId: string, metric: string, dayString: string, phase: "before" | "after" | null) =>
     `${COL.metricSnapshots}/${docIds.metricSnapshot(subjectId, metric, dayString, phase)}`,
+  // ---- Taches du To do ----
+  /** La coche d'un fondateur sur une tache du batch : ecrite par lui-meme (regle `taskCompletions`). */
+  taskCompletion: (taskId: string, founderId: string) => `${COL.taskCompletions}/${docIds.taskCompletion(taskId, founderId)}`,
 } as const;
 
 /** Sous-collections d'un evenement lues par le serveur (jamais `peerRatings` ni `judges` : SPECS §4.8). */

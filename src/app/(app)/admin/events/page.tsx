@@ -12,7 +12,7 @@ import { ActionBar } from "@/components/admin/ActionBar";
 import { EVENT_PHASE_STYLE, EVENT_STATUS_LABEL, eventLabel } from "@/components/event/eventLabels";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LinkRow, RowList } from "@/components/ui/Rows";
-import { Empty } from "@/components/ui/Section";
+import { Empty, SectionTitle } from "@/components/ui/Section";
 
 // ----------------------------
 // Admin > Events : tous les evenements du batch, en une liste
@@ -43,7 +43,7 @@ export default function AdminEventsPage() {
       <PageHeader back={{ href: paths.admin(), label: "Admin" }} title="Events" subtitle="Every event of the batch: schedule, settings, archive." />
       <BatchPicker />
       <Group justify="space-between" gap="xs" wrap="nowrap" mt="lg" mb="xs">
-        <span className="label">Events · {rows.length}</span>
+        <SectionTitle>Events · {rows.length}</SectionTitle>
         <SegmentedControl
           size="xs"
           value={filter}

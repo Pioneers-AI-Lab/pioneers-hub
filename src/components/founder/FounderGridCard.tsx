@@ -5,7 +5,7 @@ import type { Founder, FounderDirectory, WithId } from "@shared/types";
 import { useLists } from "@/context/ListsContext";
 import { PROFILE_CATEGORY_LABEL } from "@/lib/format";
 import { Field } from "@/components/ui/Field";
-import { Tags } from "@/components/ui/Tags";
+import { tagsOrNull as tags } from "@/components/ui/Tags";
 import { FounderCover } from "./FounderCover";
 
 // ----------------------------
@@ -13,7 +13,7 @@ import { FounderCover } from "./FounderCover";
 // ----------------------------
 // Reprend la galerie du Profile Book FA26 (Airtable) : la photo en couverture,
 // puis nom, type de profil, nationalite, track record, ce qui l'interesse,
-// hard skills, industries, formation, entreprises. Tout est montre en entier,
+// hard skills, industries, formation, entreprises (ces quatre en etiquettes). Tout est montre en entier,
 // comme dans le Profile Book ; un champ vide est masque. Sans `directory`
 // (visiteur public), la carte se contente du document racine.
 
@@ -56,10 +56,10 @@ export function FounderGridCard({
 
         <Field label="Track record">{directory?.trackRecord || founder.trackRecordOneLiner}</Field>
         <Field label="Interested in">{directory?.interestedInWorkingOn}</Field>
-        <Field label="Hard skills">{founder.hardSkills.length > 0 ? <Tags values={founder.hardSkills} colorOf={(v) => colorOf("hardSkills", v)} /> : null}</Field>
-        <Field label="Industries">{founder.industries.length > 0 ? <Tags values={founder.industries} colorOf={(v) => colorOf("industries", v)} /> : null}</Field>
-        <Field label="Education">{directory?.education}</Field>
-        <Field label="Notable companies">{directory?.notableCompanies?.join(", ")}</Field>
+        <Field label="Hard skills">{tags(founder.hardSkills, (v) => colorOf("hardSkills", v))}</Field>
+        <Field label="Industries">{tags(founder.industries, (v) => colorOf("industries", v))}</Field>
+        <Field label="Education">{tags(directory?.education)}</Field>
+        <Field label="Notable companies">{tags(directory?.notableCompanies)}</Field>
       </div>
     </Link>
   );

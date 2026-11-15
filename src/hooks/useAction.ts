@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { notifications } from "@mantine/notifications";
-import { errorMessage } from "@/lib/errors";
+import { notifyError } from "@/lib/errors";
 
 /**
  * Une action d'ecriture depuis l'interface (callable) : `isBusy` pendant
@@ -19,7 +19,7 @@ export function useAction() {
       notifications.show({ message: success });
       return result;
     } catch (err) {
-      notifications.show({ color: "red", message: errorMessage(err) });
+      notifyError(err);
       return undefined;
     } finally {
       setBusy(null);

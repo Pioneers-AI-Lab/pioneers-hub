@@ -31,6 +31,7 @@ import { getFirestore } from "firebase-admin/firestore";
 const require = createRequire(import.meta.url);
 const { CHECKIN_GOALS, CHECKIN_METRICS, standardEventMetric, standardEventMetricKey } = require("../functions/lib/shared/presets/standardMetrics.js");
 const { kpiSeriesFrom, weeklyMaxima } = require("../functions/lib/shared/kpis.js");
+const { splitTextList } = require("../functions/lib/shared/text.js");
 /** Les compteurs SP26 (lOICount, userInterviews...) sous leur cle standard. */
 const standardMetrics = (metrics) => Object.fromEntries(Object.entries(metrics ?? {}).map(([k, v]) => [standardEventMetricKey(k), v]));
 
@@ -338,7 +339,8 @@ for (const f of founders) {
     nationality: list(f.nationalities).join(", ") || text(f.nationality),
     country: null,
     introduceYourself: text(f.introduceYourself),
-    education: list(f.education).join(" · ") || null,
+    // Deja une liste dans le paquet ; une entree « A; B » est decoupee comme a la migration.
+    education: splitTextList(list(f.education).join("; ")),
     degree: text(f.degree),
     fieldOfStudy: text(f.fieldOfStudy),
     yearsOfXP: num(f.yearsOfXP),

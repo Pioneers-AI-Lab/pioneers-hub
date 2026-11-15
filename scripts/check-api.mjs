@@ -323,6 +323,16 @@ const call = async (key, name, args) => {
   check(!t.isError && t.data.planId, "founder previews a change to own profile", t.data);
   t = await call(adaKey, "pioneers_set_fields", { planId: t.data.planId });
   check(!t.isError && t.data.applied, "founder writes own profile");
+  // Education en liste (15/11) : une ancienne valeur texte est decoupee (« ; », « · ») puis fusionnee, sans perte.
+  await getFirestore().doc("founders/ada-example/private/directory").update({ education: "Demo University; Grenoble INP - Phelma - Data Science, AI" });
+  t = await call(adaKey, "pioneers_set_fields", { subjects: { founderId: "ada-example" }, values: { "founderDirectory.education": ["HEC Paris", "Demo University"] } });
+  t = await call(adaKey, "pioneers_set_fields", { planId: t.data.planId });
+  const adaEducation = (await getFirestore().doc("founders/ada-example/private/directory").get()).get("education");
+  check(
+    JSON.stringify(adaEducation) === JSON.stringify(["Demo University", "Grenoble INP - Phelma - Data Science, AI", "HEC Paris"]),
+    "education: legacy text split, then merged as a list",
+    adaEducation,
+  );
   t = await call(adaKey, "pioneers_set_fields", { subjects: { founderId: "ben-sample" }, values: { "founderDirectory.introduceYourself": "x" } });
   check(t.isError && /not_allowed/.test(t.data), "founder cannot write another founder's profile", t.data);
   t = await call(adaKey, "pioneers_set_fields", { subjects: { startupId: "lumen" }, values: { "startupProfile.icp": "x" } });

@@ -7,6 +7,7 @@ import { Anchor, Box, Group, Text } from "@mantine/core";
 import type { BatchRole } from "@shared/access";
 import { useBatch } from "@/context/BatchContext";
 import { useProgram } from "@/context/ProgramContext";
+import { SHOW_STARTUPS_TAB } from "@/lib/features";
 import { paths } from "@/lib/paths";
 
 const ROLE_LABEL: Record<BatchRole, string | null> = {
@@ -22,6 +23,7 @@ const ROLE_LABEL: Record<BatchRole, string | null> = {
 // ----------------------------
 // Mobile : barre d'onglets fixee en bas (a portee de pouce), texte seul.
 // Tablette et ordinateur : la meme liste en onglets sous l'en-tete.
+// « Startups » est masque derriere un drapeau (lib/features.ts).
 // Les onglets dependent du role : un fondateur a « To do » et « Me ». Les outils
 // du staff sont tous dans /admin (menu du compte), pas sous un batch.
 export function BatchShell({ children }: { children: ReactNode }) {
@@ -33,7 +35,8 @@ export function BatchShell({ children }: { children: ReactNode }) {
   const tabs = [
     { label: "Home", href: base, exact: true },
     { label: "Founders", href: paths.founders(program.id, batch.id) },
-    { label: "Startups", href: paths.startups(program.id, batch.id) },
+    ...(SHOW_STARTUPS_TAB ? [{ label: "Startups", href: paths.startups(program.id, batch.id) }] : []),
+    { label: "Calendar", href: paths.calendar(program.id, batch.id) },
     ...(role === "founder"
       ? [
           { label: "To do", href: paths.todo(program.id, batch.id) },

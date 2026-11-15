@@ -50,3 +50,9 @@ export function missingProfileFields(
  */
 export const missingRequiredFields = (founder: Founder, directory: FounderDirectory | null, profile: FounderProfile | null) =>
   missingProfileFields(founder, directory, profile).filter((m) => m.required);
+
+/**
+ * Un champ que « Mon profil » doit marquer obligatoire : attendu « required »
+ * par le registre ET modifiable par le fondateur (la regle du To do).
+ */
+export const isRequiredProfileField = (key: DbFieldKey) => EDITABLE.has(key) && getFieldDef(key).expected?.priority === "required";
