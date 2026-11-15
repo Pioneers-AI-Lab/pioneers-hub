@@ -11,7 +11,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useClaim } from "@/context/ClaimContext";
 import { claimProfile } from "@/lib/accounts";
 import { needsEmailVerification } from "@/lib/auth";
-import { PROFILE_CATEGORY_LABEL, formatPeriod } from "@/lib/format";
+import { errorMessage } from "@/lib/errors";
+import { PROFILE_CATEGORY_LABEL, formatPeriod, searchKey } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { VerifyEmailNotice } from "@/components/auth/VerifyEmailNotice";
 import { PageLoader } from "@/components/ui/PageLoader";
@@ -37,9 +38,10 @@ export default function ClaimPage() {
   const [isClaiming, setIsClaiming] = useState(false);
 
   const batch = claim.batches.find((b) => b.id === claim.selectedBatchId) ?? null;
+  // Sans accents ni casse : « gregoire » trouve « Grégoire ».
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return q ? claim.unclaimedFounders.filter((f) => f.name.toLowerCase().includes(q)) : claim.unclaimedFounders;
+    const q = searchKey(search);
+    return q ? claim.unclaimedFounders.filter((f) => searchKey(f.name).includes(q)) : claim.unclaimedFounders;
   }, [claim.unclaimedFounders, search]);
 
   if (isAuthLoading || claim.isLoading) return <PageLoader />;
@@ -83,7 +85,9 @@ export default function ClaimPage() {
       notifications.show({ message: `Welcome, ${picked.name.split(" ")[0]}.` });
       router.replace(paths.batch(picked.programId, picked.batchId));
     } catch (err) {
-      notifications.show({ color: "red", message: (err as Error).message });
+      // Profil pris entre-temps : la liste (temps reel) l'a deja retire.
+      notifications.show({ color: "red", message: errorMessage(err) });
+      setPicked(null);
       setIsClaiming(false);
     }
   };
@@ -109,6 +113,8 @@ export default function ClaimPage() {
                     <Text size="sm" c="pioneers">Selected</Text>
                   ) : claim.linkedBatchIds.has(b.id) ? (
                     <Text size="sm" c="dimmed">Linked</Text>
+                  ) : b.status === "completed" ? (
+                    <Text size="sm" c="dimmed">Completed</Text>
                   ) : undefined
                 }
                 onClick={() => {

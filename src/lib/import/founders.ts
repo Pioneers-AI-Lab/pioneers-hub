@@ -1,9 +1,10 @@
-import { arrayUnion, doc, getDoc, getDocs, query, where, writeBatch } from "firebase/firestore";
+import { arrayUnion, doc, documentId, getDoc, getDocs, query, where, writeBatch } from "firebase/firestore";
 import { parseDbField } from "@shared/fieldRegistry";
 import type { Batch, Founder, FounderDirectory, FounderInternal, FounderProfile, Person, WithId } from "@shared/types";
 import { db } from "@/lib/firebase";
 import { refs } from "@/lib/firestore/refs";
 import { addListValues } from "@/lib/batchAdmin";
+import { searchKey } from "@/lib/format";
 import { targetSpec, type ImportFieldKey, type ImportTarget } from "./targets";
 import { convertCell } from "./values";
 
@@ -11,12 +12,15 @@ import { convertCell } from "./values";
 // Import des fondateurs depuis le CSV d'onboarding (SPECS §3.2)
 // ----------------------------
 // 1. `parseRows`  : chaque ligne -> email, nom, valeurs typees, erreurs.
-// 2. `planImport` : dedoublonnage par EMAIL (cle du rattachement de compte) :
+// 2. `planImport` : dedoublonnage par EMAIL (cle du rattachement de compte),
+//    puis par NOM dans le batch pour un profil encore sans email (fa26, importe
+//    du Profile Book sans adresse) :
 //      create          personne et fondateur nouveaux
 //      add_to_batch    la personne existe (autre batch) : nouveau fondateur, meme identite
-//      fill_existing   deja dans ce batch : on ne remplit QUE les champs vides
-//                      (regle `fill_empty` du registre, listes fusionnees)
-//      skip            sans email, ou email en double dans le fichier
+//      fill_existing   deja dans ce batch : on ne remplit QUE les champs vides, email
+//                      compris (regle `fill_empty` du registre, listes fusionnees)
+//      skip            sans email, email en double dans le fichier, profil deja vise
+//                      par une autre ligne, ou plusieurs profils du meme nom
 // 3. `applyImport` : ecrit par lots. Sans Cloud Functions pour l'instant,
 //    l'import ecrit aussi les COPIES (nom et photo sur `founders`, email,
 //    WhatsApp, LinkedIn sur `private/directory`).
@@ -37,6 +41,8 @@ export type ImportAction = "create" | "add_to_batch" | "fill_existing" | "skip";
 export type PlannedRow = ParsedRow & {
   action: ImportAction;
   skipReason: string | null;
+  /** `fill_existing` : comment le profil a ete reconnu (email ou nom), affiche dans l'apercu. */
+  matchReason: string | null;
   existingPersonId: string | null;
   existingFounderId: string | null;
 };
@@ -77,34 +83,57 @@ export function parseRows(rows: Record<string, string>[], mapping: ColumnMapping
   });
 }
 
-/** Personnes deja en base, par email (requetes `in` de 30). */
-async function peopleByEmail(emails: string[]): Promise<Map<string, WithId<Person>>> {
-  const found = new Map<string, WithId<Person>>();
-  for (let i = 0; i < emails.length; i += 30) {
-    const chunk = emails.slice(i, i + 30);
-    const snap = await getDocs(query(refs.people(), where("email", "in", chunk)));
-    for (const d of snap.docs) found.set(d.data().email, d.data());
+/** Personnes deja en base dont `field` vaut l'une des `values` (requetes `in` de 30). */
+async function peopleWhere(field: "email" | ReturnType<typeof documentId>, values: string[]): Promise<WithId<Person>[]> {
+  const found: WithId<Person>[] = [];
+  for (let i = 0; i < values.length; i += 30) {
+    const snap = await getDocs(query(refs.people(), where(field, "in", values.slice(i, i + 30))));
+    found.push(...snap.docs.map((d) => d.data()));
   }
   return found;
 }
 
+/** Cle d'un nom : sans accents, casse ni espaces en trop (« Grégoire  Cazier » = « gregoire cazier »). */
+const nameKey = (name: string) => searchKey(name).replace(/\s+/g, " ");
+
 export async function planImport(rows: ParsedRow[], foundersOfBatch: WithId<Founder>[]): Promise<PlannedRow[]> {
   const emails = [...new Set(rows.map((r) => r.email).filter((e): e is string => !!e))];
-  const people = await peopleByEmail(emails);
+  const people = new Map((await peopleWhere("email", emails)).map((p) => [p.email, p]));
+  const foundersByName = new Map<string, WithId<Founder>[]>();
+  for (const f of foundersOfBatch) {
+    const key = nameKey(f.name);
+    if (!foundersByName.has(key)) foundersByName.set(key, []);
+    foundersByName.get(key)!.push(f);
+  }
+  // Profils du batch au nom d'une ligne dont l'email est inconnu : leur personne a-t-elle deja un email ?
+  const sameNameOf = (row: ParsedRow) => foundersByName.get(nameKey([row.firstName, row.lastName].filter(Boolean).join(" "))) ?? [];
+  const candidateRows = rows.filter((r) => r.email && r.firstName && !people.has(r.email));
+  const candidatePersonIds = [...new Set(candidateRows.flatMap((r) => sameNameOf(r).map((f) => f.personId)))];
+  const withEmail = new Set((await peopleWhere(documentId(), candidatePersonIds)).filter((p) => p.email).map((p) => p.id));
   const seen = new Set<string>();
+  const matchedFounders = new Set<string>();
 
-  return rows.map((row) => {
-    const base = { ...row, existingPersonId: null, existingFounderId: null, skipReason: null };
+  return rows.map((row): PlannedRow => {
+    const base = { ...row, existingPersonId: null, existingFounderId: null, skipReason: null, matchReason: null };
     if (!row.email) return { ...base, action: "skip", skipReason: "No email" };
     if (seen.has(row.email)) return { ...base, action: "skip", skipReason: "Email already in this file" };
     seen.add(row.email);
+    const existing = (founder: WithId<Founder>, matchReason: string): PlannedRow => {
+      if (matchedFounders.has(founder.id)) return { ...base, action: "skip", skipReason: `${founder.name} is already on another line` };
+      matchedFounders.add(founder.id);
+      return { ...base, action: "fill_existing", existingPersonId: founder.personId, existingFounderId: founder.id, matchReason };
+    };
     const person = people.get(row.email);
     if (!person) {
       if (!row.firstName) return { ...base, action: "skip", skipReason: "No name" };
+      // Meme nom dans le batch, profil encore sans email : c'est lui (sinon un doublon).
+      const sameName = sameNameOf(row).filter((f) => !withEmail.has(f.personId));
+      if (sameName.length > 1) return { ...base, action: "skip", skipReason: `${sameName.length} profiles named ${sameName[0].name} in this batch` };
+      if (sameName.length === 1) return existing(sameName[0], "Matched by name: the profile had no email, this one is added.");
       return { ...base, action: "create" };
     }
     const founder = foundersOfBatch.find((f) => f.personId === person.id);
-    if (founder) return { ...base, action: "fill_existing", existingPersonId: person.id, existingFounderId: founder.id };
+    if (founder) return existing(founder, "Matched by email.");
     return { ...base, action: "add_to_batch", existingPersonId: person.id };
   });
 }
@@ -208,12 +237,15 @@ export async function applyImport(
           getDoc(refs.founderProfile(founderId)).then((s) => s.data()),
           getDoc(refs.person(personId)).then((s) => s.data()),
         ]);
-        const personPatch = fillEmpty(person as Record<string, unknown> | undefined, docs.person);
+        // L'email de la ligne complete une personne sans adresse (profil reconnu par son nom) :
+        // son compte se rattachera ensuite par email.
+        const personPatch = fillEmpty(person as Record<string, unknown> | undefined, { ...docs.person, email });
         const founderPatch = fillEmpty(founder as Record<string, unknown> | undefined, docs.founder);
         // Copies a jour si l'original vient d'etre rempli.
         if (personPatch.photoUrl && !founder?.photoUrl) founderPatch.photoUrl = personPatch.photoUrl;
         const directoryPatch = fillEmpty(directory as Record<string, unknown> | undefined, {
           ...docs.founderDirectory,
+          ...(personPatch.email ? { email: personPatch.email } : {}),
           ...(personPatch.whatsapp ? { whatsapp: personPatch.whatsapp } : {}),
           ...(personPatch.linkedinUrl ? { linkedinUrl: personPatch.linkedinUrl } : {}),
           ...(personPatch.phone ? { phone: personPatch.phone } : {}),

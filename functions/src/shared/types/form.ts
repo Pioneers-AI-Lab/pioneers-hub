@@ -384,6 +384,12 @@ export type FormCompletion = BatchScoped & {
   completedDateISOString: DateISOString;
   /** Premiere reponse : c'est elle qui compte pour « rempli a temps » (Engagement, decision du 14/11). Absente des plus anciennes. */
   firstCompletedDateISOString?: DateISOString;
+  /**
+   * Les questions actives de la version que le repondant a lue : une question
+   * ajoutee depuis est « nouvelle » pour lui (`questionsAddedSince`, To do).
+   * Absent des plus anciennes : rien n'est alors signale.
+   */
+  questionIds?: string[];
 };
 
 // ---- fieldSuggestions/{suggestionId} -----------------------------------------

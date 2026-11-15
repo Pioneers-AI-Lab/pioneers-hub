@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Drawer, Modal } from "@mantine/core";
+import { Box, Drawer, Modal, type ModalProps } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
 // ----------------------------
@@ -10,6 +10,8 @@ import { useMediaQuery } from "@mantine/hooks";
 // Mobile (< 48em) : une feuille qui monte du bas, a portee de pouce, coins du
 // haut arrondis, hauteur selon le contenu (le clavier la remonte). Tablette et
 // ordinateur : une fenetre centree. Meme API que `Modal` pour ce qui sert ici.
+// `footer` : l'action de la fenetre (« Apply »), collee au bas de la fenetre
+// quand le contenu defile : toujours a portee, meme sur une longue feuille.
 
 export const MOBILE_QUERY = "(max-width: 47.99em)";
 
@@ -34,15 +36,38 @@ export function ResponsiveDialog({
   opened,
   onClose,
   title,
+  size,
+  footer,
   children,
 }: {
   opened: boolean;
   onClose: () => void;
   title?: ReactNode;
+  /** Largeur de la fenetre centree (ordinateur) ; la feuille du bas prend toute la largeur. */
+  size?: ModalProps["size"];
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   // `false` avant la mesure (rendu serveur) : fenetre centree, puis ajustee.
   const isMobile = useMediaQuery(MOBILE_QUERY) ?? false;
+  const content = (
+    <>
+      {children}
+      {footer && (
+        <Box
+          pos="sticky"
+          bottom={0}
+          pt="sm"
+          mt="md"
+          bg="var(--mantine-color-body)"
+          // Colle au bord de l'ecran sur mobile : au-dessus de la barre d'accueil.
+          style={{ zIndex: 1, paddingBottom: "calc(var(--mantine-spacing-xs) + env(safe-area-inset-bottom))" }}
+        >
+          {footer}
+        </Box>
+      )}
+    </>
+  );
 
   if (isMobile) {
     return (
@@ -54,13 +79,13 @@ export function ResponsiveDialog({
         size="auto"
         styles={BOTTOM_SHEET_STYLES}
       >
-        {children}
+        {content}
       </Drawer>
     );
   }
   return (
-    <Modal opened={opened} onClose={onClose} title={title}>
-      {children}
+    <Modal opened={opened} onClose={onClose} title={title} size={size}>
+      {content}
     </Modal>
   );
 }

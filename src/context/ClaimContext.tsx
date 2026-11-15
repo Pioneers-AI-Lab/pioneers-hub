@@ -32,6 +32,21 @@ type ClaimValue = {
 const [ClaimContextProvider, useClaim] = createStrictContext<ClaimValue>("Claim");
 export { useClaim };
 
+/**
+ * Le batch montre d'office, parmi les batchs NON TERMINES : celui ou le compte
+ * est deja rattache (il le retrouve), sinon le seul ou il ne l'est pas encore.
+ * Jamais un batch termine, sauf s'il est seul (aucune liste a choisir) : un
+ * alumni le choisit lui-meme (il reclame aussi son profil d'un batch termine).
+ */
+function defaultBatchId(batches: WithId<Batch>[], linkedBatchIds: Set<string>): string | null {
+  const open = batches.filter((b) => b.status !== "completed");
+  const linked = open.find((b) => linkedBatchIds.has(b.id));
+  if (linked) return linked.id;
+  const unlinked = open.filter((b) => !linkedBatchIds.has(b.id));
+  if (unlinked.length === 1) return unlinked[0].id;
+  return batches.length === 1 ? batches[0].id : null;
+}
+
 export function ClaimProvider({ children }: { children: ReactNode }) {
   const { firebaseUser, isLoading: isAuthLoading, memberships, isMembershipsLoading } = useAuth();
   const [chosenBatchId, selectBatch] = useState<string | null>(null);
@@ -41,16 +56,10 @@ export function ClaimProvider({ children }: { children: ReactNode }) {
   const requests = useQueryListener(
     isAuthLoading ? undefined : firebaseUser ? queries.myClaimRequests(firebaseUser.uid) : null,
   );
-  // Batch affiche : celui choisi, sinon celui d'une demande en attente, sinon le seul
-  // ou le compte n'est pas encore rattache (sinon le seul batch).
-  // Tous les batchs : un alumni reclame aussi son profil d'un batch termine.
+  // Batch affiche : celui choisi, sinon celui d'une demande en attente, sinon `defaultBatchId`.
   const linkedBatchIds = useMemo(() => new Set(memberships.map((m) => m.batchId)), [memberships]);
-  const unlinkedBatches = batches.data.filter((b) => !linkedBatchIds.has(b.id));
   const pendingBatchId = requests.data.find((r) => r.status === "pending")?.batchId ?? null;
-  const selectedBatchId =
-    chosenBatchId ??
-    pendingBatchId ??
-    (unlinkedBatches.length === 1 ? unlinkedBatches[0].id : batches.data.length === 1 ? batches.data[0].id : null);
+  const selectedBatchId = chosenBatchId ?? pendingBatchId ?? defaultBatchId(batches.data, linkedBatchIds);
   const canClaimSelected = firebaseUser && selectedBatchId && !isMembershipsLoading && !linkedBatchIds.has(selectedBatchId);
   const unclaimed = useQueryListener(canClaimSelected ? queries.unclaimedFoundersOfBatch(selectedBatchId) : null);
 

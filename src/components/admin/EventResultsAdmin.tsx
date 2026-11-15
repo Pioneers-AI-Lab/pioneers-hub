@@ -70,16 +70,16 @@ export function EventResultsAdmin() {
 export function EventFormsField() {
   const router = useRouter();
   const { event, forms } = useAdminEvent();
-  const { batch } = useAdmin();
+  const { batch, events } = useAdmin();
   const { isBusy, run } = useAction();
   const [isPicking, setPicking] = useState(false);
   const nowISO = new Date().toISOString();
   const hasWorkTeams = isWorkTeamEvent(event);
   const offered = (Object.keys(EVENT_FORM_TEMPLATES) as FormTemplateKey[]).filter((key) => hasWorkTeams || !(FORM_TEMPLATES[key] as FormTemplate).needsWorkTeams);
 
-  /** `null` : un formulaire vierge, rattache a l'evenement. */
+  /** `null` : un formulaire vierge, rattache a l'evenement, aux dates de son modele dans l'evenement. */
   const create = async (templateKey: FormTemplateKey | null) => {
-    const id = await run(() => createForm({ programId: batch.programId, batchId: batch.id, templateKey, eventId: event.id, event }), "Draft created");
+    const id = await run(() => createForm({ programId: batch.programId, batchId: batch.id, templateKey, eventId: event.id, event }, events), "Draft created");
     if (id) router.push(paths.adminForm(id));
   };
 
@@ -108,11 +108,10 @@ export function EventFormsField() {
             <ButtonRow key={key} disabled={isBusy} onClick={() => void create(key)} title={FORM_TEMPLATES[key].label} subtitle={EVENT_FORM_TEMPLATES[key]} />
           ))}
         </RowList>
-        {!hasWorkTeams && (
-          <Text size="xs" c="dimmed" mt="sm">
-            The submission and the peer rating need a matching in teams.
-          </Text>
-        )}
+        <Text size="xs" c="dimmed" mt="sm">
+          The form gets its model&apos;s dates in this event (most open 15 min before the end and are due 24 h later): adjust them in its editor.
+          {!hasWorkTeams && " The submission and the peer rating need a matching in teams."}
+        </Text>
       </ResponsiveDialog>
     </HelpBlock>
   );

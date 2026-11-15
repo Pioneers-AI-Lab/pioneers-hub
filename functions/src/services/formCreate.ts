@@ -3,6 +3,7 @@ import { z } from "zod";
 import { COL, docPaths, SUB } from "../shared/collections";
 import { isStaffViewer } from "../shared/access";
 import { isDbFieldKey, type DbFieldKey } from "../shared/fieldRegistry";
+import { addedFormDates } from "../shared/eventForms";
 import { formProblems, newQuestion } from "../shared/formRules";
 import { firstPublication, newForm } from "../shared/forms";
 import { FORM_TEMPLATES, type FormTemplateKey } from "../shared/presets/formTemplates";
@@ -97,7 +98,19 @@ export const createForm: Operation<typeof CreateFormInput, Created> = {
       throw notFound("event_not_found", `Event \`${input.eventId}\` is not an event of this batch.`, "eventId");
     }
 
-    // Construit comme dans Admin, puis verifie comme dans l'editeur.
+    // Construit comme dans Admin, puis verifie comme dans l'editeur. Rattache a un
+    // evenement : les dates de son modele dans l'evenement (`addedFormDates`, comme
+    // « Add a form »), sauf dates donnees ; un Peer rating cherche son creneau Debrief.
+    const given = { opensDateISOString: input.opensDateISOString, deadlineDateISOString: input.deadlineDateISOString };
+    const batchEvents =
+      event && input.templateKey === "peer_rating"
+        ? (await tx.get(db.collection(COL.events).where("batchId", "==", input.batchId))).docs
+            .map((d) => ({ ...(d.data() as PioneersEvent), id: d.id }))
+            .filter((e) => e.archivedDateISOString === null)
+        : [];
+    const dates = event
+      ? addedFormDates(input.templateKey ?? null, { ...event, id: input.eventId! }, batchEvents, given)
+      : { opensDateISOString: given.opensDateISOString ?? null, deadlineDateISOString: given.deadlineDateISOString ?? null };
     const form = newForm(
       { programId: batch.programId, batchId: input.batchId, templateKey: input.templateKey ?? null, eventId: input.eventId ?? null, event: event ?? null },
       {
@@ -106,8 +119,7 @@ export const createForm: Operation<typeof CreateFormInput, Created> = {
         ...(input.questions ? { questions: input.questions.map((q, i) => newQuestion(`q${i + 1}`, { ...q, dbField: q.dbField as DbFieldKey | undefined })) } : {}),
         ...(input.approval ? { approval: input.approval } : {}),
         ...(input.identityCheck ? { identityCheck: input.identityCheck } : {}),
-        opensDateISOString: input.opensDateISOString ?? null,
-        deadlineDateISOString: input.deadlineDateISOString ?? null,
+        ...dates,
       },
     );
     const problem = formProblems(form)[0];

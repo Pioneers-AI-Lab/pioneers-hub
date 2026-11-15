@@ -189,13 +189,18 @@ export async function publishEventRanking(actorUid: string, eventIdRaw: unknown,
   return { batchId };
 }
 
+// `call()` (src/lib/firebase.ts) retire deja les cles `undefined` que le SDK enverrait en `null` ; le schema
+// accepte quand meme `null` (barèmes deja stockes, anciens clients) sans en faire une regle pour les autres.
 const ScoringItemSchema = z.object({
   label: z.string().trim().min(1).max(80),
   mode: z.enum(["per_unit", "proportional", "criterion"]),
   sourceKey: z.string().regex(FAMILY_KEY),
   pointsPerUnit: z.number().finite().min(0).max(1_000_000).nullish(),
   maxPoints: z.number().finite().min(0).max(1_000_000).nullish(),
-  tieBreakOnly: z.boolean().optional(),
+  tieBreakOnly: z
+    .boolean()
+    .nullish()
+    .transform((v) => v === true),
 });
 const ScoringSchema = z.object({ items: z.array(ScoringItemSchema).max(20) });
 

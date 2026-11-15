@@ -1,6 +1,7 @@
 import { getFirestore } from "firebase-admin/firestore";
 import { docPaths } from "../shared/collections";
-import type { Evaluation, EventTeam, MetricSnapshot, PioneersEvent, Submission } from "../shared/types";
+import { eventMetrics, juryCriteria } from "../shared/forms";
+import type { Evaluation, EventTeam, Form, MetricSnapshot, PioneersEvent, Submission } from "../shared/types";
 import { sameIds } from "../shared/kpis";
 import { recomputeLeaderboard } from "./leaderboards";
 import { parisDay } from "./schemas";
@@ -14,6 +15,9 @@ import { parisDay } from "./schemas";
 // un releve date (`metricSnapshots`, id deterministe : une nouvelle saisie
 // remplace la precedente), puis le leaderboard est recalcule (classement par
 // metrique, ou departage du jury par l'heure de soumission).
+// Declencheur `onFormWritten` : la grille du jury et les metriques sont les
+// questions des formulaires de l'evenement ; une echelle, un poids, une question
+// ajoutee ou retiree recalcule le classement.
 
 const db = () => getFirestore();
 
@@ -72,4 +76,17 @@ export async function onSubmissionChange(eventId: string, teamId: string, before
 export async function onEvaluationChange(eventId: string, before: Pick<Evaluation, "scores"> | null, after: Pick<Evaluation, "scores"> | null): Promise<void> {
   if (before && after && JSON.stringify(before.scores) === JSON.stringify(after.scores)) return;
   await recomputeLeaderboard(eventId);
+}
+
+type ScoringForm = Pick<Form, "eventId" | "questions" | "archivedDateISOString">;
+
+/** Ce qu'un formulaire apporte au leaderboard : son evenement, sa grille de jury et ses metriques. */
+const rankingInputs = (form: ScoringForm | null) => JSON.stringify(form ? [form.eventId, juryCriteria([form]), eventMetrics([form])] : null);
+
+/** Un formulaire d'evenement : le leaderboard ne suit qu'une grille ou des metriques changees (pas des dates ni un titre). */
+export async function onFormChange(before: ScoringForm | null, after: ScoringForm | null): Promise<void> {
+  const eventIds = new Set([before?.eventId, after?.eventId].filter((id): id is string => Boolean(id)));
+  if (eventIds.size === 0 || rankingInputs(before) === rankingInputs(after)) return;
+  // Rattache a un autre evenement : l'ancien perd la grille, le nouveau la gagne.
+  await Promise.all([...eventIds].map(recomputeLeaderboard));
 }

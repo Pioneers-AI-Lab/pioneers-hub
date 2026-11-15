@@ -18,6 +18,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { isSlackUserId, normalizeSlackId } from "@shared/slackLinks";
+import { normalizeHttpUrl } from "@shared/text";
 import type { ExistingCoFounders, FounderDirectory, ListKey } from "@shared/types";
 import { useAuth } from "@/context/AuthContext";
 import { useBatch } from "@/context/BatchContext";
@@ -97,7 +98,7 @@ function YesNo({ label, value, onChange }: { label: string; value: boolean | nul
   );
 }
 
-/** Valeurs d'une liste fermee ; saisie libre tant que la liste est vide. */
+/** Valeurs d'une liste fermee ; saisie libre tant que la liste est vide. `max` : dit, pas seulement applique. */
 function ListPicker({
   label,
   listKey,
@@ -113,10 +114,11 @@ function ListPicker({
 }) {
   const { values } = useLists();
   const options = [...new Set([...values(listKey), ...value])];
+  const description = max === undefined ? undefined : value.length >= max ? `${max} at most: remove one to choose another.` : `${max} at most.`;
   if (values(listKey).length === 0) {
-    return <TagsInput label={label} value={value} onChange={onChange} maxTags={max} placeholder="Type and press Enter" />;
+    return <TagsInput label={label} description={description} value={value} onChange={onChange} maxTags={max} placeholder="Type and press Enter" />;
   }
-  return <MultiSelect label={label} data={options} value={value} onChange={onChange} searchable maxValues={max} hidePickedOptions />;
+  return <MultiSelect label={label} description={description} data={options} value={value} onChange={onChange} searchable maxValues={max} hidePickedOptions />;
 }
 
 export function ProfileEditor({ back }: EditorProps) {
@@ -201,6 +203,8 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
   };
   const slackChanged = isStaff && draft.slackUserId !== initial.slackUserId;
   const slackInvalid = slackChanged && draft.slackUserId !== null && !isSlackUserId(draft.slackUserId);
+  // Seulement une valeur modifiee : une ancienne valeur importee ne bloque pas le reste du profil.
+  const linkedinInvalid = "linkedinUrl" in patch.directory && dir.linkedinUrl !== null && normalizeHttpUrl(dir.linkedinUrl) === null;
   const dirty = slackChanged || Object.keys(patch.founder).length + Object.keys(patch.directory).length + Object.keys(patch.profile).length > 0;
 
   const save = async () => {
@@ -239,7 +243,7 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
         <Stack>
           <TextInput label="Phone" type="tel" disabled={!canWriteIdentity} value={dir.phone ?? ""} onChange={(e) => setD("phone", text(e.currentTarget.value))} />
           <TextInput label="WhatsApp" type="tel" disabled={!canWriteIdentity} value={dir.whatsapp ?? ""} onChange={(e) => setD("whatsapp", text(e.currentTarget.value))} />
-          <TextInput label="LinkedIn" type="url" disabled={!canWriteIdentity} placeholder="https://linkedin.com/in/..." value={dir.linkedinUrl ?? ""} onChange={(e) => setD("linkedinUrl", text(e.currentTarget.value))} />
+          <TextInput label="LinkedIn" type="url" disabled={!canWriteIdentity} placeholder="https://linkedin.com/in/..." value={dir.linkedinUrl ?? ""} onChange={(e) => setD("linkedinUrl", text(e.currentTarget.value))} error={linkedinInvalid ? "Not a web address, e.g. linkedin.com/in/your-name." : undefined} />
           <TextInput label="Country" value={dir.country ?? ""} onChange={(e) => setD("country", text(e.currentTarget.value))} />
           <TextInput label="Nationality" value={dir.nationality ?? ""} onChange={(e) => setD("nationality", text(e.currentTarget.value))} />
           <TextInput label="Gender" value={dir.gender ?? ""} onChange={(e) => setD("gender", text(e.currentTarget.value))} />
@@ -330,7 +334,7 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
       )}
 
       <Box className="savebar">
-        <Button size="md" fullWidth disabled={!dirty || slackInvalid} loading={isSaving} onClick={save}>
+        <Button size="md" fullWidth disabled={!dirty || slackInvalid || linkedinInvalid} loading={isSaving} onClick={save}>
           {dirty ? "Save changes" : "No changes"}
         </Button>
       </Box>

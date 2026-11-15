@@ -150,15 +150,16 @@ const SUBMISSION_FIELD_QUESTIONS: Record<SubmissionFieldKey, () => FormQuestion>
 
 export const FORM_TEMPLATES = {
   // La Submission d'un hackathon (SPECS §4.2, decision du 13/11), cle `debrief` :
-  // une par equipe, envoyee par le team lead avant l'echeance. Connexion
-  // obligatoire : l'equipe est celle du repondant. Le dernier envoi compte ; apres
-  // l'echeance, il est marque « en retard ».
+  // une par equipe. Le team lead s'assure qu'elle part avant l'echeance ; tout
+  // coequipier peut l'envoyer. Connexion obligatoire : l'equipe est celle du
+  // repondant. Le dernier envoi compte ; apres l'echeance, il est marque « en
+  // retard » (la page le dit avant d'enregistrer).
   debrief: template({
     label: "Hackathon submission",
     kind: "debrief",
     title: "Submission",
     description:
-      "One per team, sent by your team lead before the deadline. Any teammate can send it: the last save counts. A submission after the deadline scores 0.",
+      "One per team. Your team lead makes sure it is sent before the deadline; any teammate can send it, and the last save counts. A submission saved after the deadline scores 0.",
     identityCheck: "account",
     needsEvent: true,
     needsWorkTeams: true,
@@ -236,12 +237,13 @@ export const FORM_TEMPLATES = {
   }),
 
   // Semaine 1 : se presenter, dire qui on veut rencontrer (des picks de
-  // l'evenement), et son objectif de la semaine.
+  // l'evenement), et son objectif de la semaine. Connexion obligatoire (decision
+  // du 15/11) : il ecrit la presentation et les picks du repondant.
   founder_introductions: template({
     label: "Founder introductions",
     kind: "motivation",
     title: "Founder introductions",
-    identityCheck: "select_name",
+    identityCheck: "account",
     needsEvent: true,
     questions: [
       q("introduceYourself", { type: "long_text", label: "Introduce yourself", dbField: "founderDirectory.introduceYourself", required: true }),

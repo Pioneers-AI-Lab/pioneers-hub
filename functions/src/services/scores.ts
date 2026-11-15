@@ -2,6 +2,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, type DocumentData, type Query } from "firebase-admin/firestore";
 import { COL, docIds, docPaths, eventCollectionPaths, SUB } from "../shared/collections";
 import { eventRoster } from "../shared/attendance";
+import { computeBatchStats } from "../shared/batchStats";
 import { isWorkTeamEvent } from "../shared/events";
 import { countRequiredFields, listMissingFields } from "../shared/fieldRegistry";
 import { formAudience, formNeedsTeam } from "../shared/formRules";
@@ -38,7 +39,7 @@ import {
 // ----------------------------
 // services - les scores d'un batch (SPECS §5, §5.5)
 // ----------------------------
-// Le SEUL ecrivain de `scores`, `scoreSignals` et `founderStats` pour un batch
+// Le SEUL ecrivain de `scores`, `scoreSignals`, `founderStats` et `batchStats` pour un batch
 // dont les scores viennent du Hub (`settings.scoresSource !== "imported"`) :
 // Spring 2026, recopie de l'ancien dashboard, n'est jamais touche.
 // Tout le batch d'un coup : Likability se rapporte au maximum du batch, et
@@ -211,6 +212,10 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
 
   const write = db().bulkWriter();
   const scoped = { programId: batch.programId, batchId };
+  write.set(
+    db().doc(`${COL.batchStats}/${batchId}`),
+    computeBatchStats(batch.programId, founders.map((f) => ({ founder: f, directory: directoryOf.get(f.id) ?? null })), now),
+  );
   const performanceOf = new Map<string, number | null>();
 
   for (const f of founders) {

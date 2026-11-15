@@ -17,15 +17,16 @@ import {
   type ResolvedSubjects,
   type SubjectKey,
 } from "../shared/fieldRegistry";
-import { FORM_ANSWER_MAX, answerToFieldValue, fieldValueToAnswer, formNeedsTeam, isTeamForm, ratingScale } from "../shared/formRules";
-import type {
-  CallableRequest,
-  CallableResponse,
-  PublicChoice,
-  PublicForm,
-  PublicFormQuestion,
-  PublicRespondent,
-  RespondentInput,
+import { FORM_ANSWER_MAX, answerToFieldValue, fieldValueToAnswer, formNeedsTeam, isTeamForm, questionsAddedSince, ratingScale } from "../shared/formRules";
+import {
+  FORM_UPDATED,
+  type CallableRequest,
+  type CallableResponse,
+  type PublicChoice,
+  type PublicForm,
+  type PublicFormQuestion,
+  type PublicRespondent,
+  type RespondentInput,
 } from "../shared/callables";
 import { juryTargetOf } from "../shared/events";
 import { activeQuestions, answerKey, isJuryForm, isPerTarget, isProvenIdentity, needsAccount, parseAnswerKey, scopeOf } from "../shared/types";
@@ -41,6 +42,7 @@ import type {
   FormCompletion,
   FormQuestion,
   FormResponse,
+  FormVersion,
   Founder,
   Mentor,
   Person,
@@ -59,7 +61,7 @@ import { cleanId, cleanText, cleanUrl, invalidArgument } from "./clean";
 import { planFieldWrites, type FieldChange } from "./fields";
 import { plain } from "./operations";
 import { parisMonday } from "../shared/dates";
-import { formState } from "../shared/forms";
+import { absentFromEventMessage, formState } from "../shared/forms";
 import { absentFounderIds } from "../shared/attendance";
 
 // ----------------------------
@@ -105,6 +107,14 @@ const NOT_OPEN: Record<Exclude<PublicForm["state"], "open">, string> = {
   draft: "This form is a draft: publish it to collect answers.",
 };
 
+/** La page lue n'est plus le formulaire en place et la reponse n'y suffit plus : la page le relit, en gardant ce qui est saisi. */
+const formUpdated = () =>
+  new HttpsError("failed-precondition", "This form was updated since you opened it. Your answers are kept: answer the new questions, then send again.", {
+    reason: FORM_UPDATED,
+  });
+
+/** Un lien de jury sans son secret (fragment `#...` perdu au copier-coller). */
+const INCOMPLETE_JURY_LINK = "This jury link is incomplete. Open the full link the Pioneers team sent you.";
 
 /** Les listes fermees que lisent les questions a choix de ce formulaire. */
 const listKeysOf = (questions: FormQuestion[]) => [
@@ -283,6 +293,24 @@ async function readPrefill(form: Form, respondent: Respondent, ctx: ScopeContext
   return out;
 }
 
+/**
+ * Ce que la derniere reponse du fondateur ajoute aux valeurs de la base : ses
+ * reponses sans champ, et celles qui attendent la validation du staff (la base
+ * a encore l'ancienne valeur : c'est sa reponse qu'il doit retrouver).
+ */
+function ownAnswers(questions: FormQuestion[], response: FormResponse | undefined): { answers: Record<string, FormAnswer>; pendingKeys: string[] } {
+  if (!response) return { answers: {}, pendingKeys: [] };
+  const byId = new Map(questions.map((q) => [q.id, q]));
+  const pending = new Set(response.writes.filter((w) => w.status === "pending_approval").map((w) => answerKey(w.questionId, w.targetId ?? null)));
+  const answers = Object.fromEntries(
+    Object.entries(response.answers).filter(([key]) => {
+      const q = byId.get(parseAnswerKey(key).questionId);
+      return q !== undefined && (!q.dbField || pending.has(key));
+    }),
+  );
+  return { answers, pendingKeys: [...pending].filter((key) => key in answers) };
+}
+
 // ---- getPublicForm ---------------------------------------------------------------
 
 const byLabel = (a: PublicChoice, b: PublicChoice) => a.label.localeCompare(b.label);
@@ -335,6 +363,7 @@ const OTHER_PICKERS: Partial<Record<PickerEntity, (form: Form) => Promise<Public
 
 /** Le jury d'un formulaire `jury_link` : lien verifie, cibles notees, noms a choisir. */
 async function juryOf(form: Form, key: unknown) {
+  if (typeof key !== "string" || !key) throw new HttpsError("permission-denied", INCOMPLETE_JURY_LINK);
   const [, event] = await Promise.all([assertJuryKey(form.eventId, key), loadEvent(null, form.eventId!)]);
   const target = juryTargetOf(event);
   const scored = await scoredTargets(null, form.eventId!, event);
@@ -356,11 +385,15 @@ export async function getPublicForm(uid: string | null, req: Partial<CallableReq
   const isJury = isJuryForm(form);
   const viewerFounderId = account ? founderIdIn(account, form.batchId) : null;
   const chosen = isJury || form.identityCheck === "anonymous" ? null : (viewerFounderId ?? (needsAccount(form.identityCheck) ? null : chosenFounderId(req.respondent)));
-  // Le jury (lien, evenement, noms), l'evenement et la fiche du repondant : en meme temps.
-  const [jury, eventOfForm, founderSnap] = await Promise.all([
+  // Identite prouvee (compte, ou fondateur connecte) : ses reponses deja donnees (un nom choisi ne prouve rien).
+  const isOwn = chosen !== null && (isProvenIdentity(form.identityCheck) || chosen === viewerFounderId);
+  // Le jury (lien, evenement, noms), l'evenement, la fiche du repondant, sa presence et sa derniere reponse : en meme temps.
+  const [jury, eventOfForm, founderSnap, markSnap, completionSnap] = await Promise.all([
     isJury ? juryOf(form, req.key) : null,
     !isJury && form.eventId ? loadEvent(null, form.eventId).catch(() => null) : null,
     chosen ? db().doc(docPaths.founder(chosen)).get() : null,
+    chosen && form.eventId ? db().doc(docPaths.attendance(form.eventId, chosen)).get() : null,
+    isOwn ? db().doc(docPaths.formCompletion(formId, chosen)).get() : null,
   ]);
   const event = jury?.event ?? eventOfForm;
 
@@ -416,10 +449,15 @@ export async function getPublicForm(uid: string | null, req: Partial<CallableReq
     const founder = founderSnap?.data() as Founder | undefined;
     if (founder && founder.batchId === form.batchId && founder.archivedDateISOString === null) respondent = founderRespondent(founderSnap!.id, founder);
   }
-  const ctx = respondent ? await scopeContext(null, form, event, respondent, jury?.scored ?? null) : emptyContext(event);
-  // Les reponses deja donnees : seulement si l'identite est prouvee (un nom choisi ne prouve rien).
-  const proven = respondent !== null && (isProvenIdentity(form.identityCheck) || (respondent.founderId !== null && respondent.founderId === viewerFounderId));
+  const completion = completionSnap?.data() as FormCompletion | undefined;
+  const [ctx, lastResponse] = await Promise.all([
+    respondent ? scopeContext(null, form, event, respondent, jury?.scored ?? null) : emptyContext(event),
+    completion && respondent ? db().collection(COL.formResponses).doc(completion.responseId).get() : null,
+  ]);
+  // Les reponses deja donnees : seulement si l'identite est prouvee (un jure par le secret du lien).
+  const proven = respondent !== null && (isProvenIdentity(form.identityCheck) || isOwn);
   const state = formState(form, nowISO);
+  const own = ownAnswers(questions, proven ? (lastResponse?.data() as FormResponse | undefined) : undefined);
 
   const lists = listsFrom(listSnaps);
   const publicQuestions: PublicFormQuestion[] = questions.map((q) => ({
@@ -453,8 +491,13 @@ export async function getPublicForm(uid: string | null, req: Partial<CallableReq
     respondent: respondent ? toPublicRespondent(respondent) : null,
     team: ctx.team ? { id: ctx.team.id, name: ctx.team.name } : null,
     targets: ctx.targets,
-    prefill: proven ? await readPrefill(form, respondent!, ctx, nowISO) : {},
+    prefill: proven ? { ...(await readPrefill(form, respondent!, ctx, nowISO)), ...own.answers } : {},
     canResubmit: proven && state === "open",
+    // Le staff sans profil fondateur relit un formulaire « Sign in » sans pouvoir l'envoyer.
+    preview: state === "draft" || (!viewerFounderId && needsAccount(form.identityCheck) && isStaffViewer(account?.viewer ?? null)),
+    absent: respondent !== null && respondent.founder !== null && markSnap?.get("status") === "absent",
+    pendingAnswerKeys: own.pendingKeys,
+    newQuestionIds: respondent ? questionsAddedSince(form, completion).map((q) => q.id) : [],
   };
 }
 
@@ -741,16 +784,14 @@ export async function submitFormResponse(
 
     const form = formSnap.data() as Form | undefined;
     if (!form || form.archivedDateISOString !== null) throw new HttpsError("not-found", "This form does not exist or was removed.");
-    if (isJuryForm(form) && !jury) throw new HttpsError("permission-denied", "This jury link is not valid any more. Ask the Pioneers team for the new one.");
-    if (!isJuryForm(form) && jury) {
-      throw new HttpsError("failed-precondition", "This form was updated since you opened it. Reload the page to see the new version.");
-    }
+    if (isJuryForm(form) && !jury) throw new HttpsError("permission-denied", INCOMPLETE_JURY_LINK);
+    if (!isJuryForm(form) && jury) throw formUpdated();
     const nowISO = new Date().toISOString();
     const state = formState(form, nowISO);
     if (state !== "open") throw new HttpsError("failed-precondition", jury && state === "closed" ? "Scores are locked." : NOT_OPEN[state]);
-    if (req.version !== form.version) {
-      throw new HttpsError("failed-precondition", "This form was updated since you opened it. Reload the page to see the new version.");
-    }
+    // Une page ouverte sur une version precedente : la reponse se valide contre la version en place, par
+    // id de question (un changement de dates ou une question facultative ne la bloquent pas).
+    const readVersion = Number.isInteger(req.version) && req.version !== form.version ? (req.version as number) : null;
 
     // UNE lecture : les listes des questions a choix, le rattachement du compte, le nom choisi, l'evenement.
     const questions = activeQuestions(form);
@@ -759,7 +800,8 @@ export async function submitFormResponse(
     const membershipPath = uid && asksFounder ? docPaths.membership(form.batchId, uid) : null;
     const chosenPath = asksFounder && chosenId && !needsAccount(form.identityCheck) ? docPaths.founder(chosenId) : null;
     const eventPath = !jury && form.eventId ? docPaths.event(form.eventId) : null;
-    const paths = [...listKeys.map(docPaths.list), ...[membershipPath, chosenPath, eventPath].filter((p): p is string => p !== null)];
+    const versionPath = readVersion !== null ? docPaths.formVersion(formId, readVersion) : null;
+    const paths = [...listKeys.map(docPaths.list), ...[membershipPath, chosenPath, eventPath, versionPath].filter((p): p is string => p !== null)];
     const snaps = new Map((paths.length ? await tx.getAll(...paths.map((p) => db().doc(p))) : []).map((d) => [d.ref.path, d]));
     const lists = listsFrom(listKeys.map((k) => snaps.get(docPaths.list(k))!));
     const event = jury?.event ?? ((eventPath ? snaps.get(eventPath)?.data() : undefined) as PioneersEvent | undefined) ?? null;
@@ -770,8 +812,20 @@ export async function submitFormResponse(
       : asksFounder
         ? await resolveFounder(tx, form, linkedId, chosenPath ? chosenId : null, chosenPath ? snaps.get(chosenPath)! : null)
         : null;
-    const ctx = respondent ? await scopeContext(tx, form, event, respondent, jury?.scored ?? null) : emptyContext(event);
+    // Un absent de l'evenement n'y repond pas (shared/attendance.ts), quel que soit le formulaire.
+    const [ctx, mark] = await Promise.all([
+      respondent ? scopeContext(tx, form, event, respondent, jury?.scored ?? null) : emptyContext(event),
+      respondent?.founder && form.eventId ? tx.get(db().doc(docPaths.attendance(form.eventId, respondent.founderId!))) : null,
+    ]);
+    if (mark?.get("status") === "absent") throw new HttpsError("failed-precondition", absentFromEventMessage(event?.name ?? null));
     if (formNeedsTeam(form) && !ctx.team) throw new HttpsError("failed-precondition", "You were not in a published team at this event.");
+
+    // Les questions que le repondant a vues : celles de la version lue. Une question obligatoire
+    // qu'il n'a pas vue (ajoutee, ou recreee par un changement de type) : la page relit le formulaire.
+    const seen = versionPath ? (snaps.get(versionPath)?.data() as FormVersion | undefined) : undefined;
+    const seenIds = seen ? new Set(activeQuestions(seen).map((q) => q.id)) : null;
+    if (seenIds && questions.some((q) => q.required && !seenIds.has(q.id))) throw formUpdated();
+    const questionIds = questions.map((q) => q.id).filter((id) => !seenIds || seenIds.has(id));
 
     const answers = parseAnswers(questions, req.answers, lists, ctx);
     await assertPickedExist(tx, form, questions, answers, respondent);
@@ -837,6 +891,7 @@ export async function submitFormResponse(
         responseId: responseRef.id,
         completedDateISOString: nowISO,
         firstCompletedDateISOString: previous ? (previous.firstCompletedDateISOString ?? previous.completedDateISOString) : nowISO,
+        questionIds,
       };
       tx.set(completionRefs[i], completion);
     });

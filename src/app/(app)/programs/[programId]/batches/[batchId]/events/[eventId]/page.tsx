@@ -3,6 +3,7 @@
 import { Stack, Text } from "@mantine/core";
 import { formConcernsFounder } from "@shared/formRules";
 import { formState } from "@shared/forms";
+import { leaderIdOf } from "@shared/teamGenerator";
 import type { Form, WithId } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useEventPage } from "@/context/EventPageContext";
@@ -24,13 +25,15 @@ import { Section } from "@/components/ui/Section";
 // ----------------------------
 // Ouverte depuis l'accueil, To do, Me, une fiche ou le leaderboard : ce qu'est
 // l'evenement, puis ce qui lui est attache : mon groupe et la page publique du
-// matching, ses formulaires (a faire, fait, ferme), son leaderboard. Le staff y
+// matching (et qui le mene), ses formulaires (a faire, fait, ferme), son
+// leaderboard. Un fondateur marque absent ne s'y voit proposer aucun formulaire
+// (comme dans To do) et le lit. Le staff y
 // voit aussi les brouillons et le jury, et le lien vers l'administration.
 
 export default function EventPage() {
   const { program } = useProgram();
   const { batch, role, viewerFounderId } = useBatch();
-  const { event, matching, forms, groups, doneFormIds } = useEventPage();
+  const { event, matching, forms, groups, doneFormIds, myAttendance } = useEventPage();
   const { foundersById } = useFounders();
   const { startupsById } = useStartups();
   const { leaderboardsByEventId } = useLeaderboards();
@@ -40,10 +43,12 @@ export default function EventPage() {
   const label = eventLabel(event);
   const tool = matching ? TEAM_LABELS[matching.mode] : null;
   const mine = viewerFounderId ? (groups.find((g) => g.memberIds.includes(viewerFounderId)) ?? null) : null;
+  const leaderId = mine && leaderIdOf(mine);
+  const isAbsent = myAttendance?.status === "absent";
   const board = leaderboardsByEventId.get(event.id);
-  // Un fondateur voit les formulaires publies qui le concernent (comme To do), pas le jury ; le staff voit tout et ouvre l'editeur.
+  // Un fondateur voit les formulaires publies qui le concernent (comme To do : ni absent, ni jury) ; le staff voit tout et ouvre l'editeur.
   const founder = viewerFounderId ? foundersById.get(viewerFounderId) : undefined;
-  const shown = forms.filter((f) => isStaff || (f.version > 0 && !!founder && formConcernsFounder(f, founder, event, mine !== null)));
+  const shown = forms.filter((f) => isStaff || (f.version > 0 && !!founder && formConcernsFounder(f, founder, event, mine !== null, myAttendance)));
   const guests =
     event.audience === "batch"
       ? `All founders of ${batch.name}`
@@ -74,8 +79,24 @@ export default function EventPage() {
         </Section>
       )}
 
+      {isAbsent && (
+        <Section title="Attendance">
+          <Text size="sm">
+            You were marked absent at this event, so its forms are not for you{tool && !mine ? `, and you are not in a ${tool.groupWord}` : ""}. A
+            mistake? Tell the Pioneers team.
+          </Text>
+        </Section>
+      )}
+
       {tool && (
         <Section title={mine ? `Your ${tool.groupWord} · ${mine.name}` : `${tool.groupLabel}s`}>
+          {mine && leaderId && (
+            <Text size="sm" mb="sm">
+              {leaderId === viewerFounderId
+                ? `You are the ${tool.groupWord} lead: ${tool.leaderDuty}.`
+                : `${tool.groupLabel} lead: ${foundersById.get(leaderId)?.name ?? "a teammate"}.`}
+            </Text>
+          )}
           {groups.length === 0 ? (
             <Text size="sm" c="dimmed">
               The {tool.groupWord}s are not out yet.
@@ -93,6 +114,7 @@ export default function EventPage() {
                         href={paths.founder(program.id, batch.id, id)}
                         title={f?.name ?? "Founder"}
                         avatar={{ name: f?.name ?? "Founder", photoUrl: f?.photoUrl }}
+                        meta={id === leaderId ? <Text size="sm" c="dimmed">Leader</Text> : undefined}
                       />
                     );
                   })}

@@ -86,7 +86,11 @@ export function FounderProvider({ children, founderId: explicitId }: { children:
   const isSelf = isViewerFounder(viewerFounderId, founderId);
   const attendance = useQueryListener(canSeeInternal || isSelf ? queries.attendanceOfFounder(founderId) : null);
 
-  const found = founder.data !== null && founder.data.batchId === batch.id;
+  // Profil archive : introuvable, sauf pour le staff (il le restaure depuis la fiche).
+  const found =
+    founder.data !== null &&
+    founder.data.batchId === batch.id &&
+    (founder.data.archivedDateISOString === null || role === "staff");
 
   const value = useMemo<FounderValue | null>(
     () =>

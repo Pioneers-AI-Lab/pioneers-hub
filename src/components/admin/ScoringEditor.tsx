@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button, Group, NumberInput, SegmentedControl, Select, Stack, Switch, Text, TextInput } from "@mantine/core";
 import { criterionQuestion, metricQuestion } from "@shared/presets/formTemplates";
 import { standardEventMetricKey } from "@shared/presets/standardMetrics";
-import { scoringMaxTotal, variableExists } from "@shared/scoringRules";
+import { labelsOf, scoringMaxTotal, variableExists } from "@shared/scoringRules";
 import { keyFromLabel } from "@shared/text";
 import { scoringOf, type ScoringItem, type ScoringItemInput } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
@@ -13,8 +13,9 @@ import { useAction } from "@/hooks/useAction";
 import { call } from "@/lib/firebase";
 import { formatDateTime } from "@/lib/format";
 import { appendQuestion } from "@/lib/formsAdmin";
+import { rankedRowText } from "@/components/leaderboard/rankedRowText";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
-import { ButtonRow, RowList } from "@/components/ui/Rows";
+import { ButtonRow, RankNumber, Row, RowList } from "@/components/ui/Rows";
 import { Section } from "@/components/ui/Section";
 
 // ----------------------------
@@ -26,19 +27,23 @@ import { Section } from "@/components/ui/Section";
 // Submission ou au formulaire de jury), dire combien de points elle vaut, et si
 // elle sert seulement a departager (dans l'ordre du bareme). Chaque enregistrement
 // passe par `setEventScoring` (verifie, journalise, recalcule le classement).
-// Sans bareme : les notes du jury, ou une metrique choisie.
+// Sans bareme : les notes du jury, ou une metrique choisie. Dessous, le
+// classement calcule par le serveur, tel que le staff le verifie avant de le publier.
 
 const JURY = "__jury__";
 const NEW = "__new__";
 
-/** Ce qu'on renvoie d'un element deja stocke : tout sauf sa cle (le serveur la tire de sa variable). */
+/**
+ * Ce qu'on renvoie d'un element deja stocke : tout sauf sa cle (le serveur la tire de sa variable).
+ * Jamais `undefined` (le SDK l'encode en `null`) : un element stocke sans `tieBreakOnly` (ou a `null`) part a `false`.
+ */
 const toInput = ({ label, mode, sourceKey, pointsPerUnit, maxPoints, tieBreakOnly }: ScoringItem): ScoringItemInput => ({
   label,
   mode,
   sourceKey,
-  pointsPerUnit,
-  maxPoints,
-  tieBreakOnly,
+  pointsPerUnit: pointsPerUnit ?? null,
+  maxPoints: maxPoints ?? null,
+  tieBreakOnly: tieBreakOnly === true,
 });
 
 /** Le pourquoi des points d'un element, en clair. */
@@ -112,6 +117,7 @@ export function LeaderboardSection() {
           />
         )}
       </Group>
+      <Ranking />
       {editing !== null && (
         <ItemSheet
           index={editing === "new" ? null : editing}
@@ -124,6 +130,38 @@ export function LeaderboardSection() {
         />
       )}
     </Section>
+  );
+}
+
+/** Le classement calcule (`leaderboards/{eventId}`, recalcule a chaque saisie), avec les elements mis a 0 par equipe. */
+function Ranking() {
+  const { leaderboard: board, submissionsByTeamId } = useAdminEvent();
+  if (!board || board.rows.length === 0) return null;
+  return (
+    <Stack gap="xs" mt="md">
+      <span className="label">Ranking · computed {formatDateTime(board.computedDateISOString)}</span>
+      <RowList>
+        {[...board.rows]
+          .sort((a, b) => a.rank - b.rank)
+          .map((row) => {
+            const zeroed = labelsOf(board.scoring ?? { items: [] }, submissionsByTeamId.get(row.targetId)?.zeroedItemKeys ?? []);
+            const text = rankedRowText(board, row, zeroed.length ? [`Set to 0: ${zeroed.join(", ")}`] : []);
+            return (
+              <Row
+                key={row.targetId}
+                leading={<RankNumber rank={row.rank} />}
+                title={row.name}
+                subtitle={text.subtitle}
+                meta={
+                  <Text className="num" fw={600}>
+                    {text.value}
+                  </Text>
+                }
+              />
+            );
+          })}
+      </RowList>
+    </Stack>
   );
 }
 
@@ -195,7 +233,7 @@ function ItemSheet({ index, items, isSaving, onClose, onSave }: ItemSheetProps) 
           sourceKey,
           pointsPerUnit: mode === "per_unit" ? effectivePoints : null,
           maxPoints: mode === "per_unit" ? null : effectivePoints,
-          ...(tieBreakOnly ? { tieBreakOnly: true } : {}),
+          tieBreakOnly,
         }
       : null;
   const preview = !draft

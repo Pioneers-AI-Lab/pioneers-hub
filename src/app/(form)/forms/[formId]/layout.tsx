@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { AnimatedBackdrop } from "@/components/auth/AnimatedBackdrop";
+import { IS_LOCAL_DB, LocalDbBadge } from "@/components/chrome/LocalDbBadge";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { PublicFormProvider } from "@/context/PublicFormContext";
 
@@ -23,6 +24,12 @@ export default function PublicFormLayout({ children }: LayoutProps<"/forms/[form
     <div className="auth-page">
       <AnimatedBackdrop />
       <div aria-hidden className="form-veil" />
+      {/* « local db » sur les emulateurs, au coin : le formulaire n'a pas l'en-tete de l'application. */}
+      {IS_LOCAL_DB && (
+        <div style={{ position: "fixed", top: 8, right: 12, zIndex: 2, display: "flex" }}>
+          <LocalDbBadge />
+        </div>
+      )}
       {/* Au-dessus du voile : chargement et refus compris, pas seulement le formulaire. */}
       <div className="form-content">
         <Suspense fallback={<PageLoader />}>

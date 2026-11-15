@@ -1,4 +1,13 @@
-import { roundTo, type Criterion, type EventMetric, type EventScoring, type Leaderboard, type ScoringItem, type ScoringItemInput } from "./types";
+import {
+  roundTo,
+  type Criterion,
+  type EventMetric,
+  type EventScoring,
+  type Leaderboard,
+  type LeaderboardRow,
+  type ScoringItem,
+  type ScoringItemInput,
+} from "./types";
 
 // ----------------------------
 // Le bareme d'un hackathon (SPECS §4.2, decision du 13/11)
@@ -80,6 +89,30 @@ export function compareTeamPoints(scoring: EventScoring, a: TeamPoints, b: TeamP
     if (diff !== 0) return diff;
   }
   return 0;
+}
+
+// ----------------------------
+// L'affichage d'un classement a bareme (page Leaderboard du batch, Admin > Events)
+// ----------------------------
+
+/** Le libelle de chaque element, sa cle a defaut (element retire du bareme depuis). */
+export const labelsOf = (scoring: Pick<EventScoring, "items">, keys: readonly string[]) => keys.map((k) => scoring.items.find((i) => i.key === k)?.label ?? k);
+
+/** Ce qui compte, puis ce qui departage : « Points: Valid leads · Tie-break: Lead quality ». */
+export function scoringSummary(scoring: EventScoring): string {
+  const points = `Points: ${scoring.items.filter((i) => !i.tieBreakOnly).map((i) => i.label).join(", ")}`;
+  return scoring.tieBreaks.length ? `${points} · Tie-break: ${labelsOf(scoring, scoring.tieBreaks).join(", ")}` : points;
+}
+
+/**
+ * Le departage d'une ligne a egalite de total avec une autre : « Tie-break · Lead quality 4 »
+ * (les points de chaque departage, dans l'ordre du bareme). `null` sans egalite ni departage.
+ */
+export function tieBreakNote(scoring: EventScoring, row: Pick<LeaderboardRow, "targetId" | "total" | "points">, rows: readonly Pick<LeaderboardRow, "targetId" | "total">[]): string | null {
+  if (row.total === undefined || scoring.tieBreaks.length === 0) return null;
+  if (!rows.some((r) => r.targetId !== row.targetId && r.total === row.total)) return null;
+  const labels = labelsOf(scoring, scoring.tieBreaks);
+  return `Tie-break · ${labels.map((label, i) => `${label} ${roundTo(row.points?.[scoring.tieBreaks[i]] ?? 0, 2)}`).join(", ")}`;
 }
 
 // ----------------------------

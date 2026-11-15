@@ -283,12 +283,13 @@ service cloud.firestore {
       allow write: if isStaff();
       // Rattachement (decision du 11/11, « comme Tricount ») : un compte a l'email
       // VERIFIE reclame un profil non reclame, par email ou en le choisissant
-      // dans la liste, un seul par batch. Le staff voit chaque rattachement
-      // (Staff > Access) et peut delier.
+      // dans la liste, un seul par batch, jamais un profil archive. Le staff voit
+      // chaque rattachement (Admin > Founder profiles) et peut delier.
       allow update: if resource.data.uid == null
         && request.resource.data.uid == request.auth.uid
         && request.auth.token.email_verified == true
         && !isBatchMember(resource.data.batchId)
+        && resource.data.get('archivedDateISOString', null) == null
         && onlyChanges(['uid', 'claimedDateISOString']);
       // « Mon profil » (FOUNDER_SELF_EDITABLE.founder).
       allow update: if isViewerFounder(resource.data.batchId, founderId)

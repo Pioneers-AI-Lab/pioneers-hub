@@ -4,15 +4,17 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Anchor, Avatar, Stack, Text } from "@mantine/core";
 import { juryTargetOf } from "@shared/events";
-import type { EvaluationTargetType, EventMetric, LeaderboardRow } from "@shared/types";
+import { scoringSummary } from "@shared/scoringRules";
+import type { EvaluationTargetType, Leaderboard, LeaderboardRow } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useEvents } from "@/context/EventsContext";
 import { useFounders } from "@/context/FoundersContext";
 import { useLeaderboards, type CumulativeRow } from "@/context/LeaderboardsContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
-import { formatDay, integer, metricValue, score10 } from "@/lib/format";
+import { formatDay, integer } from "@/lib/format";
 import { paths } from "@/lib/paths";
+import { rankedRowText } from "@/components/leaderboard/rankedRowText";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { ButtonRow, LinkRow, RankNumber, Row, RowList } from "@/components/ui/Rows";
@@ -71,7 +73,7 @@ export default function LeaderboardPage() {
             title={`${event.name} · ${formatDay(event.startDateISOString.slice(0, 10), true)}`}
             hint={
               board?.scoring
-                ? `${board.published === false ? "Not published yet · " : ""}Points: ${board.scoring.items.filter((i) => !i.tieBreakOnly).map((i) => i.label).join(", ")}`
+                ? `${board.published === false ? "Not published yet · " : ""}${scoringSummary(board.scoring)}`
                 : board?.metric
                   ? `Ranked by ${board.metric.label.toLowerCase()}`
                   : undefined
@@ -92,7 +94,7 @@ export default function LeaderboardPage() {
                     <RankedRow
                       key={row.targetId}
                       row={row}
-                      metric={board.metric ?? null}
+                      board={board}
                       target={juryTargetOf(event)}
                     />
                   ))}
@@ -105,7 +107,7 @@ export default function LeaderboardPage() {
   );
 }
 
-function RankedRow({ row, metric, target }: { row: LeaderboardRow; metric: EventMetric | null; target: EvaluationTargetType | null }) {
+function RankedRow({ row, board, target }: { row: LeaderboardRow; board: Leaderboard; target: EvaluationTargetType | null }) {
   const { program } = useProgram();
   const { batch, viewerFounderId } = useBatch();
   const { startupsById } = useStartups();
@@ -113,20 +115,14 @@ function RankedRow({ row, metric, target }: { row: LeaderboardRow; metric: Event
   const [isOpen, setIsOpen] = useState(false);
 
   const isMine = viewerFounderId !== null && row.memberIds.includes(viewerFounderId);
+  const text = rankedRowText(board, row);
   const props = {
     leading: <RankNumber rank={row.rank} />,
     title: isMine ? <Text span c="pioneers" inherit>{row.name}</Text> : row.name,
-    subtitle:
-      row.total !== undefined
-        ? row.late
-          ? "Late submission: 0"
-          : `${Math.round(row.normalized ?? 0)} / 100`
-        : metric
-          ? metric.label
-          : `${row.evaluationsCount} ${row.evaluationsCount === 1 ? "review" : "reviews"}`,
+    subtitle: text.subtitle,
     meta: (
       <Text className="num" fw={600} fz="lg">
-        {row.total !== undefined ? metricValue({ unit: "pts" }, row.total) : metric ? metricValue(metric, row.score) : score10(row.score)}
+        {text.value}
       </Text>
     ),
   };

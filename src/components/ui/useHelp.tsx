@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { ActionIcon, Input } from "@mantine/core";
 import { IconHelpCircle } from "@tabler/icons-react";
+import touch from "./touch.module.css";
 
 /**
  * Le libelle d'un champ avec son aide repliee : un (?) a droite du libelle
@@ -10,6 +11,7 @@ import { IconHelpCircle } from "@tabler/icons-react";
  * `Input.Wrapper` : `<Select {...useHelp("Status", "...")} />`. Un bloc sans
  * champ (des lignes) : `HelpBlock`.
  * Le bouton dans un `<label>` ne donne pas le focus au champ (contenu interactif).
+ * Au doigt, il fait 40 x 40 sans grandir la ligne du libelle (`touch.helpButton`).
  */
 export function useHelp(label: string, help: ReactNode) {
   const [isOpen, setOpen] = useState(false);
@@ -22,6 +24,7 @@ export function useHelp(label: string, help: ReactNode) {
           color="gray"
           size="md"
           ml={4}
+          className={touch.helpButton}
           aria-label={`About ${label}`}
           aria-expanded={isOpen}
           onClick={(e) => {

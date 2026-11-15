@@ -50,7 +50,9 @@ Images de conteneur purgees apres 1 jour (europe-west4 et europe-west9).
 Verifications a cote des emulateurs de dev (ports et +200 pris) : `CHECK_PORT_OFFSET=1000 node scripts/emulators-check-config.mjs`
 puis `firebase emulators:exec --config .firebase-check.json ...` ; check-rules a alors besoin de `FUNCTIONS_EMULATOR_HOST=127.0.0.1:6101`.
 Scores (SPECS §5.5) : `services/scores.ts` (formules pures `shared/scoring.ts`, bareme `shared/scoringRules.ts`) ecrit `scores`,
-`scoreSignals`, `founderStats` ; jamais pour un batch `settings.scoresSource: "imported"` (spring-2026).
+`scoreSignals`, `founderStats` et `batchStats` (`shared/batchStats.ts`, accueil du batch) ; jamais pour un batch
+`settings.scoresSource: "imported"` (spring-2026). Callables : `call()` (lib/firebase.ts) retire les cles `undefined`
+(le SDK les enverrait en `null`, qu'un schema zod `.optional()` refuse).
 Un seul `next dev` par dossier (Next 16) : arreter `dev:emu` avant `dev`, et inversement. Pour
 verifier un build a cote d'un `next dev` : `NEXT_DIST_DIR=.next-emu next build` puis
 `NEXT_DIST_DIR=.next-emu next start` (Next ajoute alors `.next-emu` au tsconfig : ne pas le commiter).
@@ -105,7 +107,10 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   template, reglages facon agenda, « Create » / fleche « Create as draft », `lib/eventsAdmin.ts#createEventPack`),
   `create_event` et l'import. Staff : `/admin/events/{id}` = la page hub (reglages, presence, matching, formulaires,
   classement, resultats, jury, picks), `/admin/events/{id}/matching` (TeamGenerator), `/admin/events/{id}/teams/{teamId}`
-  (resultats). `/admin/challenge-teams/**` et `/admin/lunch-roulette/**` redirigent. Tous : `/programs/…/batches/…/events/{id}`
+  (resultats). Un tirage PUBLIE se retouche (echanger, deplacer, leader, retardataire) avec confirmation ; ids d'equipe
+  stables, `memberships` suivent, pas de retirage ni de depublication. Deplacer un evenement propose de deplacer ses
+  formulaires (`shared/eventForms.ts#planEventMove`, regles de creation) et le Debrief accole ; l'archiver ferme ses
+  formulaires ouverts (rouverts a la restauration). `/admin/challenge-teams/**` et `/admin/lunch-roulette/**` redirigent. Tous : `/programs/…/batches/…/events/{id}`
   (`EventPageContext` : infos, mon groupe, formulaires a faire / fait / ferme, leaderboard) ; `EventRow` y mene.
   Page publique des groupes : `/groups/{id}` (`/lunch-roulette/{id}` et `/challenge-teams/{id}` montrent la meme).
 - **Modele standard** (SPECS §2, decision du 12/11) : un evenement = une entree d'agenda + un tirage de groupes
@@ -140,7 +145,8 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   `node scripts/backfill-kpis.mjs <batchId> [--prod]` (a blanc sans `--prod` ; emulateurs avec `FIRESTORE_EMULATOR_HOST`).
   Resultats d'equipe et jury, quel que soit l'ecrivain (Debrief, staff, API) : `onSubmissionWritten` (releves
   `metricSnapshots`, source `recordedSource` de la soumission, puis leaderboard, `services/teamResults.ts`) et
-  `onEvaluationWritten` (leaderboard), en europe-west9.
+  `onEvaluationWritten` (leaderboard), en europe-west9. `onFormWritten` (`forms/{id}`) recalcule le leaderboard quand
+  la grille du jury ou les metriques d'un formulaire changent (pas pour une date, un statut, un titre).
 - **Jamais lus par l'API** : `peerRatings`, `picks`, `judges`, `apiKeys`, `writePlans` (SPECS §4.8). Avis, picks
   et notes du jury ne s'ecrivent que par leur formulaire (`DOC_KINDS[...].formOnly`, refus `form_only`).
 - **OAuth 2.1** (`functions/src/oauth`, connecteur claude.ai et Claude Code) : decouverte RFC 9728 / 8414, enregistrement

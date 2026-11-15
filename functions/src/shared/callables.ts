@@ -98,7 +98,22 @@ export type PublicForm = {
   prefill: Record<string, FormAnswer>;
   /** Le formulaire se renvoie (identite prouvee, formulaire ouvert) : chaque envoi remplace les valeurs. */
   canResubmit: boolean;
+  /**
+   * Lu sans pouvoir repondre : un brouillon, ou un formulaire « Sign in » ouvert
+   * par le staff sans profil fondateur dans ce batch. Les questions s'affichent,
+   * rien ne s'envoie.
+   */
+  preview: boolean;
+  /** Le repondant a ete marque absent a l'evenement du formulaire : il n'y repond pas (le serveur refuse). */
+  absent: boolean;
+  /** Les cles (`answerKey`) dont la valeur prerempliee attend la validation du staff : celle de sa derniere reponse. */
+  pendingAnswerKeys: string[];
+  /** Les questions ajoutees depuis sa derniere reponse (`questionsAddedSince`). */
+  newQuestionIds: string[];
 };
+
+/** `details.reason` du refus d'un envoi lu sur une version qui ne suffit plus (question obligatoire ajoutee...). */
+export const FORM_UPDATED = "form_updated";
 
 /** Un compte vu par Admin > Access : identite Firebase Auth et droits (`users/{uid}`). */
 export type AccountRow = {
@@ -198,7 +213,10 @@ export type Callables = {
    * Repond a un formulaire public. `submissionId` est tire une fois par ouverture
    * de la page : un second envoi (double appui, reseau qui rejoue) rend la meme
    * reponse au lieu d'en creer une autre. `version` : celle que le repondant a
-   * lue ; refus si le formulaire a change depuis.
+   * lue. La reponse se valide contre la version EN PLACE, par id de question :
+   * elle passe si elle y suffit (dates changees, question facultative ajoutee) ;
+   * sinon refus `failed-precondition`, `details.reason` = `FORM_UPDATED`, et la
+   * page relit le formulaire en gardant ce qui est saisi.
    */
   submitFormResponse: {
     req: {

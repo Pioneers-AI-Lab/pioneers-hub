@@ -82,9 +82,11 @@ export function newEvent(input: NewEventInput, extra: Partial<Omit<EventData, "k
 export const isPublishedEvent = (e: Pick<PioneersEvent, "status" | "archivedDateISOString">) =>
   e.status !== "draft" && e.archivedDateISOString === null;
 
+/** La fin d'un evenement, a defaut son debut. */
+export const eventEndOf = (e: Pick<PioneersEvent, "startDateISOString" | "endDateISOString">) => e.endDateISOString ?? e.startDateISOString;
+
 /** A venir : pas encore termine (la fin, a defaut le debut). Accueil du batch, « Me », Admin > Events. */
-export const isUpcomingEvent = (e: Pick<PioneersEvent, "startDateISOString" | "endDateISOString">, nowISO: string) =>
-  (e.endDateISOString ?? e.startDateISOString) >= nowISO;
+export const isUpcomingEvent = (e: Pick<PioneersEvent, "startDateISOString" | "endDateISOString">, nowISO: string) => eventEndOf(e) >= nowISO;
 
 export type EventPhase = "past" | "today" | "upcoming";
 

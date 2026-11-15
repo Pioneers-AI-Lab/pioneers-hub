@@ -75,8 +75,13 @@ export const GROUP_SIZES = Array.from({ length: GROUP_SIZE_MAX - GROUP_SIZE_MIN 
 /** Le tirage se publie en entier : une equipe publiee, il l'est (le matching est alors fige). */
 export const isDrawPublished = (teams: readonly { publishedDateISOString: string | null }[]) => teams.some((t) => t.publishedDateISOString !== null);
 
+/** La date de publication du tirage, `null` s'il ne l'est pas. */
+export const publishedDateOf = (teams: readonly { publishedDateISOString: string | null }[]) =>
+  teams.find((t) => t.publishedDateISOString !== null)?.publishedDateISOString ?? null;
+
 export const byGroupOrder = (a: { id: string }, b: { id: string }) => groupNumber(a.id) - groupNumber(b.id);
-const groupNumber = (id: string) => Number(id.match(/(\d+)$/)?.[1] ?? 0);
+/** Le numero d'un groupe, tire de son id (`…-t7` : 7). */
+export const groupNumber = (id: string) => Number(id.match(/(\d+)$/)?.[1] ?? 0);
 
 /** Taille d'un matching (`EventMatching.size`) a partir de sa taille maximale. */
 export const teamSizeFor = (max: number) => ({ min: Math.max(GROUP_SIZE_MIN, max - 1), max });
@@ -265,6 +270,9 @@ type CostContext = {
   categoryOf: Map<string, ProfileCategory | null>;
 };
 
+/** Poids a partir duquel une regle de paires est stricte (elle ne cede que faute d'autre repartition). */
+const STRICT_WEIGHT = 1_000;
+
 /** Une contrainte « jamais » ou « toujours » coute plus que toutes les regles reunies. */
 const HARD = 1_000_000;
 
@@ -450,10 +458,13 @@ export function scoreGroups(
   const relaxed: string[] = [];
   if (keepApartViolations > 0) relaxed.push(`${plural(keepApartViolations, "pair")} marked "keep apart" ended up together.`);
   if (keepTogetherViolations > 0) relaxed.push(`${plural(keepTogetherViolations, "pair")} marked "keep together" ended up apart.`);
-  if (input.rules.challengeRepeatWeight >= 1_000 && repeatedChallengePairs > 0)
-    relaxed.push(`${plural(repeatedChallengePairs, "pair")} already teamed up in a challenge: no other split was possible.`);
-  if (input.rules.matchingRepeatWeight >= 1_000 && repeatedMatchingPairs > 0)
-    relaxed.push(`${plural(repeatedMatchingPairs, "pair")} already met at a lunch roulette: no other split was possible.`);
+  // Toute regle de paires active qui cede est dite : stricte, faute d'autre repartition ; souple, evitee si possible.
+  const pairRule = (weight: number, count: number, what: string) => {
+    if (weight > 0 && count > 0)
+      relaxed.push(`${plural(count, "pair")} ${what}: ${weight >= STRICT_WEIGHT ? "no other split was possible" : "avoided where possible"}.`);
+  };
+  pairRule(input.rules.challengeRepeatWeight, repeatedChallengePairs, "already teamed up in a challenge");
+  pairRule(input.rules.matchingRepeatWeight, repeatedMatchingPairs, "already met at a lunch roulette");
   if (input.rules.noTechPenalty > 0 && groupsWithoutTech > 0)
     relaxed.push(
       techCount < groups.length

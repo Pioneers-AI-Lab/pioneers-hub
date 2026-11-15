@@ -1,5 +1,6 @@
 import { writeBatch } from "firebase/firestore";
 import { deriveAttachments, formProblems, versionedSnapshot } from "@shared/formRules";
+import { addedFormDates, type EventTimes } from "@shared/eventForms";
 import { formVersion, newForm, type NewFormInput } from "@shared/forms";
 import type { Form, FormQuestion, WithId } from "@shared/types";
 import { db } from "@/lib/firebase";
@@ -48,8 +49,18 @@ export const draftOf = (form: Form): FormDraft => ({
 export const appendQuestion = (form: WithId<Form>, question: FormQuestion) =>
   saveForm(form, { ...draftOf(form), questions: [...form.questions, question] }, { publish: false });
 
-export async function createForm(input: NewFormInput): Promise<string> {
-  return createDoc<Form>(refs.forms(), newForm(input));
+/**
+ * Un brouillon neuf. Rattache a un evenement, il porte les dates de son modele
+ * dans cet evenement (`addedFormDates` : ouvert 15 min avant la fin, echeance
+ * 24 h apres...) ; `events` (ceux du batch) situe le creneau Debrief d'un Peer rating.
+ */
+export async function createForm(
+  input: NewFormInput & { event?: (NewFormInput["event"] & EventTimes) | null },
+  events: readonly WithId<EventTimes>[] = [],
+): Promise<string> {
+  const { event, eventId, templateKey } = input;
+  const dates = event && eventId ? addedFormDates(templateKey, { ...event, id: eventId }, events) : {};
+  return createDoc<Form>(refs.forms(), newForm(input, dates));
 }
 
 /**

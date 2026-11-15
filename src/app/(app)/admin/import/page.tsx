@@ -226,6 +226,11 @@ function ImportFounders() {
                   subtitle={
                     <>
                       {r.email ?? "No email"}
+                      {r.matchReason && (
+                        <Text span size="xs" c="dimmed" display="block" style={{ whiteSpace: "normal" }}>
+                          {r.matchReason}
+                        </Text>
+                      )}
                       {r.errors.length > 0 && (
                         <Text span size="xs" c="red.4" display="block" style={{ whiteSpace: "normal" }}>
                           {r.errors.join(" · ")}

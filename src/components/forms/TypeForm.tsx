@@ -3,16 +3,26 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { Button, Group, Text, TextInput, Textarea, VisuallyHidden } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import type { PublicChoice, PublicForm, PublicFormQuestion } from "@shared/callables";
 import { FORM_ANSWER_MAX, ratingScale } from "@shared/formRules";
+import { absentFromEventMessage } from "@shared/forms";
 import { needsAccount as needsAccountFor, type FormResponseStatus } from "@shared/types";
 import { call } from "@/lib/firebase";
-import { errorMessage } from "@/lib/errors";
 import { formatDateTime, searchKey } from "@/lib/format";
 import { paths } from "@/lib/paths";
+import { usePublicForm } from "@/context/PublicFormContext";
 import { markAnonymousFormDone } from "@/hooks/useAnonymousFormsDone";
-import { draftsFromPrefill, newSubmissionId, problemOf, toAnswers, type Draft, type Drafts } from "@/components/forms/formDrafts";
+import {
+  PENDING_NOTE,
+  draftsFromPrefill,
+  formNotes,
+  newSubmissionId,
+  notifySendError,
+  problemOf,
+  toAnswers,
+  type Draft,
+  type Drafts,
+} from "@/components/forms/formDrafts";
 import styles from "./TypeForm.module.css";
 
 // ----------------------------
@@ -36,6 +46,11 @@ import styles from "./TypeForm.module.css";
 //
 // Clavier : Entree valide (Maj + Entree : nouvelle ligne dans un texte long),
 // A, B, C... choisissent une option, 1 a 9 (et 0 pour 10) donnent une note.
+//
+// Une nouvelle version publiee pendant la saisie : le serveur prend la reponse
+// si elle suffit a la version en place ; sinon (question obligatoire ajoutee)
+// la page relit le formulaire SANS se demonter : les reponses restent (par id de
+// question) et le volet va a la premiere question a completer.
 
 type Step =
   | { kind: "intro" }
@@ -59,9 +74,10 @@ const stepLabel = (step: Step, form: PublicForm) =>
   step.kind === "question" ? step.question.label : step.kind === "name" ? NAME_QUESTION : step.kind === "done" ? "Thank you" : form.title;
 
 export function TypeForm({ form }: { form: PublicForm }) {
-  const needsAccount = needsAccountFor(form.identityCheck) && !form.viewerFounderId;
-  const canAnswer = (form.state === "open" || form.state === "draft") && !needsAccount;
-  const isPreview = form.state === "draft";
+  const { reload } = usePublicForm();
+  const needsAccount = needsAccountFor(form.identityCheck) && !form.viewerFounderId && !form.preview;
+  const canAnswer = (form.state === "open" || form.preview) && !needsAccount && !form.absent;
+  const isPreview = form.preview;
   const asksName = form.identityCheck === "select_name" && !form.viewerFounderId;
 
   const steps: Step[] = [
@@ -82,6 +98,16 @@ export function TypeForm({ form }: { form: PublicForm }) {
   const [isSending, setIsSending] = useState(false);
   const [status, setStatus] = useState<FormResponseStatus | null>(null);
   const [submissionId] = useState(newSubmissionId);
+  const [version, setVersion] = useState(form.version);
+
+  // Relu sur une nouvelle version (envoi refuse, `FORM_UPDATED`) : a la premiere question a completer,
+  // sinon a la derniere (une question retiree raccourcit le parcours).
+  if (form.version !== version) {
+    setVersion(form.version);
+    const target = steps.findIndex((s) => s.kind === "question" && problemOf(s.question, drafts[s.question.id]) !== null);
+    setLeaving(null);
+    setIndex(target >= 0 ? target : Math.min(index, lastInputIndex));
+  }
 
   const step = steps[index];
   const isLastInput = index === lastInputIndex;
@@ -144,7 +170,7 @@ export function TypeForm({ form }: { form: PublicForm }) {
       setStatus(data.status);
       goTo(doneIndex);
     } catch (err) {
-      notifications.show({ color: "red", title: "Not sent", message: errorMessage(err) });
+      notifySendError(err, "Not sent", reload);
     } finally {
       setIsSending(false);
     }
@@ -185,17 +211,19 @@ export function TypeForm({ form }: { form: PublicForm }) {
     next();
   }
 
-  const action = (label: string, hint: string | null) => (
+  /** Le bouton d'un volet : `isLast` est celui du VOLET rendu (ses voisins sont rendus pour l'animation). */
+  const action = (label: string, hint: string | null, isLast = false) => (
     <Group gap="md" className={styles.actions}>
-      <Button size="md" data-primary loading={isSending} disabled={isPreview && isLastInput} onClick={() => next()}>
-        {isPreview && isLastInput ? "Preview only" : label}
+      <Button size="md" data-primary loading={isSending} disabled={isPreview && isLast} onClick={() => next()}>
+        {isPreview && isLast ? "Preview only" : label}
       </Button>
       {hint && <span className={styles.hint}>{hint}</span>}
     </Group>
   );
   const errorLine = error && <p className={styles.error}>{error}</p>;
 
-  function renderStep(s: Step): ReactNode {
+  function renderStep(s: Step, position: number): ReactNode {
+    const isLast = position === lastInputIndex;
     switch (s.kind) {
       case "intro":
         return (
@@ -204,7 +232,7 @@ export function TypeForm({ form }: { form: PublicForm }) {
             <h1 className={styles.title}>{form.title}</h1>
             {form.description && <p className={styles.description}>{form.description}</p>}
             <IntroNotes form={form} needsAccount={needsAccount} />
-            {canAnswer && action(steps.length > 2 ? "Start" : "Submit", "press Enter")}
+            {canAnswer && action(isLast ? "Submit" : "Start", "press Enter", isLast)}
           </>
         );
       case "name":
@@ -232,8 +260,9 @@ export function TypeForm({ form }: { form: PublicForm }) {
           <>
             <QuestionHeading number={s.number} label={q.label} required={q.required} description={q.description} />
             {field}
+            {form.pendingAnswerKeys.includes(q.id) && <p className={styles.note}>{PENDING_NOTE}</p>}
             {errorLine}
-            {action(isLastInput ? "Submit" : "OK", hint)}
+            {action(isLast ? "Submit" : "OK", hint, isLast)}
           </>
         );
       }
@@ -408,7 +437,7 @@ export function TypeForm({ form }: { form: PublicForm }) {
             inert={position !== index || undefined}
             tabIndex={-1}
           >
-            {Math.abs(position - index) <= 1 && <div className={cx(styles.group, styles.cascade)}>{renderStep(s)}</div>}
+            {Math.abs(position - index) <= 1 && <div className={cx(styles.group, styles.cascade)}>{renderStep(s, position)}</div>}
           </section>
         ))}
       </main>
@@ -426,7 +455,7 @@ export function TypeForm({ form }: { form: PublicForm }) {
 }
 
 function IntroNotes({ form, needsAccount }: { form: PublicForm; needsAccount: boolean }) {
-  if (form.state === "closed") {
+  if (form.state === "closed" && !form.preview) {
     return (
       <>
         <p className={styles.note}>This form is closed. It no longer accepts answers.</p>
@@ -434,7 +463,8 @@ function IntroNotes({ form, needsAccount }: { form: PublicForm; needsAccount: bo
       </>
     );
   }
-  if (form.state === "not_open_yet") return <p className={styles.note}>This form is not open yet. Come back later.</p>;
+  if (form.state === "not_open_yet" && !form.preview) return <p className={styles.note}>This form is not open yet. Come back later.</p>;
+  if (form.absent) return <p className={styles.note}>{absentFromEventMessage(form.event?.name ?? null)}</p>;
   if (needsAccount) {
     return (
       <>
@@ -450,7 +480,7 @@ function IntroNotes({ form, needsAccount }: { form: PublicForm; needsAccount: bo
   const lines = [
     form.deadlineDateISOString ? `Due ${formatDateTime(form.deadlineDateISOString)}` : null,
     form.identityCheck === "anonymous" ? ANONYMOUS_NOTE : null,
-    form.state === "draft" ? "Draft: you are previewing it. Publish the form to collect answers." : null,
+    ...formNotes(form),
   ].filter(Boolean);
   return lines.length > 0 ? <p className={styles.note}>{lines.join(" · ")}</p> : null;
 }

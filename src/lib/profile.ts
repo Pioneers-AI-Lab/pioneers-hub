@@ -1,5 +1,6 @@
 import { writeBatch } from "firebase/firestore";
 import { FOUNDER_SELF_EDITABLE } from "@shared/access";
+import { normalizeHttpUrl } from "@shared/text";
 import type { Founder, FounderDirectory, FounderProfile, WithId } from "@shared/types";
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
@@ -13,6 +14,8 @@ import { addSlackUserIdWrites } from "@/lib/slackAdmin";
 // Les champs autorises sont ceux de FOUNDER_SELF_EDITABLE (shared/access.ts),
 // miroir des regles. WhatsApp et LinkedIn s'ecrivent dans `people` (l'original)
 // ET dans `private/directory` (la copie lue par le batch), dans le meme lot.
+// LinkedIn s'enregistre en adresse complete (`https://` ajoute) : l'API et les
+// exports lisent la base, pas l'affichage.
 
 type Pick<T, K extends readonly (keyof T)[]> = { [P in K[number]]?: T[P] };
 
@@ -35,7 +38,7 @@ export async function saveMyProfile(founder: WithId<Founder>, patch: MyProfilePa
   const { whatsapp, linkedinUrl, phone, ...directory } = patch.directory;
   const identity = {
     ...(whatsapp !== undefined ? { whatsapp } : {}),
-    ...(linkedinUrl !== undefined ? { linkedinUrl } : {}),
+    ...(linkedinUrl !== undefined ? { linkedinUrl: linkedinUrl && (normalizeHttpUrl(linkedinUrl) ?? linkedinUrl) } : {}),
     ...(phone !== undefined ? { phone } : {}),
   };
   const directoryPatch = canWriteIdentity ? { ...directory, ...identity } : directory;

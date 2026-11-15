@@ -3,6 +3,7 @@ import { arrayUnion, getDoc, getDocs, query, where, writeBatch, type WriteBatch 
 import type { Founder, WithId } from "@shared/types";
 import { db } from "@/lib/firebase";
 import { refs } from "@/lib/firestore/refs";
+import { patchDoc } from "@/lib/firestore/write";
 
 // ----------------------------
 // Rattachement des comptes et acces (SPECS §3.1, §3.2 « Acces »)
@@ -78,7 +79,8 @@ export async function autoClaimByEmail(firebaseUser: FirebaseUser): Promise<Clai
  * La personne est rattachee dans le meme lot ; si elle l'est deja a un autre
  * compte (le compte ne peut pas le lire avant), on rattache le profil seul.
  * Un profil par batch : les regles refusent le lot si le compte y est deja
- * rattache ; le refus est alors traduit en message clair.
+ * rattache, ou si le profil vient d'etre pris par un autre compte (deux « This
+ * is me » simultanes) ; chaque refus est traduit en message clair.
  */
 export async function claimProfile(firebaseUser: FirebaseUser, founder: WithId<Founder>) {
   const write = (withIdentity: boolean) => {
@@ -94,13 +96,25 @@ export async function claimProfile(firebaseUser: FirebaseUser, founder: WithId<F
   try {
     await write(true);
   } catch (err) {
-    if ((err as { code?: string }).code !== "permission-denied") throw err;
+    if (!isPermissionDenied(err)) throw err;
     if ((await getDoc(refs.membership(founder.batchId, firebaseUser.uid))).exists()) {
       throw new Error("Your account is already linked to a profile in this batch.");
     }
-    await write(false);
+    // Pris entre-temps : le profil a un compte, ou n'est plus lisible (un profil
+    // reclame ne se lit que du batch).
+    const current = await getDoc(refs.founder(founder.id)).catch(() => null);
+    if (!current?.exists() || current.data().uid !== null) {
+      throw new Error(`${founder.name} was just linked to another account. Pick your own name, or contact the Pioneers team.`);
+    }
+    // La personne est deja rattachee a un autre compte : le profil seul.
+    await write(false).catch((retryErr: unknown) => {
+      if (!isPermissionDenied(retryErr)) throw retryErr;
+      throw new Error("Your account could not be linked to this profile. Reload the page and try again, or contact the Pioneers team.");
+    });
   }
 }
+
+const isPermissionDenied = (err: unknown) => (err as { code?: string }).code === "permission-denied";
 
 // ---- Staff (Admin > Founder profiles) -------------------------------------------
 
@@ -167,3 +181,12 @@ export async function unlinkFounder(founder: { id: string; batchId: string; pers
   }
   await batch.commit();
 }
+
+/**
+ * Archive (doublon, profil cree par erreur) ou restaure un profil. Archive, il
+ * sort des listes, des tirages, des formulaires et de /claim ; sa fiche n'est
+ * plus ouverte qu'au staff. Rien n'est supprime. Un profil rattache se delie
+ * d'abord (Admin > Founder profiles) : un compte ne garde pas un profil archive.
+ */
+export const setFounderArchived = (founderId: string, archived: boolean) =>
+  patchDoc<Founder>(refs.founder(founderId), { archivedDateISOString: archived ? nowISO() : null });

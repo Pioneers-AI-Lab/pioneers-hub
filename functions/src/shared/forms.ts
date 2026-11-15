@@ -111,6 +111,13 @@ export function formState(
   return "open";
 }
 
+/**
+ * Un absent de l'evenement ne repond pas a ses formulaires (shared/attendance.ts) :
+ * le refus de `submitFormResponse` et ce que dit la page du formulaire.
+ */
+export const absentFromEventMessage = (eventName: string | null) =>
+  `You were marked absent at ${eventName ?? "this event"}: this form is for the founders who attended. Ask the Pioneers team if this is a mistake.`;
+
 // ----------------------------
 // Ce que les formulaires d'un evenement declarent (SPECS §2, modele standard)
 // ----------------------------

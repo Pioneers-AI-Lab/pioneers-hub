@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 import type { ValueSpec } from "@shared/fieldRegistry";
+import { normalizeHttpUrl } from "@shared/text";
 import type { ImportFieldKey } from "./targets";
 
 dayjs.extend(customParseFormat);
@@ -70,7 +71,11 @@ export function convertCell(field: ImportFieldKey, spec: ValueSpec, raw: string 
   switch (spec.kind) {
     case "text":
       return { ok: true, value: spec.maxLength ? value.slice(0, spec.maxLength) : value };
-    case "url":
+    case "url": {
+      // Comme « Mon profil » : `linkedin.com/in/x` devient `https://linkedin.com/in/x`.
+      const url = normalizeHttpUrl(value);
+      return url ? { ok: true, value: url } : { ok: false, reason: `"${value}" is not a web address` };
+    }
     case "phone":
       return { ok: true, value };
     case "email":

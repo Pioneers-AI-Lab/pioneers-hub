@@ -1,4 +1,5 @@
 import { createTheme, type MantineColorsTuple } from "@mantine/core";
+import touch from "@/components/ui/touch.module.css";
 
 // ----------------------------
 // Theme Pioneers (sombre, mobile d'abord)
@@ -11,7 +12,10 @@ import { createTheme, type MantineColorsTuple } from "@mantine/core";
 // - minimaliste : du texte, des filets, peu de cadres ; pas d'icone sauf manque
 //   de place, jamais d'emoji ;
 // - mobile d'abord : champs en 16 px (sinon iOS zoome a la saisie), cibles
-//   tactiles de 44 px, aucune table large (des lignes empilees).
+//   tactiles de 44 px, aucune table large (des lignes empilees). Les petites
+//   cibles de Mantine (croix d'une valeur, fleches d'un nombre, choix d'un
+//   SegmentedControl, interrupteur, case a cocher, bouton compact) passent a 40 px au doigt
+//   seulement (`touch.module.css`, `pointer: coarse`) : rien ne change a la souris.
 
 const pioneers: MantineColorsTuple = [
   "#e2f7fe",
@@ -62,10 +66,10 @@ export const theme = createTheme({
   defaultRadius: "md",
   components: {
     // 42 px : une cible tactile confortable (44 px recommandes, 40 au minimum).
-    Button: { defaultProps: { size: "md", radius: "md" } },
+    Button: { defaultProps: { size: "md", radius: "md" }, classNames: { root: touch.button } },
     TextInput: inputDefaults,
     Textarea: inputDefaults,
-    NumberInput: inputDefaults,
+    NumberInput: { ...inputDefaults, classNames: { controls: touch.numberControls } },
     Select: inputDefaults,
     MultiSelect: inputDefaults,
     TagsInput: inputDefaults,
@@ -73,7 +77,10 @@ export const theme = createTheme({
     InputWrapper: inputDefaults,
     // Place pour l'oeil du mot de passe (40 px : `--psi-button-size-md`, globals.css).
     PasswordInput: { defaultProps: { size: "md", rightSectionWidth: 44 } },
-    SegmentedControl: { defaultProps: { radius: "md" } },
+    SegmentedControl: { defaultProps: { radius: "md" }, classNames: { label: touch.segmentLabel } },
+    Pill: { classNames: { remove: touch.pillRemove } },
+    Switch: { classNames: { body: touch.inlineBody } },
+    Checkbox: { classNames: { body: touch.inlineBody } },
     Modal: { defaultProps: { centered: true, radius: "md", closeButtonProps: { size: "xl" } } },
     Drawer: { defaultProps: { closeButtonProps: { size: "xl" } } },
   },

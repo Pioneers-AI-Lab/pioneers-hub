@@ -23,6 +23,7 @@ import type {
   Form,
   FormAnswer,
   FormAttachments,
+  FormCompletion,
   FormFieldType,
   FormIdentityCheck,
   FormQuestion,
@@ -86,6 +87,8 @@ export function alignQuestionWithField(input: FormQuestion): FormQuestion {
   const description = input.description ?? standardMetricOfField(input.dbField)?.description ?? null;
   const question: FormQuestion = { ...input, scope: scopeForField(input.dbField), description };
   const value = getFieldDef(input.dbField).value;
+  // Un champ multi-ligne (Track record...) se remplit dans une zone de texte : une ligne l'aplatirait.
+  if (value.kind === "text" && value.multiline && question.type === "text") return { ...question, type: "long_text" };
   if (value.kind === "rating") return { ...question, scale: { min: value.min, max: value.max } };
   if ((value.kind === "enum" || value.kind === "enumMulti") && value.values) return { ...question, options: [...value.values] };
   if (value.kind === "enum" && value.listKey) return { ...question, options: null };
@@ -287,9 +290,26 @@ const isAnonymous = (identity: FormIdentityCheck) => identity === "anonymous";
 export const feedsIndicator = (question: FormQuestion) =>
   question.dbField !== null && getFieldDef(question.dbField).indicator !== null;
 
-/** Les champs que fige une version publiee : les changer cree une nouvelle version. */
+/** JSON a cles triees a toute profondeur, sans `undefined` (meme regle que services/operations.ts#stableStringify). */
+function sortedJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(sortedJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${sortedJson(v)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * Les champs que fige une version publiee : les changer cree une nouvelle
+ * version. Cles triees : Firestore rend les cles d'un objet dans son ordre a
+ * lui, `deriveAttachments` dans l'ordre des questions ; sans tri, changer une
+ * date creait une version (et refusait les envois en cours).
+ */
 export const versionedSnapshot = (form: Pick<Form, "questions" | "attachments" | "approval">) =>
-  JSON.stringify({ questions: form.questions, attachments: form.attachments, approval: form.approval });
+  sortedJson({ questions: form.questions, attachments: form.attachments, approval: form.approval });
 
 // ----------------------------
 // Qui doit repondre, et qui a repondu (relances du staff)
@@ -310,6 +330,32 @@ export const formNeedsTeam = (form: Pick<Form, "questions">) => activeQuestions(
 
 /** Toutes ses questions portent sur l'equipe (la Submission) : un envoi vaut pour toute l'equipe. */
 export const isTeamForm = (questions: readonly FormQuestion[]) => questions.length > 0 && questions.every((q) => scopeOf(q) === "team");
+
+/**
+ * Les questions actives ajoutees depuis la reponse du fondateur (celles qu'il
+ * n'a pas vues : `FormCompletion.questionIds`). Vide sans reponse, ou pour une
+ * reponse d'avant ce suivi.
+ */
+export function questionsAddedSince<Q extends Pick<FormQuestion, "id" | "archived">>(
+  form: { questions: readonly Q[] },
+  completion: Pick<FormCompletion, "questionIds"> | null | undefined,
+): Q[] {
+  if (!completion?.questionIds) return [];
+  const seen = new Set(completion.questionIds);
+  return activeQuestions(form).filter((q) => !seen.has(q.id));
+}
+
+/**
+ * Le formulaire compte encore comme fait pour ce fondateur : il y a repondu
+ * (`answered` : sa reponse enregistree, ou le souvenir du navigateur pour un
+ * formulaire anonyme) et aucune question obligatoire n'a ete ajoutee depuis.
+ * La regle du To do et de la page d'un evenement.
+ */
+export const isFormStillDone = (
+  form: { questions: readonly Pick<FormQuestion, "id" | "archived" | "required">[] },
+  completion: Pick<FormCompletion, "questionIds"> | null | undefined,
+  answered: boolean = completion != null,
+): boolean => answered && !questionsAddedSince(form, completion).some((q) => q.required);
 
 /** Sur quoi porte le denominateur, affiche avec le taux. */
 export type AudienceBasis = "batch" | "present" | "teams" | "invited";

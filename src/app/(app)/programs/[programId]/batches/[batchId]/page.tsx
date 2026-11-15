@@ -5,6 +5,7 @@ import { Anchor, Button, Divider, Stack, Text, Title } from "@mantine/core";
 import { IconBrandSlack } from "@tabler/icons-react";
 import { slackWorkspaceUrl } from "@shared/slackLinks";
 import { STARTUP_WEIGHTING_HINT } from "@shared/types";
+import { useAuth } from "@/context/AuthContext";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
 import { useFounders } from "@/context/FoundersContext";
@@ -31,6 +32,7 @@ import { UpcomingEvents } from "@/components/event/UpcomingEvents";
 export default function BatchHomePage() {
   const { program } = useProgram();
   const { batch, role } = useBatch();
+  const { firebaseUser } = useAuth();
   const { founders } = useFounders();
   const { startups } = useStartups();
   const { stats, canSeeScores, founderPerformance, startupScoreOf } = useCohort();
@@ -112,10 +114,22 @@ export default function BatchHomePage() {
 
       {role === "public" && (
         <Text size="sm" c="dimmed" mt="md">
-          Founders of this batch:{" "}
-          <Anchor component={Link} href={paths.signIn(paths.batch(program.id, batch.id))} inherit>
-            sign in
-          </Anchor>{" "}
+          {firebaseUser ? (
+            // Connecte sans profil dans ce batch : se connecter n'y changerait rien.
+            <>
+              Your account is not linked to a founder profile of this batch.{" "}
+              <Anchor component={Link} href={paths.claim()} inherit>
+                Find your profile
+              </Anchor>
+            </>
+          ) : (
+            <>
+              Founders of this batch:{" "}
+              <Anchor component={Link} href={paths.signIn(paths.batch(program.id, batch.id))} inherit>
+                sign in
+              </Anchor>
+            </>
+          )}{" "}
           to see everyone.
         </Text>
       )}

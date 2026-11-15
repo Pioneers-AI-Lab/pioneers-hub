@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { formConcernsFounder } from "@shared/formRules";
+import { formConcernsFounder, isFormStillDone, questionsAddedSince } from "@shared/formRules";
 import { formState } from "@shared/forms";
 import { isProvenIdentity, type Form, type WithId } from "@shared/types";
 import { queries } from "@/lib/firestore/refs";
@@ -31,9 +31,14 @@ import { useFounder } from "@/context/FounderContext";
 // formulaires comme les autres. Un formulaire a identite prouvee (connexion)
 // deja rempli reste dans la liste tant qu'il est ouvert (`done`) : le fondateur
 // y retrouve ses reponses et les corrige (choix des cofondateurs, resultats).
+// Une question ajoutee depuis sa reponse (`questionsAddedSince`) est signalee ;
+// obligatoire, elle rend le formulaire de nouveau « a faire ».
 
-/** `closed` : des picks clos que le fondateur a donnes : il y relit ses choix. */
-export type FormToFill = { form: WithId<Form>; done: boolean; closed: boolean; eventName: string | null };
+/**
+ * `closed` : des picks clos que le fondateur a donnes : il y relit ses choix.
+ * `newQuestions` : questions ajoutees depuis sa reponse.
+ */
+export type FormToFill = { form: WithId<Form>; done: boolean; closed: boolean; eventName: string | null; newQuestions: number };
 
 type FormsToFillValue = {
   /** A remplir (puis les remplis encore modifiables), echeance la plus proche d'abord, sans echeance a la fin. */
@@ -55,22 +60,24 @@ export function FormsToFillProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<FormsToFillValue>(() => {
     const nowISO = new Date().toISOString();
-    const done = new Set(completions.data.map((c) => c.formId));
+    const completionOf = new Map(completions.data.map((c) => [c.formId, c]));
     const teamEventIds = new Set(teamMemberships.map((m) => m.eventId));
     const attendanceByEventId = new Map(attendance.map((a) => [a.parentId, a]));
     const items = forms.data.flatMap((f): FormToFill[] => {
       if (f.archivedDateISOString !== null || formState(f, nowISO) !== "open") return [];
-      const isDone = (f.identityCheck === "anonymous" ? anonymousDone : done).has(f.id);
+      const completion = completionOf.get(f.id);
+      const added = questionsAddedSince(f, completion);
+      const isDone = isFormStillDone(f, completion, f.identityCheck === "anonymous" ? anonymousDone.has(f.id) : completion !== undefined);
       if (isDone && !isProvenIdentity(f.identityCheck)) return [];
       const event = f.eventId ? (allEventsById.get(f.eventId) ?? null) : null;
       const isTeamMember = f.eventId !== null && teamEventIds.has(f.eventId);
       if (!formConcernsFounder(f, founder, event, isTeamMember, f.eventId ? attendanceByEventId.get(f.eventId) : undefined)) return [];
-      return [{ form: f, done: isDone, closed: false, eventName: event?.name ?? null }];
+      return [{ form: f, done: isDone, closed: false, eventName: event?.name ?? null, newQuestions: added.length }];
     });
     // Des picks clos restent lisibles par qui les a donnes (son choix de cofondateurs).
     for (const f of closedPicks.data) {
-      if (f.archivedDateISOString !== null || !done.has(f.id)) continue;
-      items.push({ form: f, done: true, closed: true, eventName: f.eventId ? (allEventsById.get(f.eventId)?.name ?? null) : null });
+      if (f.archivedDateISOString !== null || !completionOf.has(f.id)) continue;
+      items.push({ form: f, done: true, closed: true, eventName: f.eventId ? (allEventsById.get(f.eventId)?.name ?? null) : null, newQuestions: 0 });
     }
     const due = (i: FormToFill) => i.form.deadlineDateISOString ?? "9";
     return {

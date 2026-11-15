@@ -7,6 +7,7 @@ import { matchingOf } from "@shared/events";
 import { byGroupOrder, isDrawPublished } from "@shared/teamGenerator";
 import {
   isJuryForm,
+  scoringOf,
   type Criterion,
   type Evaluation,
   type EventMatching,
@@ -14,6 +15,7 @@ import {
   type Form,
   type EventTeam,
   type JuryLink,
+  type Leaderboard,
   type PioneersEvent,
   type Submission,
   type WithId,
@@ -62,6 +64,8 @@ type AdminEventValue = {
   juryForm: WithId<Form> | null;
   /** Les absents (Admin > Events > Attendance) : decoches du tirage. */
   absentIds: Set<string>;
+  /** Le classement calcule (`leaderboards/{eventId}`), `null` si l'evenement ne classe pas ou tant qu'aucune saisie ne classe. */
+  leaderboard: WithId<Leaderboard> | null;
 };
 
 const [AdminEventContextProvider, useAdminEvent] = createStrictContext<AdminEventValue>("AdminEvent");
@@ -82,6 +86,10 @@ export function AdminEventProvider({ backHref, children }: { backHref: string; c
   const evaluations = useQueryListener(hasJury ? queries.evaluationsOfEvent(eventId) : null);
   const attendance = useQueryListener(queries.attendanceOfEvent(eventId));
   const absentIds = useMemo(() => absentFounderIds(attendance.data), [attendance.data]);
+  // Le classement n'existe que pour un evenement qui classe (bareme, metrique ou grille du jury) :
+  // pas d'ecouteur pour une lunch roulette ou un talk.
+  const ranks = event.data ? scoringOf(event.data) !== null || eventMetrics(forms).length > 0 || juryCriteria(forms).length > 0 : undefined;
+  const leaderboard = useDocListener(ranks === undefined ? undefined : ranks ? refs.leaderboard(eventId) : null);
   const eventBatchId = event.data?.batchId ?? null;
   useEffect(() => {
     if (eventBatchId && eventBatchId !== batch.id) selectBatch(eventBatchId);
@@ -105,8 +113,9 @@ export function AdminEventProvider({ backHref, children }: { backHref: string; c
       criteria: juryCriteria(forms),
       juryForm: forms.find(isJuryForm) ?? null,
       absentIds,
+      leaderboard: leaderboard.data,
     };
-  }, [event.data, teams.data, teams.isLoading, submissions.data, juryLink.data, evaluations.data, forms, absentIds]);
+  }, [event.data, teams.data, teams.isLoading, submissions.data, juryLink.data, evaluations.data, forms, absentIds, leaderboard.data]);
 
   // Batch archive : hors de la liste de travail, l'outil ne s'y applique plus.
   if (eventBatchId && !batches.some((b) => b.id === eventBatchId)) return <BlockedState reason="not_found" backHref={backHref} />;

@@ -10,6 +10,8 @@ export type TeamLabels = {
   groupLabel: string;
   /** Rappel du role du leader, en tete de la liste (outil staff et page publique). */
   leaderReminder: string;
+  /** Ce que fait le leader, dit au leader sur la page de l'evenement. */
+  leaderDuty: string;
   /** Le mot de la fin de la page publique. */
   publicHint: string;
 };
@@ -20,6 +22,7 @@ export const TEAM_LABELS: Record<GeneratorMode, TeamLabels> = {
     groupLabel: "Team",
     leaderReminder:
       "Each team has a leader, drawn at random. The leader gathers the team at the start and makes sure the challenge runs smoothly until the end.",
+    leaderDuty: "gather the team at the start and make sure the challenge runs smoothly until the end",
     publicHint: "Find your teammates, introduce yourselves, and get started.",
   },
   matching: {
@@ -27,6 +30,7 @@ export const TEAM_LABELS: Record<GeneratorMode, TeamLabels> = {
     groupLabel: "Table",
     leaderReminder:
       "Each table has a leader, drawn at random. The leader gathers the table and makes sure lunch runs smoothly, so everyone gets a chance to talk.",
+    leaderDuty: "gather the table and make sure lunch runs smoothly, so everyone gets a chance to talk",
     publicHint: "Sit with your table, introduce yourself, and enjoy lunch.",
   },
 };

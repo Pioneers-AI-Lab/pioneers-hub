@@ -1,0 +1,51 @@
+/* Cibles tactiles de 40 px au moins (CLAUDE.md, mobile d'abord), posees par le
+   theme (src/theme.ts) sur les composants Mantine qui en ont de plus petites.
+   Seulement au doigt (`pointer: coarse`) : a la souris, rien ne change.
+   Double classe : passe devant le style Mantine (une classe), quel que soit
+   l'ordre de chargement des feuilles. */
+
+@media (pointer: coarse) {
+  /* Croix d'une valeur choisie (MultiSelect, TagsInput) : 40 x 40, marges
+     negatives pour que la pastille garde sa hauteur. */
+  .pillRemove.pillRemove {
+    min-width: 40px;
+    height: 40px;
+    margin-block: calc((var(--pill-height) - 40px) / 2);
+  }
+
+  /* Fleches des champs nombre (20 px de haut) : au doigt, le clavier numerique suffit. */
+  .numberControls.numberControls {
+    display: none;
+  }
+
+  /* Choix d'un SegmentedControl : 40 px de haut et de large au moins. */
+  .segmentLabel.segmentLabel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    min-width: 40px;
+  }
+
+  /* Interrupteur, case a cocher : la ligne entiere (un <label> ; l'input d'un
+     interrupteur couvre la racine) a 40 px. */
+  .inlineBody.inlineBody {
+    min-height: 40px;
+    align-items: center;
+  }
+
+  /* Bouton compact (« Add question ») : 40 px de haut au moins. */
+  .button.button {
+    min-height: 40px;
+  }
+
+  /* Bouton d'aide d'un libelle (useHelp) : 40 x 40, marges negatives pour ne
+     pas grandir la ligne du libelle. */
+  .helpButton.helpButton {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+    margin-block: -8px;
+  }
+}

@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Anchor, Badge, Box, Button, Group, Select, Stack, Text, TextInput } from "@mantine/core";
+import { Anchor, Badge, Box, Button, Group, Select, Stack, Text, TextInput, type ComboboxItem, type OptionsFilter } from "@mantine/core";
 import type { Founder, WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAction } from "@/hooks/useAction";
 import { useCallable } from "@/hooks/useCallable";
-import { linkFounder, unlinkFounder } from "@/lib/accounts";
+import { linkFounder, setFounderArchived, unlinkFounder } from "@/lib/accounts";
 import { formatDay, searchKey } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { accountLabel, signInSummary } from "@/components/admin/accountLabels";
@@ -28,15 +28,21 @@ import { Empty, Section } from "@/components/ui/Section";
 // Les profils viennent du batch (temps reel) ; l'email d'un compte vient de
 // Firebase Auth (callable `listAccounts`) et complete les lignes a son arrivee.
 
+// Comptes du champ « Account » : la meme recherche sans accents ni casse que la liste.
+const accountFilter: OptionsFilter = ({ options, search }) => {
+  const q = searchKey(search);
+  return (options as ComboboxItem[]).filter((o) => searchKey(o.label).includes(q));
+};
+
 const byClaimDateDesc = (a: WithId<Founder>, b: WithId<Founder>) =>
   (b.claimedDateISOString ?? "").localeCompare(a.claimedDateISOString ?? "");
 
 export default function AdminProfilesPage() {
-  const { batch, founders } = useAdmin();
+  const { batch, founders, archivedFounders } = useAdmin();
   const { data } = useCallable("listAccounts", {});
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<WithId<Founder> | null>(null);
-  const [confirmUnlink, setConfirmUnlink] = useState(false);
+  const [confirming, setConfirming] = useState<"unlink" | "archive" | null>(null);
   const [accountUid, setAccountUid] = useState<string | null>(null);
   const { busy, run } = useAction();
 
@@ -57,22 +63,40 @@ export default function AdminProfilesPage() {
 
   const open = (f: WithId<Founder>) => {
     setSelected(f);
-    setConfirmUnlink(false);
+    setConfirming(null);
     setAccountUid(null);
   };
 
-  const unlink = async (f: WithId<Founder>) => {
-    if ((await run(async () => (await unlinkFounder(f), true), "Account unlinked.", "unlink")) === true) setSelected(null);
+  /** Une ecriture puis, si elle passe, la fenetre se ferme. */
+  const runAndClose = async (action: () => Promise<void>, success: string, key: string) => {
+    if ((await run(async () => (await action(), true), success, key)) === true) setSelected(null);
   };
 
-  const link = async (f: WithId<Founder>) => {
+  const link = (f: WithId<Founder>) => {
     const account = accountUid ? accountByUid.get(accountUid) : undefined;
-    if (!account) return;
-    const done = await run(async () => (await linkFounder(f, account), true), `${f.name} is linked to ${account.email ?? "the account"}.`, "link");
-    if (done === true) setSelected(null);
+    if (account) return runAndClose(() => linkFounder(f, account), `${f.name} is linked to ${account.email ?? "the account"}.`, "link");
   };
 
   const selectedAccount = selected ? accountOf(selected) : undefined;
+  // L'etape de confirmation d'une action sensible, dans la fenetre du profil.
+  const confirm =
+    selected && confirming
+      ? {
+          unlink: {
+            title: "Unlink this account?",
+            body: `${selectedAccount?.email ?? "The account"} loses access to ${batch.name} as ${selected.name}. The profile is kept and can be linked again.`,
+            label: "Unlink",
+            action: () => runAndClose(() => unlinkFounder(selected), "Account unlinked.", "unlink"),
+          },
+          archive: {
+            title: "Archive this profile?",
+            body: `${selected.name} leaves the lists, draws and forms of ${batch.name}, and the list where founders find their profile. Nothing is deleted: restore it below, under Archived.`,
+            label: "Archive",
+            action: () =>
+              runAndClose(() => setFounderArchived(selected.id, true), `${selected.name} is archived.`, "archive"),
+          },
+        }[confirming]
+      : null;
 
   return (
     <>
@@ -115,28 +139,42 @@ export default function AdminProfilesPage() {
         )}
       </Section>
 
+      {archivedFounders.length > 0 && (
+        <Section title={`Archived · ${archivedFounders.length}`} hint="Out of the lists, draws and forms. Restore a profile archived by mistake.">
+          <RowList>
+            {archivedFounders.map((f) => (
+              <ButtonRow
+                key={f.id}
+                onClick={() => void run(() => setFounderArchived(f.id, false), `${f.name} is restored.`, `restore-${f.id}`)}
+                avatar={{ name: f.name, photoUrl: f.photoUrl }}
+                title={f.name}
+                subtitle={`Archived ${formatDay(f.archivedDateISOString?.slice(0, 10))}`}
+                meta={busy === `restore-${f.id}` ? "Restoring…" : "Restore"}
+              />
+            ))}
+          </RowList>
+        </Section>
+      )}
+
       <ResponsiveDialog
         opened={selected !== null}
         onClose={() => setSelected(null)}
-        title={confirmUnlink ? "Unlink this account?" : (selected?.name ?? "Profile")}
+        title={confirm?.title ?? selected?.name ?? "Profile"}
       >
-        {selected && confirmUnlink && (
+        {confirm && (
           <Stack>
-            <Text size="sm">
-              {selectedAccount?.email ?? "The account"} loses access to {batch.name} as {selected.name}. The profile is kept and
-              can be linked again.
-            </Text>
+            <Text size="sm">{confirm.body}</Text>
             <Group grow>
-              <Button variant="default" size="md" disabled={busy !== null} onClick={() => setConfirmUnlink(false)}>
+              <Button variant="default" size="md" disabled={busy !== null} onClick={() => setConfirming(null)}>
                 Cancel
               </Button>
-              <Button color="red" size="md" loading={busy === "unlink"} disabled={busy !== null} onClick={() => unlink(selected)}>
-                Unlink
+              <Button color="red" size="md" loading={busy === confirming} disabled={busy !== null} onClick={confirm.action}>
+                {confirm.label}
               </Button>
             </Group>
           </Stack>
         )}
-        {selected && !confirmUnlink && (
+        {selected && !confirm && (
           <Stack>
             <Anchor component={Link} href={paths.founder(selected.programId, selected.batchId, selected.id)} size="sm" className="tap-link">
               Open the profile
@@ -161,9 +199,12 @@ export default function AdminProfilesPage() {
                 <Text size="xs" c="dimmed">
                   Roles and sign-in of this account: Admin &gt; Access.
                 </Text>
-                <Button color="red" variant="light" size="md" fullWidth disabled={busy !== null} onClick={() => setConfirmUnlink(true)}>
+                <Button color="red" variant="light" size="md" fullWidth disabled={busy !== null} onClick={() => setConfirming("unlink")}>
                   Unlink
                 </Button>
+                <Text size="xs" c="dimmed">
+                  To archive this profile (a duplicate, a mistake), unlink the account first.
+                </Text>
               </>
             ) : (
               <>
@@ -175,11 +216,15 @@ export default function AdminProfilesPage() {
                   data={linkable}
                   value={accountUid}
                   onChange={setAccountUid}
+                  filter={accountFilter}
                   nothingFoundMessage="No account matches."
                   comboboxProps={{ withinPortal: true }}
                 />
                 <Button size="md" fullWidth loading={busy === "link"} disabled={!accountUid || busy !== null} onClick={() => link(selected)}>
                   Link
+                </Button>
+                <Button color="red" variant="subtle" size="md" fullWidth disabled={busy !== null} onClick={() => setConfirming("archive")}>
+                  Archive this profile
                 </Button>
               </>
             )}

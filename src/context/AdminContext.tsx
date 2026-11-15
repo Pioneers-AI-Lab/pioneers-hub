@@ -40,6 +40,8 @@ type AdminValue = {
   /** Non archives, par nom ; les fondateurs partis (`left`) restent pour l'historique. */
   founders: WithId<Founder>[];
   foundersById: Map<string, WithId<Founder>>;
+  /** Archives (doublons, erreurs d'import), du plus recent au plus ancien : a restaurer depuis Admin > Founder profiles. */
+  archivedFounders: WithId<Founder>[];
   /** Non archivees, par nom (invites d'un evenement, cibles d'un jury). */
   startups: WithId<Startup>[];
   /** Non archives, brouillons compris, du plus recent au plus ancien. */
@@ -113,6 +115,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       selectBatch,
       founders: founderList,
       foundersById: new Map(founderList.map((f) => [f.id, f])),
+      archivedFounders: founders.data
+        .filter((f) => f.archivedDateISOString !== null)
+        .sort((a, b) => b.archivedDateISOString!.localeCompare(a.archivedDateISOString!)),
       startups: startups.data.filter((s) => s.archivedDateISOString === null).sort((a, b) => a.name.localeCompare(b.name)),
       events: eventList,
       eventsById: new Map(eventList.map((e) => [e.id, e])),

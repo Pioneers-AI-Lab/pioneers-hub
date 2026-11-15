@@ -1,5 +1,5 @@
 import { docPaths } from "./collections";
-import { isUpcomingEvent, isWorkTeamEvent } from "./events";
+import { endAfter, eventEndOf as endOf, isUpcomingEvent, isWorkTeamEvent } from "./events";
 import { firstPublication, newForm, type FormData } from "./forms";
 import { eventTemplateOf } from "./presets/eventTemplates";
 import {
@@ -11,7 +11,7 @@ import {
   type RetroSession,
   type SubmissionFieldKey,
 } from "./presets/formTemplates";
-import type { Criterion, EventMetric, FormVersion, PioneersEvent } from "./types";
+import type { Criterion, EventMetric, Form, FormVersion, PioneersEvent, WithId } from "./types";
 
 // ----------------------------
 // Les formulaires d'un evenement : ceux de son pack, et ceux d'un evenement d'avant
@@ -66,25 +66,64 @@ type EventForPlan = Pick<
   "programId" | "batchId" | "kind" | "templateKey" | "startDateISOString" | "endDateISOString" | "status" | "matching" | "teamSize"
 >;
 
-const MINUTE = 60_000;
-const shift = (iso: string, minutes: number) => new Date(Date.parse(iso) + minutes * MINUTE).toISOString();
+const shiftMs = (iso: string, ms: number) => new Date(Date.parse(iso) + ms).toISOString();
+const msBetween = (from: string, to: string) => Date.parse(to) - Date.parse(from);
+/** Le meme instant (ou deux dates vides), quel que soit le format ISO. */
+const sameTime = (a: string | null, b: string | null) => a === b || (a !== null && b !== null && Date.parse(a) === Date.parse(b));
 
-/** L'ouverture et l'echeance d'un formulaire dans son evenement (`FormTiming`), sauf dates donnees. */
-function formDatesOf(templateKey: FormTemplateKey, event: EventForPlan, given: EventFormDates) {
-  const timing = (FORM_TEMPLATES[templateKey] as FormTemplate).timing ?? DEFAULT_FORM_TIMING;
-  const end = event.endDateISOString ?? event.startDateISOString;
-  // 15 minutes avant la fin, jamais avant le debut (un evenement tres court).
-  const beforeEnd = shift(end, -15) < event.startDateISOString ? event.startDateISOString : shift(end, -15);
-  const opens = given.opensDateISOString ?? (timing.opens === "start" ? event.startDateISOString : beforeEnd);
+/** Le debut et la fin d'un evenement : tout ce dont dependent les dates de ses formulaires. */
+export type EventTimes = Pick<PioneersEvent, "startDateISOString" | "endDateISOString">;
+
+/** 15 minutes avant la fin, jamais avant le debut (un evenement tres court). */
+const beforeEndOf = (e: EventTimes) => {
+  const at = endAfter(endOf(e), -15);
+  return at < e.startDateISOString ? e.startDateISOString : at;
+};
+
+/**
+ * L'ouverture et l'echeance d'un formulaire dans son evenement, selon son modele
+ * (`FormTiming` ; `DEFAULT_FORM_TIMING` sans modele), sauf dates donnees. A la
+ * creation d'un pack comme par « Add a form » ou Admin > Forms > New form.
+ */
+export function eventFormDates(templateKey: FormTemplateKey | null, event: EventTimes, given: EventFormDates = {}) {
+  const timing = (templateKey ? (FORM_TEMPLATES[templateKey] as FormTemplate).timing : null) ?? DEFAULT_FORM_TIMING;
+  const opens = given.opensDateISOString ?? (timing.opens === "start" ? event.startDateISOString : beforeEndOf(event));
   const deadline =
     given.deadlineDateISOString !== undefined
       ? given.deadlineDateISOString
       : timing.deadline === "before_end"
-        ? beforeEnd
+        ? beforeEndOf(event)
         : timing.deadline === "day_after_opening"
-          ? shift(opens, 24 * 60)
+          ? endAfter(opens, 24 * 60)
           : null;
-  return { opens, deadline };
+  return { opensDateISOString: opens, deadlineDateISOString: deadline };
+}
+
+/**
+ * LE lien d'un hackathon a son creneau Debrief, deduit des heures (aucun champ ne
+ * le porte) : l'evenement du batch, autre que `exceptId`, qui commence a `at`.
+ * Un Peer rating s'ouvre a son debut. Rend la recherche (index par heure de debut).
+ */
+function debriefSlots<E extends WithId<EventTimes>>(events: readonly E[]) {
+  const byStart = new Map<number, E[]>();
+  for (const e of events) byStart.set(Date.parse(e.startDateISOString), [...(byStart.get(Date.parse(e.startDateISOString)) ?? []), e]);
+  return (at: string | null, exceptId: string | null): E | null => (at ? (byStart.get(Date.parse(at))?.find((e) => e.id !== exceptId) ?? null) : null);
+}
+
+/**
+ * Les dates par defaut d'un formulaire ajoute a un evenement existant (« Add a
+ * form », Admin > Forms > New form, `create_form`) : celles de son modele ; un
+ * Peer rating s'ouvre au debut du creneau Debrief, l'evenement du batch qui
+ * commence a la fin de celui-ci (`events`), s'il y en a un.
+ */
+export function addedFormDates(
+  templateKey: FormTemplateKey | null,
+  event: WithId<EventTimes>,
+  events: readonly WithId<EventTimes>[] = [],
+  given: EventFormDates = {},
+) {
+  const slot = templateKey === "peer_rating" ? debriefSlots(events)(endOf(event), event.id) : null;
+  return eventFormDates(templateKey, event, slot && given.opensDateISOString === undefined ? { ...given, opensDateISOString: slot.startDateISOString } : given);
 }
 
 export function eventFormsPlan(eventId: string, event: EventForPlan, options: EventFormsOptions, nowISO: string): EventFormPlan[] {
@@ -110,8 +149,7 @@ export function eventFormsPlan(eventId: string, event: EventForPlan, options: Ev
     const given = options.formDates?.[templateKey] ?? {};
     const status = given.draft && eventStatus === "open" ? "draft" : eventStatus;
     // Publie ou brouillon, il porte ses dates : publie plus tard, il s'ouvre a son heure (ou tout de suite si elle est passee).
-    const { opens, deadline } = formDatesOf(templateKey, event, given);
-    let extra: Parameters<typeof newForm>[1] = { opensDateISOString: opens, deadlineDateISOString: deadline };
+    let extra: Parameters<typeof newForm>[1] = eventFormDates(templateKey, event, given);
     if (templateKey === "picks" && legacy.picks) {
       // La question, le nombre de choix et la cloture de l'ancienne demande ; ouverte des maintenant.
       const { question, max, closesDateISOString } = legacy.picks;
@@ -145,3 +183,99 @@ export const eventFormDocs = (plan: EventFormPlan, nowISO: string): { path: stri
   { path: docPaths.form(plan.id), data: { ...plan.form, createdDateISOString: nowISO, updatedDateISOString: nowISO } },
   ...(plan.version ? [{ path: docPaths.formVersion(plan.id, plan.version.version), data: plan.version }] : []),
 ];
+
+// ----------------------------
+// Deplacer un evenement : ses formulaires suivent (Admin > Events, piste 7.3)
+// ----------------------------
+// Chaque date garde sa place dans l'evenement :
+//   - une date qui suit la regle de creation (au debut, 15 min avant la fin) la suit encore ;
+//   - une date fixee a la main garde sa distance au bord le plus proche (debut ou fin) ;
+//   - une echeance apres la fin garde sa distance a l'ouverture (24 h apres, par defaut).
+// Un formulaire ferme, ou dont l'echeance est passee, garde ses dates (ses reponses
+// et leur retard sont acquis). Une date vide reste vide.
+// Le Peer rating d'un hackathon s'ouvre au debut de son creneau Debrief (un autre
+// evenement) : il suit ce creneau, pas le hackathon. Deplacer la fin d'un hackathon
+// propose de decaler d'autant le Debrief qui le suit (`linked`).
+// Seules les dates changent : aucune nouvelle version (`versionedSnapshot`).
+
+type MovableForm = WithId<Pick<Form, "eventId" | "kind" | "title" | "status" | "archivedDateISOString" | "opensDateISOString" | "deadlineDateISOString">>;
+type MovableEvent = WithId<EventTimes & Pick<PioneersEvent, "name">>;
+
+export type FormMove<F> = { form: F; opensDateISOString: string | null; deadlineDateISOString: string | null };
+/** Garde ses dates : ferme, echeance passee, ou lie a un creneau Debrief qui ne bouge pas (`tiedTo`). */
+export type FormKept<F> = { form: F; reason: "closed" | "past_deadline" | "tied"; tiedTo: string | null };
+export type EventMovePlan<F, E> = {
+  /** Le creneau Debrief accole, s'il peut suivre la fin ; `isMoved` : il est decale avec. */
+  linked: { event: E; to: EventTimes; isMoved: boolean } | null;
+  moves: FormMove<F>[];
+  kept: FormKept<F>[];
+};
+
+const shiftTimes = (e: EventTimes, ms: number): EventTimes => ({
+  startDateISOString: shiftMs(e.startDateISOString, ms),
+  endDateISOString: e.endDateISOString && shiftMs(e.endDateISOString, ms),
+});
+
+/** Une date de l'evenement `from`, a la meme place dans `to`. */
+function followDate(date: string, from: EventTimes, to: EventTimes): string {
+  if (sameTime(date, from.startDateISOString)) return to.startDateISOString;
+  if (sameTime(date, beforeEndOf(from))) return beforeEndOf(to);
+  const fromStart = msBetween(from.startDateISOString, date);
+  const fromEnd = msBetween(endOf(from), date);
+  return Math.abs(fromStart) <= Math.abs(fromEnd) ? shiftMs(to.startDateISOString, fromStart) : shiftMs(endOf(to), fromEnd);
+}
+
+function followForm(form: MovableForm, from: EventTimes, to: EventTimes) {
+  const { opensDateISOString: opens, deadlineDateISOString: deadline } = form;
+  const nextOpens = opens && followDate(opens, from, to);
+  // Une echeance apres la fin garde sa distance a l'ouverture.
+  if (opens && nextOpens && deadline && Date.parse(deadline) > Date.parse(endOf(from))) {
+    return { opensDateISOString: nextOpens, deadlineDateISOString: shiftMs(nextOpens, msBetween(opens, deadline)) };
+  }
+  return { opensDateISOString: nextOpens, deadlineDateISOString: deadline && followDate(deadline, from, to) };
+}
+
+/**
+ * Ce que devient chaque formulaire quand `event` passe a l'horaire `next` :
+ * les siens, et les Peer rating qui s'ouvrent a son debut (il est un creneau
+ * Debrief). `events` et `forms` : ceux du batch.
+ */
+export function planEventMove<F extends MovableForm, E extends MovableEvent>(input: {
+  event: E;
+  next: EventTimes;
+  events: readonly E[];
+  forms: readonly F[];
+  moveLinked: boolean;
+  nowISO: string;
+}): EventMovePlan<F, E> {
+  const { event, next, events, nowISO } = input;
+  const forms = input.forms.filter((f) => f.archivedDateISOString === null);
+  const slotOf = debriefSlots(events);
+  const tiedSlot = new Map(forms.map((f) => [f.id, f.kind === "peer_feedback" ? slotOf(f.opensDateISOString, f.eventId) : null]));
+
+  // Le Debrief accole (il commence a la fin) auquel s'ouvre un Peer rating de l'evenement.
+  const endShift = msBetween(endOf(event), endOf(next));
+  const slot = endShift === 0 ? null : slotOf(endOf(event), event.id);
+  const isLinked = slot !== null && forms.some((f) => f.eventId === event.id && tiedSlot.get(f.id) === slot);
+  const linked = isLinked ? { event: slot, to: shiftTimes(slot, endShift), isMoved: input.moveLinked } : null;
+
+  const moved = new Map<string, { from: EventTimes; to: EventTimes }>([[event.id, { from: event, to: next }]]);
+  if (linked?.isMoved) moved.set(linked.event.id, { from: linked.event, to: linked.to });
+
+  const plan: EventMovePlan<F, E> = { linked, moves: [], kept: [] };
+  for (const form of forms) {
+    const tied = tiedSlot.get(form.id);
+    const anchor = moved.get(tied?.id ?? form.eventId ?? "");
+    if (!anchor) {
+      if (tied && form.eventId && moved.has(form.eventId)) plan.kept.push({ form, reason: "tied", tiedTo: tied.name });
+      continue;
+    }
+    if (form.status === "closed") plan.kept.push({ form, reason: "closed", tiedTo: null });
+    else if (form.deadlineDateISOString && form.deadlineDateISOString < nowISO) plan.kept.push({ form, reason: "past_deadline", tiedTo: null });
+    else {
+      const to = followForm(form, anchor.from, anchor.to);
+      if (!sameTime(to.opensDateISOString, form.opensDateISOString) || !sameTime(to.deadlineDateISOString, form.deadlineDateISOString)) plan.moves.push({ form, ...to });
+    }
+  }
+  return plan;
+}

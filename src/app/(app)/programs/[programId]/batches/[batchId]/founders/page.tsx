@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Group, SegmentedControl, SimpleGrid, Stack, Text, TextInput } from "@mantine/core";
+import { Anchor, Group, SegmentedControl, SimpleGrid, Stack, Text, TextInput } from "@mantine/core";
 import type { ProfileCategory } from "@shared/types";
+import { useAuth } from "@/context/AuthContext";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
 import { useFounderDirectories, type FoundersView } from "@/context/FounderDirectoriesContext";
@@ -10,7 +12,7 @@ import { useFounders } from "@/context/FoundersContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
 import { missingRequiredFields } from "@/lib/completeness";
-import { PROFILE_CATEGORY_LABEL, score10 } from "@/lib/format";
+import { PROFILE_CATEGORY_LABEL, score10, searchKey } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { FounderGridCard } from "@/components/founder/FounderGridCard";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -23,6 +25,7 @@ type Filter = "all" | ProfileCategory;
 export default function FoundersPage() {
   const { program } = useProgram();
   const { batch, role } = useBatch();
+  const { firebaseUser } = useAuth();
   const { founders, isLoading } = useFounders();
   const { startupsById } = useStartups();
   const [search, setSearch] = useState("");
@@ -34,16 +37,20 @@ export default function FoundersPage() {
   // Grille : la galerie du Profile Book (1 a 3 cartes par ligne selon la largeur).
   const { view, setView, directoriesById, isLoading: isGridLoading } = useFounderDirectories();
 
+  // Texte cherchable de chaque fondateur, sans accents ni casse : calcule une fois par liste, pas a chaque frappe.
+  const searchTextOf = useMemo(
+    () => new Map(founders.map((f) => [f.id, searchKey([f.name, ...f.hardSkills, ...f.industries, ...f.rolesICouldTake].join("\n"))])),
+    [founders],
+  );
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = searchKey(search);
     const list = founders.filter((f) => {
       if (filter !== "all" && f.profileCategory !== filter) return false;
-      if (!q) return true;
-      return [f.name, ...f.hardSkills, ...f.industries, ...f.rolesICouldTake].some((v) => v.toLowerCase().includes(q));
+      return !q || searchTextOf.get(f.id)!.includes(q);
     });
     if (!byScore) return list;
     return [...list].sort((a, b) => (founderPerformance(b.id) ?? -1) - (founderPerformance(a.id) ?? -1));
-  }, [founders, search, filter, byScore, founderPerformance]);
+  }, [founders, searchTextOf, search, filter, byScore, founderPerformance]);
   // Grille : les profils complets d'abord, l'ordre choisi garde dans chaque groupe.
   // Complet = aucun champ obligatoire vide (le profil prive n'en porte aucun).
   // Sans annuaire (visiteur public), on ne sait pas : ordre inchange.
@@ -75,7 +82,20 @@ export default function FoundersPage() {
       <PageHeader title="Founders" right={<Text c="dimmed" className="num">{founders.length}</Text>} />
       {role === "public" && (
         <Text size="sm" c="dimmed" mb="md">
-          Only founders who agreed to a public profile are listed. Sign in to see the whole batch.
+          Only founders who agreed to a public profile are listed.{" "}
+          {firebaseUser ? (
+            <>
+              Your account is not linked to a profile of this batch:{" "}
+              <Anchor component={Link} href={paths.claim()} inherit>
+                find your profile
+              </Anchor>
+            </>
+          ) : (
+            <Anchor component={Link} href={paths.signIn(paths.founders(program.id, batch.id))} inherit>
+              Sign in
+            </Anchor>
+          )}{" "}
+          to see the whole batch.
         </Text>
       )}
       <Stack gap="sm" mb="xs">

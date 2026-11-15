@@ -7,6 +7,7 @@ import { getDoc, setDoc } from "firebase/firestore";
 import { viewerFromUser, type Viewer } from "@shared/access";
 import type { BatchMembership, User, WithId } from "@shared/types";
 import { auth, googleProvider } from "@/lib/firebase";
+import { syncVerifiedToken } from "@/lib/auth";
 import { queries, refs } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
 import { paths } from "@/lib/paths";
@@ -84,7 +85,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(
     () =>
-      onAuthStateChanged(auth, (nextUser) => {
+      onAuthStateChanged(auth, async (nextUser) => {
+        // Jeton a jour AVANT de montrer le compte : rien ne lit ni n'ecrit avec un
+        // `email_verified` perime (rattachement refuse apres un rechargement).
+        if (nextUser) await syncVerifiedToken(nextUser).catch((err) => console.error("token refresh failed", err));
+        // Deconnecte (ou autre compte) pendant l'attente : cet appel est perime.
+        if (auth.currentUser !== nextUser) return;
         setFirebaseUser(nextUser);
         if (nextUser) {
           setHasSignedOut(false);
@@ -133,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       reloadUser: async () => {
         if (!auth.currentUser) return;
         await auth.currentUser.reload();
-        await auth.currentUser.getIdToken(true);
+        await syncVerifiedToken(auth.currentUser);
         setUserVersion((v) => v + 1);
       },
       hasSignedOut,

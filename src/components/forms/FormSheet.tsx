@@ -6,17 +6,30 @@ import { Anchor, Box, Button, Container, Group, MultiSelect, NumberInput, Segmen
 import { notifications } from "@mantine/notifications";
 import { JUDGE_LIMITS, type PublicChoice, type PublicFormQuestion } from "@shared/callables";
 import { FORM_ANSWER_MAX, ratingScale } from "@shared/formRules";
+import { absentFromEventMessage } from "@shared/forms";
 import { answerKey, isPerTarget, needsAccount, parseAnswerKey, type QuestionScope } from "@shared/types";
 import { useAuth } from "@/context/AuthContext";
 import { usePublicForm } from "@/context/PublicFormContext";
 import { call } from "@/lib/firebase";
-import { errorMessage } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
-import { draftsFromPrefill, isEmptyDraft, newSubmissionId, problemOf, toAnswers, type Draft, type Drafts } from "@/components/forms/formDrafts";
+import {
+  PENDING_NOTE,
+  changesSaved,
+  draftsFromPrefill,
+  formNotes,
+  isEmptyDraft,
+  newSubmissionId,
+  notifySendError,
+  problemOf,
+  toAnswers,
+  type Draft,
+  type Drafts,
+} from "@/components/forms/formDrafts";
 
 // ----------------------------
 // Un formulaire a portee, sur une seule page (SPECS §2, modele standard)
@@ -29,6 +42,11 @@ import { draftsFromPrefill, isEmptyDraft, newSubmissionId, problemOf, toAnswers,
 // un champ vide n'efface rien), sous un nouvel envoi, puis la page se relit.
 // Un jure note une equipe apres l'autre : chaque equipe a son bouton, qui
 // n'envoie que cette equipe.
+//
+// Apres l'echeance, enregistrer une Submission qui change ses valeurs la marque
+// en retard (0 point, sauf exception du staff) : la page le demande d'abord. Un
+// renvoi sans changement ne demande rien (le serveur n'en fait rien).
+// Apercu du staff (`preview`) : les questions, sans repondant ni envoi.
 
 function Frame({ children }: { children: ReactNode }) {
   return (
@@ -41,7 +59,7 @@ function Frame({ children }: { children: ReactNode }) {
 export function FormSheet() {
   const { form, respondentInput } = usePublicForm();
   const header = <SheetHeader />;
-  if (needsAccount(form.identityCheck) && !form.viewerFounderId) {
+  if (needsAccount(form.identityCheck) && !form.viewerFounderId && !form.preview) {
     return (
       <Frame>
         {header}
@@ -54,7 +72,15 @@ export function FormSheet() {
       </Frame>
     );
   }
-  if (form.identityCheck !== "anonymous" && !form.respondent) {
+  if (form.absent) {
+    return (
+      <Frame>
+        {header}
+        <Empty>{absentFromEventMessage(form.event?.name ?? null)}</Empty>
+      </Frame>
+    );
+  }
+  if (form.identityCheck !== "anonymous" && !form.respondent && !form.preview) {
     return (
       <Frame>
         {header}
@@ -143,14 +169,20 @@ function WhoAreYou() {
   );
 }
 
+/** L'apercu du staff n'a pas de coequipiers : un exemple montre les questions par coequipier. */
+const SAMPLE_TEAMMATE = { value: "preview", label: "A teammate", hint: null };
+
 function Sheet() {
   const { form, juryKey, respondentInput, setRespondent, reload } = usePublicForm();
   const [drafts, setDrafts] = useState<Drafts>(() => draftsFromPrefill(form.prefill));
   const [submissionId, setSubmissionId] = useState(newSubmissionId);
   const [isSending, setSending] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
-  const canEdit = form.state === "open";
-  const isPreview = form.state === "draft";
+  const [isConfirmingLate, setConfirmingLate] = useState(false);
+  const isPreview = form.preview;
+  // L'apercu se remplit pour voir les champs, sans rien envoyer.
+  const canFill = form.state === "open" || isPreview;
+  const canEdit = canFill && !isPreview;
 
   const of = (scope: QuestionScope) => form.questions.filter((q) => q.scope === scope);
   const self = of("self");
@@ -159,9 +191,11 @@ function Sheet() {
   const scored = of("each_target");
   const isJury = form.identityCheck === "jury_link";
 
-  if ((team.length > 0 || mates.length > 0) && !form.team) {
+  if ((team.length > 0 || mates.length > 0) && !form.team && !isPreview) {
     return <Empty>You were not in a team at this event, or the teams are not published yet.</Empty>;
   }
+  const teammates = isPreview && form.targets.each_teammate.length === 0 ? [SAMPLE_TEAMMATE] : form.targets.each_teammate;
+  const deadline = form.deadlineDateISOString;
 
   const set = (key: string, value: Draft | undefined) => setDrafts((d) => ({ ...d, [key]: value }));
   const byId = new Map(form.questions.map((q) => [q.id, q]));
@@ -181,13 +215,20 @@ function Sheet() {
     return null;
   };
 
-  /** Enregistre la feuille ; depuis une equipe notee (`onlyTarget`), ses seules notes. */
-  async function save(onlyTarget: string | null = null): Promise<boolean> {
+  /** Enregistre la feuille ; depuis une equipe notee (`onlyTarget`), ses seules notes. `lateConfirmed` : le retard est accepte. */
+  async function save(onlyTarget: string | null = null, lateConfirmed = false): Promise<boolean> {
     const problem = problemIn(onlyTarget);
     if (problem) {
       notifications.show({ color: "red", title: "Not saved yet", message: problem });
       return false;
     }
+    // Apres l'echeance, des valeurs de l'equipe changees : l'envoi sera en retard.
+    const isLate = deadline !== null && new Date().toISOString() > deadline;
+    if (!onlyTarget && !lateConfirmed && isLate && changesSaved(drafts, form.prefill, team.map((q) => q.id), (key) => questionOf(key)?.type)) {
+      setConfirmingLate(true);
+      return false;
+    }
+    setConfirmingLate(false);
     setSending(true);
     try {
       const sent = onlyTarget ? Object.fromEntries(Object.entries(drafts).filter(([key]) => parseAnswerKey(key).targetId === onlyTarget)) : drafts;
@@ -205,7 +246,7 @@ function Sheet() {
       reload();
       return true;
     } catch (err) {
-      notifications.show({ color: "red", title: "Not saved", message: errorMessage(err) });
+      notifySendError(err, "Not saved", reload);
       return false;
     } finally {
       setSending(false);
@@ -214,9 +255,19 @@ function Sheet() {
 
   const fields = (questions: PublicFormQuestion[], targetId: string | null) => (
     <Stack gap="md" py="xs">
-      {questions.map((q) => (
-        <SheetField key={q.id} q={q} disabled={!canEdit} value={drafts[answerKey(q.id, targetId)]} onChange={(v) => set(answerKey(q.id, targetId), v)} />
-      ))}
+      {questions.map((q) => {
+        const key = answerKey(q.id, targetId);
+        return (
+          <SheetField
+            key={q.id}
+            q={q}
+            disabled={!canFill}
+            pending={form.pendingAnswerKeys.includes(key)}
+            value={drafts[key]}
+            onChange={(v) => set(key, v)}
+          />
+        );
+      })}
     </Stack>
   );
 
@@ -238,21 +289,23 @@ function Sheet() {
       )}
       {form.state === "closed" && <Empty>{isJury ? "Scores are locked. You can still read yours." : "This form is closed. You can still read your answers."}</Empty>}
       {form.state === "not_open_yet" && <Empty>This form is not open yet. Come back later.</Empty>}
-      {isPreview && <Empty>Draft: you are previewing it. Publish the form to collect answers.</Empty>}
+      {formNotes(form).map((note) => (
+        <Empty key={note}>{note}</Empty>
+      ))}
 
       {self.length > 0 && <Section title="You">{fields(self, null)}</Section>}
-      {team.length > 0 && form.team && (
-        <Section title={`Your team · ${form.team.name}`} hint="One teammate can fill this in for the whole team. The last save counts.">
+      {team.length > 0 && (
+        <Section title={form.team ? `Your team · ${form.team.name}` : "Your team"} hint="One teammate can fill this in for the whole team. The last save counts.">
           {fields(team, null)}
         </Section>
       )}
       {mates.length > 0 && (
         <Section title="Your teammates" hint="Private: only the Pioneers team reads it.">
-          {form.targets.each_teammate.length === 0 ? (
+          {teammates.length === 0 ? (
             <Empty>No teammate to rate.</Empty>
           ) : (
             <Stack gap="lg">
-              {form.targets.each_teammate.map((t) => (
+              {teammates.map((t) => (
                 <Box key={t.value}>
                   <Text fw={600}>{t.label}</Text>
                   {fields(mates, t.value)}
@@ -293,6 +346,22 @@ function Sheet() {
           Go to Pioneers Hub
         </Button>
       </Group>
+      <ResponsiveDialog opened={isConfirmingLate} onClose={() => setConfirmingLate(false)} title="Save after the deadline?">
+        <Stack>
+          <Text size="sm">
+            The deadline passed{deadline ? ` (${formatDateTime(deadline)})` : ""}. If you save these changes, your team&apos;s submission is marked
+            late and scores 0 points, unless the Pioneers team makes an exception.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" size="md" onClick={() => setConfirmingLate(false)}>
+              Keep it as it is
+            </Button>
+            <Button color="red" size="md" loading={isSending} onClick={() => void save(null, true)}>
+              Save anyway
+            </Button>
+          </Group>
+        </Stack>
+      </ResponsiveDialog>
     </>
   );
 }
@@ -342,11 +411,14 @@ function SheetField({
   value,
   onChange,
   disabled,
+  pending,
 }: {
   q: PublicFormQuestion;
   value: Draft | undefined;
   onChange: (value: Draft | undefined) => void;
   disabled: boolean;
+  /** La valeur est la reponse envoyee, en attente de validation du staff. */
+  pending: boolean;
 }) {
   const { form } = usePublicForm();
   const label = (
@@ -355,7 +427,8 @@ function SheetField({
       {q.required && <Text span c="pioneers"> *</Text>}
     </>
   );
-  const common = { label, description: q.description ?? undefined, disabled };
+  const description = [q.description, pending ? PENDING_NOTE : null].filter(Boolean).join(" ") || undefined;
+  const common = { label, description, disabled };
   const text = typeof value === "string" ? value : "";
 
   switch (q.type) {
@@ -380,9 +453,9 @@ function SheetField({
             {label}
             <Text span c="dimmed" size="sm">{` · ${scale.min} to ${scale.max}`}</Text>
           </Text>
-          {q.description && (
+          {description && (
             <Text size="xs" c="dimmed">
-              {q.description}
+              {description}
             </Text>
           )}
           <SegmentedControl
@@ -425,7 +498,7 @@ function SheetField({
           searchable
           data={data}
           maxValues={max}
-          description={q.description ?? (max > 1 ? `Up to ${max}, your first choice first.` : undefined)}
+          description={description ?? (max > 1 ? `Up to ${max}, your first choice first.` : undefined)}
           value={Array.isArray(value) ? value : []}
           onChange={(v) => onChange(v)}
         />

@@ -1,20 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Box, Button, Group, Menu, Select, Stack, Text } from "@mantine/core";
+import { Box, Button, Checkbox, Group, Menu, Select, Stack, Text } from "@mantine/core";
 import { IconChevronDown } from "@tabler/icons-react";
+import { planEventMove, type EventTimes, type FormKept } from "@shared/eventForms";
 import { defaultMatching, newEvent, type EventData } from "@shared/events";
 import { EVENT_TEMPLATES, eventTemplateOf, templatesOfKind, type EventTemplateKey } from "@shared/presets/eventTemplates";
 import { FORM_TEMPLATES } from "@shared/presets/formTemplates";
 import { GENERATOR_PRESETS } from "@shared/teamGenerator";
-import { EVENT_KINDS, MATCHING_MODES, type EventStatus, type MatchingMode, type PioneersEvent, type WithId } from "@shared/types";
+import { EVENT_KINDS, MATCHING_MODES, type EventStatus, type Form, type MatchingMode, type PioneersEvent, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminEvent } from "@/context/AdminEventContext";
 import { useAction } from "@/hooks/useAction";
-import { createEventPack, setEventArchived, updateEvent } from "@/lib/eventsAdmin";
+import { createEventPack, formsClosedByArchive, formsReopenedByRestore, saveEventMove, setEventArchived, updateEvent, type EventMove } from "@/lib/eventsAdmin";
 import { replaceMatching } from "@/lib/teamsAdmin";
-import { formatDateTime, fromLocalInput } from "@/lib/format";
+import { formatDateTime, fromLocalInput, joinList } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { ActionBar } from "@/components/admin/ActionBar";
 import { AttendanceLinkRow } from "@/components/admin/AttendanceSheet";
@@ -102,7 +103,8 @@ function NewEventSettings({ templateKey, onBack }: { templateKey: EventTemplateK
         programId: batch.programId,
         batchId: batch.id,
         templateKey,
-        name: template?.label ?? "",
+        // Un nom a donner, comme a blanc : le libelle du modele n'est pas un nom d'evenement.
+        name: "",
         startDateISOString: fromLocalInput(defaultEventStart(templateKey)) ?? new Date().toISOString(),
         status: "scheduled",
       }),
@@ -168,20 +170,41 @@ export function EventEditor() {
 
 function Hub({ event }: { event: WithId<PioneersEvent> }) {
   const router = useRouter();
+  const { events, forms: batchForms } = useAdmin();
+  const { forms } = useAdminEvent();
   const { isBusy, run } = useAction();
   const [initial] = useState(() => settingsDraftOf(event));
   const [draft, setDraft] = useState(initial);
   const [status, setStatus] = useState<EventStatus>(event.status);
   const [confirmArchive, setConfirmArchive] = useState(false);
+  /** Le nouvel horaire, en attente de la fenetre « Move its forms too? ». */
+  const [move, setMove] = useState<EventTimes | null>(null);
   const isArchived = event.archivedDateISOString !== null;
   const isDirty = status !== event.status || JSON.stringify(draft) !== JSON.stringify(initial);
   const problems = settingsProblems(draft);
   const label = eventLabel(event);
+  const toClose = formsClosedByArchive(forms);
+  const toReopen = formsReopenedByRestore(event, forms);
 
-  const save = () => void run(() => updateEvent(event.id, { ...settingsOf(draft), status }), "Event saved");
+  const settings = () => ({ ...settingsOf(draft), status });
+  const save = () => {
+    const { startDateISOString, endDateISOString } = settings();
+    const next = { startDateISOString, endDateISOString };
+    const isMoved = startDateISOString !== event.startDateISOString || endDateISOString !== event.endDateISOString;
+    // Un nouvel horaire : la fenetre dit ce qu'il deplace, s'il deplace quelque chose.
+    const plan = isMoved ? planEventMove({ event, next, events, forms: batchForms, moveLinked: true, nowISO: new Date().toISOString() }) : null;
+    if (plan && (plan.moves.length > 0 || plan.kept.length > 0 || plan.linked)) setMove(next);
+    else void run(() => updateEvent(event.id, settings()), "Event saved");
+  };
+  /** `null` : l'evenement seul, les formulaires gardent leurs dates. */
+  const saveMove = (plan: EventMove | null) => {
+    setMove(null);
+    const n = plan?.moves.length ?? 0;
+    void run(() => (plan ? saveEventMove(event.id, settings(), plan) : updateEvent(event.id, settings())), n ? `Event saved, ${formsCount(n)} moved` : "Event saved");
+  };
   const archive = async () => {
     setConfirmArchive(false);
-    if (await run(() => setEventArchived(event.id, true).then(() => true), "Event archived")) router.push(paths.adminEvents());
+    if (await run(() => setEventArchived(event, true, forms).then(() => true), "Event archived")) router.push(paths.adminEvents());
   };
 
   return (
@@ -193,8 +216,13 @@ function Hub({ event }: { event: WithId<PioneersEvent> }) {
       />
 
       {isArchived ? (
-        <Section title="Archived" hint="Hidden from founders, the calendar and the staff tools. Its teams, results and scores are kept.">
-          <Button size="md" fullWidth maw={480} loading={isBusy} onClick={() => void run(() => setEventArchived(event.id, false), "Event restored")}>
+        <Section
+          title="Archived"
+          hint={`Hidden from founders, the calendar and the staff tools. Its teams, results and scores are kept.${
+            toReopen.length ? ` Restoring it opens again the forms the archive closed: ${titles(toReopen)}.` : ""
+          }`}
+        >
+          <Button size="md" fullWidth maw={480} loading={isBusy} onClick={() => void run(() => setEventArchived(event, false, forms), "Event restored")}>
             Restore this event
           </Button>
         </Section>
@@ -240,13 +268,106 @@ function Hub({ event }: { event: WithId<PioneersEvent> }) {
 
       <ResponsiveDialog opened={confirmArchive} onClose={() => setConfirmArchive(false)} title="Archive this event?">
         <Stack>
-          <Text size="sm">It leaves the lists, the founders&apos; pages and the calendar. Its teams, results and scores are kept, and you can restore it.</Text>
+          <Text size="sm">
+            It leaves the lists, the founders&apos; pages and the calendar.
+            {toClose.length > 0 && ` Its open forms close, and leave the founders' To do: ${titles(toClose)}.`} Its teams, results and scores are
+            kept, and you can restore it{toClose.length > 0 && ": these forms then open again"}.
+          </Text>
           <Button size="md" color="red" fullWidth onClick={() => void archive()}>
             Archive
           </Button>
         </Stack>
       </ResponsiveDialog>
+
+      {move && <MoveDialog event={event} next={move} isBusy={isBusy} onCancel={() => setMove(null)} onSave={saveMove} />}
     </>
+  );
+}
+
+const titles = (forms: readonly WithId<Form>[]) => joinList(forms.map((f) => f.title));
+const formsCount = (n: number) => `${n} ${n === 1 ? "form" : "forms"}`;
+
+/** « Opens Thu 19 Nov, 15:00 · due Thu 19 Nov, 16:55 ». */
+const formDatesLine = (opens: string | null, deadline: string | null) =>
+  [opens ? `Opens ${formatDateTime(opens)}` : "No opening date", deadline ? `due ${formatDateTime(deadline)}` : "no deadline"].join(" · ");
+
+/** Pourquoi un formulaire garde ses dates. */
+const keptLine = ({ reason, tiedTo }: FormKept<unknown>) =>
+  reason === "tied" ? `stays with ${tiedTo}, it opens at its start` : reason === "closed" ? "closed, keeps its dates" : "past its deadline, keeps its dates";
+
+/**
+ * Le nouvel horaire deplace les formulaires (planEventMove, shared/eventForms.ts) :
+ * la fenetre liste ce qui bouge et ce qui garde ses dates, et propose de decaler
+ * le creneau Debrief accole. « Save, keep the forms' dates » n'enregistre que l'evenement.
+ */
+function MoveDialog({
+  event,
+  next,
+  isBusy,
+  onCancel,
+  onSave,
+}: {
+  event: WithId<PioneersEvent>;
+  next: EventTimes;
+  isBusy: boolean;
+  onCancel: () => void;
+  onSave: (plan: EventMove | null) => void;
+}) {
+  const { events, eventsById, forms } = useAdmin();
+  const [moveLinked, setMoveLinked] = useState(true);
+  const plan = useMemo(() => planEventMove({ event, next, events, forms, moveLinked, nowISO: new Date().toISOString() }), [event, next, events, forms, moveLinked]);
+  const n = plan.moves.length;
+  const otherEvent = (f: WithId<Form>) => (f.eventId && f.eventId !== event.id ? ` · ${eventsById.get(f.eventId)?.name ?? "another event"}` : "");
+
+  return (
+    <ResponsiveDialog opened onClose={onCancel} title={n ? "Move its forms too?" : "Save the new time?"}>
+      <Stack>
+        <Text size="sm">
+          The event now starts {formatDateTime(next.startDateISOString)}
+          {next.endDateISOString ? ` and ends ${formatDateTime(next.endDateISOString)}` : ""}. Its forms keep their place in it: at the start, 15 min
+          before the end, or 24 h after opening. Dates set by hand keep their distance to the start or the end. Closed forms, and forms past their
+          deadline, keep their dates.
+        </Text>
+        {plan.linked && (
+          <Checkbox
+            size="md"
+            checked={moveLinked}
+            onChange={(e) => setMoveLinked(e.currentTarget.checked)}
+            label={`Also move ${plan.linked.event.name} to ${formatDateTime(plan.linked.to.startDateISOString)}`}
+            description="It starts when this event ends, and the peer rating opens at its start."
+          />
+        )}
+        {plan.moves.map(({ form, opensDateISOString, deadlineDateISOString }) => (
+          <div key={form.id}>
+            <Text size="sm" fw={500}>
+              {form.title}
+              {otherEvent(form)}
+            </Text>
+            <Text size="sm">{formDatesLine(opensDateISOString, deadlineDateISOString)}</Text>
+            <Text size="xs" c="dimmed">
+              Was: {formDatesLine(form.opensDateISOString, form.deadlineDateISOString)}
+            </Text>
+          </div>
+        ))}
+        {plan.kept.map((k) => (
+          <Text key={k.form.id} size="sm" c="dimmed">
+            {k.form.title}
+            {otherEvent(k.form)}: {keptLine(k)}.
+          </Text>
+        ))}
+        <Button size="md" fullWidth loading={isBusy} onClick={() => onSave(plan)}>
+          {n ? `Save and move ${formsCount(n)}` : "Save"}
+        </Button>
+        {(n > 0 || plan.linked?.isMoved) && (
+          <Button variant="subtle" color="gray" disabled={isBusy} onClick={() => onSave(null)}>
+            Save, keep the forms&apos; dates
+          </Button>
+        )}
+        <Button variant="subtle" color="gray" disabled={isBusy} onClick={onCancel}>
+          Cancel
+        </Button>
+      </Stack>
+    </ResponsiveDialog>
   );
 }
 
@@ -332,14 +453,15 @@ function MatchingDialog({ opened, onClose }: { opened: boolean; onClose: () => v
           <RowList>
             <LinkRow
               href={paths.adminEventMatching(event.id)}
-              title={isPublished ? `See the ${tool.groupWord}s` : "Open the draw"}
-              subtitle={drawStatus(teams.length, isPublished, tool.groupWord) + (isPublished ? "" : " · size, rules, publish")}
+              title={isPublished ? `Open the ${tool.groupWord}s` : "Open the draw"}
+              subtitle={drawStatus(teams.length, isPublished, tool.groupWord) + (isPublished ? " · swap, move, change a leader" : " · size, rules, publish")}
             />
           </RowList>
         )}
         {isPublished ? (
           <Text size="sm" c="dimmed">
-            The {tool?.groupWord}s are published: the matching can no longer be changed or removed.
+            The {tool?.groupWord}s are published: open them above to swap or move a founder, or change a leader. The type of matching can no
+            longer be changed, nor the matching removed.
           </Text>
         ) : (
           <>

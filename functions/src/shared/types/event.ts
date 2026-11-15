@@ -267,7 +267,16 @@ export type EventTeam = {
   publishedDateISOString: DateISOString | null;
   /** Rempli si l'equipe devient (ou est deja) une startup. */
   startupId: string | null;
+  /**
+   * Contraintes du tirage en brouillon, les memes sur chaque equipe (relues
+   * ensemble a l'ouverture). `null` une fois publie : l'equipe devient publique,
+   * ces paires restent entre le staff et les IC. Absent des anciens documents.
+   */
+  drawConstraints?: DrawConstraints | null;
 };
+
+/** Paires a separer ou a reunir au tirage (`pairKey` : « idA|idB », ids tries ; Firestore refuse les tableaux de tableaux). */
+export type DrawConstraints = { keepApart: string[]; keepTogether: string[] };
 
 // ---- submissions/{teamId} ----------------------------------------------------
 

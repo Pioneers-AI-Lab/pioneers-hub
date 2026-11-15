@@ -73,5 +73,20 @@ if (useEmulators && isFirstInit) {
  *   const { data } = await health({});
  */
 export function call<K extends CallableName>(name: K, options?: { timeout?: number }) {
-  return httpsCallable<CallableRequest<K>, CallableResponse<K>>(functions, name, options);
+  const fn = httpsCallable<CallableRequest<K>, CallableResponse<K>>(functions, name, options);
+  return (data?: CallableRequest<K> | null) => fn(withoutUndefined(data) as CallableRequest<K>);
+}
+
+/**
+ * Le SDK encode une cle `undefined` en `null`, qu'un schema serveur en `.optional()` refuse : on retire
+ * ces cles avant l'envoi, a toute profondeur. Un schema n'a donc pas a accepter `null` pour « absent ».
+ */
+function withoutUndefined(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutUndefined);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, withoutUndefined(v)]),
+  );
 }

@@ -13,7 +13,7 @@ import { FUNCTIONS_REGION, type CallableName, type CallableRequest, type Callabl
 import { API_KEY_NAME_MAX } from "./shared/api";
 import { COL, SUB } from "./shared/collections";
 import { isStaffViewer } from "./shared/access";
-import type { ApiKey, Evaluation, Submission } from "./shared/types";
+import type { ApiKey, Evaluation, Form, Submission } from "./shared/types";
 import { mintApiKey } from "./api/caller";
 import { loadViewer } from "./api/viewer";
 import { decideRequest, describeRequest } from "./oauth/consent";
@@ -226,7 +226,7 @@ export const decideFormWrite = onCallTyped("decideFormWrite", async (request) =>
 
 // ----------------------------
 // Declencheurs : updates du jeudi -> metricSnapshots + kpiSeries ; resultats
-// d'equipe -> metricSnapshots + leaderboard ; notes du jury -> leaderboard
+// d'equipe -> metricSnapshots + leaderboard ; notes du jury et formulaires de l'evenement -> leaderboard
 // ----------------------------
 // Declencheurs Firestore : dans la region de la base (europe-west9), que
 // firebase-tools exige pour un declencheur Firestore. Regle : shared/kpis.ts.
@@ -263,6 +263,11 @@ export const onEvaluationWritten = onDocumentWritten(
       (event.data?.before.data() as Evaluation | undefined) ?? null,
       (event.data?.after.data() as Evaluation | undefined) ?? null,
     ),
+);
+
+// Grille du jury et metriques : les questions des formulaires de l'evenement (echelle, poids, ajout, retrait).
+export const onFormWritten = onDocumentWritten({ document: `${COL.forms}/{formId}`, region: FIRESTORE_TRIGGER_REGION }, (event) =>
+  teamResults.onFormChange((event.data?.before.data() as Form | undefined) ?? null, (event.data?.after.data() as Form | undefined) ?? null),
 );
 
 // ----------------------------

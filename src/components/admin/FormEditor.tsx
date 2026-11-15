@@ -6,7 +6,6 @@ import {
   Box,
   Button,
   Group,
-  Modal,
   NumberInput,
   SegmentedControl,
   Select,
@@ -35,7 +34,7 @@ import { formState } from "@shared/forms";
 import { EVENT_TEMPLATES } from "@shared/presets/eventTemplates";
 import { EVENT_METRIC_RENAMES, STANDARD_METRICS, standardEventMetricKey } from "@shared/presets/standardMetrics";
 import { keyFromLabel } from "@shared/text";
-import { needsAccount, scopeOf, type Form, type FormApproval, type FormFieldType, type FormIdentityCheck, type FormKind, type FormQuestion, type PickerEntity, type QuestionScope, type WithId } from "@shared/types";
+import { IDENTITY_RULES, activeQuestions, needsAccount, scopeOf, type Form, type FormApproval, type FormFieldType, type FormIdentityCheck, type FormKind, type FormQuestion, type PickerEntity, type QuestionScope, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminForm } from "@/context/AdminFormContext";
 import { formatDateTime, fromLocalInput, toLocalInput } from "@/lib/format";
@@ -50,6 +49,7 @@ import {
 } from "@/components/admin/formLabels";
 import { FormResponses } from "@/components/admin/FormResponses";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 
@@ -66,6 +66,12 @@ import { Empty, Section } from "@/components/ui/Section";
 // metrique d'equipe (`submission.metrics.<cle>`) et un critere du jury
 // (`evaluation.scores.<cle>`, avec son poids) gardent leur cle d'un evenement a
 // l'autre : l'editeur propose celles des modeles et celles deja utilisees.
+//
+// Deux membres du staff sur le meme formulaire (piste 7.12) : une mise a jour
+// distante n'efface jamais un brouillon modifie. Le brouillon garde la version
+// d'ou il part (`base`) ; tant que rien de local n'attend, il suit la base en
+// silence ; sinon un bandeau previent et laisse choisir, et l'enregistrement
+// FUSIONNE (`mergeDraft`) : ce que l'autre a change et pas moi est garde.
 
 const DOC_KIND_LABELS: Record<DocKind, string> = {
   person: "Person",
@@ -123,18 +129,114 @@ const blankQuestion = (): FormQuestion => ({
 
 export function FormEditor() {
   const { form } = useAdminForm();
-  // Remonte a chaque enregistrement (ou modification distante) : le brouillon repart de la base.
-  return <Editor key={form.updatedDateISOString} form={form} />;
+  // Un brouillon par formulaire : il ne se remonte pas a chaque enregistrement (le sien ou celui d'un autre).
+  return <Editor key={form.id} form={form} />;
+}
+
+// ---- Fusion d'un brouillon avec la base --------------------------------------------
+
+type DraftKey = Exclude<keyof FormDraft, "attachments">;
+
+/** Les reglages du brouillon, tels que l'editeur les nomme (bandeau de conflit). */
+const DRAFT_LABELS: Record<DraftKey, string> = {
+  kind: "Type",
+  title: "Title",
+  description: "Description",
+  questions: "Questions",
+  approval: "Database writes",
+  identityCheck: "Respondent",
+  eventId: "Event",
+  status: "Status",
+  opensDateISOString: "Opens",
+  deadlineDateISOString: "Deadline",
+};
+
+/** Meme valeur, quel que soit l'ordre des cles (Firestore relit un objet cles triees). */
+const sameValue = (a: unknown, b: unknown) => stableJson(a) === stableJson(b);
+const stableJson = (value: unknown) =>
+  JSON.stringify(value, (_key, v: unknown) =>
+    v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([x], [y]) => x.localeCompare(y))) : v,
+  );
+
+/**
+ * Fusion a trois des questions, une par une (id) : chaque question prend le
+ * cote qui l'a changee, ajoutee ou retiree. L'ordre est celui du cote qui a
+ * deplace des questions (le mien sinon), les ajouts de l'autre cote a la fin.
+ * `conflict` : une meme question changee des deux cotes (la mienne l'emporte),
+ * ou deplacees des deux cotes.
+ */
+function mergeQuestions(base: FormQuestion[], mine: FormQuestion[], theirs: FormQuestion[]): { questions: FormQuestion[]; conflict: boolean } {
+  if (sameValue(mine, base)) return { questions: theirs, conflict: false };
+  if (sameValue(theirs, base)) return { questions: mine, conflict: false };
+  const byId = (list: FormQuestion[]) => new Map(list.map((q) => [q.id, q]));
+  const [was, m, t] = [byId(base), byId(mine), byId(theirs)];
+  const reordered = (list: FormQuestion[]) => {
+    const ids = new Set(list.map((q) => q.id));
+    return !sameValue([...ids].filter((id) => was.has(id)), base.map((q) => q.id).filter((id) => ids.has(id)));
+  };
+  const [mineMoved, theirsMoved] = [reordered(mine), reordered(theirs)];
+  let conflict = mineMoved && theirsMoved;
+  const [first, second] = theirsMoved && !mineMoved ? [theirs, mine] : [mine, theirs];
+  const ids = [...new Set([...first, ...second].map((q) => q.id))];
+  const questions = ids.flatMap((id) => {
+    const before = was.get(id);
+    const [mq, tq] = [m.get(id), t.get(id)];
+    if (!before) return mq ?? tq ?? [];
+    if (sameValue(mq, before)) return tq ?? [];
+    if (!sameValue(tq, before) && !sameValue(tq, mq)) conflict = true;
+    return mq ?? [];
+  });
+  return { questions, conflict };
+}
+
+/**
+ * Fusion a trois du brouillon : `base` (la version d'ou il part), `mine` (le
+ * brouillon), `theirs` (la base maintenant). Un reglage que je n'ai pas touche
+ * prend leur valeur ; un reglage que j'ai change garde la mienne. `conflicts` :
+ * les reglages changes des deux cotes, differemment (le mien l'emporte).
+ */
+function mergeDraft(base: FormDraft, mine: FormDraft, theirs: FormDraft): { draft: FormDraft; conflicts: string[] } {
+  const draft: Record<string, unknown> = { ...theirs };
+  const conflicts: string[] = [];
+  for (const key of Object.keys(DRAFT_LABELS) as DraftKey[]) {
+    if (key === "questions" || sameValue(mine[key], base[key])) continue;
+    if (!sameValue(theirs[key], base[key]) && !sameValue(theirs[key], mine[key])) conflicts.push(DRAFT_LABELS[key]);
+    draft[key] = mine[key];
+  }
+  const merged = mergeQuestions(base.questions, mine.questions, theirs.questions);
+  if (merged.conflict) conflicts.push(DRAFT_LABELS.questions);
+  return { draft: { ...(draft as FormDraft), questions: merged.questions }, conflicts };
 }
 
 function Editor({ form }: { form: WithId<Form> }) {
   const router = useRouter();
   const { events } = useAdmin();
-  const { event } = useAdminForm();
-  const [draft, setDraft] = useState<FormDraft>(() => draftOf(form));
+  const { event, responses } = useAdminForm();
+  // `base` : la version de la base d'ou part le brouillon (elle reste en arriere tant qu'une saisie attend).
+  const [base, setBase] = useState<FormDraft>(() => draftOf(form));
+  const [draft, setDraft] = useState<FormDraft>(base);
   const [editing, setEditing] = useState<{ original: FormQuestion | null; index: number } | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
+  /** La confirmation d'enregistrement ouverte : `publish` (premiere publication) ou non. */
+  const [confirmSave, setConfirmSave] = useState<{ publish: boolean } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Ce que l'enregistrement ecrira : mon brouillon, fusionne avec la base si elle a change entre-temps.
+  const remote = draftOf(form);
+  const isBehind = !sameValue(remote, base);
+  const { draft: toSave, conflicts } = isBehind ? mergeDraft(base, draft, remote) : { draft, conflicts: [] };
+  const isDirty = !sameValue(toSave, remote);
+  // Rien de local n'attend (brouillon intact, ou echo de mon propre enregistrement) : le brouillon suit la base.
+  // Une fenetre de question ouverte attend d'etre fermee : elle part de l'ancienne version.
+  const loadTheirs = () => {
+    setBase(remote);
+    setDraft(remote);
+  };
+  if (isBehind && !isDirty && !editing) loadTheirs();
+  const keepMine = () => {
+    setBase(remote);
+    setDraft(toSave);
+  };
 
   const set = <K extends keyof FormDraft>(key: K, value: FormDraft[K]) => setDraft((d) => ({ ...d, [key]: value }));
   const isPublished = form.version > 0;
@@ -146,18 +248,64 @@ function Editor({ form }: { form: WithId<Form> }) {
     return isPublished && saved !== undefined && feedsIndicator(saved);
   };
 
-  const attachments = deriveAttachments(draft.questions, form.attachments);
-  const next = { ...form, ...draft, attachments };
+  const attachments = deriveAttachments(toSave.questions, form.attachments);
+  const next = { ...form, ...toSave, attachments };
   const problems = formProblems(next);
-  const isDirty = JSON.stringify(draftOf(form)) !== JSON.stringify(draft);
   const willBumpVersion = isPublished && versionedSnapshot(next) !== versionedSnapshot(form);
+  const saveLabel = willBumpVersion ? `Publish changes as version ${form.version + 1}` : "Save";
   const active = draft.questions.map((q, index) => ({ q, index })).filter(({ q }) => !q.archived);
   const archivedCount = draft.questions.length - active.length;
 
+  /**
+   * Ce que l'enregistrement change pour les repondants (C7, C10) : ceux qui
+   * remplissent le formulaire, ceux qui y ont deja repondu, et des dates qui
+   * manquent (pas de retard possible, hors « Forms on time »).
+   */
+  const saveWarnings = (publish: boolean): string[] => {
+    const warnings: string[] = [];
+    if (willBumpVersion) {
+      const savedIds = new Set(activeQuestions(form).map((q) => q.id));
+      const newRequired = activeQuestions(toSave).filter((q) => q.required && !savedIds.has(q.id)).length;
+      const ask = newRequired === 1 ? "the new required question" : `the ${newRequired} new required questions`;
+      if (formState(form, new Date().toISOString()) === "open") {
+        warnings.push(
+          newRequired > 0
+            ? `Founders filling it in right now keep what they typed, and must answer ${ask} before sending.`
+            : "Founders filling it in right now keep what they typed and send it to the new version.",
+        );
+      }
+      // Des fondateurs (le To do est le leur) : ni les reponses anonymes ni celles des jures.
+      const answered = new Set(responses.flatMap((r) => r.respondentFounderId ?? [])).size;
+      if (answered > 0) {
+        const who = `${answered} ${answered === 1 ? "founder" : "founders"} already answered.`;
+        warnings.push(
+          newRequired > 0
+            ? `${who} The form goes back to their To do for ${ask}.`
+            : `${who} Their answers stay as they are: nothing asks them again.`,
+        );
+      }
+    }
+    // Les dates se verifient a la publication, ou quand l'enregistrement les change.
+    const datesChange = publish || toSave.opensDateISOString !== form.opensDateISOString || toSave.deadlineDateISOString !== form.deadlineDateISOString;
+    if (datesChange && IDENTITY_RULES[toSave.identityCheck].respondent === "founder") {
+      if (!toSave.deadlineDateISOString) warnings.push("No deadline: no answer can be late, and this form does not count in “Forms on time”.");
+      if (publish && !toSave.opensDateISOString) warnings.push("No opening date: the form opens as soon as you publish.");
+    }
+    return warnings;
+  };
+
+  /** Enregistre, apres confirmation si l'enregistrement a un effet sur les repondants. */
+  const requestSave = (publish: boolean) => {
+    if (saveWarnings(publish).length > 0) setConfirmSave({ publish });
+    else void save(publish);
+  };
+
   const save = async (publish: boolean) => {
+    setConfirmSave(null);
     setIsSaving(true);
     try {
-      const version = await saveForm(form, draft, { publish });
+      // Contre la base ACTUELLE : la version suivante est juste, et ce qu'un autre a change reste (fusion).
+      const version = await saveForm(form, toSave, { publish });
       notifications.show({
         message: publish ? "Form published and open" : version !== form.version ? `Saved as version ${version}` : "Form saved",
       });
@@ -397,21 +545,41 @@ function Editor({ form }: { form: WithId<Form> }) {
       </Section>
 
       <Box className="savebar">
+        {isBehind && isDirty && (
+          <Box mb="sm">
+            <Text size="sm" fw={600}>
+              Updated by someone else while you were editing.
+            </Text>
+            <Text size="sm" c="dimmed">
+              {conflicts.length > 0
+                ? `You both changed: ${conflicts.join(", ")}. Saving keeps your version of ${conflicts.length === 1 ? "it" : "them"}, and their other changes.`
+                : "Your changes are kept. Saving adds them to theirs."}
+            </Text>
+            <Group grow gap="xs" mt={6}>
+              <Button variant="default" onClick={loadTheirs}>
+                Load their version
+              </Button>
+              <Button variant="default" onClick={keepMine}>
+                Keep my changes
+              </Button>
+            </Group>
+          </Box>
+        )}
         {problems.length > 0 && (
           <Text size="sm" c="red.4" mb={6}>
             {problems[0]}
           </Text>
         )}
         {isPublished ? (
-          <Button size="md" fullWidth disabled={!isDirty || problems.length > 0} loading={isSaving} onClick={() => save(false)}>
-            {!isDirty ? "No changes" : willBumpVersion ? `Publish changes as version ${form.version + 1}` : "Save"}
+          <Button size="md" fullWidth disabled={!isDirty || problems.length > 0} loading={isSaving} onClick={() => requestSave(false)}>
+            {!isDirty ? "No changes" : saveLabel}
           </Button>
         ) : (
           <Group grow gap="xs">
             <Button size="md" variant="default" disabled={!isDirty} loading={isSaving} onClick={() => save(false)}>
               {isDirty ? "Save draft" : "Saved"}
             </Button>
-            <Button size="md" disabled={problems.length > 0 || active.length === 0 || isSaving} onClick={() => save(true)}>
+            <Button size="md" disabled={problems.length > 0 || active.length === 0 || isSaving} onClick={() => requestSave(true)}>
               Publish
             </Button>
           </Group>
@@ -436,14 +604,31 @@ function Editor({ form }: { form: WithId<Form> }) {
         />
       )}
 
-      <Modal opened={confirmArchive} onClose={() => setConfirmArchive(false)} title="Archive this form?" centered>
+      <ResponsiveDialog opened={confirmArchive} onClose={() => setConfirmArchive(false)} title="Archive this form?">
         <Stack>
           <Text size="sm">The form closes and leaves the lists. Its answers and versions are kept.</Text>
           <Button size="md" color="red" fullWidth onClick={archive}>
             Archive
           </Button>
         </Stack>
-      </Modal>
+      </ResponsiveDialog>
+
+      <ResponsiveDialog
+        opened={confirmSave !== null}
+        onClose={() => setConfirmSave(null)}
+        title={confirmSave?.publish ? "Publish this form?" : willBumpVersion ? `Publish version ${form.version + 1}?` : "Save these changes?"}
+      >
+        <Stack>
+          {confirmSave && saveWarnings(confirmSave.publish).map((w) => (
+            <Text key={w} size="sm">
+              {w}
+            </Text>
+          ))}
+          <Button size="md" fullWidth loading={isSaving} onClick={() => confirmSave && save(confirmSave.publish)}>
+            {confirmSave?.publish ? "Publish" : saveLabel}
+          </Button>
+        </Stack>
+      </ResponsiveDialog>
     </>
   );
 }
@@ -549,7 +734,25 @@ function QuestionModal({
     });
 
   return (
-    <Modal opened onClose={onClose} title={original ? "Edit question" : "New question"} size="lg" centered>
+    <ResponsiveDialog
+      opened
+      onClose={onClose}
+      title={original ? "Edit question" : "New question"}
+      size="lg"
+      // « Apply » reste a portee, meme quand la fenetre defile (feuille du bas sur mobile).
+      footer={
+        <Stack gap="xs">
+          {problems.map((p) => (
+            <Text key={p} size="sm" c="red.4">
+              {p}
+            </Text>
+          ))}
+          <Button size="md" fullWidth disabled={problems.length > 0} onClick={() => onApply(withKey)}>
+            {original ? "Apply" : "Add question"}
+          </Button>
+        </Stack>
+      }
+    >
       <Stack>
         <Select
           label="Answer type"
@@ -682,15 +885,6 @@ function QuestionModal({
           />
         )}
 
-        {problems.map((p) => (
-          <Text key={p} size="sm" c="red.4">
-            {p}
-          </Text>
-        ))}
-
-        <Button size="md" fullWidth disabled={problems.length > 0} onClick={() => onApply(withKey)}>
-          {original ? "Apply" : "Add question"}
-        </Button>
         {original && (
           <Group grow gap="xs">
             <Button variant="default" onClick={() => onMove(-1)}>
@@ -705,7 +899,7 @@ function QuestionModal({
           </Group>
         )}
       </Stack>
-    </Modal>
+    </ResponsiveDialog>
   );
 }
 

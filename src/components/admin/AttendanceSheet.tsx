@@ -25,12 +25,12 @@ import { PageLoader } from "@/components/ui/PageLoader";
 /** Toucher un fondateur : present -> absent -> en retard -> present. */
 const NEXT_STATUS: Record<AttendanceStatus, AttendanceStatus> = { present: "absent", absent: "late", late: "present", in_office: "present" };
 
-/** « 28 present · 2 absent · 1 late », ou « Not taken yet ». */
+/** « 28 present · 2 absent · 1 late » (chacun compte une fois : le total fait les attendus), ou « Not taken yet ». */
 function attendanceSummary({ rows, isTaken }: EventRoster<AttendanceFounder>): string {
   if (!isTaken) return `Not taken yet · ${rows.length} expected`;
   const count = (s: AttendanceStatus) => rows.filter((r) => r.status === s).length;
-  const absent = count("absent");
-  return [`${rows.length - absent} present`, `${absent} absent`, count("late") > 0 && `${count("late")} late`].filter(Boolean).join(" · ");
+  const [absent, late] = [count("absent"), count("late")];
+  return [`${rows.length - absent - late} present`, `${absent} absent`, late > 0 && `${late} late`].filter(Boolean).join(" · ");
 }
 
 /** La ligne « Attendance » de la page d'un evenement, avec son resume. */

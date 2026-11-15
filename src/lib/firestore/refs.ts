@@ -146,6 +146,8 @@ export const refs = {
   /** Appartenances datees aux equipes (`memberships`), a ne pas confondre avec `batchMemberships`. */
   teamMemberships: () => colRef<Membership>(COL.memberships),
   leaderboards: () => colRef<Leaderboard>(COL.leaderboards),
+  /** Le classement calcule d'un evenement (`leaderboards/{eventId}`). */
+  leaderboard: (eventId: string) => docRef<Leaderboard>(COL.leaderboards, eventId),
   /** Staff et l'auteur (regle `picks`). */
   picks: () => colRef<Picks>(COL.picks),
   forms: () => colRef<Form>(COL.forms),

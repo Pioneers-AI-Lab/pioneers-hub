@@ -49,6 +49,17 @@ export async function sendResetPasswordEmail(email: string) {
 export const needsEmailVerification = (user: FirebaseUser | null): boolean =>
   user !== null && !user.emailVerified && user.providerData.some((p) => p.providerId === "password");
 
+/**
+ * Les regles lisent le JETON (`email_verified`), pas le compte. Apres un lien de
+ * confirmation ouvert ailleurs, le compte relu (au demarrage, ou par « I have
+ * confirmed ») est confirme mais le jeton en cache ne l'est pas : on le renouvelle.
+ */
+export async function syncVerifiedToken(user: FirebaseUser) {
+  if (!user.emailVerified) return;
+  const { claims } = await user.getIdTokenResult();
+  if (claims.email_verified !== true) await user.getIdToken(true);
+}
+
 // ---- Messages d'erreur ----------------------------------------------------------
 
 /** Annulations volontaires : aucun message. */

@@ -16,7 +16,8 @@ import { paths } from "@/lib/paths";
 // Monte par app/(form)/forms/[formId]/layout.tsx. SANS COMPTE : le formulaire
 // est lu par la callable `getPublicForm`, pas par un ecouteur Firestore. Les
 // noms du batch ne sont pas publics : c'est le serveur qui les rend, en nom
-// court. Une reponse se donne a la version lue.
+// court. Une reponse se valide contre la version en place ; si elle n'y suffit
+// plus, la page appelle `reload` : la relecture garde la page montee (et ses saisies).
 //
 // Le repondant (SPECS §2, modele standard) : un compte connecte et rattache
 // repond en son nom ; sinon la page le demande (`setRespondent`) et relit le
