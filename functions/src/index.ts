@@ -24,6 +24,7 @@ import * as forms from "./services/forms";
 import * as kpis from "./services/kpis";
 import * as teamResults from "./services/teamResults";
 import * as scores from "./services/scores";
+import * as calendarSync from "./services/calendarSync";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { cleanId } from "./services/clean";
 import { onDocumentUpdated, onDocumentWritten } from "firebase-functions/v2/firestore";
@@ -192,6 +193,23 @@ export const recomputeBatchScores = onCallTyped("recomputeBatchScores", async (r
 export const nightlyScores = onSchedule({ schedule: "0 2 * * *", timeZone: "Europe/Paris", timeoutSeconds: 540 }, async () => {
   const done = await scores.recomputeActiveBatches();
   console.log("nightlyScores", JSON.stringify(done));
+});
+
+// ----------------------------
+// Agenda Google du batch (SPECS §2, decision du 16/11) : ses evenements
+// deviennent ceux du Hub, toutes les 5 minutes et sur le bouton du staff
+// (Admin > Batch settings, Admin > Events).
+// ----------------------------
+
+export const syncBatchCalendar = onCallTyped("syncBatchCalendar", async (request) => {
+  const actorUid = await assertStaff(request.auth?.uid);
+  const calendarId = typeof request.data?.calendarId === "string" ? request.data.calendarId : null;
+  return calendarSync.syncBatchCalendar(cleanId(request.data?.batchId, "batchId"), { dryRun: request.data?.dryRun === true, calendarId, actorUid });
+});
+
+export const syncGoogleCalendars = onSchedule({ schedule: "every 5 minutes", timeZone: "Europe/Paris", timeoutSeconds: 240 }, async () => {
+  const done = await calendarSync.syncAllCalendars();
+  if (Object.keys(done).length) console.log("syncGoogleCalendars", JSON.stringify(done));
 });
 
 export const resetJuryLink = onCallTyped("resetJuryLink", async (request) => {

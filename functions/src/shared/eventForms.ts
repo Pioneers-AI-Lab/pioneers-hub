@@ -69,7 +69,8 @@ type EventForPlan = Pick<
 const shiftMs = (iso: string, ms: number) => new Date(Date.parse(iso) + ms).toISOString();
 const msBetween = (from: string, to: string) => Date.parse(to) - Date.parse(from);
 /** Le meme instant (ou deux dates vides), quel que soit le format ISO. */
-const sameTime = (a: string | null, b: string | null) => a === b || (a !== null && b !== null && Date.parse(a) === Date.parse(b));
+/** Le meme instant (deux ecritures ISO d'une meme heure comptent pour une). */
+export const sameTime = (a: string | null, b: string | null) => a === b || (a !== null && b !== null && Date.parse(a) === Date.parse(b));
 
 /** Le debut et la fin d'un evenement : tout ce dont dependent les dates de ses formulaires. */
 export type EventTimes = Pick<PioneersEvent, "startDateISOString" | "endDateISOString">;
@@ -199,7 +200,7 @@ export const eventFormDocs = (plan: EventFormPlan, nowISO: string): { path: stri
 // Seules les dates changent : aucune nouvelle version (`versionedSnapshot`).
 
 type MovableForm = WithId<Pick<Form, "eventId" | "kind" | "title" | "status" | "archivedDateISOString" | "opensDateISOString" | "deadlineDateISOString">>;
-type MovableEvent = WithId<EventTimes & Pick<PioneersEvent, "name">>;
+type MovableEvent = WithId<EventTimes & Pick<PioneersEvent, "name" | "calendarSource">>;
 
 export type FormMove<F> = { form: F; opensDateISOString: string | null; deadlineDateISOString: string | null };
 /** Garde ses dates : ferme, echeance passee, ou lie a un creneau Debrief qui ne bouge pas (`tiedTo`). */
@@ -257,7 +258,8 @@ export function planEventMove<F extends MovableForm, E extends MovableEvent>(inp
   const endShift = msBetween(endOf(event), endOf(next));
   const slot = endShift === 0 ? null : slotOf(endOf(event), event.id);
   const isLinked = slot !== null && forms.some((f) => f.eventId === event.id && tiedSlot.get(f.id) === slot);
-  const linked = isLinked ? { event: slot, to: shiftTimes(slot, endShift), isMoved: input.moveLinked } : null;
+  // Un creneau venu de l'agenda Google suit son propre horaire : le Hub ne le deplace pas.
+  const linked = isLinked ? { event: slot, to: shiftTimes(slot, endShift), isMoved: input.moveLinked && !slot.calendarSource } : null;
 
   const moved = new Map<string, { from: EventTimes; to: EventTimes }>([[event.id, { from: event, to: next }]]);
   if (linked?.isMoved) moved.set(linked.event.id, { from: linked.event, to: linked.to });
@@ -279,3 +281,21 @@ export function planEventMove<F extends MovableForm, E extends MovableEvent>(inp
   }
   return plan;
 }
+
+// ----------------------------
+// Archiver un evenement : ses formulaires ouverts se ferment (Admin > Events, synchro de l'agenda)
+// ----------------------------
+
+type ArchivableForm = Pick<Form, "status" | "updatedDateISOString">;
+
+/** Les formulaires ouverts d'un evenement : l'archivage les ferme (ils sortent du To do et ne prennent plus de reponse). */
+export const formsClosedByArchive = <F extends ArchivableForm>(forms: readonly F[]) => forms.filter((f) => f.status === "open");
+
+/**
+ * Ceux que l'archivage a fermes, et que personne n'a touches depuis : ils
+ * portent l'heure de l'archivage (meme lot). La restauration les rouvre.
+ * Choix delibere, faute de marque sur le formulaire (aucun champ du type `Form`) :
+ * un formulaire ferme puis retouche par le staff reste ferme a la restauration.
+ */
+export const formsReopenedByRestore = <F extends ArchivableForm>(event: Pick<PioneersEvent, "archivedDateISOString">, forms: readonly F[]) =>
+  forms.filter((f) => f.status === "closed" && f.updatedDateISOString === event.archivedDateISOString);

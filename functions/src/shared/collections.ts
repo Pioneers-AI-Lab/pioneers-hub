@@ -22,6 +22,10 @@ export const COL = {
   programs: "programs",
   batches: "batches",
   batchStats: "batchStats",
+  /** Synchro de l'agenda Google d'un batch (serveur ; staff en lecture). */
+  calendarSyncs: "calendarSyncs",
+  /** Emulateurs seulement : un faux agenda Google par id d'agenda (verifications). */
+  calendarFakes: "calendarFakes",
   // Fondateurs et startups
   founders: "founders",
   founderWeeks: "founderWeeks",
@@ -151,6 +155,7 @@ export const docIds = {
  */
 export const docPaths = {
   batch: (batchId: string) => `${COL.batches}/${batchId}`,
+  calendarSync: (batchId: string) => `${COL.calendarSyncs}/${batchId}`,
   /** Rattachement d'un compte a un profil fondateur du batch. */
   membership: (batchId: string, uid: string) => `${COL.batchMemberships}/${docIds.membership(batchId, uid)}`,
   list: (listKey: string) => `${COL.lists}/${listKey}`,

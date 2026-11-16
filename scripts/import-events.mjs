@@ -27,6 +27,7 @@ import { formOptions, parisLabel, readEventsFile, toEvent } from "./lib/eventsFi
 
 const require = createRequire(import.meta.url);
 const { eventFormDocs, eventFormsPlan } = require("../functions/lib/shared/eventForms.js");
+const { calendarIdOf } = require("../functions/lib/shared/calendarSync.js");
 
 const PROJECT_ID = "pioneers-3627c";
 const [week, flag] = process.argv.slice(2);
@@ -42,6 +43,13 @@ const { data, selected } = readEventsFile(week);
 initializeApp({ projectId: PROJECT_ID, credential: applicationDefault() });
 const db = getFirestore();
 const now = new Date().toISOString();
+
+// Un batch relie a un agenda Google cree ses evenements dans l'agenda (SPECS §2, 16/11).
+const batchDoc = (await db.doc(`batches/${data.batchId}`).get()).data();
+if (batchDoc && calendarIdOf(batchDoc)) {
+  console.error(`Batch ${data.batchId} relie a Google Calendar : cree les evenements dans l'agenda (synchro toutes les 5 min), puis node scripts/sync-events.mjs pour les baremes et les formulaires.`);
+  process.exit(1);
+}
 
 const events = selected.map((e) => ({ e, ev: toEvent(data, e, now) }));
 // Le pack du modele, plus les formulaires de `forms` du fichier, avec ses reglages (scripts/lib/eventsFile.mjs).

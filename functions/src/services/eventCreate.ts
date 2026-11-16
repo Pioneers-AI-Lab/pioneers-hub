@@ -1,5 +1,6 @@
 import { getFirestore } from "firebase-admin/firestore";
 import { z } from "zod";
+import { CALENDAR_BATCH_MESSAGE, calendarIdOf } from "../shared/calendarSync";
 import { COL, docPaths } from "../shared/collections";
 import { isStaffViewer } from "../shared/access";
 import { eventFormDocs, eventFormsPlan } from "../shared/eventForms";
@@ -20,6 +21,7 @@ import { isoDateTime } from "./schemas";
 // ensemble (shared/eventForms.ts) ; publies avec un evenement « scheduled », en
 // brouillon avec un brouillon. Sans modele : un evenement seul.
 //
+// Un batch relie a un agenda Google refuse : on cree dans l'agenda (shared/calendarSync.ts).
 // Staff seulement (regle `events` : write staff). Un evenement cree en
 // brouillon (`draft`) n'est pas montre aux fondateurs ; `scheduled` l'est.
 
@@ -67,6 +69,8 @@ export const createEvent: Operation<typeof CreateEventInput, { eventId: string }
     );
     const batch = batchSnap.data() as Batch | undefined;
     if (!batch) throw notFound("batch_not_found", `Batch \`${input.batchId}\` does not exist.`, "batchId");
+    // Un batch relie a un agenda Google cree ses evenements dans l'agenda (SPECS §2, 16/11).
+    if (calendarIdOf(batch)) throw badRequest("calendar_batch", CALENDAR_BATCH_MESSAGE, "batchId");
     const startupSnaps = rest.splice(0, startupIds.length);
     const startups = startupSnaps.map((s) => s.data() as Startup | undefined);
     const foreign = startupIds.filter((_id, i) => startups[i]?.batchId !== input.batchId);

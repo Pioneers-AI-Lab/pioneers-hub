@@ -105,6 +105,16 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   Le plan (`planFieldWrites`) a un mode `partial` (un champ fautif est ecarte, pas l'appel : formulaires)
   et un `hold` (calcule, pas ecrit : validation du staff). /v1 et le MCP restent en « tout ou rien ».
   Une URL sans protocole est completee (`shared/text.ts#normalizeHttpUrl`).
+- **Agenda Google = source des evenements** (SPECS §2, 16/11) : un batch avec `settings.googleCalendarId` (Admin >
+  Batch settings, « Check » a blanc) recoit les evenements de SA periode, toutes les 5 min (`syncGoogleCalendars`) ou sur
+  « Sync now » (`syncBatchCalendar`), sens unique Google -> Hub (services/calendarSync.ts, plan pur
+  shared/calendarSync.ts). Un evenement relie porte `calendarSource` : ses `CALENDAR_FIELDS` (nom, description, dates,
+  lieu) ne s'ecrivent QUE par la synchro (regles, `lib/eventsAdmin.ts#updateEvent` les retire, `sync-events.mjs` les saute) ;
+  le reste (invites, template via TemplateField, matching, formulaires) se regle dans le Hub. Un batch relie ne cree
+  pas d'evenement (regle, `create_event`, `import-events.mjs` refusent). Masquer = archiver, la synchro le laisse masque ;
+  supprime ou annule dans Google = archive. Jeton et derniere synchro : `calendarSyncs/{batchId}`. Prod : activer l'API
+  Calendar et partager l'agenda (lecture) avec le compte de service des functions. Emulateurs : faux agenda
+  `calendarFakes/{calendarId}` ({ events }, scripts/check-rules.mjs).
 - **Evenement = point d'entree** (SPECS §2, decision du 13/11) : son type (`kind`) n'est qu'une ETIQUETTE ; les
   outils viennent de ce qui est attache : `event.matching` (0 ou 1 : mode `challenge` = equipes, `matching` = tables,
   taille ; groupes dans `teams`) et ses formulaires. Un evenement d'avant sans le champ le deduit de son type et de

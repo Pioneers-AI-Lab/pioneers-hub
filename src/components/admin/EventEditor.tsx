@@ -4,16 +4,25 @@ import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Box, Button, Checkbox, Group, Menu, Select, Stack, Text } from "@mantine/core";
 import { IconChevronDown } from "@tabler/icons-react";
-import { planEventMove, type EventTimes, type FormKept } from "@shared/eventForms";
+import { calendarIdOf } from "@shared/calendarSync";
+import { formsClosedByArchive, formsReopenedByRestore, planEventMove, type EventTimes, type FormKept } from "@shared/eventForms";
 import { defaultMatching, newEvent, type EventData } from "@shared/events";
 import { EVENT_TEMPLATES, eventTemplateOf, templatesOfKind, type EventTemplateKey } from "@shared/presets/eventTemplates";
 import { FORM_TEMPLATES } from "@shared/presets/formTemplates";
 import { GENERATOR_PRESETS } from "@shared/teamGenerator";
-import { EVENT_KINDS, MATCHING_MODES, type EventStatus, type Form, type MatchingMode, type PioneersEvent, type WithId } from "@shared/types";
+import { EVENT_KINDS, MATCHING_MODES, type EventMatching, type EventStatus, type Form, type MatchingMode, type PioneersEvent, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminEvent } from "@/context/AdminEventContext";
 import { useAction } from "@/hooks/useAction";
-import { createEventPack, formsClosedByArchive, formsReopenedByRestore, saveEventMove, setEventArchived, updateEvent, type EventMove } from "@/lib/eventsAdmin";
+import {
+  applyEventTemplate,
+  createEventPack,
+  saveEventMove,
+  setEventArchived,
+  templatePlan,
+  updateEvent,
+  type EventMove,
+} from "@/lib/eventsAdmin";
 import { replaceMatching } from "@/lib/teamsAdmin";
 import { formatDateTime, fromLocalInput, joinList } from "@/lib/format";
 import { paths } from "@/lib/paths";
@@ -23,7 +32,7 @@ import { AttendanceLinkRow } from "@/components/admin/AttendanceSheet";
 import { EventFormsField, EventResultsAdmin } from "@/components/admin/EventResultsAdmin";
 import { EventSettingsFields, settingsDraftOf, settingsOf, settingsProblems, type SettingsDraft } from "@/components/admin/EventSettingsFields";
 import { TEAM_TOOLS } from "@/components/admin/teamModes";
-import { EVENT_KIND_LABEL, EVENT_STATUS_DESCRIPTION, EVENT_STATUS_OPTIONS, defaultEventStart, eventLabel } from "@/components/event/eventLabels";
+import { EVENT_KIND_LABEL, EVENT_STATUS_DESCRIPTION, EVENT_STATUS_OPTIONS, archiveWords, defaultEventStart, eventLabel } from "@/components/event/eventLabels";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, LinkRow, RowList } from "@/components/ui/Rows";
@@ -46,14 +55,22 @@ import { HelpBlock } from "@/components/ui/useHelp";
 // type ; le retrait, jusqu'a la publication), formulaires (« Add a form » ->
 // vierge ou un modele -> son editeur). Ensuite ce qui fait son resultat : classement, resultats, jury,
 // picks (EventResultsAdmin), et l'archive.
+//
+// Agenda Google (SPECS §2, 16/11) : un batch relie ne cree pas d'evenement ici
+// (« New » renvoie a l'agenda). Un evenement venu de l'agenda a son nom, ses
+// dates, son lieu et sa description grises ; on lui applique un template
+// (TemplateField) ; l'archiver le masque, la synchro le laisse masque.
 
 // ---- Creer ------------------------------------------------------------------------
+
+/** Un matching en clair : « teams of 3 ». */
+const matchingLine = (m: EventMatching | null | undefined) => (m ? `${TEAM_TOOLS[m.mode].title.toLowerCase()} of ${m.size.max}` : null);
 
 /** Ce que cree un pack, en clair : son matching et ses formulaires. */
 function packLine(key: EventTemplateKey): string {
   const t = EVENT_TEMPLATES[key];
   const forms = t.forms.map((f) => FORM_TEMPLATES[f].label.toLowerCase());
-  return [t.matching ? `${TEAM_TOOLS[t.matching.mode].title.toLowerCase()} of ${t.matching.size.max}` : null, ...forms].filter(Boolean).join(", ") || t.summary;
+  return [matchingLine(t.matching), ...forms].filter(Boolean).join(", ") || t.summary;
 }
 
 /** Un evenement neuf du batch de travail, construit en memoire, ecrit a la creation. */
@@ -65,6 +82,19 @@ export function NewEventEditor() {
   const { batch } = useAdmin();
   const back = { href: paths.adminEvents(), label: "Events" };
 
+  if (calendarIdOf(batch)) {
+    return (
+      <>
+        <PageHeader back={back} title="New event" subtitle={`In ${batch.name}.`} />
+        <Section title="From Google Calendar">
+          <Text size="sm">
+            {batch.name}&apos;s events come from its Google Calendar: create the event there, it shows up in Events within 5 minutes. Then
+            open it here to pick a template (matching and forms).
+          </Text>
+        </Section>
+      </>
+    );
+  }
   if (templateKey === undefined) {
     return (
       <>
@@ -186,6 +216,8 @@ function Hub({ event }: { event: WithId<PioneersEvent> }) {
   const label = eventLabel(event);
   const toClose = formsClosedByArchive(forms);
   const toReopen = formsReopenedByRestore(event, forms);
+  // Venu de l'agenda : l'archiver, c'est le masquer.
+  const archiveWord = archiveWords(event);
 
   const settings = () => ({ ...settingsOf(draft), status });
   const save = () => {
@@ -195,13 +227,13 @@ function Hub({ event }: { event: WithId<PioneersEvent> }) {
     // Un nouvel horaire : la fenetre dit ce qu'il deplace, s'il deplace quelque chose.
     const plan = isMoved ? planEventMove({ event, next, events, forms: batchForms, moveLinked: true, nowISO: new Date().toISOString() }) : null;
     if (plan && (plan.moves.length > 0 || plan.kept.length > 0 || plan.linked)) setMove(next);
-    else void run(() => updateEvent(event.id, settings()), "Event saved");
+    else void run(() => updateEvent(event, settings()), "Event saved");
   };
   /** `null` : l'evenement seul, les formulaires gardent leurs dates. */
   const saveMove = (plan: EventMove | null) => {
     setMove(null);
     const n = plan?.moves.length ?? 0;
-    void run(() => (plan ? saveEventMove(event.id, settings(), plan) : updateEvent(event.id, settings())), n ? `Event saved, ${formsCount(n)} moved` : "Event saved");
+    void run(() => (plan ? saveEventMove(event, settings(), plan) : updateEvent(event, settings())), n ? `Event saved, ${formsCount(n)} moved` : "Event saved");
   };
   const archive = async () => {
     setConfirmArchive(false);
@@ -213,13 +245,13 @@ function Hub({ event }: { event: WithId<PioneersEvent> }) {
       <PageHeader
         back={{ href: paths.adminEvents(), label: "Events" }}
         title={event.name}
-        subtitle={[label, formatDateTime(event.startDateISOString), isArchived ? "Archived" : null].filter(Boolean).join(" · ")}
+        subtitle={[label, formatDateTime(event.startDateISOString), isArchived ? archiveWord.state : null].filter(Boolean).join(" · ")}
       />
 
       {isArchived ? (
         <Section
-          title="Archived"
-          hint={`Hidden from founders, the calendar and the staff tools. Its teams, results and scores are kept.${
+          title={archiveWord.state}
+          hint={`Hidden from founders, the calendar and the staff tools.${archiveWord.note ? ` ${archiveWord.note}` : ""} Its teams, results and scores are kept.${
             toReopen.length ? ` Restoring it opens again the forms the archive closed: ${titles(toReopen)}.` : ""
           }`}
         >
@@ -230,7 +262,7 @@ function Hub({ event }: { event: WithId<PioneersEvent> }) {
       ) : (
         <>
           <Box mt="md">
-            <EventSettingsFields draft={draft} onChange={setDraft} canChangeBatch={false}>
+            <EventSettingsFields draft={draft} onChange={setDraft} canChangeBatch={false} calendarSource={event.calendarSource}>
               <Select
                 label="Status"
                 allowDeselect={false}
@@ -254,13 +286,18 @@ function Hub({ event }: { event: WithId<PioneersEvent> }) {
                 <AttendanceLinkRow eventId={event.id} />
               </RowList>
             </HelpBlock>
+            <TemplateField />
             <MatchingField />
             <EventFormsField />
           </Stack>
           <EventResultsAdmin />
           <Section title="Archive">
             <RowList>
-              <ButtonRow onClick={() => setConfirmArchive(true)} title="Archive this event" subtitle="Hides it from founders, the calendar and the staff tools" />
+              <ButtonRow
+                onClick={() => setConfirmArchive(true)}
+                title={archiveWord.action}
+                subtitle={`Hides it from founders, the calendar and the staff tools.${archiveWord.note ? ` ${archiveWord.note}` : ""}`}
+              />
             </RowList>
           </Section>
           <ActionBar label={isDirty ? "Save" : "No changes"} loading={isBusy} disabled={!isDirty || problems.length > 0} problem={isDirty ? problems[0] : null} onClick={save} />
@@ -385,6 +422,65 @@ function MatchingField() {
         )}
       </RowList>
       <MatchingDialog opened={isOpen} onClose={() => setOpen(false)} />
+    </HelpBlock>
+  );
+}
+
+/**
+ * Le template de l'evenement : un evenement venu de l'agenda arrive sans. En
+ * appliquer un donne son etiquette, son matching (s'il n'en a pas) et les
+ * formulaires du pack qu'il n'a pas encore (templatePlan, lib/eventsAdmin.ts).
+ */
+const TEMPLATE_OPTIONS = EVENT_KINDS.map((kind) => ({
+  group: EVENT_KIND_LABEL[kind],
+  items: templatesOfKind(kind).map((k) => ({ value: k, label: EVENT_TEMPLATES[k].label })),
+}));
+
+function TemplateField() {
+  const { event, forms, teams } = useAdminEvent();
+  const { isBusy, run } = useAction();
+  const [chosen, setChosen] = useState<EventTemplateKey | null>(null);
+  const current = eventTemplateOf(event.templateKey);
+  const hasTeams = teams.length > 0;
+  const plan = useMemo(() => (chosen ? templatePlan(event, chosen, forms, hasTeams) : null), [chosen, event, forms, hasTeams]);
+
+  const apply = async () => {
+    if (!chosen || !plan) return;
+    const applied = await run(() => applyEventTemplate(event.id, plan).then(() => true), `${EVENT_TEMPLATES[chosen].label} applied`);
+    if (applied) setChosen(null);
+  };
+
+  return (
+    <HelpBlock label="Template" help="A pack: the label, a matching and the forms. Applying one adds what the event does not have yet.">
+      <Select
+        placeholder="Pick a template"
+        data={TEMPLATE_OPTIONS}
+        value={chosen ?? (current ? event.templateKey : null)}
+        onChange={(v) => setChosen(v && v !== event.templateKey ? (v as EventTemplateKey) : null)}
+        searchable
+        comboboxProps={{ withinPortal: true }}
+      />
+      {chosen && plan && (
+        <Stack gap={6} mt="xs">
+          <Text size="sm" c="dimmed">
+            {[
+              `Label: ${EVENT_KIND_LABEL[EVENT_TEMPLATES[chosen].kind].toLowerCase()}`,
+              matchingLine(plan.patch.matching),
+              plan.forms.length ? `adds ${joinList(plan.forms.map((p) => p.form.title))}` : "no new form",
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </Text>
+          <Group gap="xs">
+            <Button size="sm" loading={isBusy} onClick={() => void apply()}>
+              Apply
+            </Button>
+            <Button size="sm" variant="subtle" color="gray" onClick={() => setChosen(null)}>
+              Cancel
+            </Button>
+          </Group>
+        </Stack>
+      )}
     </HelpBlock>
   );
 }

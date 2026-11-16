@@ -196,7 +196,23 @@ export type PioneersEvent = BatchScoped &
      * `rankingMetricKey`. Absent : les notes du jury, ou la metrique choisie.
      */
     scoring?: EventScoring | null;
+    /**
+     * L'evenement Google Calendar qu'il reflete (decision du 16/11) : son nom,
+     * ses dates, son lieu et sa description viennent de l'agenda et ne se
+     * modifient plus dans le Hub (`CALENDAR_FIELDS`, shared/calendarSync.ts).
+     * Absent ou `null` : cree dans le Hub.
+     */
+    calendarSource?: CalendarSource | null;
   };
+
+export type CalendarSource = {
+  provider: "google";
+  calendarId: string;
+  /** L'id de l'evenement Google (une occurrence d'un evenement recurrent a le sien). */
+  eventId: string;
+  /** Sa page dans Google Calendar. */
+  htmlLink: string | null;
+};
 
 /**
  * Un element du bareme :

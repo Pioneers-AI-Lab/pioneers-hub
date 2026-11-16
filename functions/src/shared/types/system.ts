@@ -191,3 +191,39 @@ export type OAuthToken = {
   createdDateISOString: DateISOString;
   expiresDateISOString: DateISOString;
 };
+
+// ----------------------------
+// calendarSyncs/{batchId}  (staff en lecture, serveur en ecriture)
+// ----------------------------
+// La synchro de l'agenda Google d'un batch (shared/calendarSync.ts) : le jeton
+// des changements suivants, et le compte rendu de la derniere synchro.
+
+export type CalendarSyncCounts = { created: number; updated: number; linked: number; archived: number; formsMoved: number };
+
+export type CalendarSync = {
+  batchId: string;
+  /** L'agenda du jeton : un autre agenda repart d'une synchro complete. */
+  calendarId: string;
+  /** Jeton Google des changements suivants (`nextSyncToken`). */
+  syncToken: string | null;
+  lastSyncDateISOString: DateISOString;
+  /** La derniere synchro reussie. */
+  lastSuccessDateISOString: DateISOString | null;
+  /** Le message de la derniere erreur, `null` si la derniere synchro a reussi. */
+  lastError: string | null;
+  /** Ce que la derniere synchro reussie a ecrit. */
+  counts: CalendarSyncCounts;
+};
+
+/** Ce que rend une synchro (ou une synchro a blanc) : Admin > Batch settings, `syncBatchCalendar`. */
+export type CalendarSyncResult = {
+  /** L'adresse avec laquelle partager l'agenda. */
+  serviceAccountEmail: string;
+  /** Evenements Google de la periode du batch. */
+  found: number;
+  counts: CalendarSyncCounts;
+  /** Les noms de ce qui est (ou serait) cree, relie et masque. */
+  created: string[];
+  linked: string[];
+  archived: string[];
+};

@@ -407,9 +407,29 @@ service cloud.firestore {
 
     // ---- Evenements --------------------------------------------------------
 
+    // Agenda Google (SPECS §2, 16/11) : un batch relie cree ses evenements dans
+    // l'agenda, et l'agenda fait foi pour le nom, les dates, le lieu et la
+    // description d'un evenement qui en vient (shared/calendarSync.ts,
+    // CALENDAR_FIELDS). Seule la synchro (SDK admin) les ecrit.
+    function batchHasCalendar(batchId) {
+      return get(/databases/$(database)/documents/batches/$(batchId)).data.settings.get('googleCalendarId', null) != null;
+    }
+    // Le client ne pose ni ne retire jamais le lien ; il ne touche pas aux champs
+    // d'agenda d'un evenement relie (meme liste que CALENDAR_FIELDS : check-rules les essaie tous).
+    function touchesCalendarFields() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasAny(['calendarSource'])
+        || (resource.data.get('calendarSource', null) != null
+          && changed.hasAny(['name', 'topic', 'startDateISOString', 'endDateISOString', 'location']));
+    }
+
     match /events/{eventId} {
       allow read: if true;
-      allow write: if isStaff();
+      allow create: if isStaff()
+        && request.resource.data.get('calendarSource', null) == null
+        && !batchHasCalendar(request.resource.data.batchId);
+      allow update: if isStaff() && !touchesCalendarFields();
+      allow delete: if isStaff();
 
       // Une equipe n'est publique qu'une fois publiee (une requete publique doit
       // filtrer `publishedDateISOString != null`).
@@ -626,6 +646,12 @@ service cloud.firestore {
     }
 
     // ---- Systeme -----------------------------------------------------------
+
+    // Synchro de l'agenda Google d'un batch (jeton, derniere synchro) : serveur seulement.
+    match /calendarSyncs/{batchId} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
 
     match /auditLogs/{logId} {
       allow read: if isStaff();

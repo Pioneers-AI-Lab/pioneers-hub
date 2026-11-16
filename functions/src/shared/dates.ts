@@ -22,3 +22,12 @@ export function parisMonday(iso: string): string {
   d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
   return d.toISOString().slice(0, 10);
 }
+
+const PARIS_HOUR = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", hour: "2-digit", hourCycle: "h23" });
+
+/** Minuit a Paris, en ISO, d'un jour `YYYY-MM-DD` (evenement « toute la journee » de Google Calendar). */
+export function parisMidnight(day: string): string {
+  const utc = Date.parse(`${day}T00:00:00Z`);
+  // A 00:00 UTC, Paris affiche 01:00 (hiver) ou 02:00 (ete) : c'est le decalage.
+  return new Date(utc - Number(PARIS_HOUR.format(new Date(utc))) * 3_600_000).toISOString();
+}

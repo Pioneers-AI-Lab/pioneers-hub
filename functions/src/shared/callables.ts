@@ -7,6 +7,7 @@
 // ajouter une ligne ici, puis l'implementer dans functions/src.
 
 import type {
+  CalendarSyncResult,
   FieldWriteStatus,
   FormAnswer,
   FormFieldType,
@@ -254,6 +255,16 @@ export type Callables = {
   setEventScoring: {
     req: { eventId: string; scoring: { items: ScoringItemInput[] } };
     res: { ok: true };
+  };
+  /**
+   * Staff : synchronise le batch avec son agenda Google (SPECS §2, decision du
+   * 16/11), comme toutes les 5 minutes. `dryRun` : ce qui serait cree, relie et
+   * archive, sans rien ecrire ; `calendarId` (a blanc seulement) : essayer un
+   * agenda avant de l'enregistrer. Journalise.
+   */
+  syncBatchCalendar: {
+    req: { batchId: string; dryRun?: boolean; calendarId?: string | null };
+    res: CalendarSyncResult;
   };
   /** Staff : recalcule les scores du batch (SPECS §5.5), comme chaque nuit. */
   recomputeBatchScores: {

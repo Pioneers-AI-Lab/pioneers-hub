@@ -1,15 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Box, Group, SegmentedControl, Text } from "@mantine/core";
+import { Box, Button, Group, SegmentedControl, Text } from "@mantine/core";
+import { calendarIdOf } from "@shared/calendarSync";
 import { eventPhaseOf, type EventPhase } from "@shared/events";
 import type { PioneersEvent, WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
+import { useAction } from "@/hooks/useAction";
+import { call } from "@/lib/firebase";
 import { formatDateTime } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { BatchPicker } from "@/components/admin/BatchPicker";
 import { ActionBar } from "@/components/admin/ActionBar";
-import { EVENT_PHASE_STYLE, EVENT_STATUS_LABEL, eventLabel } from "@/components/event/eventLabels";
+import { CalendarSyncStatus } from "@/components/admin/CalendarSyncStatus";
+import { EVENT_PHASE_STYLE, EVENT_STATUS_LABEL, archiveWords, eventLabel } from "@/components/event/eventLabels";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LinkRow, RowList } from "@/components/ui/Rows";
 import { Empty, SectionTitle } from "@/components/ui/Section";
@@ -24,6 +28,8 @@ import { Empty, SectionTitle } from "@/components/ui/Section";
 // « + Create » ouvre la page d'un evenement neuf (EventEditor), en brouillon
 // par defaut : invisible des fondateurs et du calendrier tant qu'il n'est pas
 // « Scheduled ».
+// Batch relie a un agenda Google (SPECS §2, 16/11) : pas de « + Create » (on cree
+// dans l'agenda), mais « Sync now » et l'heure de la derniere synchro.
 
 type Filter = "upcoming" | "all";
 
@@ -65,13 +71,26 @@ export default function AdminEventsPage() {
           </RowList>
         )}
       </div>
-      <ActionBar label="+ Create" href={paths.adminEventNew()} />
+      {calendarIdOf(batch) ? <CalendarSyncBar batchId={batch.id} /> : <ActionBar label="+ Create" href={paths.adminEventNew()} />}
     </div>
   );
 }
 
+/** Les evenements viennent de l'agenda : la derniere synchro, et la relancer tout de suite. */
+function CalendarSyncBar({ batchId }: { batchId: string }) {
+  const { isBusy, run } = useAction();
+  return (
+    <Box className="savebar">
+      <CalendarSyncStatus batchId={batchId} mb={6} />
+      <Button size="md" fullWidth loading={isBusy} onClick={() => void run(() => call("syncBatchCalendar")({ batchId }), "Events synced")}>
+        Sync with Google Calendar now
+      </Button>
+    </Box>
+  );
+}
+
 function statusLabel(e: PioneersEvent, phase: EventPhase): string {
-  if (e.archivedDateISOString) return "Archived";
+  if (e.archivedDateISOString) return archiveWords(e).state;
   if (phase === "today" && e.status !== "live") return "Today";
   return EVENT_STATUS_LABEL[e.status];
 }

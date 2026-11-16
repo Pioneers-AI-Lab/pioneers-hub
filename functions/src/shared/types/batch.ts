@@ -43,6 +43,13 @@ export type BatchSettings = {
    * ancien outil (Spring 2026) : le calcul n'y touche jamais.
    */
   scoresSource?: "hub" | "imported";
+  /**
+   * L'agenda Google du batch (decision du 16/11, SPECS §2) : son id
+   * (`…@group.calendar.google.com`). Ses evenements de la periode du batch
+   * deviennent les evenements du Hub (shared/calendarSync.ts). Plusieurs batchs
+   * peuvent partager un agenda. Absent ou `null` : les evenements se creent dans le Hub.
+   */
+  googleCalendarId?: string | null;
 };
 
 export type Batch = Timestamps &

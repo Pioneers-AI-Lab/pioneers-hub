@@ -22,6 +22,10 @@
 // `formSettings` d'un evenement du fichier : par modele de formulaire, `opens` /
 // `deadline` (heure de Paris, le jour de l'evenement) et `draft`.
 //
+// Batch relie a un agenda Google (SPECS §2, 16/11) : l'agenda fait foi. Un evenement
+// qui en vient garde ses CALENDAR_FIELDS (nom, description, dates, lieu) ; un
+// evenement du fichier absent de la base n'est pas cree (il se cree dans l'agenda).
+//
 // Lit le code partage compile : `npm --prefix functions run build` apres un changement de functions/src/shared.
 
 import { createRequire } from "node:module";
@@ -31,6 +35,7 @@ import { formOptions, parisLabel, readEventsFile, toEvent } from "./lib/eventsFi
 
 const require = createRequire(import.meta.url);
 const { eventFormDocs, eventFormsPlan } = require("../functions/lib/shared/eventForms.js");
+const { CALENDAR_FIELDS, calendarIdOf } = require("../functions/lib/shared/calendarSync.js");
 
 const PROJECT_ID = "pioneers-3627c";
 const [week, ...flags] = process.argv.slice(2);
@@ -78,6 +83,10 @@ else initializeApp({ projectId: "demo-pioneers-hub" });
 const db = getFirestore();
 const now = new Date().toISOString();
 
+const batchDoc = (await db.doc(`batches/${data.batchId}`).get()).data();
+const isCalendarBatch = batchDoc ? calendarIdOf(batchDoc) !== null : false;
+if (isCalendarBatch) console.log(`Batch ${data.batchId} relie a Google Calendar : nom, description, dates et lieu viennent de l'agenda.`);
+
 const ops = []; // { kind: "set" | "update", path, data }
 const counts = { created: 0, updated: 0, unchanged: 0, archived: 0, formsCreated: 0, formsRecreated: 0, formsKept: 0, formsArchived: 0 };
 
@@ -94,6 +103,11 @@ for (const [n, e] of selected.entries()) {
   const when = `${parisLabel(ev.startDateISOString)}-${parisLabel(ev.endDateISOString).slice(11)}`;
   // Le matching qui vaut pour ses formulaires : celui du planning, sauf si des equipes sont deja tirees.
   let effective = ev;
+  if (!snap.exists && isCalendarBatch) {
+    counts.unchanged++;
+    console.log(`ignore   ${e.key.padEnd(40)} ${when}  pas dans la base : a creer dans Google Calendar`);
+    continue;
+  }
   if (!snap.exists) {
     ops.push({ kind: "set", path: snap.ref.path, data: ev });
     counts.created++;
@@ -101,7 +115,10 @@ for (const [n, e] of selected.entries()) {
   } else {
     const current = snap.data();
     const patch = {};
-    for (const f of AGENDA_FIELDS) if (!same(current[f], ev[f])) patch[f] = ev[f];
+    const locked = new Set(current.calendarSource ? CALENDAR_FIELDS : []);
+    // Venu de l'agenda : ses formulaires se reglent sur ses dates a lui, pas sur celles du fichier.
+    if (locked.size) effective = { ...ev, ...Object.fromEntries(CALENDAR_FIELDS.map((f) => [f, current[f]])) };
+    for (const f of AGENDA_FIELDS) if (!locked.has(f) && !same(current[f], ev[f])) patch[f] = ev[f];
     // Le lien : seulement si le fichier le donne (sinon celui saisi par le staff reste).
     if ("resourceUrl" in e && !same(current.resourceUrl, ev.resourceUrl)) patch.resourceUrl = ev.resourceUrl;
     if (current.status === "draft" && ev.status === "scheduled") patch.status = "scheduled";
@@ -110,7 +127,7 @@ for (const [n, e] of selected.entries()) {
       const teams = await db.collection(`events/${e.key}/teams`).limit(1).get();
       if (teams.empty) patch.matching = ev.matching;
       else {
-        effective = { ...ev, matching: current.matching };
+        effective = { ...effective, matching: current.matching };
         console.log(`  ! ${e.key} a deja des equipes : matching garde (${JSON.stringify(current.matching)})`);
       }
     }

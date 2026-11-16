@@ -21,6 +21,7 @@ import type {
   BatchTask,
   BatchMembership,
   BatchStats,
+  CalendarSync,
   Checkin,
   Evaluation,
   JuryLink,
@@ -140,6 +141,8 @@ export const refs = {
   events: () => colRef<PioneersEvent>(COL.events),
   event: (eventId: string) => docRef<PioneersEvent>(COL.events, eventId),
   batchStats: (batchId: string) => docRef<BatchStats>(COL.batchStats, batchId),
+  /** Synchro de l'agenda Google du batch (staff). */
+  calendarSync: (batchId: string) => docRef<CalendarSync>(docPaths.calendarSync(batchId)),
   scores: () => colRef<Score>(COL.scores),
   scoreSignals: (targetType: "founder" | "startup", targetId: string) =>
     docRef<ScoreSignals>(COL.scoreSignals, docIds.score(targetType, targetId)),

@@ -1,4 +1,4 @@
-import { getFirestore, type Transaction } from "firebase-admin/firestore";
+import { getFirestore, type Transaction, type WriteBatch } from "firebase-admin/firestore";
 import { COL } from "../shared/collections";
 import type { AuditLog, AuditSource } from "../shared/types";
 import type { Caller } from "../api/caller";
@@ -22,7 +22,8 @@ const auditLog = (actor: AuditActor, entry: AuditEntry): AuditLog => ({
   dateISOString: new Date().toISOString(),
 });
 
-export function writeAudit(tx: Transaction, actor: AuditActor, entry: AuditEntry): void {
+/** `tx` : la transaction de l'ecriture, ou son lot (synchro de l'agenda). */
+export function writeAudit(tx: Transaction | WriteBatch, actor: AuditActor, entry: AuditEntry): void {
   tx.create(getFirestore().collection(COL.auditLogs).doc(), auditLog(actor, entry));
 }
 

@@ -6,6 +6,7 @@
 // Chaque cas dit ce qu'un role DOIT pouvoir lire et ce qu'il NE DOIT PAS. Code
 // de sortie 1 au premier ecart.
 
+import { createRequire } from "node:module";
 import { initializeApp as initAdmin } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
@@ -1121,6 +1122,116 @@ console.log("tasks (To do checklist)");
   );
   await expectOk("staff lists every tick of the batch", () => count(completionsOf(staff.db)));
   await expectDenied("staff ticks a task for a founder", () => tick(staff.db, "demo-task-shortlist", "ada-example"));
+  await deleteApp(staff.app);
+}
+
+// ---- Agenda Google (SPECS §2, 16/11) : synchro, verrou, masquage ----------------
+// Un batch a part (le seed n'est pas touche). Aux emulateurs, l'agenda est le
+// document `calendarFakes/{id}` (services/calendarSync.ts).
+console.log("google calendar sync");
+{
+  const admin = getAdminFirestore();
+  const CAL = "cal-check@group.calendar.google.com";
+  const B = "cal-check";
+  const stamp = "2026-11-16T08:00:00.000Z";
+  await admin.doc(`batches/${B}`).set({
+    programId: "accelerator", name: "cal", startDayString: "2026-11-16", endDayString: "2026-11-27", status: "active", milestones: [],
+    settings: { leaderboardVisibility: "visible", slackChannelId: null, googleCalendarId: CAL },
+    archivedDateISOString: null, createdDateISOString: stamp, updatedDateISOString: stamp,
+  });
+  // Deja dans le Hub avant la connexion (import du planning) : il sera relie, pas recree.
+  await admin.doc("events/cal-existing").set({
+    programId: "accelerator", batchId: B, kind: "matching", name: "Lunch roulette", templateKey: "lunch_roulette", stage: null, topic: null,
+    startDateISOString: "2026-11-18T11:30:00.000Z", endDateISOString: "2026-11-18T12:30:00.000Z", location: null, programWeek: null,
+    isMilestone: false, audience: "batch", guests: [], guestFounderIds: [], mentorIds: [], startupIds: [], signUpUrl: null, resourceUrl: null,
+    status: "scheduled", matching: null, leaderboardRevealDateISOString: null, rankingMetricKey: null, archivedDateISOString: null,
+    createdDateISOString: stamp, updatedDateISOString: stamp,
+  });
+  await admin.doc("forms/cal-existing-feedback").set({
+    programId: "accelerator", batchId: B, eventId: "cal-existing", kind: "session_feedback", title: "Lunch feedback", status: "open", questions: [],
+    archivedDateISOString: null, opensDateISOString: "2026-11-18T11:30:00.000Z", deadlineDateISOString: null,
+    createdDateISOString: stamp, updatedDateISOString: stamp,
+  });
+  const g = (id, summary, start, end, extra = {}) => ({ id, summary, start: { dateTime: start }, end: { dateTime: end }, htmlLink: `https://calendar.google.com/event?eid=${id}`, ...extra });
+  const fake = admin.doc(`calendarFakes/${encodeURIComponent(CAL)}`);
+  await fake.set({
+    events: [
+      g("g1", "Lunch roulette", "2026-11-18T12:30:00+01:00", "2026-11-18T13:30:00+01:00"),
+      g("g2", "Masterclass pricing", "2026-11-19T10:00:00+01:00", "2026-11-19T11:30:00+01:00", { description: '<p>Bring your <a href="https://x.y">slides</a></p>', location: " Station F " }),
+      g("g3", "After the batch", "2026-12-10T10:00:00+01:00", "2026-12-10T11:00:00+01:00"),
+      { id: "g4", status: "cancelled" },
+      { id: "g5", summary: "Offsite", start: { date: "2026-11-20" }, end: { date: "2026-11-21" } },
+    ],
+  });
+
+  const staff = await clientAs("staff-1");
+  const sync = (data) => httpsCallable(staff.functions, "syncBatchCalendar")({ batchId: B, ...data }).then((r) => r.data);
+  const ada = await clientAs("ada-1");
+  await expectCallableError("a founder cannot sync a calendar", "permission-denied", () => httpsCallable(ada.functions, "syncBatchCalendar")({ batchId: B }));
+  await deleteApp(ada.app);
+  await expectCallableError("an unshared calendar is refused, naming the account to share with", "not-found", () => sync({ dryRun: true, calendarId: "nope@group.calendar.google.com" }));
+
+  const must = (cond, what) => {
+    if (!cond) throw new Error(what);
+  };
+  await expectOk("dry run: 2 to create, 1 to link, nothing written", async () => {
+    const r = await sync({ dryRun: true });
+    must(r.counts.created === 2 && r.counts.linked === 1 && r.found === 3, JSON.stringify(r.counts));
+    must(!(await admin.doc(`events/${B}_gcal_g2`).get()).exists, "dry run wrote an event");
+    return `${r.found} found`;
+  });
+  await expectOk("sync creates the new events and links the existing one", async () => {
+    const r = await sync({});
+    must(r.counts.created === 2 && r.counts.linked === 1, JSON.stringify(r.counts));
+    const created = (await admin.doc(`events/${B}_gcal_g2`).get()).data();
+    must(created?.topic === "Bring your slides (https://x.y)" && created.location === "Station F" && created.status === "scheduled", JSON.stringify(created));
+    const allDay = (await admin.doc(`events/${B}_gcal_g5`).get()).data();
+    must(allDay?.startDateISOString === "2026-11-19T23:00:00.000Z", `all-day start ${allDay?.startDateISOString}`);
+    const linked = (await admin.doc("events/cal-existing").get()).data();
+    must(linked?.calendarSource?.eventId === "g1" && linked.templateKey === "lunch_roulette", "not linked");
+    return "2 created, 1 linked";
+  });
+  await expectOk("a second sync writes nothing", async () => {
+    const r = await sync({});
+    must(Object.values(r.counts).every((n) => n === 0), JSON.stringify(r.counts));
+  });
+
+  const gEvent = doc(staff.db, `events/${B}_gcal_g2`);
+  // Chaque champ d'agenda (CALENDAR_FIELDS) est refuse : la liste des regles ne peut pas diverger.
+  const { CALENDAR_FIELDS } = createRequire(import.meta.url)("../functions/lib/shared/calendarSync.js");
+  for (const field of CALENDAR_FIELDS) {
+    await expectDenied(`staff changes \`${field}\` of an event from Google Calendar`, () => updateDoc(gEvent, { [field]: "2026-11-19T07:00:00.000Z" }));
+  }
+  await expectDenied("staff unlinks an event from Google Calendar", () => updateDoc(gEvent, { calendarSource: null }));
+  await expectOk("staff sets the guests and the milestone of an event from Google Calendar", () => updateDoc(gEvent, { isMilestone: true, audience: "guests", updatedDateISOString: stamp }));
+  await expectOk("staff applies a template to an event from Google Calendar", () => updateDoc(gEvent, { templateKey: "masterclass", kind: "session", updatedDateISOString: stamp }));
+  await expectDenied("staff creates an event in a batch linked to Google Calendar", () =>
+    setDoc(doc(staff.db, "events/cal-made-in-hub"), { batchId: B, programId: "accelerator", name: "Made here", archivedDateISOString: null }),
+  );
+  await expectDenied("staff marks a Hub event as coming from Google Calendar", () =>
+    updateDoc(doc(staff.db, "events/demo-hackathon-1"), { calendarSource: { provider: "google", calendarId: CAL, eventId: "x", htmlLink: null } }),
+  );
+  await expectOk("staff hides an event from Google Calendar", () => updateDoc(doc(staff.db, `events/${B}_gcal_g5`), { archivedDateISOString: stamp, updatedDateISOString: stamp }));
+  await expectOk("staff reads the sync status", async () => (await getDoc(doc(staff.db, `calendarSyncs/${B}`))).data()?.counts.created);
+
+  // Dans Google : le lunch est decale d'une heure, la masterclass supprimee.
+  await fake.set({
+    events: [
+      g("g1", "Lunch roulette", "2026-11-18T13:30:00+01:00", "2026-11-18T14:30:00+01:00"),
+      { id: "g5", summary: "Offsite", start: { date: "2026-11-20" }, end: { date: "2026-11-21" } },
+    ],
+  });
+  await expectOk("a moved event moves its forms; a deleted one is hidden; a hidden one stays hidden", async () => {
+    const r = await sync({});
+    must(r.counts.updated === 1 && r.counts.archived === 1 && r.counts.formsMoved === 1, JSON.stringify(r.counts));
+    const lunch = (await admin.doc("events/cal-existing").get()).data();
+    must(lunch?.startDateISOString === "2026-11-18T12:30:00.000Z", `lunch ${lunch?.startDateISOString}`);
+    const form = (await admin.doc("forms/cal-existing-feedback").get()).data();
+    must(form?.opensDateISOString === "2026-11-18T12:30:00.000Z", `form opens ${form?.opensDateISOString}`);
+    must((await admin.doc(`events/${B}_gcal_g2`).get()).data()?.archivedDateISOString, "deleted event not hidden");
+    must((await admin.doc(`events/${B}_gcal_g5`).get()).data()?.archivedDateISOString === stamp, "hidden event came back");
+    return "1 moved, 1 hidden";
+  });
   await deleteApp(staff.app);
 }
 

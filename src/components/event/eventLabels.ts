@@ -1,6 +1,13 @@
 import dayjs from "dayjs";
+import { isFromCalendar } from "@shared/calendarSync";
 import { defaultStartTime, eventLabelOf, type EventPhase } from "@shared/events";
 import { ATTENDANCE_STATUS_LABELS, type AttendanceStatus, type EventKind, type EventStatus, type PioneersEvent } from "@shared/types";
+
+/** Archiver un evenement venu de l'agenda Google, c'est le masquer : la synchro le laisse masque (SPECS §2, 16/11). */
+export const archiveWords = (event: Pick<PioneersEvent, "calendarSource">) =>
+  isFromCalendar(event)
+    ? { state: "Hidden", action: "Hide this event", note: "It stays in Google Calendar, and the sync leaves it hidden." }
+    : { state: "Archived", action: "Archive this event", note: null };
 
 /** L'etiquette d'un evenement (son type n'est qu'une etiquette, decision du 13/11). */
 export const EVENT_KIND_LABEL: Record<EventKind, string> = {

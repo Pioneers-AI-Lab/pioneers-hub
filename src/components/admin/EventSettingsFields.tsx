@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Button, Collapse, Group, MultiSelect, Select, Stack, Switch, TextInput, Textarea } from "@mantine/core";
+import { Anchor, Button, Collapse, Group, MultiSelect, Select, Stack, Switch, Text, TextInput, Textarea } from "@mantine/core";
 import { endAfter, guestCopiesOf } from "@shared/events";
 import { normalizeHttpUrl } from "@shared/text";
-import type { EventAudience, EventGuest, PioneersEvent } from "@shared/types";
+import type { CalendarSource, EventAudience, EventGuest, PioneersEvent } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { fromLocalInput, toLocalInput } from "@/lib/format";
 import type { EventSettings } from "@/lib/eventsAdmin";
@@ -18,6 +18,8 @@ import { useHelp } from "@/components/ui/useHelp";
 // d'inscription, ressource. Les memes champs a la creation et sur la page d'un
 // evenement. Ni semaine du programme, ni taille d'equipe (dans le matching), ni
 // metriques (dans le Debrief). « More options » est replie par defaut.
+// Un evenement venu de l'agenda Google (`calendarSource`) : nom, dates, lieu et
+// description se changent dans l'agenda, ils sont grises ici (SPECS §2, 16/11).
 
 export type SettingsDraft = {
   name: string;
@@ -104,12 +106,15 @@ export function EventSettingsFields({
   draft,
   onChange,
   canChangeBatch,
+  calendarSource,
   children,
 }: {
   draft: SettingsDraft;
   onChange: (next: SettingsDraft) => void;
   /** A la creation : le batch se choisit parmi les invites (il bascule le batch de travail). */
   canChangeBatch: boolean;
+  /** L'evenement Google qu'il reflete : ses champs d'agenda sont grises. */
+  calendarSource?: CalendarSource | null;
   /** Champs de plus, avant « More options » (le statut, sur la page d'un evenement). */
   children?: ReactNode;
 }) {
@@ -118,14 +123,17 @@ export function EventSettingsFields({
   const set = <K extends keyof SettingsDraft>(key: K, value: SettingsDraft[K]) => onChange({ ...draft, [key]: value });
   const minutes = minutesBetween(draft.start, draft.end);
   const durationValue = minutes !== null && DURATIONS.includes(minutes) ? String(minutes) : CUSTOM;
+  const locked = Boolean(calendarSource);
+  const calendarHref = calendarSource?.htmlLink;
 
   return (
     <Stack gap="md" maw={560}>
-      <TextInput label="Name" labelProps={{ size: "md" }} placeholder="Add a title" size="lg" value={draft.name} onChange={(e) => set("name", e.currentTarget.value)} />
+      <TextInput label="Name" labelProps={{ size: "md" }} placeholder="Add a title" size="lg" disabled={locked} value={draft.name} onChange={(e) => set("name", e.currentTarget.value)} />
       <Group grow align="flex-end" gap="xs" wrap="wrap">
         <TextInput
           label="Starts"
           type="datetime-local"
+          disabled={locked}
           value={draft.start}
           // La duree reste : la fin suit le debut.
           onChange={(e) => {
@@ -136,14 +144,28 @@ export function EventSettingsFields({
         />
         <Select
           label="Duration"
+          disabled={locked}
           allowDeselect={false}
           value={durationValue}
           onChange={(v) => v && v !== CUSTOM && set("end", addMinutes(draft.start, Number(v)))}
           data={[...DURATIONS.map((m) => ({ value: String(m), label: durationLabel(m) })), ...(durationValue === CUSTOM ? [{ value: CUSTOM, label: minutes && minutes > 0 ? durationLabel(minutes) : "Custom" }] : [])]}
           miw={110}
         />
-        <TextInput label="Ends" type="datetime-local" value={draft.end} onChange={(e) => set("end", e.currentTarget.value)} miw={190} />
+        <TextInput label="Ends" type="datetime-local" disabled={locked} value={draft.end} onChange={(e) => set("end", e.currentTarget.value)} miw={190} />
       </Group>
+      {locked && (
+        <Text size="sm" c="dimmed">
+          From Google Calendar: change the name, times, location and description there, the Hub follows within 5 minutes.
+          {calendarHref && (
+            <>
+              {" "}
+              <Anchor href={calendarHref} target="_blank" rel="noopener noreferrer">
+                Open in Google Calendar
+              </Anchor>
+            </>
+          )}
+        </Text>
+      )}
       <GuestsField draft={draft} onChange={onChange} canChangeBatch={canChangeBatch} />
       {children}
 
@@ -153,8 +175,8 @@ export function EventSettingsFields({
         </Button>
         <Collapse expanded={moreOpen}>
           <Stack gap="md" pt="xs">
-            <TextInput label="Location" placeholder="Station F" value={draft.location} onChange={(e) => set("location", e.currentTarget.value)} />
-            <Textarea label="Description" autosize minRows={2} placeholder="What the event is about" value={draft.topic} onChange={(e) => set("topic", e.currentTarget.value)} />
+            <TextInput label="Location" placeholder="Station F" disabled={locked} value={draft.location} onChange={(e) => set("location", e.currentTarget.value)} />
+            <Textarea label="Description" autosize minRows={2} placeholder="What the event is about" disabled={locked} value={draft.topic} onChange={(e) => set("topic", e.currentTarget.value)} />
             <Switch size="md" {...milestoneHelp} checked={draft.isMilestone} onChange={(e) => set("isMilestone", e.currentTarget.checked)} />
             <TextInput label="Sign-up link" placeholder="https://" value={draft.signUpUrl} onChange={(e) => set("signUpUrl", e.currentTarget.value)} />
             <TextInput label="Resource link" placeholder="Slides, brief, recording" value={draft.resourceUrl} onChange={(e) => set("resourceUrl", e.currentTarget.value)} />
