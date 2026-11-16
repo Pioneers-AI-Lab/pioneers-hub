@@ -17,11 +17,18 @@ export function SectionTitle({ children }: { children: ReactNode }) {
 
 /**
  * Titre d'un bloc DANS une section (cadre de graphique, liste, classement) : un
- * niveau sous `SectionTitle`, meme famille, 14 px, couleur du texte.
+ * niveau sous `SectionTitle`, meme famille, 14 px, couleur du texte. `accent` : le
+ * bleu clair de `SectionTitle`, pour un sous-titre qui tient lieu de titre de section.
  */
-export function SubsectionTitle({ children }: { children: ReactNode }) {
+export function SubsectionTitle({ children, accent = false }: { children: ReactNode; accent?: boolean }) {
   return (
-    <Title order={4} fz={14} lh={1.3} style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+    <Title
+      order={4}
+      fz={14}
+      lh={1.3}
+      c={accent ? "pioneers.3" : undefined}
+      style={{ minWidth: 0, overflowWrap: "anywhere" }}
+    >
       {children}
     </Title>
   );

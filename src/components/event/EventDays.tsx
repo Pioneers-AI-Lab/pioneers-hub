@@ -25,7 +25,7 @@ function byDay(events: WithId<PioneersEvent>[]): Day[] {
 /**
  * Des evenements par jour de Paris (`Today · Mon 16 Nov`), chacun en ligne d'agenda
  * (`EventRow timeOnly` : l'heure a gauche du nom). Un `Section` par jour (Calendar) ;
- * `nested` : dans une section deja titree (« Coming up »), un `SubsectionTitle` par jour.
+ * `nested` : dans une section deja titree (« Coming up »), un `SubsectionTitle` bleu par jour.
  */
 export function EventDays({ events, nested = false }: { events: WithId<PioneersEvent>[]; nested?: boolean }) {
   const days = byDay(events);
@@ -40,7 +40,7 @@ export function EventDays({ events, nested = false }: { events: WithId<PioneersE
     <Stack gap="sm">
       {days.map(({ day, events }) => (
         <Box key={day}>
-          <SubsectionTitle>{formatDayTitle(day)}</SubsectionTitle>
+          <SubsectionTitle accent>{formatDayTitle(day)}</SubsectionTitle>
           <DayRows events={events} />
         </Box>
       ))}
