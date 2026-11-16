@@ -7,3 +7,8 @@
 
 [build.environment]
   NODE_VERSION = "24"
+  # Cle web Firebase (NEXT_PUBLIC_FIREBASE_API_KEY, .env.production) : publique par
+  # conception, elle finit dans le bundle du navigateur (la securite repose sur les
+  # regles Firestore et Storage). La « smart detection » de Netlify la prend pour un
+  # secret et fait echouer le build : liste blanche de cette seule valeur.
+  SECRETS_SCAN_SMART_DETECTION_OMIT_VALUES = "AIzaSyD4FY91FlezroIEyjYznEetPBUttWNjNog"
