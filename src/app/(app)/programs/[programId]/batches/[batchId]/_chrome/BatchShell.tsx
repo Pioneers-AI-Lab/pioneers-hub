@@ -7,6 +7,7 @@ import { Anchor, Box, Group, Text } from "@mantine/core";
 import type { BatchRole } from "@shared/access";
 import { useBatch } from "@/context/BatchContext";
 import { useProgram } from "@/context/ProgramContext";
+import { formatPeriod } from "@/lib/format";
 import { SHOW_STARTUPS_TAB } from "@/lib/features";
 import { paths } from "@/lib/paths";
 
@@ -26,6 +27,8 @@ const ROLE_LABEL: Record<BatchRole, string | null> = {
 // « Startups » est masque derriere un drapeau (lib/features.ts).
 // Les onglets dependent du role : un fondateur a « To do » et « Me ». Les outils
 // du staff sont tous dans /admin (menu du compte), pas sous un batch.
+// Pas de titre de page sous les onglets : l'onglet actif le dit deja. Le nom et
+// les dates du batch sont dans la ligne du haut, pour tous les onglets.
 export function BatchShell({ children }: { children: ReactNode }) {
   const { program } = useProgram();
   const { batch, role, viewerFounderId } = useBatch();
@@ -57,6 +60,11 @@ export function BatchShell({ children }: { children: ReactNode }) {
       <Group justify="space-between" gap="xs" mb="xs" wrap="nowrap">
         <Anchor component={Link} href={base} c="dimmed" size="sm" underline="never" truncate className="tap-link" style={{ display: "block", lineHeight: "20px" }}>
           {program.name} · <Text span c="white" inherit fw={500}>{batch.name}</Text>
+          <span className="num">
+            {" · "}
+            {formatPeriod(batch.startDayString, batch.endDayString)}
+            {batch.status === "completed" ? " · Completed" : ""}
+          </span>
         </Anchor>
         {roleLabel && (
           <Text size="xs" c="pioneers" fw={600} tt="uppercase" lts={0.6} style={{ flexShrink: 0 }}>

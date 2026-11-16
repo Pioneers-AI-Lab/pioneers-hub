@@ -18,9 +18,9 @@ import { missingRequiredFields } from "@/lib/completeness";
 import { PROFILE_CATEGORY_LABEL, score10, searchKey } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { FounderGridCard } from "@/components/founder/FounderGridCard";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { LinkRow, RowList } from "@/components/ui/Rows";
+import { searchCount } from "@/components/ui/SearchCount";
 import { Empty } from "@/components/ui/Section";
 
 type Filter = "all" | ProfileCategory;
@@ -120,7 +120,6 @@ function FoundersDirectory() {
 
   return (
     <>
-      <PageHeader title="Founders" right={<Text c="dimmed" className="num">{visible.length === founders.length ? founders.length : `${visible.length} / ${founders.length}`}</Text>} />
       {role === "public" && (
         <Text size="sm" c="dimmed" mb="md">
           Only founders who agreed to a public profile are listed.{" "}
@@ -148,6 +147,7 @@ function FoundersDirectory() {
             setQuery(e.currentTarget.value.trim());
           }}
           type="search"
+          {...searchCount(visible.length, founders.length)}
         />
         <SegmentedControl
           fullWidth

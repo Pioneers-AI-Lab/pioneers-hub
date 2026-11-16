@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Anchor, Button, Divider, Stack, Text, Title } from "@mantine/core";
+import { Anchor, Button, Divider, Stack, Text } from "@mantine/core";
 import { IconBrandSlack } from "@tabler/icons-react";
 import { slackWorkspaceUrl } from "@shared/slackLinks";
 import { STARTUP_WEIGHTING_HINT } from "@shared/types";
@@ -11,7 +11,7 @@ import { useCohort } from "@/context/CohortContext";
 import { useFounders } from "@/context/FoundersContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
-import { PROFILE_CATEGORY_LABEL, formatDay, formatPeriod, percent, score10, todayDayString } from "@/lib/format";
+import { PROFILE_CATEGORY_LABEL, formatDay, percent, score10, todayDayString } from "@/lib/format";
 import { SHOW_MILESTONES, SHOW_STARTUPS_TAB } from "@/lib/features";
 import { paths } from "@/lib/paths";
 import { LinkRow, Row, RowList } from "@/components/ui/Rows";
@@ -64,11 +64,6 @@ export default function BatchHomePage() {
 
   return (
     <Stack gap={0}>
-      <Title order={2}>{batch.name}</Title>
-      <Text size="sm" c="dimmed" className="num">
-        {formatPeriod(batch.startDayString, batch.endDayString)}
-        {batch.status === "completed" ? " · Completed" : ""}
-      </Text>
       {slackWorkspace && (
         <Button
           component="a"
@@ -78,7 +73,6 @@ export default function BatchHomePage() {
           variant="default"
           size="sm"
           radius="xl"
-          mt="sm"
           w="fit-content"
           leftSection={<IconBrandSlack size={16} stroke={1.75} />}
         >
