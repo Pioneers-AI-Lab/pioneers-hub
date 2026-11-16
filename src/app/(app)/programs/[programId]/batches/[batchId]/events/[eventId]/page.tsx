@@ -88,7 +88,7 @@ export default function EventPage() {
         </Section>
       )}
 
-      {tool && (
+      {matching && tool && (
         <Section title={mine ? `Your ${tool.groupWord} · ${mine.name}` : `${tool.groupLabel}s`}>
           {mine && leaderId && (
             <Text size="sm" mb="sm">
@@ -118,7 +118,7 @@ export default function EventPage() {
                       />
                     );
                   })}
-              <LinkRow href={paths.groups(event.id)} title={`All ${tool.groupWord}s`} subtitle={`${groups.length} ${tool.groupWord}s, the public page`} />
+              <LinkRow href={paths.groups(event.id, matching.mode)} title={`All ${tool.groupWord}s`} subtitle={`${groups.length} ${tool.groupWord}s, the public page`} />
             </RowList>
           )}
         </Section>

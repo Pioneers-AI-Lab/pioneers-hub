@@ -1,16 +1,9 @@
-import type { Metadata } from "next";
-import { APP_NAME } from "@shared/brand";
 import { PublicTeamsProvider } from "@/context/PublicTeamsContext";
+import { shareMetadata } from "@/lib/shareBanner";
 
-// Equipes publiees d'un challenge, lien partage (sans compte). Comme la lunch
-// roulette, le serveur Next ne lit aucune donnee : l'apercu du lien ne porte
-// pas le nom de l'evenement.
+// Ancien lien des equipes d'un challenge (deja partage) : meme page que `/groups/{id}`.
 
-export const metadata: Metadata = {
-  title: "Challenge teams",
-  description: "Find your team.",
-  openGraph: { title: "Challenge teams", description: "Find your team.", siteName: APP_NAME, type: "website" },
-};
+export const metadata = shareMetadata("groups", "Challenge teams", "Find your team.");
 
 export default function PublicChallengeTeamsLayout({ children }: LayoutProps<"/challenge-teams/[eventId]">) {
   return <PublicTeamsProvider>{children}</PublicTeamsProvider>;

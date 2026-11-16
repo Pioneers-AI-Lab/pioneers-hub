@@ -16,9 +16,9 @@ import { paths } from "@/lib/paths";
 // ----------------------------
 // Repartition publique des groupes d'un evenement
 // ----------------------------
-// Les groupes du matching de l'evenement (/groups/[eventId], et les anciennes
-// adresses /lunch-roulette et /challenge-teams) : tables ou equipes selon le
-// mode du matching ; un evenement sans matching est introuvable. SANS COMPTE : l'evenement est public, et les groupes le sont
+// Les groupes du matching de l'evenement (/groups/[eventId] pour des equipes,
+// /lunch-roulette/[eventId] pour des tables, ancienne adresse /challenge-teams,
+// `paths.groups`) : tables ou equipes selon le mode du matching ; un evenement sans matching est introuvable. SANS COMPTE : l'evenement est public, et les groupes le sont
 // une fois publies (la requete porte le filtre que la regle `teams` exige).
 //
 // Ce que chacun voit des membres, selon les regles des fiches fondateurs :

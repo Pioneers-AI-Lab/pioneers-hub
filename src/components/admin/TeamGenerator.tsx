@@ -110,7 +110,7 @@ function PublishedSection({ mode }: { mode: TeamToolMode }) {
   const nameOf = (id: string) => foundersById.get(id)?.name ?? id;
   const publishedOn = publishedDateOf(teams);
   // Un lien public (sans compte) a partager dans le channel du batch.
-  const publicPath = paths.groups(event.id);
+  const publicPath = paths.groups(event.id, mode);
   const missingNames = teams.some((t) => !t.memberNames || t.memberNames.length !== t.memberIds.length);
   const [isFixing, setIsFixing] = useState(false);
 

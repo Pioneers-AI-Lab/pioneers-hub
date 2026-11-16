@@ -1,4 +1,5 @@
 import { isAppPath } from "@shared/text";
+import type { MatchingMode } from "@shared/types";
 
 // ----------------------------
 // URL de l'application
@@ -44,10 +45,11 @@ export const paths = {
   event: (programId: string, batchId: string, eventId: string) => `${batchBase(programId, batchId)}/events/${eventId}`,
   /**
    * Repartition publique des groupes du matching d'un evenement (lien partage,
-   * sans compte). `/lunch-roulette/{id}` et `/challenge-teams/{id}` (liens deja
-   * partages) y menent aussi.
+   * sans compte). Tables (`matching`) : `/lunch-roulette/{id}`, equipes : `/groups/{id}` ;
+   * meme page, seule la banniere de l'apercu du lien change (lib/shareBanner.ts).
+   * `/challenge-teams/{id}` (liens deja partages) y mene aussi.
    */
-  groups: (eventId: string) => `/groups/${eventId}`,
+  groups: (eventId: string, mode: MatchingMode) => (mode === "matching" ? `/lunch-roulette/${eventId}` : `/groups/${eventId}`),
   /** Le lien partage d'un formulaire de jury : le secret suit en fragment (jamais envoye au serveur web). */
   juryForm: (formId: string, secret: string) => `/forms/${formId}#${secret}`,
   /** Formulaire public, une question par ecran (lien partage, sans compte). */

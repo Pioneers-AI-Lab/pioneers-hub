@@ -118,7 +118,9 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   formulaires (`shared/eventForms.ts#planEventMove`, regles de creation) et le Debrief accole ; l'archiver ferme ses
   formulaires ouverts (rouverts a la restauration). `/admin/challenge-teams/**` et `/admin/lunch-roulette/**` redirigent. Tous : `/programs/…/batches/…/events/{id}`
   (`EventPageContext` : infos, mon groupe, formulaires a faire / fait / ferme, leaderboard) ; `EventRow` y mene.
-  Page publique des groupes : `/groups/{id}` (`/lunch-roulette/{id}` et `/challenge-teams/{id}` montrent la meme).
+  Page publique des groupes : `paths.groups(id, mode)` donne `/lunch-roulette/{id}` pour des tables, `/groups/{id}` pour des
+  equipes (`/challenge-teams/{id}`, ancien lien, idem) : meme page, seule la banniere de l'apercu du lien change
+  (`lib/shareBanner.ts`, `public/share-banner-*.jpg` en 1200 px ; `metadataBase` dans le layout racine).
 - **Modele standard** (SPECS §2, decision du 12/11) : un evenement = une entree d'agenda + un tirage de groupes
   (`teams`) + des FORMULAIRES. Toute saisie passe par un formulaire rattache a l'evenement : le Debrief d'un
   hackathon (metriques = questions `submission.metrics.<cle>`, avis = `peerRating.*`), le jury
