@@ -7,7 +7,8 @@
 //
 // Avant, le lien Google Meet etait la ressource (`resourceUrl`). Un evenement
 // dont la ressource est une visio (Meet, Zoom, Teams) la voit DEPLACEE dans
-// `videoCallUrl` (la ressource se vide), sauf s'il a deja une visio. A lancer
+// `videoCallUrl` (la ressource se vide), sauf s'il a deja une AUTRE visio ; une
+// ressource egale a la visio (recue de l'agenda Google entre-temps) se vide. A lancer
 // avec --prod une fois le front qui affiche `videoCallUrl` en ligne (l'ancien
 // front ne montre que la ressource). Un evenement relie a l'agenda Google recoit
 // de toute facon sa visio de la synchro. Rejouable.
@@ -34,8 +35,12 @@ const db = getFirestore();
 console.log(`${PROJECT_ID} · ${batchId} · ${write ? "ECRITURE" : "a blanc"}\n`);
 
 const events = (await db.collection(COL.events).where("batchId", "==", batchId).get()).docs;
-const ops = events.filter((e) => !e.get("videoCallUrl") && VIDEO_CALL.test(e.get("resourceUrl") ?? ""));
-for (const e of ops) console.log(`${e.get("name")} (${e.id})\n  videoCallUrl : ${e.get("resourceUrl")}`);
+const ops = events.filter((e) => {
+  const resource = e.get("resourceUrl") ?? "";
+  const video = e.get("videoCallUrl") ?? null;
+  return VIDEO_CALL.test(resource) && (video === null || video === resource);
+});
+for (const e of ops) console.log(`${e.get("name")} (${e.id})\n  videoCallUrl : ${e.get("resourceUrl")}${e.get("videoCallUrl") ? " (deja la, venue de l'agenda)" : ""}`);
 
 console.log(`\n${events.length} evenement(s) lu(s) : ${ops.length} a deplacer.`);
 if (!write) {
@@ -44,6 +49,6 @@ if (!write) {
 }
 const now = new Date().toISOString();
 const batch = db.batch();
-for (const e of ops) batch.update(e.ref, { videoCallUrl: e.get("resourceUrl"), resourceUrl: null, updatedDateISOString: now });
+for (const e of ops) batch.update(e.ref, { videoCallUrl: e.get("videoCallUrl") ?? e.get("resourceUrl"), resourceUrl: null, updatedDateISOString: now });
 if (ops.length) await batch.commit();
 console.log(`Ecrit : ${ops.length} evenement(s).`);
