@@ -69,7 +69,7 @@ Donnees : batch `spring-2026` (termine) importe du dashboard spring2026.thepione
 reimport sans perte des rattachements). Batch `fall-2026` importe le 12/11 de la vue partagee
 « Pioneers Profile Book - FA26 » (32 fondateurs, ids Airtable, sans email : rattachement par /claim).
 Noms affiches des batchs : `fa26` et `sp26` (comme sur Slack) ; les ids restent `fall-2026` / `spring-2026`.
-Evenements des semaines 1 et 2 : data/events.json aligne le 16/11 sur le Google Calendar officiel « Pioneers Residency FA2026 » (mise a jour MANUELLE, aucune synchro), 38 evenements en base. Semaine 1 synchronisee le 14/11, retouchee le 16/11 avec `--only` (lieux, The Mom Test le 18/11, Benoit Miegeville deplace au 24/11) ; semaine 2 importee le 16/11 (formulaires du hackathon 5 et Picks du hackathon 4 en brouillon). Le 16/11, les 38 sont identiques au calendrier champ par champ (nom exact, description exacte, lieu, debut, fin) ; visio Google Meet dans `resourceUrl` (« Resources », champ du fichier) ; seule exception : le hackathon 5, en journee entiere dans le calendrier, va du 25/11 9:30 au 27/11 19:30. NE PAS relancer la semaine 1 en entier : elle recreerait les Submissions H1 et H2 et Founder introductions, retouchees le 15/11 (utiliser `--only`).
+Evenements des semaines 1 et 2 : data/events.json aligne le 16/11 sur le Google Calendar officiel « Pioneers Residency FA2026 » (mise a jour MANUELLE, aucune synchro), 38 evenements en base. Semaine 1 synchronisee le 14/11, retouchee le 16/11 avec `--only` (lieux, The Mom Test le 18/11, Benoit Miegeville deplace au 24/11) ; semaine 2 importee le 16/11 (formulaires du hackathon 5 et Picks du hackathon 4 en brouillon). Le 16/11, les 38 sont identiques au calendrier champ par champ (nom exact, description exacte, lieu, debut, fin) ; visio Google Meet dans `videoCallUrl` (champ du fichier ; avant le 16/11 dans `resourceUrl`, deplacee par migrate-video-call-links.mjs) ; seule exception : le hackathon 5, en journee entiere dans le calendrier, va du 25/11 9:30 au 27/11 19:30. NE PAS relancer la semaine 1 en entier : elle recreerait les Submissions H1 et H2 et Founder introductions, retouchees le 15/11 (utiliser `--only`).
 Reimport : un profil reclame garde son rattachement, ses valeurs non vides et sa photo (meme retiree) ; l'import ne touche que les photos des profils non reclames.
 Photo depuis « Mon profil » (fondateur ou staff) : `founders/{id}/photo-*.jpg` (storage.rules), vignette + `coverPhotoUrl` en un lot, croix pour la retirer.
 Photos et logos : vignettes JPEG 128 px en `data:` URL dans `photoUrl` / `logoUrl` (avatars).
@@ -106,14 +106,17 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   et un `hold` (calcule, pas ecrit : validation du staff). /v1 et le MCP restent en « tout ou rien ».
   Une URL sans protocole est completee (`shared/text.ts#normalizeHttpUrl`).
 - **Agenda Google = source des evenements** (SPECS §2, 16/11) : un batch avec `settings.googleCalendarId` (Admin >
-  Batch settings, « Check » a blanc) recoit les evenements de SA periode, toutes les 5 min (`syncGoogleCalendars`) ou sur
-  « Sync now » (`syncBatchCalendar`), sens unique Google -> Hub (services/calendarSync.ts, plan pur
-  shared/calendarSync.ts). Un evenement relie porte `calendarSource` : ses `CALENDAR_FIELDS` (nom, description, dates,
-  lieu) ne s'ecrivent QUE par la synchro (regles, `lib/eventsAdmin.ts#updateEvent` les retire, `sync-events.mjs` les saute) ;
+  Batch settings, « Check » a blanc) recoit les evenements de SA periode, sens unique Google -> Hub (services/calendarSync.ts,
+  plan pur shared/calendarSync.ts) : a chaque changement (notification `events.watch` -> fonction `googleCalendarWebhook`,
+  un canal par batch dans `calendarSyncs.channel`, secret verifie, pris a la premiere synchro et renouvele 1 jour avant
+  ses 7 jours), toutes les 30 min en filet (`syncGoogleCalendars`, qui renouvelle aussi) ou sur « Sync now »
+  (`syncBatchCalendar`). Un evenement relie porte `calendarSource` : ses `CALENDAR_FIELDS` (nom, description, dates,
+  lieu, visio `videoCallUrl` = Meet ou `conferenceData`) ne s'ecrivent QUE par la synchro (regles, `lib/eventsAdmin.ts#updateEvent` les retire, `sync-events.mjs` les saute) ;
   le reste (invites, template via TemplateField, matching, formulaires) se regle dans le Hub. Un batch relie ne cree
   pas d'evenement (regle, `create_event`, `import-events.mjs` refusent). Masquer = archiver, la synchro le laisse masque ;
-  supprime ou annule dans Google = archive. Jeton et derniere synchro : `calendarSyncs/{batchId}`. Prod : activer l'API
-  Calendar et partager l'agenda (lecture) avec le compte de service des functions. Emulateurs : faux agenda
+  supprime ou annule dans Google = archive. Jeton et derniere synchro : `calendarSyncs/{batchId}`. Prod : API Calendar activee
+  (16/11), partager l'agenda (« See all event details ») avec `804975656292-compute@developer.gserviceaccount.com`. Visio
+  d'avant le 16/11 dans `resourceUrl` : `node scripts/migrate-video-call-links.mjs <batchId> [--prod]` (deplace vers `videoCallUrl`, a blanc sans --prod, APRES le front). Emulateurs : faux agenda
   `calendarFakes/{calendarId}` ({ events }, scripts/check-rules.mjs).
 - **Evenement = point d'entree** (SPECS §2, decision du 13/11) : son type (`kind`) n'est qu'une ETIQUETTE ; les
   outils viennent de ce qui est attache : `event.matching` (0 ou 1 : mode `challenge` = equipes, `matching` = tables,

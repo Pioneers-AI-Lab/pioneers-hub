@@ -23,6 +23,9 @@ export function readEventsFile(week) {
 }
 
 /** Heure de Paris -> ISO. Les dates du batch sont en hiver (UTC+1). */
+/** Les liens d'un evenement que le fichier peut donner ; sync-events ne les ecrit que s'ils y sont. */
+export const FILE_LINK_FIELDS = ["resourceUrl", "videoCallUrl"];
+
 export const parisISO = (day, time) => new Date(`${day}T${time}:00+01:00`).toISOString();
 export const parisLabel = (iso) => new Date(iso).toLocaleString("sv-SE", { timeZone: "Europe/Paris" }).slice(0, 16);
 
@@ -57,8 +60,8 @@ export function toEvent(data, e, now) {
       guests: e.guests,
       rankingMetricKey: e.rankingMetricKey ?? null,
       scoring: e.scoring ?? null,
-      // Le lien de l'evenement (« Resources » : la visio Google Meet). sync-events ne l'ecrit que s'il est dans le fichier.
-      resourceUrl: e.resourceUrl ?? null,
+      // Les liens (« Resources », visio Google Meet) : FILE_LINK_FIELDS.
+      ...Object.fromEntries(FILE_LINK_FIELDS.map((f) => [f, e[f] ?? null])),
     },
   );
   return { ...event, createdDateISOString: now, updatedDateISOString: now };

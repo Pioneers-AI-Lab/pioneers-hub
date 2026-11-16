@@ -14,12 +14,12 @@ import { useHelp } from "@/components/ui/useHelp";
 // Les reglages d'un evenement, dans l'ordre d'un agenda (decision du 13/11)
 // ----------------------------
 // Nom ; debut | duree | fin ; invites (le batch et / ou des personnes, comme
-// les invites de Google Calendar). Replies : lieu, description, jalon, lien
-// d'inscription, ressource. Les memes champs a la creation et sur la page d'un
+// les invites de Google Calendar). Replies : lieu, description, visio, jalon,
+// lien d'inscription, ressource. Les memes champs a la creation et sur la page d'un
 // evenement. Ni semaine du programme, ni taille d'equipe (dans le matching), ni
 // metriques (dans le Debrief). « More options » est replie par defaut.
-// Un evenement venu de l'agenda Google (`calendarSource`) : nom, dates, lieu et
-// description se changent dans l'agenda, ils sont grises ici (SPECS §2, 16/11).
+// Un evenement venu de l'agenda Google (`calendarSource`) : nom, dates, lieu,
+// description et visio se changent dans l'agenda, ils sont grises ici (SPECS §2, 16/11).
 
 export type SettingsDraft = {
   name: string;
@@ -33,6 +33,7 @@ export type SettingsDraft = {
   isMilestone: boolean;
   signUpUrl: string;
   resourceUrl: string;
+  videoCallUrl: string;
 };
 
 export const settingsDraftOf = (e: Pick<PioneersEvent, keyof EventSettings>): SettingsDraft => ({
@@ -47,6 +48,7 @@ export const settingsDraftOf = (e: Pick<PioneersEvent, keyof EventSettings>): Se
   isMilestone: e.isMilestone,
   signUpUrl: e.signUpUrl ?? "",
   resourceUrl: e.resourceUrl ?? "",
+  videoCallUrl: e.videoCallUrl ?? "",
 });
 
 const link = (value: string) => (value.trim() ? normalizeHttpUrl(value) : null);
@@ -62,6 +64,7 @@ export function settingsProblems(d: SettingsDraft): string[] {
     d.audience === "guests" && d.guests.length === 0 && d.startupIds.length === 0 && "Invite the batch or at least one guest.",
     d.signUpUrl.trim() && !link(d.signUpUrl) && "The sign-up link is not a web address.",
     d.resourceUrl.trim() && !link(d.resourceUrl) && "The resource link is not a web address.",
+    d.videoCallUrl.trim() && !link(d.videoCallUrl) && "The video call link is not a web address.",
   ].filter((p): p is string => Boolean(p));
 }
 
@@ -77,6 +80,7 @@ export function settingsOf(d: SettingsDraft): Omit<EventSettings, "status"> {
     isMilestone: d.isMilestone,
     signUpUrl: link(d.signUpUrl),
     resourceUrl: link(d.resourceUrl),
+    videoCallUrl: link(d.videoCallUrl),
     audience: d.audience,
     guests: d.guests,
     ...guestCopiesOf(d.guests),
@@ -155,7 +159,7 @@ export function EventSettingsFields({
       </Group>
       {locked && (
         <Text size="sm" c="dimmed">
-          From Google Calendar: change the name, times, location and description there, the Hub follows within 5 minutes.
+          From Google Calendar: change the name, times, location, description and video call there, the Hub follows within a minute.
           {calendarHref && (
             <>
               {" "}
@@ -171,12 +175,13 @@ export function EventSettingsFields({
 
       <div>
         <Button variant="subtle" color="gray" px={0} onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen}>
-          {moreOpen ? "Fewer options" : "More options: location, description, links"}
+          {moreOpen ? "Fewer options" : "More options: location, description, video call, links"}
         </Button>
         <Collapse expanded={moreOpen}>
           <Stack gap="md" pt="xs">
             <TextInput label="Location" placeholder="Station F" disabled={locked} value={draft.location} onChange={(e) => set("location", e.currentTarget.value)} />
             <Textarea label="Description" autosize minRows={2} placeholder="What the event is about" disabled={locked} value={draft.topic} onChange={(e) => set("topic", e.currentTarget.value)} />
+            <TextInput label="Video call link" placeholder="Google Meet, Zoom" disabled={locked} value={draft.videoCallUrl} onChange={(e) => set("videoCallUrl", e.currentTarget.value)} />
             <Switch size="md" {...milestoneHelp} checked={draft.isMilestone} onChange={(e) => set("isMilestone", e.currentTarget.checked)} />
             <TextInput label="Sign-up link" placeholder="https://" value={draft.signUpUrl} onChange={(e) => set("signUpUrl", e.currentTarget.value)} />
             <TextInput label="Resource link" placeholder="Slides, brief, recording" value={draft.resourceUrl} onChange={(e) => set("resourceUrl", e.currentTarget.value)} />

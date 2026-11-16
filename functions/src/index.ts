@@ -197,8 +197,9 @@ export const nightlyScores = onSchedule({ schedule: "0 2 * * *", timeZone: "Euro
 
 // ----------------------------
 // Agenda Google du batch (SPECS §2, decision du 16/11) : ses evenements
-// deviennent ceux du Hub, toutes les 5 minutes et sur le bouton du staff
-// (Admin > Batch settings, Admin > Events).
+// deviennent ceux du Hub, a chaque changement (notification de Google), toutes
+// les 30 minutes en filet (et renouvellement des abonnements) et sur le bouton
+// du staff (Admin > Batch settings, Admin > Events).
 // ----------------------------
 
 export const syncBatchCalendar = onCallTyped("syncBatchCalendar", async (request) => {
@@ -207,9 +208,24 @@ export const syncBatchCalendar = onCallTyped("syncBatchCalendar", async (request
   return calendarSync.syncBatchCalendar(cleanId(request.data?.batchId, "batchId"), { dryRun: request.data?.dryRun === true, calendarId, actorUid });
 });
 
-export const syncGoogleCalendars = onSchedule({ schedule: "every 5 minutes", timeZone: "Europe/Paris", timeoutSeconds: 240 }, async () => {
+export const syncGoogleCalendars = onSchedule({ schedule: "every 30 minutes", timeZone: "Europe/Paris", timeoutSeconds: 240 }, async () => {
   const done = await calendarSync.syncAllCalendars();
   if (Object.keys(done).length) console.log("syncGoogleCalendars", JSON.stringify(done));
+});
+
+/** Ou Google previent d'un changement de l'agenda (`events.watch`) : sans corps, tout est dans les en-tetes. */
+export const googleCalendarWebhook = onRequest({ invoker: "public", timeoutSeconds: 120 }, async (req, res) => {
+  if (req.method !== "POST") {
+    res.status(405).end();
+    return;
+  }
+  const status = await calendarSync.handleCalendarNotification({
+    channelId: req.get("X-Goog-Channel-ID"),
+    resourceId: req.get("X-Goog-Resource-ID"),
+    token: req.get("X-Goog-Channel-Token"),
+    state: req.get("X-Goog-Resource-State"),
+  });
+  res.status(status).end();
 });
 
 export const resetJuryLink = onCallTyped("resetJuryLink", async (request) => {

@@ -70,6 +70,7 @@ export type EventSettings = Pick<
   | "status"
   | "signUpUrl"
   | "resourceUrl"
+  | "videoCallUrl"
   | "audience"
   | "guests"
   | "guestFounderIds"

@@ -213,6 +213,30 @@ export type CalendarSync = {
   lastError: string | null;
   /** Ce que la derniere synchro reussie a ecrit. */
   counts: CalendarSyncCounts;
+  /**
+   * L'abonnement aux notifications de Google (`events.watch`) : a chaque
+   * changement de l'agenda, Google appelle `googleCalendarWebhook`, qui
+   * synchronise aussitot. Renouvele par la tache planifiee avant qu'il expire.
+   * Absent ou `null` : pas encore pris, ou refuse (`channelError`).
+   */
+  channel?: CalendarChannel | null;
+  /** Pourquoi Google a refuse l'abonnement, `null` s'il est pris. */
+  channelError?: string | null;
+};
+
+export type CalendarChannel = {
+  /** L'id du canal (choisi par le Hub, unique) : `X-Goog-Channel-ID` des notifications. */
+  id: string;
+  /**
+   * Empreinte (sha256) du secret que Google renvoie (`X-Goog-Channel-Token`) :
+   * une notification sans lui est refusee. Le secret lui-meme n'est garde que par Google.
+   */
+  tokenHash: string;
+  /** L'agenda suivi : un autre agenda prend un autre abonnement. */
+  calendarId: string;
+  /** L'id de la ressource suivie, donne par Google (pour arreter le canal). */
+  resourceId: string;
+  expirationDateISOString: DateISOString;
 };
 
 /** Ce que rend une synchro (ou une synchro a blanc) : Admin > Batch settings, `syncBatchCalendar`. */

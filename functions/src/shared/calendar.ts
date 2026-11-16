@@ -60,7 +60,7 @@ export function batchCalendar(input: {
   url: string;
   events: (Pick<
     PioneersEvent,
-    "name" | "topic" | "location" | "startDateISOString" | "endDateISOString" | "updatedDateISOString"
+    "name" | "topic" | "location" | "videoCallUrl" | "startDateISOString" | "endDateISOString" | "updatedDateISOString"
   > & { id: string })[];
 }): string {
   // DTSTAMP = derniere modification : le texte ne change qu'avec les evenements
@@ -79,6 +79,7 @@ export function batchCalendar(input: {
   ];
   for (const e of input.events) {
     const end = e.endDateISOString ?? new Date(new Date(e.startDateISOString).getTime() + DEFAULT_DURATION_MS).toISOString();
+    const description = [e.topic, e.videoCallUrl && `Video call: ${e.videoCallUrl}`].filter(Boolean).join("\n\n");
     lines.push(
       "BEGIN:VEVENT",
       `UID:${e.id}@${UID_DOMAIN}`,
@@ -88,7 +89,7 @@ export function batchCalendar(input: {
       `DTEND:${icsDate(end)}`,
       `SUMMARY:${icsText(e.name)}`,
       ...(e.location ? [`LOCATION:${icsText(e.location)}`] : []),
-      ...(e.topic ? [`DESCRIPTION:${icsText(e.topic)}`] : []),
+      ...(description ? [`DESCRIPTION:${icsText(description)}`] : []),
       `URL:${input.url}`,
       "STATUS:CONFIRMED",
       "END:VEVENT",

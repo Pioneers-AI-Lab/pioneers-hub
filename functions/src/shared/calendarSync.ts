@@ -7,8 +7,8 @@ import type { Batch, CalendarSource, PioneersEvent, WithId } from "./types";
 // ----------------------------
 // L'agenda Google, source des evenements d'un batch (decision du 16/11, SPECS §2)
 // ----------------------------
-// Sens unique : Google -> Hub. L'agenda fait foi pour le nom, les dates, le lieu
-// et la description (`CALENDAR_FIELDS`) ; le Hub garde le reste (invites,
+// Sens unique : Google -> Hub. L'agenda fait foi pour le nom, les dates, le lieu,
+// la description et la visio (`CALENDAR_FIELDS`) ; le Hub garde le reste (invites,
 // etiquette, template, matching, formulaires, jalon, liens). Seuls les
 // evenements de la periode du batch (jours de Paris) entrent : un agenda peut
 // servir a plusieurs batchs.
@@ -18,7 +18,7 @@ import type { Batch, CalendarSource, PioneersEvent, WithId } from "./types";
 // un evenement deja a jour n'est pas reecrit.
 
 /** Ce que l'agenda porte, et que le Hub ne modifie plus (Admin, API, Claude, scripts, regles). */
-export const CALENDAR_FIELDS = ["name", "topic", "startDateISOString", "endDateISOString", "location"] as const;
+export const CALENDAR_FIELDS = ["name", "topic", "startDateISOString", "endDateISOString", "location", "videoCallUrl"] as const;
 export type CalendarFields = Pick<PioneersEvent, (typeof CALENDAR_FIELDS)[number]>;
 
 /** L'evenement vient de l'agenda Google : ses `CALENDAR_FIELDS` sont verrouilles. */
@@ -31,8 +31,12 @@ export const withoutCalendarFields = <T extends object>(o: T): Omit<T, (typeof C
 /** Le batch tire ses evenements d'un agenda Google : on ne les cree plus dans le Hub. */
 export const calendarIdOf = (batch: Pick<Batch, "settings">): string | null => batch.settings.googleCalendarId?.trim() || null;
 
+/** L'agenda que la synchro suit pour ce batch : relie, ni archive ni termine ; `null` sinon (tache planifiee, notifications). */
+export const syncedCalendarIdOf = (batch: Pick<Batch, "settings" | "status" | "archivedDateISOString">): string | null =>
+  batch.archivedDateISOString === null && batch.status !== "completed" ? calendarIdOf(batch) : null;
+
 /** Le message d'un refus de creation dans un batch relie a un agenda. */
-export const CALENDAR_BATCH_MESSAGE = "This batch's events come from its Google Calendar: create the event there, it shows up in the Hub within 5 minutes.";
+export const CALENDAR_BATCH_MESSAGE = "This batch's events come from its Google Calendar: create the event there, it shows up in the Hub within a minute.";
 
 /** Ce que l'API Google Calendar (v3, `events.list`) rend d'un evenement, ce qui sert ici. */
 export type GoogleCalendarEvent = {
@@ -44,6 +48,10 @@ export type GoogleCalendarEvent = {
   htmlLink?: string;
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
+  /** Le lien Google Meet, s'il y en a un. */
+  hangoutLink?: string;
+  /** La visio attachee (Meet, Zoom, Teams... par un module de l'agenda). */
+  conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] };
 };
 
 // ---- Champs ---------------------------------------------------------------------------
@@ -67,6 +75,10 @@ export function htmlToText(html: string): string {
     .trim();
 }
 
+/** Le lien de la visio : Meet, sinon le point d'entree video d'une autre visio. */
+const videoCallOf = (g: GoogleCalendarEvent): string | null =>
+  g.hangoutLink ?? g.conferenceData?.entryPoints?.find((p) => p.entryPointType === "video" && p.uri)?.uri ?? null;
+
 /** Les champs du Hub tires d'un evenement Google ; `null` sans debut (inutilisable). */
 export function calendarFieldsOf(g: GoogleCalendarEvent): CalendarFields | null {
   const start = timeOf(g.start);
@@ -77,6 +89,7 @@ export function calendarFieldsOf(g: GoogleCalendarEvent): CalendarFields | null 
     startDateISOString: start,
     endDateISOString: timeOf(g.end),
     location: g.location?.trim() || null,
+    videoCallUrl: videoCallOf(g),
   };
 }
 
@@ -180,7 +193,7 @@ export function planCalendarSync(input: {
         status: "scheduled",
         location: fields.location,
       },
-      { topic: fields.topic, calendarSource: source },
+      { topic: fields.topic, videoCallUrl: fields.videoCallUrl, calendarSource: source },
     );
     plan.creates.push({ id: calendarEventDocId(batch.id, g.id), data });
   }
@@ -190,12 +203,15 @@ export function planCalendarSync(input: {
   return plan;
 }
 
+const TIME_FIELDS: ReadonlySet<keyof CalendarFields> = new Set(["startDateISOString", "endDateISOString"]);
+
+/** Les champs d'agenda qui different (un champ absent d'un evenement d'avant vaut `null`). */
 function changedFields(event: CalendarFields, fields: CalendarFields): Partial<CalendarFields> {
   const patch: Partial<CalendarFields> = {};
-  if (event.name !== fields.name) patch.name = fields.name;
-  if (event.topic !== fields.topic) patch.topic = fields.topic;
-  if (event.location !== fields.location) patch.location = fields.location;
-  if (!sameTime(event.startDateISOString, fields.startDateISOString)) patch.startDateISOString = fields.startDateISOString;
-  if (!sameTime(event.endDateISOString, fields.endDateISOString)) patch.endDateISOString = fields.endDateISOString;
+  for (const key of CALENDAR_FIELDS) {
+    const was = event[key] ?? null;
+    const now = fields[key] ?? null;
+    if (TIME_FIELDS.has(key) ? !sameTime(was, now) : was !== now) Object.assign(patch, { [key]: now });
+  }
   return patch;
 }

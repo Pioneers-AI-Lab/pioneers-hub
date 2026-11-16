@@ -88,7 +88,7 @@ export function NewEventEditor() {
         <PageHeader back={back} title="New event" subtitle={`In ${batch.name}.`} />
         <Section title="From Google Calendar">
           <Text size="sm">
-            {batch.name}&apos;s events come from its Google Calendar: create the event there, it shows up in Events within 5 minutes. Then
+            {batch.name}&apos;s events come from its Google Calendar: create the event there, it shows up in Events within a minute. Then
             open it here to pick a template (matching and forms).
           </Text>
         </Section>

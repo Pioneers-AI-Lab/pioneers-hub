@@ -181,7 +181,7 @@ function syncLine(r: CalendarSyncResult, dryRun: boolean): string {
  * L'agenda Google du batch : son id (Google Calendar > Settings > Integrate
  * calendar), partage en lecture avec le compte de service du Hub. « Check »
  * essaie l'id saisi a blanc : ce qui serait cree, relie, masque. Une fois
- * enregistre, la synchro tourne toutes les 5 minutes.
+ * enregistre, la synchro tourne a chaque changement de l'agenda (et toutes les 30 minutes en filet).
  */
 function CalendarSection({
   batch,
@@ -207,7 +207,7 @@ function CalendarSection({
   return (
     <Section
       title="Google Calendar"
-      hint="The batch's events come from this calendar: every event in the batch's dates, every 5 minutes. Their name, times, location and description are then changed in Google Calendar only. Share the calendar with the Hub's account (See all event details), then paste its ID: Google Calendar, the calendar's settings, Integrate calendar."
+      hint="The batch's events come from this calendar: every event in the batch's dates, updated as soon as the calendar changes. Their name, times, location, description and video call are then changed in Google Calendar only. Share the calendar with the Hub's account (See all event details), then paste its ID: Google Calendar, the calendar's settings, Integrate calendar."
     >
       <Stack gap="xs">
         <TextInput label="Calendar ID" placeholder="…@group.calendar.google.com" value={input} onChange={(e) => onChange(e.currentTarget.value)} />

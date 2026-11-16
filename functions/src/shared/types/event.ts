@@ -171,6 +171,12 @@ export type PioneersEvent = BatchScoped &
     /** @source intra « event_sign_up_link », « external_resource_link » */
     signUpUrl: string | null;
     resourceUrl: string | null;
+    /**
+     * Le lien de la visio (Google Meet, ou celui d'une autre visio de l'agenda).
+     * Vient de l'agenda Google pour un evenement relie (`CALENDAR_FIELDS`, 16/11).
+     * Absent des evenements d'avant : la visio etait dans `resourceUrl`.
+     */
+    videoCallUrl?: string | null;
     status: EventStatus;
     /**
      * Le matching de l'evenement, `null` sans tirage. Absent d'un evenement

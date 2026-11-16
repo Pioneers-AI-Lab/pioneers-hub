@@ -10,8 +10,8 @@
 // ce script MET A JOUR un evenement deja en base sur le planning valide :
 //   - les champs d'agenda : nom, description (`topic`), etiquette, modele, debut,
 //     fin, lieu, statut (un brouillon devient programme quand l'heure est connue),
-//     semaine, jalon, invites, bareme (`scoring`), et le lien `resourceUrl` s'il est dans le fichier
-//     (il REMPLACE alors le lien saisi par le staff, slides ou brief : un seul lien par evenement) ;
+//     semaine, jalon, invites, bareme (`scoring`), et les liens `resourceUrl` / `videoCallUrl` s'ils sont
+//     dans le fichier (ils REMPLACENT alors ceux saisis par le staff) ;
 //   - le matching, SAUF si l'evenement a deja des equipes (on ne casse pas un tirage) ;
 //   - les cles de `archived` (en tete du fichier) sont archivees, jamais supprimees.
 // Ses formulaires (shared/eventForms.ts : le pack du modele, plus `forms` du
@@ -31,7 +31,7 @@
 import { createRequire } from "node:module";
 import { initializeApp, applicationDefault } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { formOptions, parisLabel, readEventsFile, toEvent } from "./lib/eventsFile.mjs";
+import { FILE_LINK_FIELDS, formOptions, parisLabel, readEventsFile, toEvent } from "./lib/eventsFile.mjs";
 
 const require = createRequire(import.meta.url);
 const { eventFormDocs, eventFormsPlan } = require("../functions/lib/shared/eventForms.js");
@@ -119,8 +119,9 @@ for (const [n, e] of selected.entries()) {
     // Venu de l'agenda : ses formulaires se reglent sur ses dates a lui, pas sur celles du fichier.
     if (locked.size) effective = { ...ev, ...Object.fromEntries(CALENDAR_FIELDS.map((f) => [f, current[f]])) };
     for (const f of AGENDA_FIELDS) if (!locked.has(f) && !same(current[f], ev[f])) patch[f] = ev[f];
-    // Le lien : seulement si le fichier le donne (sinon celui saisi par le staff reste).
-    if ("resourceUrl" in e && !same(current.resourceUrl, ev.resourceUrl)) patch.resourceUrl = ev.resourceUrl;
+    // Les liens : seulement si le fichier les donne (sinon ceux saisis par le staff restent) ; la visio
+    // d'un evenement relie vient de l'agenda (`locked`).
+    for (const f of FILE_LINK_FIELDS) if (f in e && !locked.has(f) && !same(current[f] ?? null, ev[f])) patch[f] = ev[f];
     if (current.status === "draft" && ev.status === "scheduled") patch.status = "scheduled";
     // Un evenement d'avant le 13/11 n'a pas le champ : il deduirait un tirage de son type. On l'ecrit.
     if (current.matching === undefined || !same(current.matching, ev.matching)) {

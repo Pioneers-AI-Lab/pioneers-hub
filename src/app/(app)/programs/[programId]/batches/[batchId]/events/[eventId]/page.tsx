@@ -70,9 +70,10 @@ export default function EventPage() {
         </Stack>
       </Section>
 
-      {(event.signUpUrl || event.resourceUrl) && (
+      {(event.videoCallUrl || event.signUpUrl || event.resourceUrl) && (
         <Section title="Links">
           <RowList>
+            {event.videoCallUrl && <ExternalLinkRow href={event.videoCallUrl} title="Join the video call" subtitle={event.videoCallUrl} />}
             {event.signUpUrl && <ExternalLinkRow href={event.signUpUrl} title="Sign up" subtitle={event.signUpUrl} />}
             {event.resourceUrl && <ExternalLinkRow href={event.resourceUrl} title="Resources" subtitle={event.resourceUrl} />}
           </RowList>

@@ -345,7 +345,7 @@
           "draft": true
         }
       },
-      "resourceUrl": "https://meet.google.com/hmz-sdsb-oeh"
+      "videoCallUrl": "https://meet.google.com/hmz-sdsb-oeh"
     },
     {
       "key": "fa26-lunch-roulette-11-17",
@@ -423,7 +423,7 @@
         }
       ],
       "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)",
-      "resourceUrl": "https://meet.google.com/hfn-mhsh-zwq"
+      "videoCallUrl": "https://meet.google.com/hfn-mhsh-zwq"
     },
     {
       "key": "fa26-talk-hugo-manoukian",
@@ -470,7 +470,7 @@
         }
       ],
       "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)",
-      "resourceUrl": "https://meet.google.com/uzd-drdf-brv"
+      "videoCallUrl": "https://meet.google.com/uzd-drdf-brv"
     },
     {
       "key": "fa26-hackathon-1-pain-hunters",
@@ -1154,7 +1154,7 @@
         }
       ],
       "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)",
-      "resourceUrl": "https://meet.google.com/bhb-ccfr-dgn"
+      "videoCallUrl": "https://meet.google.com/bhb-ccfr-dgn"
     },
     {
       "key": "fa26-week-1-retro",

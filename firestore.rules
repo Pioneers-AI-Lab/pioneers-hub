@@ -420,7 +420,7 @@ service cloud.firestore {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return changed.hasAny(['calendarSource'])
         || (resource.data.get('calendarSource', null) != null
-          && changed.hasAny(['name', 'topic', 'startDateISOString', 'endDateISOString', 'location']));
+          && changed.hasAny(['name', 'topic', 'startDateISOString', 'endDateISOString', 'location', 'videoCallUrl']));
     }
 
     match /events/{eventId} {

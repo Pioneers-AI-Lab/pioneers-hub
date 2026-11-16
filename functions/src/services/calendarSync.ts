@@ -1,20 +1,30 @@
+import { randomUUID } from "node:crypto";
 import { HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { GoogleAuth } from "google-auth-library";
-import { calendarIdOf, isMovedBy, planCalendarSync, type CalendarSyncPlan, type GoogleCalendarEvent } from "../shared/calendarSync";
+import { calendarIdOf, isMovedBy, planCalendarSync, syncedCalendarIdOf, type CalendarSyncPlan, type GoogleCalendarEvent } from "../shared/calendarSync";
+import { FUNCTIONS_REGION } from "../shared/callables";
 import { COL, docPaths } from "../shared/collections";
 import { formsClosedByArchive, planEventMove } from "../shared/eventForms";
-import type { Batch, CalendarSync, CalendarSyncCounts, CalendarSyncResult, Form, PioneersEvent, WithId } from "../shared/types";
+import type { Batch, CalendarChannel, CalendarSync, CalendarSyncCounts, CalendarSyncResult, Form, PioneersEvent, WithId } from "../shared/types";
+import { secret, sha256 } from "../api/crypto";
 import { writeAudit } from "./audit";
 
 // ----------------------------
 // services - la synchro de l'agenda Google d'un batch (decision du 16/11)
 // ----------------------------
-// Toutes les 5 minutes (`syncGoogleCalendars`, index.ts) et sur le bouton du
-// staff (`syncBatchCalendar`) : lit les changements de l'agenda depuis la
-// derniere fois (`syncToken`, stocke dans `calendarSyncs/{batchId}`), les
-// traduit (shared/calendarSync.ts) et les ecrit avec l'Admin SDK. Le jeton
-// expire (410) : synchro complete.
+// A chaque changement de l'agenda (notification de Google sur
+// `googleCalendarWebhook`), toutes les 30 minutes en filet (`syncGoogleCalendars`,
+// index.ts) et sur le bouton du staff (`syncBatchCalendar`) : lit les changements
+// de l'agenda depuis la derniere fois (`syncToken`, stocke dans
+// `calendarSyncs/{batchId}`), les traduit (shared/calendarSync.ts) et les ecrit
+// avec l'Admin SDK. Le jeton expire (410) : synchro complete.
+//
+// Notifications (`events.watch`) : un abonnement par batch, pris a la premiere
+// synchro reussie et renouvele un jour avant d'expirer (Google le donne pour 7
+// jours au plus, sans renouvellement automatique). La notification ne porte
+// rien : elle declenche la meme synchro. Elle n'est acceptee qu'avec le secret
+// de l'abonnement (`X-Goog-Channel-Token`).
 //
 // Acces : l'agenda est partage, en lecture, avec le compte de service des
 // functions (identifiants par defaut, sans cle). L'API Google Calendar doit
@@ -28,13 +38,36 @@ class SyncTokenExpired extends Error {}
 
 type Changes = { items: GoogleCalendarEvent[]; nextSyncToken: string | null; isFull: boolean };
 
+/** Un canal a ouvrir : le secret en clair part chez Google, le Hub n'en garde que l'empreinte. */
+type NewChannel = Pick<CalendarChannel, "id" | "calendarId"> & { token: string };
+
 /** Ou lire l'agenda : Google, ou le faux agenda des emulateurs. Choisi une fois. */
 type CalendarReader = {
   /** Les changements depuis `syncToken` (`null` : tout l'agenda). */
   listChanges: (calendarId: string, syncToken: string | null) => Promise<Changes>;
   /** L'adresse avec laquelle partager l'agenda (Google Calendar > Share with specific people). */
   accountEmail: () => Promise<string>;
+  /** S'abonne aux changements de l'agenda : Google appellera `address`. */
+  watch: (channel: NewChannel, address: string) => Promise<Pick<CalendarChannel, "resourceId" | "expirationDateISOString">>;
+  /** Arrete un abonnement (remplace, ou batch delie). */
+  stop: (channel: Pick<CalendarChannel, "id" | "resourceId">) => Promise<void>;
 };
+
+/** Duree demandee d'un abonnement (Google peut la raccourcir) et marge de renouvellement. */
+const CHANNEL_TTL_SECONDS = 7 * 24 * 3600;
+const RENEW_BEFORE_MS = 24 * 3600 * 1000;
+const defaultExpiry = () => new Date(Date.now() + CHANNEL_TTL_SECONDS * 1000).toISOString();
+
+/** Ou Google envoie les notifications : la fonction `googleCalendarWebhook` (index.ts). */
+const webhookAddress = () => {
+  const project = process.env.GCLOUD_PROJECT;
+  return process.env.FUNCTIONS_EMULATOR === "true"
+    ? `http://${process.env.FUNCTIONS_EMULATOR_HOST ?? "127.0.0.1:5101"}/${project}/${FUNCTIONS_REGION}/googleCalendarWebhook`
+    : `https://${FUNCTIONS_REGION}-${project}.cloudfunctions.net/googleCalendarWebhook`;
+};
+
+type GoogleError = { status?: number; response?: { status?: number }; message?: string };
+const statusOf = (err: GoogleError) => err.status ?? err.response?.status;
 
 const notShared = async (calendarId: string) =>
   new HttpsError("not-found", `Calendar ${calendarId} not found, or not shared with ${await source.accountEmail()} (See all event details).`);
@@ -58,8 +91,8 @@ function googleReader(): CalendarReader {
             url: `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
             params,
           })
-          .catch(async (err: { status?: number; response?: { status?: number }; message?: string }) => {
-            const status = err.status ?? err.response?.status;
+          .catch(async (err: GoogleError) => {
+            const status = statusOf(err);
             if (status === 410) throw new SyncTokenExpired();
             if (status === 404 || status === 403) throw await notShared(calendarId);
             throw new HttpsError("unavailable", `Google Calendar: ${err.message ?? "request failed"}`);
@@ -68,6 +101,20 @@ function googleReader(): CalendarReader {
         if (res.data.nextPageToken) pageToken = res.data.nextPageToken;
         else return { items, nextSyncToken: res.data.nextSyncToken ?? null, isFull: !syncToken };
       }
+    },
+    async watch(channel, address) {
+      const res = await client()
+        .request<{ resourceId: string; expiration?: string }>({
+          url: `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(channel.calendarId)}/events/watch`,
+          method: "POST",
+          data: { id: channel.id, type: "web_hook", address, token: channel.token, params: { ttl: String(CHANNEL_TTL_SECONDS) } },
+        })
+        .catch((err: GoogleError) => Promise.reject(new Error(`Google Calendar refused the subscription (${statusOf(err) ?? "?"}): ${err.message ?? "request failed"}`)));
+      const expiration = Number(res.data.expiration);
+      return { resourceId: res.data.resourceId, expirationDateISOString: expiration ? new Date(expiration).toISOString() : defaultExpiry() };
+    },
+    async stop(channel) {
+      await client().request({ url: "https://www.googleapis.com/calendar/v3/channels/stop", method: "POST", data: { id: channel.id, resourceId: channel.resourceId } });
     },
   };
 }
@@ -79,6 +126,13 @@ const fakeReader: CalendarReader = {
     if (!fake.exists) throw await notShared(calendarId);
     return { items: (fake.data()?.events ?? []) as GoogleCalendarEvent[], nextSyncToken: "fake", isFull: true };
   },
+  // Rien n'appelle le webhook aux emulateurs : les verifications le font a la main, avec le
+  // secret que le faux agenda garde (comme Google, le seul a l'avoir en clair).
+  async watch(channel) {
+    await db().collection(COL.calendarFakes).doc(encodeURIComponent(channel.calendarId)).set({ channel: { id: channel.id, token: channel.token } }, { merge: true });
+    return { resourceId: `fake-${channel.id}`, expirationDateISOString: defaultExpiry() };
+  },
+  stop: async () => {},
 };
 
 const source: CalendarReader = process.env.FUNCTIONS_EMULATOR === "true" ? fakeReader : googleReader();
@@ -135,8 +189,20 @@ export async function syncBatchCalendar(
   };
 
   if (!dryRun) {
-    await writePlan(plan, moves, forms, now, batchId, calendarId, options.actorUid);
-    const next: CalendarSync = { batchId, calendarId, syncToken: changes.nextSyncToken, lastSyncDateISOString: now, lastSuccessDateISOString: now, lastError: null, counts };
+    const [, subscription] = await Promise.all([
+      writePlan(plan, moves, forms, now, batchId, calendarId, options.actorUid),
+      subscribe(batchId, calendarId, state?.channel ?? null),
+    ]);
+    const next: CalendarSync = {
+      batchId,
+      calendarId,
+      syncToken: changes.nextSyncToken,
+      lastSyncDateISOString: now,
+      lastSuccessDateISOString: now,
+      lastError: null,
+      counts,
+      ...subscription,
+    };
     await stateRef.set(next);
   }
   return {
@@ -147,6 +213,59 @@ export async function syncBatchCalendar(
     linked: plan.updates.filter((u) => u.isLink).map((u) => u.event.name),
     archived: plan.archives.map((e) => e.name),
   };
+}
+
+/**
+ * L'abonnement du batch a son agenda : garde tant qu'il suit le bon agenda et
+ * n'expire pas dans la journee, sinon remplace (l'ancien est arrete). Un refus
+ * de Google n'arrete pas la synchro : il est note (`channelError`), la tache
+ * planifiee reessaie.
+ */
+async function subscribe(batchId: string, calendarId: string, current: CalendarChannel | null): Promise<Pick<CalendarSync, "channel" | "channelError">> {
+  /** Le canal actuel suit cet agenda et dure encore au moins `ms`. */
+  const lastsFor = (ms: number) => current?.calendarId === calendarId && Date.parse(current.expirationDateISOString) - Date.now() > ms;
+  if (lastsFor(RENEW_BEFORE_MS)) return { channel: current, channelError: null };
+  const channel: NewChannel = { id: `${batchId.slice(0, 27)}-${randomUUID()}`, token: secret(), calendarId };
+  try {
+    const taken = await source.watch(channel, webhookAddress());
+    if (current) await source.stop(current).catch(() => {}); // il expire de lui-meme sinon
+    return { channel: { id: channel.id, calendarId, tokenHash: sha256(channel.token), ...taken }, channelError: null };
+  } catch (err) {
+    return { channel: lastsFor(0) ? current : null, channelError: (err as Error).message };
+  }
+}
+
+/**
+ * Une notification de Google (`googleCalendarWebhook`) : le code HTTP a rendre.
+ * `sync` (la premiere, a l'abonnement, parfois avant que l'etat soit ecrit) :
+ * rien a faire. Un canal inconnu (remplace, ou pris deux fois par deux synchros
+ * simultanees) : arrete. Un mauvais secret : refuse. Un batch delie de cet
+ * agenda, archive ou termine (`syncedCalendarIdOf`, la regle de la tache
+ * planifiee) : le canal est arrete.
+ * Sinon la synchro du batch tourne avant la reponse (une fonction n'a plus de
+ * processeur apres) ; son echec est note dans l'etat, la reponse reste 200 :
+ * la tache planifiee rattrapera, Google n'a pas a reessayer.
+ */
+export async function handleCalendarNotification(headers: { channelId?: string; resourceId?: string; token?: string; state?: string }): Promise<number> {
+  if (!headers.channelId) return 400;
+  if (headers.state === "sync") return 200;
+  const snap = await db().collection(COL.calendarSyncs).where("channel.id", "==", headers.channelId).limit(1).get();
+  const state = snap.docs[0]?.data() as CalendarSync | undefined;
+  const channel = state?.channel;
+  if (!state || !channel) {
+    if (headers.resourceId) await source.stop({ id: headers.channelId, resourceId: headers.resourceId }).catch(() => {});
+    return 200;
+  }
+  if (!headers.token || sha256(headers.token) !== channel.tokenHash) return 403;
+
+  const batch = (await db().doc(docPaths.batch(state.batchId)).get()).data() as Batch | undefined;
+  if (!batch || syncedCalendarIdOf(batch) !== channel.calendarId) {
+    await source.stop(channel).catch(() => {});
+    await snap.docs[0].ref.set({ channel: null }, { merge: true });
+    return 200;
+  }
+  await syncBatchCalendar(state.batchId, { actorUid: null }).catch((err: Error) => console.error("googleCalendarWebhook", state.batchId, err.message));
+  return 200;
 }
 
 /** Le plan, sur les evenements du batch (archives compris : un evenement masque reste relie). */
@@ -207,10 +326,7 @@ async function writePlan(
 /** Tous les batchs relies a un agenda et en cours : la tache planifiee. Une erreur n'arrete pas les autres. */
 export async function syncAllCalendars(): Promise<Record<string, CalendarSyncCounts | string>> {
   const batches = await db().collection(COL.batches).where("status", "in", ["upcoming", "active"]).get();
-  const linked = batches.docs.filter((s) => {
-    const b = s.data() as Batch;
-    return b.archivedDateISOString === null && calendarIdOf(b) !== null;
-  });
+  const linked = batches.docs.filter((s) => syncedCalendarIdOf(s.data() as Batch) !== null);
   const results = await Promise.all(
     linked.map((s) =>
       syncBatchCalendar(s.id, { actorUid: null }).then(

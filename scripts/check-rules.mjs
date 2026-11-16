@@ -1157,7 +1157,7 @@ console.log("google calendar sync");
   await fake.set({
     events: [
       g("g1", "Lunch roulette", "2026-11-18T12:30:00+01:00", "2026-11-18T13:30:00+01:00"),
-      g("g2", "Masterclass pricing", "2026-11-19T10:00:00+01:00", "2026-11-19T11:30:00+01:00", { description: '<p>Bring your <a href="https://x.y">slides</a></p>', location: " Station F " }),
+      g("g2", "Masterclass pricing", "2026-11-19T10:00:00+01:00", "2026-11-19T11:30:00+01:00", { description: '<p>Bring your <a href="https://x.y">slides</a></p>', location: " Station F ", hangoutLink: "https://meet.google.com/abc-defg-hij" }),
       g("g3", "After the batch", "2026-12-10T10:00:00+01:00", "2026-12-10T11:00:00+01:00"),
       { id: "g4", status: "cancelled" },
       { id: "g5", summary: "Offsite", start: { date: "2026-11-20" }, end: { date: "2026-11-21" } },
@@ -1185,6 +1185,7 @@ console.log("google calendar sync");
     must(r.counts.created === 2 && r.counts.linked === 1, JSON.stringify(r.counts));
     const created = (await admin.doc(`events/${B}_gcal_g2`).get()).data();
     must(created?.topic === "Bring your slides (https://x.y)" && created.location === "Station F" && created.status === "scheduled", JSON.stringify(created));
+    must(created.videoCallUrl === "https://meet.google.com/abc-defg-hij", `video call ${created.videoCallUrl}`);
     const allDay = (await admin.doc(`events/${B}_gcal_g5`).get()).data();
     must(allDay?.startDateISOString === "2026-11-19T23:00:00.000Z", `all-day start ${allDay?.startDateISOString}`);
     const linked = (await admin.doc("events/cal-existing").get()).data();
@@ -1220,7 +1221,7 @@ console.log("google calendar sync");
       g("g1", "Lunch roulette", "2026-11-18T13:30:00+01:00", "2026-11-18T14:30:00+01:00"),
       { id: "g5", summary: "Offsite", start: { date: "2026-11-20" }, end: { date: "2026-11-21" } },
     ],
-  });
+  }, { merge: true }); // garde le canal du faux agenda
   await expectOk("a moved event moves its forms; a deleted one is hidden; a hidden one stays hidden", async () => {
     const r = await sync({});
     must(r.counts.updated === 1 && r.counts.archived === 1 && r.counts.formsMoved === 1, JSON.stringify(r.counts));
@@ -1231,6 +1232,36 @@ console.log("google calendar sync");
     must((await admin.doc(`events/${B}_gcal_g2`).get()).data()?.archivedDateISOString, "deleted event not hidden");
     must((await admin.doc(`events/${B}_gcal_g5`).get()).data()?.archivedDateISOString === stamp, "hidden event came back");
     return "1 moved, 1 hidden";
+  });
+
+  // Notifications de Google : l'abonnement est pris a la synchro, la notification synchronise aussitot.
+  const state = (await admin.doc(`calendarSyncs/${B}`).get()).data();
+  const channel = state?.channel;
+  // Le secret en clair n'est que chez « Google » (le faux agenda) ; le Hub garde son empreinte.
+  const token = (await fake.get()).data()?.channel?.token;
+  await expectOk("a sync subscribes to the calendar's changes, keeping only the secret's hash", async () => {
+    must(channel?.id && channel.tokenHash && !channel.token && channel.calendarId === CAL && Date.parse(channel.expirationDateISOString) > Date.now(), JSON.stringify(state));
+    must(token && (await fake.get()).data()?.channel?.id === channel.id, "the fake calendar has no channel");
+  });
+  const { FUNCTIONS_REGION } = createRequire(import.meta.url)("../functions/lib/shared/callables.js");
+  const webhook = (headers) =>
+    fetch(`http://${FUNCTIONS_EMU.host}:${FUNCTIONS_EMU.port}/demo-pioneers-hub/${FUNCTIONS_REGION}/googleCalendarWebhook`, { method: "POST", headers }).then((r) => r.status);
+  const notify = (secretValue, resourceState = "exists") => ({ "X-Goog-Channel-ID": channel.id, "X-Goog-Channel-Token": secretValue, "X-Goog-Resource-ID": channel.resourceId, "X-Goog-Resource-State": resourceState });
+  await fake.set({
+    events: [
+      g("g1", "Lunch roulette", "2026-11-18T13:30:00+01:00", "2026-11-18T14:30:00+01:00", { location: "Room 2" }),
+      { id: "g5", summary: "Offsite", start: { date: "2026-11-20" }, end: { date: "2026-11-21" } },
+    ],
+  }, { merge: true }); // garde le canal du faux agenda
+  await expectOk("a notification with a wrong secret is refused", async () => must((await webhook(notify("wrong"))) === 403, "not 403"));
+  await expectOk("the first notification (sync) changes nothing", async () => {
+    must((await webhook(notify(token, "sync"))) === 200, "not 200");
+    must((await admin.doc("events/cal-existing").get()).data()?.location === null, "synced on the sync message");
+  });
+  await expectOk("a notification syncs the batch at once", async () => {
+    must((await webhook(notify(token))) === 200, "not 200");
+    const lunch = (await admin.doc("events/cal-existing").get()).data();
+    must(lunch?.location === "Room 2", `location ${lunch?.location}`);
   });
   await deleteApp(staff.app);
 }

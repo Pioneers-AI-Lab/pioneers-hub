@@ -70,6 +70,7 @@ export function newEvent(input: NewEventInput, extra: Partial<Omit<EventData, "k
     startupIds: [],
     signUpUrl: null,
     resourceUrl: null,
+    videoCallUrl: null,
     status: input.status,
     matching: input.matching !== undefined ? input.matching : (template?.matching ?? null),
     leaderboardRevealDateISOString: null,
