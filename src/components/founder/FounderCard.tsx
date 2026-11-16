@@ -39,9 +39,9 @@ const yesNo = (v: boolean | null | undefined) => (v === true ? "Yes" : v === fal
  * sur SA fiche, sous les Providers qu'il lit (SelfProviders, monte par le layout).
  * Sur la fiche d'un autre, le staff voit ses prochains evenements (prives compris).
  *
- * Ordre (demande du 15/11) : coordonnees et Shortlist / Met en haut de fiche (plus
- * de section « Contact »), puis ce que lit qui cherche un cofondateur, puis le
- * parcours dans le programme.
+ * Ordre (demandes du 15/11 et du 16/11) : coordonnees et boutons Shortlist / Met en
+ * haut de fiche (plus de section « Contact »), puis ce que lit qui cherche un
+ * cofondateur, puis le parcours dans le programme ; les listes Shortlist / Met en bas.
  */
 export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
   const { program } = useProgram();
@@ -149,8 +149,6 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
         </>
       )}
 
-      <FounderConnections />
-
       {dir && (
         <Section title="Background">
           <FieldGrid>
@@ -221,6 +219,9 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
           </FieldGrid>
         </Section>
       )}
+
+      {/* Shortlist / Met tout en bas, pour tous ceux qui les lisent (demande du 16/11). */}
+      <FounderConnections />
     </Stack>
   );
 }

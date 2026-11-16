@@ -7,6 +7,8 @@
   --app-content-pt: var(--mantine-spacing-md);
   /* Asterisque « obligatoire » : bleu clair des titres partout (Mantine `withAsterisk`, FormSheet, TypeForm). */
   --input-asterisk-color: var(--mantine-color-pioneers-3);
+  /* Fond sombre translucide : boutons poses sur une photo, cadre de connexion. */
+  --overlay-bg: rgba(10, 10, 12, 0.78);
 }
 
 /* Pas de rebond elastique en bout de page (iOS, macOS) : il emportait l'en-tete
@@ -44,12 +46,14 @@ body {
 }
 a.row:active,
 button.row:active,
+.row:has(> .row-link:active),
 .card-link:active {
   background: var(--mantine-color-dark-5);
 }
 @media (hover: hover) {
   a.row:hover,
   button.row:hover,
+  .row:has(> .row-link:hover),
   .card-link:hover {
     background: var(--mantine-color-dark-6);
   }
@@ -90,13 +94,30 @@ button.row {
   background: var(--mantine-color-dark-6);
   border-bottom: 1px solid var(--mantine-color-dark-4);
 }
-/* Bouton pose sur une photo (retirer la photo) : fond sombre translucide, comme la barre d'onglets. */
-.photo-overlay-button.photo-overlay-button {
+/* Boutons poses sur une photo, en haut a droite : retirer la photo (PhotoUpload),
+   Shortlist / Met eteints (carte de l'annuaire). */
+.photo-overlay-button.photo-overlay-button,
+.card-overlay {
   position: absolute;
   top: 8px;
   right: 8px;
-  background: rgba(10, 10, 12, 0.78);
+}
+.photo-overlay-button.photo-overlay-button,
+.card-overlay [data-variant="default"] {
+  background: var(--overlay-bg);
+  border-color: transparent;
   color: var(--mantine-color-white);
+}
+
+/* Carte de grille : son lien, et a cote (pas dedans) les boutons poses sur la photo. */
+.card-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.card-wrap > .card-link {
+  flex: 1;
 }
 
 /* Seule dans un cadre (apercu de « Mon profil ») : pas de filet sous la photo. */
@@ -333,7 +354,7 @@ button.row {
   padding: 24px;
   border: 1px solid var(--mantine-color-dark-4);
   border-radius: 16px;
-  background: rgba(10, 10, 12, 0.78);
+  background: var(--overlay-bg);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }

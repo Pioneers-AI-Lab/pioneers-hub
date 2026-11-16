@@ -72,12 +72,38 @@ function RowBody({ title, subtitle, meta, avatar, leading }: RowProps) {
   );
 }
 
-/** Ligne cliquable vers une page. */
-export function LinkRow({ href, ...props }: RowProps & { href: string }) {
+/** Corps d'un `LinkRow` a action : le lien prend toute la place a gauche du bouton. */
+const LINK_ROW_BODY_STYLE = {
+  flex: 1,
+  minWidth: 0,
+  alignSelf: "stretch",
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  color: "inherit",
+  textDecoration: "none",
+} as const;
+
+/**
+ * Ligne cliquable vers une page. `action` : un bouton a droite, HORS du lien (un
+ * bouton dans un lien n'est pas valide) ; le texte reste tronque, a l'inverse
+ * d'`ActionRow` (consigne a lire en entier).
+ */
+export function LinkRow({ href, action, ...props }: RowProps & { href: string; action?: ReactNode }) {
+  if (action === undefined) {
+    return (
+      <Link href={href} className="row">
+        <RowBody {...props} />
+      </Link>
+    );
+  }
   return (
-    <Link href={href} className="row">
-      <RowBody {...props} />
-    </Link>
+    <div className="row">
+      <Link href={href} className="row-link" style={LINK_ROW_BODY_STYLE}>
+        <RowBody {...props} />
+      </Link>
+      <Box style={{ flexShrink: 0 }}>{action}</Box>
+    </div>
   );
 }
 
@@ -175,7 +201,7 @@ export function ActionRow({
           {text}
         </a>
       )}
-      {action}
+      <Box style={{ flexShrink: 0 }}>{action}</Box>
     </div>
   );
 }

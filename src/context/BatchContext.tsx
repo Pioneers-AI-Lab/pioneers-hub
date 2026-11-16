@@ -11,6 +11,7 @@ import { LevelGate } from "@/components/ui/LevelGate";
 import { useAuth } from "@/context/AuthContext";
 import { useProgram } from "@/context/ProgramContext";
 import { paths } from "@/lib/paths";
+import { useViewAs } from "@/lib/viewAs";
 
 // ----------------------------
 // Niveau 2 : un batch, et le ROLE du visiteur dans ce batch
@@ -20,12 +21,18 @@ import { paths } from "@/lib/paths";
 // (`useBatch().role`) au lieu de refaire la verification d'acces : chez
 // Trippple, Business puis AdAccount la refaisaient chacun, avec chacun sa
 // redirection.
+// « View as » (lib/viewAs.ts) : pour un staff, le role et le profil choisis
+// remplacent les siens ICI, et nulle part ailleurs.
 
 type BatchValue = {
   batch: WithId<Batch>;
   role: BatchRole;
   /** Profil du visiteur dans ce batch (`null` s'il n'en a pas). */
   viewerFounderId: string | null;
+  /** Connecte (faux en apercu « Public » : le visiteur anonyme). Les pages le lisent ici, pas dans `useAuth`. */
+  isSignedIn: boolean;
+  /** Son VRAI role est staff : il a le « View as » (BatchShell), qu'il soit en apercu ou non. */
+  canViewAs: boolean;
 };
 
 const [BatchContextProvider, useBatch] = createStrictContext<BatchValue>("Batch");
@@ -35,6 +42,7 @@ export function BatchProvider({ children }: { children: ReactNode }) {
   const { batchId } = useParamsTS<{ batchId: string }>();
   const { program } = useProgram();
   const { viewer, isLoading: isAuthLoading } = useAuth();
+  const viewAs = useViewAs();
 
   const batch = useDocListener(refs.batch(batchId));
   // Le lien compte -> fondateur de CE batch. Rien a lire pour un visiteur non
@@ -48,10 +56,14 @@ export function BatchProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<BatchValue | null>(() => {
     if (!found || !batch.data) return null;
-    const viewerFounderId = membership.data?.founderId ?? null;
-    const role = roleInBatch(viewer, viewerFounderId);
-    return { batch: batch.data, role, viewerFounderId };
-  }, [found, batch.data, membership.data, viewer]);
+    const ownFounderId = membership.data?.founderId ?? null;
+    const role = roleInBatch(viewer, ownFounderId);
+    const canViewAs = role === "staff";
+    if (!canViewAs || !viewAs) return { batch: batch.data, role, viewerFounderId: ownFounderId, isSignedIn: viewer !== null, canViewAs };
+    // Apercu : un fondateur choisi dans un autre batch ne vaut pas ici.
+    const founderId = viewAs.role === "founder" && viewAs.batchId === batch.data.id ? viewAs.founderId : null;
+    return { batch: batch.data, role: viewAs.role, viewerFounderId: founderId, isSignedIn: viewAs.role !== "public", canViewAs };
+  }, [found, batch.data, membership.data, viewer, viewAs]);
 
   return (
     <LevelGate

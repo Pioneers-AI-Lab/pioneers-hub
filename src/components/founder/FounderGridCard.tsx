@@ -24,6 +24,7 @@ export function FounderGridCard({
   directory,
   startupName,
   meta,
+  overlay,
 }: {
   href: string;
   founder: WithId<Founder>;
@@ -31,36 +32,41 @@ export function FounderGridCard({
   startupName: string | null;
   /** A droite du nom : score (staff, investors) ou « Not linked ». */
   meta?: ReactNode;
+  /** Sur la photo, en haut a droite, HORS du lien (un bouton dans un lien n'est pas valide) : Shortlist / Met. */
+  overlay?: ReactNode;
 }) {
   const { colorOf } = useLists();
   const category = founder.profileCategory ? PROFILE_CATEGORY_LABEL[founder.profileCategory] : null;
   const context = [category, directory?.nationality, startupName].filter(Boolean).join(" · ");
 
   return (
-    <Link href={href} className="card-link">
-      <FounderCover founder={founder} />
+    <div className="card-wrap">
+      <Link href={href} className="card-link">
+        <FounderCover founder={founder} />
 
-      <div className="card-body">
-        <Group gap="sm" wrap="nowrap" align="flex-start">
-          <Box style={{ flex: 1, minWidth: 0 }}>
-            <Text fw={600} size="lg">
-              {founder.name}
-            </Text>
-            {context && (
-              <Text size="sm" c="dimmed">
-                {context}
+        <div className="card-body">
+          <Group gap="sm" wrap="nowrap" align="flex-start">
+            <Box style={{ flex: 1, minWidth: 0 }}>
+              <Text fw={600} size="lg">
+                {founder.name}
               </Text>
-            )}
-          </Box>
-          {meta && <Box style={{ flexShrink: 0 }}>{meta}</Box>}
-        </Group>
+              {context && (
+                <Text size="sm" c="dimmed">
+                  {context}
+                </Text>
+              )}
+            </Box>
+            {meta && <Box style={{ flexShrink: 0 }}>{meta}</Box>}
+          </Group>
 
-        {founder.trackRecordOneLiner && <Text size="sm">{founder.trackRecordOneLiner}</Text>}
-        <Field label="Hard skills">{tags(founder.hardSkills, (v) => colorOf("hardSkills", v))}</Field>
-        <Field label="Industries">{tags(founder.industries, (v) => colorOf("industries", v))}</Field>
-        <Field label="Education">{tags(directory?.education)}</Field>
-        <Field label="Notable companies">{tags(directory?.notableCompanies)}</Field>
-      </div>
-    </Link>
+          {founder.trackRecordOneLiner && <Text size="sm">{founder.trackRecordOneLiner}</Text>}
+          <Field label="Hard skills">{tags(founder.hardSkills, (v) => colorOf("hardSkills", v))}</Field>
+          <Field label="Industries">{tags(founder.industries, (v) => colorOf("industries", v))}</Field>
+          <Field label="Education">{tags(directory?.education)}</Field>
+          <Field label="Notable companies">{tags(directory?.notableCompanies)}</Field>
+        </div>
+      </Link>
+      {overlay && <div className="card-overlay">{overlay}</div>}
+    </div>
   );
 }

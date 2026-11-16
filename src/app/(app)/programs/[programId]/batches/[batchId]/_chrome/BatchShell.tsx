@@ -4,20 +4,13 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { Anchor, Box, Group, Text } from "@mantine/core";
-import type { BatchRole } from "@shared/access";
+import { isInvestor } from "@shared/access";
 import { useBatch } from "@/context/BatchContext";
 import { useProgram } from "@/context/ProgramContext";
 import { formatPeriod } from "@/lib/format";
 import { SHOW_STARTUPS_TAB } from "@/lib/features";
 import { paths } from "@/lib/paths";
-
-const ROLE_LABEL: Record<BatchRole, string | null> = {
-  staff: "Staff",
-  investor_ic: "Investor",
-  investor_portfolio: "Investor",
-  founder: null,
-  public: null,
-};
+import { ViewAsFounderPicker, ViewAsSwitch } from "./ViewAsSwitch";
 
 // ----------------------------
 // La navigation d'un batch
@@ -26,12 +19,13 @@ const ROLE_LABEL: Record<BatchRole, string | null> = {
 // Tablette et ordinateur : la meme liste en onglets sous l'en-tete.
 // « Startups » est masque derriere un drapeau (lib/features.ts).
 // Les onglets dependent du role : un fondateur a « To do » et « Me ». Les outils
-// du staff sont tous dans /admin (menu du compte), pas sous un batch.
+// du staff sont tous dans /admin (menu du compte), pas sous un batch. Un staff a, a
+// la place de son etiquette de role, le « View as » (ViewAsSwitch).
 // Pas de titre de page sous les onglets : l'onglet actif le dit deja. Le nom et
 // les dates du batch sont dans la ligne du haut, pour tous les onglets.
 export function BatchShell({ children }: { children: ReactNode }) {
   const { program } = useProgram();
-  const { batch, role, viewerFounderId } = useBatch();
+  const { batch, role, viewerFounderId, canViewAs } = useBatch();
   const pathname = usePathname();
   const base = paths.batch(program.id, batch.id);
 
@@ -53,7 +47,6 @@ export function BatchShell({ children }: { children: ReactNode }) {
   // L'onglet le plus precis gagne : sa propre fiche (/founders/{moi}) est « Me », pas « Founders ».
   const activeHref = tabs.filter(matches).sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
   const isActive = (tab: (typeof tabs)[number]) => tab.href === activeHref;
-  const roleLabel = ROLE_LABEL[role];
 
   return (
     <Box>
@@ -66,12 +59,15 @@ export function BatchShell({ children }: { children: ReactNode }) {
             {batch.status === "completed" ? " · Completed" : ""}
           </span>
         </Anchor>
-        {roleLabel && (
+        {/* Le staff : son « View as » ; un investor : son etiquette ; un fondateur, rien. */}
+        {canViewAs && <ViewAsSwitch />}
+        {!canViewAs && isInvestor(role) && (
           <Text size="xs" c="pioneers" fw={600} tt="uppercase" lts={0.6} style={{ flexShrink: 0 }}>
-            {roleLabel}
+            Investor
           </Text>
         )}
       </Group>
+      {canViewAs && <ViewAsFounderPicker />}
 
       <Box component="nav" className="toptabs" visibleFrom="sm" mb="lg">
         {tabs.map((tab) => (

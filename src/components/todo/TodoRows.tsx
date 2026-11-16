@@ -100,7 +100,7 @@ function TaskRow({ item: { task, done } }: { item: TaskItem }) {
       title={<TaskTitle done={done}>{task.title}</TaskTitle>}
       subtitle={task.description ?? undefined}
       action={
-        <ToggleButton size="md" on={done} onToggle={(next) => setTaskDone(task, founder.id, next)} style={{ flexShrink: 0 }}>
+        <ToggleButton size="md" on={done} onToggle={(next) => setTaskDone(task, founder.id, next)}>
           {done ? "Done" : "Mark done"}
         </ToggleButton>
       }

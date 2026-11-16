@@ -5,7 +5,6 @@ import { Anchor, Button, Divider, Stack, Text } from "@mantine/core";
 import { IconBrandSlack } from "@tabler/icons-react";
 import { slackWorkspaceUrl } from "@shared/slackLinks";
 import { STARTUP_WEIGHTING_HINT } from "@shared/types";
-import { useAuth } from "@/context/AuthContext";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
 import { useFounders } from "@/context/FoundersContext";
@@ -35,8 +34,7 @@ import { NextSession } from "@/components/event/NextSession";
 // sont masques (lib/features.ts).
 export default function BatchHomePage() {
   const { program } = useProgram();
-  const { batch, role } = useBatch();
-  const { firebaseUser } = useAuth();
+  const { batch, role, isSignedIn } = useBatch();
   const { founders } = useFounders();
   const { startups } = useStartups();
   const { stats, canSeeScores, founderPerformance, startupScoreOf } = useCohort();
@@ -100,7 +98,7 @@ export default function BatchHomePage() {
 
         {role === "public" && (
           <Text size="sm" c="dimmed">
-            {firebaseUser ? (
+            {isSignedIn ? (
               // Connecte sans profil dans ce batch : se connecter n'y changerait rien.
               <>
                 Your account is not linked to a founder profile of this batch.{" "}

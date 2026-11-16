@@ -249,7 +249,9 @@ Roles : `users.roles` (`staff`, `investor`, `mentor`, cumulables) et `users.inve
 (`ic` ou `portfolio`), ecrits par le staff seulement. Un visiteur est fondateur d'un batch
 si `batchMemberships/{batchId}_{uid}` existe. Role dans un batch (`roleInBatch`) :
 `staff` > `investor_ic` > `investor_portfolio` > `founder` > `public` ; un mentor n'a pas
-d'acces en v1. Collections a plat avec `programId` / `batchId`.
+d'acces en v1. « View as » du staff (16/11, `lib/viewAs.ts`, switch `_chrome/ViewAsSwitch.tsx`) : BatchContext
+remplace `role` / `viewerFounderId` et SEUL lui lit le store ; sous un batch, lire `useBatch()` (`isSignedIn`,
+`canViewAs`), jamais `useAuth()` pour une decision de role, sinon l'apercu ne suit pas. Collections a plat avec `programId` / `batchId`.
 
 ## L'arbre : un niveau = un dossier = un layout = un Provider
 

@@ -5,7 +5,6 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Anchor, Group, SegmentedControl, SimpleGrid, Stack, Text, TextInput } from "@mantine/core";
 import type { ProfileCategory } from "@shared/types";
-import { useAuth } from "@/context/AuthContext";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
 import { useFounderDirectories } from "@/context/FounderDirectoriesContext";
@@ -17,6 +16,7 @@ import { useStartups } from "@/context/StartupsContext";
 import { missingRequiredFields } from "@/lib/completeness";
 import { PROFILE_CATEGORY_LABEL, score10, searchKey } from "@/lib/format";
 import { paths } from "@/lib/paths";
+import { ConnectionToggles } from "@/components/founder/ConnectionButtons";
 import { FounderGridCard } from "@/components/founder/FounderGridCard";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { LinkRow, RowList } from "@/components/ui/Rows";
@@ -45,8 +45,7 @@ export default function FoundersPage() {
 
 function FoundersDirectory() {
   const { program } = useProgram();
-  const { batch, role } = useBatch();
-  const { firebaseUser } = useAuth();
+  const { batch, role, isSignedIn } = useBatch();
   const { founders, isLoading } = useFounders();
   const { startupsById } = useStartups();
   const [query, setQuery] = useUrlState<string>("q", "");
@@ -101,7 +100,7 @@ function FoundersDirectory() {
 
   if (isLoading) return <PageLoader />;
 
-  /** Score (staff, investors), compte non rattache (staff) ou, pour un fondateur, « Shortlisted » / « Met », a droite de la ligne ou de la carte. */
+  /** Score (staff, investors) ou compte non rattache (staff), a droite de la ligne ou de la carte. */
   const metaOf = (founderId: string, uid: string | null) => {
     if (canSeeScores) {
       const score = founderPerformance(founderId);
@@ -112,8 +111,6 @@ function FoundersDirectory() {
       );
     }
     if (role === "staff" && !uid) return <Text size="xs" c="dimmed">Not linked</Text>;
-    const marks = [shortlisted.has(founderId) && "Shortlisted", met.has(founderId) && "Met"].filter(Boolean);
-    if (marks.length > 0) return <Text size="xs" c="dimmed">{marks.join(" · ")}</Text>;
     return undefined;
   };
   const startupNameOf = (startupId: string | null) => (startupId && startupsById.get(startupId)?.name) || null;
@@ -123,7 +120,7 @@ function FoundersDirectory() {
       {role === "public" && (
         <Text size="sm" c="dimmed" mb="md">
           Only founders who agreed to a public profile are listed.{" "}
-          {firebaseUser ? (
+          {isSignedIn ? (
             <>
               Your account is not linked to a profile of this batch:{" "}
               <Anchor component={Link} href={paths.claim()} inherit>
@@ -212,6 +209,7 @@ function FoundersDirectory() {
                 directory={directoriesById.get(f.id)}
                 startupName={startupNameOf(f.startupId)}
                 meta={metaOf(f.id, f.uid)}
+                overlay={<ConnectionToggles founderId={f.id} />}
               />
             ))}
           </SimpleGrid>
@@ -230,6 +228,8 @@ function FoundersDirectory() {
                 title={f.name}
                 subtitle={f.trackRecordOneLiner || context || undefined}
                 meta={metaOf(f.id, f.uid)}
+                // Fondateur du batch : ses bascules Shortlist / Met (rien pour les autres roles).
+                action={<ConnectionToggles founderId={f.id} />}
               />
             );
           })}
