@@ -5,7 +5,6 @@ import { useEvents } from "@/context/EventsContext";
 import { useTodoItems } from "@/hooks/useTodoItems";
 import { EventRow } from "@/components/event/EventRow";
 import { ChecklistRow, FormRow } from "@/components/todo/TodoRows";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
@@ -30,7 +29,6 @@ export default function TodoPage() {
 
   return (
     <>
-      <PageHeader title="To do" />
       {nothing && <Empty>You are all set. New forms and events show up here.</Empty>}
 
       <Section title="Checklist" hint="Tick a task once you have done it.">

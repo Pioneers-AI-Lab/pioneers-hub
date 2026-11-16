@@ -28,7 +28,7 @@ export function AddToCalendarButton({ batchId, batchName }: { batchId: string; b
 
   return (
     <>
-      {/* En tete de section : petit, mais une cible tactile de 40 px. */}
+      {/* Petit, mais une cible tactile de 40 px. */}
       <Button variant="subtle" size="compact-sm" h={40} px="xs" onClick={() => setOpened(true)}>
         Add to calendar
       </Button>

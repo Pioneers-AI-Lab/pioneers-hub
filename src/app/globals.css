@@ -218,6 +218,13 @@ button.row {
   border-top: 1px solid var(--mantine-color-dark-4);
   scroll-margin-top: calc(var(--app-shell-header-offset, 0px) + 16px);
 }
+/* Le filet ne vient qu'APRES un bloc : en tete de son conteneur (onglet de batch
+   sans titre de page), ni marge ni filet. */
+.section:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
 
 /* Barre d'enregistrement collee au bas de l'ecran (au-dessus des onglets sur mobile). */
 .savebar {

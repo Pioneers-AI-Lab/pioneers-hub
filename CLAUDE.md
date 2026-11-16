@@ -33,7 +33,6 @@ node scripts/import-sp26.mjs <bundle.json> --prod   # import du batch Spring 202
 node scripts/import-fa26.mjs <lien-airtable> --prod --overwrite-fa26 [--dry-run]   # batch Fall 2026 depuis la vue partagee du Profile Book (lien hors depot) ; NE JAMAIS LANCER SANS DEMANDER A L'UTILISATEUR : remplace les documents des profils non reclames, donc efface import-fa26-onboarding, anythingElse, les one-liners et les scores Elo (le script refuse d'ecrire en prod sans --overwrite-fa26)
 node scripts/import-fa26-onboarding.mjs <export.csv> --skills <skills.json> [--prod]   # complete FA26 depuis l'export CSV de la vue onboarding (rattachement par nom, remplit le vide, a blanc sans --prod ; fait le 16/11)
 node scripts/set-one-liners.mjs <one-liners.json> [--overwrite] [--prod]   # ecrit `founders.trackRecordOneLiner` ({ founderId: texte }), remplit le vide sauf --overwrite, a blanc sans --prod ; textes FA26 rediges en session Claude le 16/11 (fichier hors depot)
-node scripts/set-photo.mjs <founderId> <image> [--prod]   # photo d'un fondateur deposee par le staff, comme « Mon profil » (photo-*.jpg + vignette), a blanc sans --prod ; Rida Taleb le 16/11
 node scripts/import-events.mjs "Week 1" [--prod]   # evenements de data/events.json ET leurs formulaires (a blanc sans --prod, n'ecrase jamais)
 node scripts/sync-events.mjs "Week 1" [--prod] [--only cle1,cle2]   # MET A JOUR les evenements sur data/events.json (agenda, bareme, matching sans equipes), recree les formulaires sans reponse, archive `archived` ; `--only` : ces evenements seulement (semaine en cours)
 node scripts/elo-rank.mjs <batchId> [--prod] [--rounds 8]   # Elo des profils par Claude (claude-opus-5-5, ANTHROPIC_API_KEY ; a blanc sans --prod : aucun appel)
@@ -319,7 +318,10 @@ Regles :
   48em (16 px, 48 px de haut) (`BatchShell`, `.tabbar` / `.toptabs`, `--tabbar-height`). Pas d'icones. Les onglets
   dependent du role (fondateur : To do, Me). Aucun onglet staff : TOUS les outils du staff sont dans
   `/admin` (decision du 13/11) : Access (comptes), Founder profiles, Events, Forms, Tasks, Import founders, Batch settings.
-  Onglets : Home, Founders, Calendar (+ To do, Me). Startups et la section Milestones de l'accueil sont MASQUES
+  Onglets : Home, Founders, Calendar (+ To do, Me). Pas de titre de page sous un onglet (16/11, place verticale) :
+  nom et dates du batch dans la ligne du haut de `BatchShell` ; compteur d'une liste dans sa recherche
+  (`components/ui/SearchCount.tsx`) ; « Add to calendar » en bas de Calendar ; une `Section` en tete de son
+  conteneur n'a ni marge ni filet (`.section:first-child`, `globals.css`). Startups et la section Milestones de l'accueil sont MASQUES
   par drapeau (`lib/features.ts`, decision du 15/11 : startups formees le 25/11) ; le code reste.
 - Champs de saisie en 16 px (sinon iOS zoome) : taille `md` par defaut (theme.ts). Boutons
   d'action principaux `size="md"`, pleine largeur sur mobile ; enregistrement dans `.savebar`.

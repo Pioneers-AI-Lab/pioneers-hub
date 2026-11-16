@@ -9,9 +9,9 @@ import { useFounders } from "@/context/FoundersContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
 import { paths } from "@/lib/paths";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { LinkRow, RowList } from "@/components/ui/Rows";
+import { searchCount } from "@/components/ui/SearchCount";
 import { Empty } from "@/components/ui/Section";
 
 export default function StartupsPage() {
@@ -37,9 +37,8 @@ export default function StartupsPage() {
 
   return (
     <>
-      <PageHeader title="Startups" right={<Text c="dimmed" className="num">{startups.length}</Text>} />
       {startups.length > 6 && (
-        <TextInput placeholder="Search a startup" value={search} onChange={(e) => setSearch(e.currentTarget.value)} type="search" mb="xs" />
+        <TextInput placeholder="Search a startup" value={search} onChange={(e) => setSearch(e.currentTarget.value)} type="search" mb="xs" {...searchCount(visible.length, startups.length)} />
       )}
       {visible.length === 0 ? (
         <Empty>
