@@ -1,7 +1,15 @@
 // ----------------------------
 // Import du batch Fall 2026 (Profile Book FA26, vue partagee Airtable)
 // ----------------------------
-// node scripts/import-fa26.mjs <lien-de-partage-airtable> --prod [--dry-run]     projet reel pioneers-3627c
+// !!! NE PAS RELANCER SANS L'ACCORD EXPLICITE DE L'UTILISATEUR (decision du 16/11) !!!
+// Fait le 12/11. Chaque ecriture REMPLACE le document entier d'un profil non
+// reclame : un nouveau passage efface ce qui a ete ajoute depuis, notamment
+// import-fa26-onboarding.mjs (email, WhatsApp, logistique, cofondateur...),
+// `anythingElse`, les one-liners (`trackRecordOneLiner`, ecrits par
+// set-one-liners.mjs) et les scores Elo (`private/internal`). Sur le projet reel, l'ecriture exige en plus
+// `--overwrite-fa26` ; `--dry-run` reste libre.
+//
+// node scripts/import-fa26.mjs <lien-de-partage-airtable> --prod --overwrite-fa26 [--dry-run]   projet reel pioneers-3627c
 // FIRESTORE_EMULATOR_HOST=127.0.0.1:8180 FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9399 \
 //   node scripts/import-fa26.mjs <lien-de-partage-airtable>                       emulateurs
 //
@@ -46,6 +54,13 @@ const dryRun = args.includes("--dry-run");
 if (!shareUrl) throw new Error("usage: node scripts/import-fa26.mjs <lien-de-partage-airtable> [--prod] [--dry-run]");
 const onEmulator = !!process.env.FIRESTORE_EMULATOR_HOST;
 if (!onEmulator && !args.includes("--prod")) throw new Error("projet reel : ajouter --prod (ou FIRESTORE_EMULATOR_HOST pour les emulateurs)");
+if (!onEmulator && !dryRun && !args.includes("--overwrite-fa26")) {
+  throw new Error(
+    "ATTENTION : cet import REMPLACE les documents des profils FA26 non reclames et efface l'import onboarding du 16/11, " +
+      "anythingElse, les one-liners et les scores Elo. Ne le relancer qu'avec l'accord explicite de l'utilisateur, puis ajouter --overwrite-fa26 " +
+      "(ou --dry-run pour voir sans ecrire).",
+  );
+}
 
 const PROJECT_ID = onEmulator ? "demo-pioneers-hub" : "pioneers-3627c";
 const BUCKET = onEmulator ? "demo-pioneers-hub.appspot.com" : "pioneers-3627c.firebasestorage.app";

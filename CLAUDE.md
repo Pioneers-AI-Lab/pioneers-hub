@@ -30,8 +30,9 @@ npm run deploy:rules  # regles + index Firestore sur le projet reel (apres check
 npm run init:prod     # documents de depart du projet reel (rejouable, n'ecrase rien)
 npm run grant -- <email> staff|investor ic|investor portfolio|mentor|none   # role d'un compte, reel
 node scripts/import-sp26.mjs <bundle.json> --prod   # import du batch Spring 2026 (paquet hors depot, donnees personnelles)
-node scripts/import-fa26.mjs <lien-airtable> --prod [--dry-run]   # batch Fall 2026 depuis la vue partagee du Profile Book (lien hors depot) ; ATTENTION : remplace les documents des profils non reclames, donc efface ce qu'a rempli import-fa26-onboarding
+node scripts/import-fa26.mjs <lien-airtable> --prod --overwrite-fa26 [--dry-run]   # batch Fall 2026 depuis la vue partagee du Profile Book (lien hors depot) ; NE JAMAIS LANCER SANS DEMANDER A L'UTILISATEUR : remplace les documents des profils non reclames, donc efface import-fa26-onboarding, anythingElse, les one-liners et les scores Elo (le script refuse d'ecrire en prod sans --overwrite-fa26)
 node scripts/import-fa26-onboarding.mjs <export.csv> --skills <skills.json> [--prod]   # complete FA26 depuis l'export CSV de la vue onboarding (rattachement par nom, remplit le vide, a blanc sans --prod ; fait le 16/11)
+node scripts/set-one-liners.mjs <one-liners.json> [--overwrite] [--prod]   # ecrit `founders.trackRecordOneLiner` ({ founderId: texte }), remplit le vide sauf --overwrite, a blanc sans --prod ; textes FA26 rediges en session Claude le 16/11 (fichier hors depot)
 node scripts/import-events.mjs "Week 1" [--prod]   # evenements de data/events.json ET leurs formulaires (a blanc sans --prod, n'ecrase jamais)
 node scripts/sync-events.mjs "Week 1" [--prod] [--only cle1,cle2]   # MET A JOUR les evenements sur data/events.json (agenda, bareme, matching sans equipes), recree les formulaires sans reponse, archive `archived` ; `--only` : ces evenements seulement (semaine en cours)
 node scripts/elo-rank.mjs <batchId> [--prod] [--rounds 8]   # Elo des profils par Claude (claude-opus-5-5, ANTHROPIC_API_KEY ; a blanc sans --prod : aucun appel)

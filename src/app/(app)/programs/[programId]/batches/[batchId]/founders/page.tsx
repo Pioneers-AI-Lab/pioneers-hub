@@ -196,7 +196,7 @@ export default function FoundersPage() {
                 href={paths.founder(program.id, batch.id, f.id)}
                 avatar={{ name: f.name, photoUrl: f.photoUrl }}
                 title={f.name}
-                subtitle={context || undefined}
+                subtitle={f.trackRecordOneLiner || context || undefined}
                 meta={metaOf(f.id, f.uid)}
               />
             );

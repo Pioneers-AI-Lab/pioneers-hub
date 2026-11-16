@@ -13,8 +13,8 @@ import { useFounders } from "@/context/FoundersContext";
 // Annuaire du batch en grille (Profile Book)
 // ----------------------------
 // Monte par .../founders/layout.tsx. La carte d'un fondateur reprend le
-// Profile Book (track record, interets, formation, entreprises, nationalite) :
-// des champs de `private/directory`, un document par fondateur, lus si le role
+// Profile Book (formation, entreprises, nationalite ; le one-liner vient de la
+// fiche racine) : des champs de `private/directory`, un document par fondateur, lus si le role
 // y a droit. La grille est la vue par defaut (demande du 15/11), la liste reste
 // au choix. Le mode vit ici et non dans la page : on revient d'une fiche sur la
 // vue quittee, ecouteurs gardes. Ils s'ouvrent a la premiere visite de

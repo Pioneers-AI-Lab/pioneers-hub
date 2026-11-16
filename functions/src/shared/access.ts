@@ -135,9 +135,10 @@ export const canReadStartupProfile = (
 // ----------------------------
 // MIROIR des regles `update` de firestore.rules (founders, private/directory,
 // private/profile, people). Tout autre champ est ecrit par le staff, l'import
-// ou l'API. Exclus : les champs generes (profileCategory, trackRecordOneLiner,
-// trackRecord3Liners), le statut, le rattachement, et l'email (cle du
-// rattachement de compte).
+// ou l'API. Exclus : les champs generes (profileCategory, trackRecord3Liners),
+// le one-liner de la grille (`trackRecordOneLiner`, staff seul : « Staff only »
+// de l'editeur, decision du 16/11), le statut, le rattachement, et l'email (cle
+// du rattachement de compte).
 //
 // WhatsApp, LinkedIn et le telephone vivent dans `people` et sont COPIES dans
 // `private/directory` : le fondateur ecrit les deux dans le meme lot, et la

@@ -12,10 +12,11 @@ import { FounderCover } from "./FounderCover";
 // Carte d'un fondateur dans la grille de l'annuaire
 // ----------------------------
 // Reprend la galerie du Profile Book FA26 (Airtable) : la photo en couverture,
-// puis nom, type de profil, nationalite, track record, ce qui l'interesse,
-// hard skills, industries, formation, entreprises (ces quatre en etiquettes). Tout est montre en entier,
-// comme dans le Profile Book ; un champ vide est masque. Sans `directory`
-// (visiteur public), la carte se contente du document racine.
+// puis nom, type de profil, nationalite, le one-liner (`trackRecordOneLiner`,
+// une phrase ecrite par le staff, a la place du track record et de « Interested
+// in » depuis le 16/11 : ils restent sur la fiche), hard skills, industries,
+// formation, entreprises (ces quatre en etiquettes). Un champ vide est masque.
+// Sans `directory` (visiteur public), la carte se contente du document racine.
 
 export function FounderGridCard({
   href,
@@ -54,8 +55,7 @@ export function FounderGridCard({
           {meta && <Box style={{ flexShrink: 0 }}>{meta}</Box>}
         </Group>
 
-        <Field label="Track record">{directory?.trackRecord || founder.trackRecordOneLiner}</Field>
-        <Field label="Interested in">{directory?.interestedInWorkingOn}</Field>
+        {founder.trackRecordOneLiner && <Text size="sm">{founder.trackRecordOneLiner}</Text>}
         <Field label="Hard skills">{tags(founder.hardSkills, (v) => colorOf("hardSkills", v))}</Field>
         <Field label="Industries">{tags(founder.industries, (v) => colorOf("industries", v))}</Field>
         <Field label="Education">{tags(directory?.education)}</Field>

@@ -26,14 +26,20 @@ export type MyProfilePatch = {
 };
 
 /**
- * `canWriteIdentity` : la personne est rattachee a ce compte (sinon WhatsApp et LinkedIn sont refuses).
- * `slackUserId` (staff seulement) : ecrit dans le meme lot ; `undefined` = inchange.
+ * Champs que le staff seul modifie (section « Staff only ») ; absent = inchange.
+ * `slackUserId` : `people` et sa copie (lib/slackAdmin.ts). `trackRecordOneLiner` :
+ * la fiche (regle `founders` : ecriture staff, hors FOUNDER_SELF_EDITABLE).
  */
-export async function saveMyProfile(founder: WithId<Founder>, patch: MyProfilePatch, canWriteIdentity: boolean, slackUserId?: string | null) {
+export type StaffPatch = { slackUserId?: string | null; trackRecordOneLiner?: string | null };
+
+/** `canWriteIdentity` : la personne est rattachee a ce compte (sinon WhatsApp et LinkedIn sont refuses). */
+export async function saveMyProfile(founder: WithId<Founder>, patch: MyProfilePatch, canWriteIdentity: boolean, staff: StaffPatch = {}) {
   const now = new Date().toISOString();
   const batch = writeBatch(db);
-  if (Object.keys(patch.founder).length > 0) {
-    batch.set(refs.founder(founder.id), { ...patch.founder, updatedDateISOString: now }, { merge: true });
+  const { slackUserId, trackRecordOneLiner } = staff;
+  const founderPatch = { ...patch.founder, ...(trackRecordOneLiner !== undefined ? { trackRecordOneLiner } : {}) };
+  if (Object.keys(founderPatch).length > 0) {
+    batch.set(refs.founder(founder.id), { ...founderPatch, updatedDateISOString: now }, { merge: true });
   }
   const { whatsapp, linkedinUrl, phone, ...directory } = patch.directory;
   const identity = {

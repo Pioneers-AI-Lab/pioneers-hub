@@ -26,7 +26,7 @@ import { useBatch } from "@/context/BatchContext";
 import { useFounder } from "@/context/FounderContext";
 import { useLists } from "@/context/ListsContext";
 import { isRequiredProfileField } from "@/lib/completeness";
-import { saveMyProfile, type MyProfilePatch } from "@/lib/profile";
+import { saveMyProfile, type MyProfilePatch, type StaffPatch } from "@/lib/profile";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PhotoUpload } from "./PhotoUpload";
 import { PageLoader } from "@/components/ui/PageLoader";
@@ -39,8 +39,9 @@ import { Section } from "@/components/ui/Section";
 // Seuls les champs de FOUNDER_SELF_EDITABLE (shared/access.ts) sont proposes,
 // et seuls les champs MODIFIES sont envoyes : rien n'ecrase une valeur que le
 // fondateur n'a pas touchee. Le staff ne touche pas au consentement a la page
-// publique : c'est le choix du fondateur. Le staff seul voit et saisit l'id
-// Slack (section « Staff only », hors completude du profil). Un champ
+// publique : c'est le choix du fondateur. Le staff seul saisit l'id Slack et
+// le one-liner de la grille (section « Staff only », hors completude du
+// profil, decision du 16/11 pour le one-liner). Un champ
 // obligatoire du registre (celui qui manque dans le To do) porte l'asterisque.
 
 type EditorProps = {
@@ -66,8 +67,8 @@ type Draft = {
   founder: Required<MyProfilePatch["founder"]>;
   directory: Required<MyProfilePatch["directory"]>;
   profile: Required<MyProfilePatch["profile"]>;
-  /** Staff seulement : `people.slackUserId` et sa copie (lib/slackAdmin.ts). */
-  slackUserId: string | null;
+  /** Staff seulement (section « Staff only »), ecrits par `saveMyProfile`. */
+  staff: Required<StaffPatch>;
 };
 
 function changed<T extends Record<string, unknown>>(initial: T, current: T): Partial<T> {
@@ -79,6 +80,8 @@ function changed<T extends Record<string, unknown>>(initial: T, current: T): Par
 }
 
 const T_SHIRTS = ["XS", "S", "M", "L", "XL", "XXL"];
+/** Une phrase : la grille l'affiche en entier, la liste sur une ligne. */
+const ONE_LINER_MAX = 140;
 
 /** L'asterisque des champs obligatoires, tiree du registre (src/lib/completeness.ts). */
 const req = (key: DbFieldKey) => ({ withAsterisk: isRequiredProfileField(key) });
@@ -181,7 +184,7 @@ export function ProfileEditor({ back }: EditorProps) {
             anythingElse: directory.anythingElse ?? null,
           },
           profile: { housingSupport: profile?.housingSupport ?? null, tShirtSize: profile?.tShirtSize ?? null },
-          slackUserId: directory.slackUserId ?? null,
+          staff: { slackUserId: directory.slackUserId ?? null, trackRecordOneLiner: founder.trackRecordOneLiner ?? null },
         };
 
   if (!initial) {
@@ -220,16 +223,18 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
     directory: changed(initial.directory as Record<string, unknown>, dir as Record<string, unknown>) as Partial<FounderDirectory>,
     profile: changed(initial.profile, draft.profile),
   };
-  const slackChanged = isStaff && draft.slackUserId !== initial.slackUserId;
-  const slackInvalid = slackChanged && draft.slackUserId !== null && !isSlackUserId(draft.slackUserId);
+  const setS = <K extends keyof Draft["staff"]>(k: K, v: Draft["staff"][K]) => setDraft((d) => ({ ...d, staff: { ...d.staff, [k]: v } }));
+  // Vide hors staff : la section « Staff only » n'est montree qu'a lui.
+  const staffPatch: StaffPatch = changed(initial.staff, draft.staff);
+  const slackInvalid = staffPatch.slackUserId != null && !isSlackUserId(staffPatch.slackUserId);
   // Seulement une valeur modifiee : une ancienne valeur importee ne bloque pas le reste du profil.
   const linkedinInvalid = "linkedinUrl" in patch.directory && dir.linkedinUrl !== null && normalizeHttpUrl(dir.linkedinUrl) === null;
-  const dirty = slackChanged || Object.keys(patch.founder).length + Object.keys(patch.directory).length + Object.keys(patch.profile).length > 0;
+  const dirty = [patch.founder, patch.directory, patch.profile, staffPatch].some((p) => Object.keys(p).length > 0);
 
   const save = async () => {
     setIsSaving(true);
     try {
-      await saveMyProfile(founder, patch, canWriteIdentity, slackChanged ? draft.slackUserId : undefined);
+      await saveMyProfile(founder, patch, canWriteIdentity, staffPatch);
       notifications.show({ message: "Profile saved" });
       router.push(back.href);
     } catch (err) {
@@ -337,15 +342,26 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
       </Section>
 
       {isStaff && (
-        <Section title="Staff only" hint="Only the Pioneers team sees this. Not part of profile completeness.">
-          <TextInput
-            label="Slack member ID"
-            description="In Slack: their profile, then Copy member ID."
-            placeholder="U0123ABCD"
-            value={draft.slackUserId ?? ""}
-            onChange={(e) => setDraft((d) => ({ ...d, slackUserId: normalizeSlackId(e.currentTarget.value) }))}
-            error={slackInvalid ? "Starts with U (or W), like U0123ABCD." : undefined}
-          />
+        <Section title="Staff only" hint="Only the Pioneers team edits this. Not part of profile completeness.">
+          <Stack>
+            <Textarea
+              label="One-liner"
+              description="One sentence on the founder's edge, under their name in the founders grid and list."
+              autosize
+              minRows={1}
+              maxLength={ONE_LINER_MAX}
+              value={draft.staff.trackRecordOneLiner ?? ""}
+              onChange={(e) => setS("trackRecordOneLiner", text(e.currentTarget.value))}
+            />
+            <TextInput
+              label="Slack member ID"
+              description="In Slack: their profile, then Copy member ID."
+              placeholder="U0123ABCD"
+              value={draft.staff.slackUserId ?? ""}
+              onChange={(e) => setS("slackUserId", normalizeSlackId(e.currentTarget.value))}
+              error={slackInvalid ? "Starts with U (or W), like U0123ABCD." : undefined}
+            />
+          </Stack>
         </Section>
       )}
 
