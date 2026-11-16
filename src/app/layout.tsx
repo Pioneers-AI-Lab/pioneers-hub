@@ -28,7 +28,12 @@ const plexMono = localFont({
   preload: false,
 });
 
+// Adresse du site, base des URL absolues des apercus de lien (og:image) :
+// `NEXT_PUBLIC_SITE_URL`, sinon `URL` (fournie par Netlify au build), sinon le serveur local.
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? process.env.URL ?? "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: { default: APP_NAME, template: `%s · ${APP_NAME}` },
   description: "Founders, startups and events of the Pioneers batches.",
 };

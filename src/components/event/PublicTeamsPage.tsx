@@ -153,7 +153,6 @@ function GroupCard({
       </Text>
       <RowList>
         {ordered.map((m) => {
-          const marks = [m.id === leaderId && "leader", m.id === viewerFounderId && "you"].filter(Boolean);
           return (
             <LinkRow
               key={m.id}
@@ -162,12 +161,8 @@ function GroupCard({
               title={
                 <Text span inherit c={matches(m) ? "pioneers" : undefined}>
                   {m.name}
-                  {marks.length > 0 && (
-                    <Text span c="dimmed" size="sm" fw={400}>
-                      {" "}
-                      ({marks.join(", ")})
-                    </Text>
-                  )}
+                  {m.id === leaderId && <Mark c="pioneers">leader</Mark>}
+                  {m.id === viewerFounderId && <Mark c="dimmed">you</Mark>}
                 </Text>
               }
               subtitle={m.context ?? undefined}
@@ -176,5 +171,14 @@ function GroupCard({
         })}
       </RowList>
     </Box>
+  );
+}
+
+/** « (leader) » en bleu, « (you) » en gris, apres le nom. */
+function Mark({ c, children }: { c: string; children: string }) {
+  return (
+    <Text span c={c} size="sm" fw={400}>
+      {` (${children})`}
+    </Text>
   );
 }

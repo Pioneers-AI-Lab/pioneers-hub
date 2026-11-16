@@ -1,17 +1,13 @@
-import type { Metadata } from "next";
-import { APP_NAME } from "@shared/brand";
 import { PublicTeamsProvider } from "@/context/PublicTeamsContext";
+import { shareMetadata } from "@/lib/shareBanner";
 
 // Les groupes publies du matching d'un evenement (equipes ou tables), lien
-// partage sans compte. Le serveur Next ne lit aucune donnee : l'apercu du lien
-// ne porte pas le nom de l'evenement. `/lunch-roulette/{id}` et
-// `/challenge-teams/{id}` (liens deja partages) montrent la meme page.
+// partage sans compte. `/lunch-roulette/{id}` et `/challenge-teams/{id}` (liens
+// deja partages) montrent la meme page. Apercu du lien : la banniere de la
+// lunch roulette (lib/shareBanner.ts), le serveur ne sachant pas le type de
+// l'evenement.
 
-export const metadata: Metadata = {
-  title: "Groups",
-  description: "Find your team or your table.",
-  openGraph: { title: "Find your group", description: "Find your team or your table.", siteName: APP_NAME, type: "website" },
-};
+export const metadata = shareMetadata("Groups", "Find your team or your table.", "Find your group");
 
 export default function PublicGroupsLayout({ children }: LayoutProps<"/groups/[eventId]">) {
   return <PublicTeamsProvider>{children}</PublicTeamsProvider>;
