@@ -1,5 +1,5 @@
 {
-  "_doc": "Evenements du batch Fall 2026 (Pioneers Accelerator), a importer plus tard dans `events` (pas encore en base). Champs alignes sur `PioneersEvent` (functions/src/shared/types/event.ts) ; les heures `startTime`/`endTime` sont en heure de Paris (UTC+1), `startDateISOString` en UTC. Modele standard (SPECS §2) : l'evenement ne porte ni grille ni metriques ; scripts/import-events.mjs cree ses formulaires (shared/eventForms.ts) : le Debrief d'un hackathon avec `metrics` (sinon celles du modele), le jury et les picks en brouillon, et les modeles de `forms` en brouillon. Champs non importes : `key`, `dayString`, `endDayString`, `startTime`, `endTime`, `dateHint`, `schedule`, `dataToCollect`, `source`. `dataToCollect.status` : ok = stocke et saisissable ; partial = stocke en texte libre ; missing_capture = la base sait stocker, pas encore d'outil de saisie ; missing_structure = pas de place dans la base. Semaine 1 : planning valide du 13/11 (24 evenements). `formSettings` : par modele de formulaire, `opens` / `deadline` (heure de Paris, jour de l'evenement) et `draft` ; `criteria`, `submissionFields`, `scoring` et `sessions` (retro) vont aux formulaires et a l'evenement (scripts/sync-events.mjs). `archived` : cles a archiver en base (jamais supprimees).",
+  "_doc": "Evenements du batch Fall 2026 (Pioneers Accelerator), a importer plus tard dans `events` (pas encore en base). Champs alignes sur `PioneersEvent` (functions/src/shared/types/event.ts) ; les heures `startTime`/`endTime` sont en heure de Paris (UTC+1), `startDateISOString` en UTC. Modele standard (SPECS §2) : l'evenement ne porte ni grille ni metriques ; scripts/import-events.mjs cree ses formulaires (shared/eventForms.ts) : le Debrief d'un hackathon avec `metrics` (sinon celles du modele), le jury et les picks en brouillon, et les modeles de `forms` en brouillon. Champs non importes : `key`, `dayString`, `endDayString`, `startTime`, `endTime`, `dateHint`, `schedule`, `dataToCollect`, `source`. `dataToCollect.status` : ok = stocke et saisissable ; partial = stocke en texte libre ; missing_capture = la base sait stocker, pas encore d'outil de saisie ; missing_structure = pas de place dans la base. Semaine 1 : planning valide du 13/11, aligne le 16/11 sur le Google Calendar officiel (24 evenements) ; semaine 2 : Google Calendar officiel du 16/11 (14 evenements). `formSettings` : par modele de formulaire, `opens` / `deadline` (heure de Paris, jour de l'evenement) et `draft` ; `criteria`, `submissionFields`, `scoring` et `sessions` (retro) vont aux formulaires et a l'evenement (scripts/sync-events.mjs). `archived` : cles a archiver en base (jamais supprimees).",
   "programId": "accelerator",
   "batchId": "fall-2026",
   "sources": [
@@ -238,7 +238,7 @@
       "kind": "session",
       "templateKey": "founder_introductions",
       "stage": null,
-      "topic": "Time to present yourself. Three minutes in front of batch to tell everyone who you are, what you've done and what you want to build. A template slide will be shared on slack.",
+      "topic": "Time to present yourself.\n\nThree minutes in front of batch to tell everyone who you are, what you've done and what you want to build.\n\nA template slide will be shared on slack.",
       "dayString": "2026-11-16",
       "endDayString": null,
       "startTime": "16:00",
@@ -283,7 +283,7 @@
       "startDateISOString": "2026-11-16T17:30:00.000Z",
       "endDateISOString": "2026-11-16T19:00:00.000Z",
       "dateHint": null,
-      "location": "La Felicità",
+      "location": null,
       "programWeek": "Week 1",
       "isMilestone": false,
       "audience": "batch",
@@ -306,7 +306,7 @@
       "kind": "matching",
       "templateKey": null,
       "stage": null,
-      "topic": "Quick one-on-ones with everyone in the batch. You rotate every 3 minutes, so have your 30-second intro ready.",
+      "topic": "Quick one-on-ones with everyone in the batch. You rotate every 3 minutes, so have your 30-second intro ready.\n\nParticiper via Google Meet : https://meet.google.com/hmz-sdsb-oeh\nOu composez le : (FR) +33 1 87 40 01 96 Code PIN : 875365551#\nPlus de numéros de téléphone: https://tel.meet/hmz-sdsb-oeh?pin=5222437928170&hs=7\n\nPour en savoir plus sur Meet : https://support.google.com/a/users/answer/9282720",
       "dayString": "2026-11-17",
       "endDayString": null,
       "startTime": "09:30",
@@ -335,7 +335,7 @@
           "status": "missing_structure"
         }
       ],
-      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)",
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)",
       "matching": null,
       "forms": [
         "picks"
@@ -344,7 +344,8 @@
         "picks": {
           "draft": true
         }
-      }
+      },
+      "resourceUrl": "https://meet.google.com/hmz-sdsb-oeh"
     },
     {
       "key": "fa26-lunch-roulette-11-17",
@@ -383,7 +384,7 @@
       "kind": "session",
       "templateKey": null,
       "stage": null,
-      "topic": null,
+      "topic": "Participer via Google Meet : https://meet.google.com/hfn-mhsh-zwq\nOu composez le : (FR) +33 1 87 40 38 66 Code PIN : 489767873#\nPlus de numéros de téléphone: https://tel.meet/hfn-mhsh-zwq?pin=8174540094180&hs=7\n\nPour en savoir plus sur Meet : https://support.google.com/a/users/answer/9282720",
       "dayString": "2026-11-17",
       "endDayString": null,
       "startTime": "14:00",
@@ -391,7 +392,7 @@
       "startDateISOString": "2026-11-17T13:00:00.000Z",
       "endDateISOString": "2026-11-17T14:30:00.000Z",
       "dateHint": null,
-      "location": "Station F - Junior Stage",
+      "location": "Station F - Snowflake Room",
       "programWeek": "Week 1",
       "isMilestone": false,
       "audience": "batch",
@@ -421,7 +422,8 @@
           "status": "missing_capture"
         }
       ],
-      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)",
+      "resourceUrl": "https://meet.google.com/hfn-mhsh-zwq"
     },
     {
       "key": "fa26-talk-hugo-manoukian",
@@ -429,7 +431,7 @@
       "kind": "session",
       "templateKey": null,
       "stage": null,
-      "topic": "Session with Hugo Manoukian, one of our Venture Partners. Come with questions.",
+      "topic": "Session with Hugo Manoukian, one of our Venture Partners. Come with questions.\n\nParticiper via Google Meet : https://meet.google.com/uzd-drdf-brv\nOu composez le : (FR) +33 1 87 40 41 03 Code PIN : 324269137#\nPlus de numéros de téléphone: https://tel.meet/uzd-drdf-brv?pin=6886781470885&hs=7\n\nPour en savoir plus sur Meet : https://support.google.com/a/users/answer/9282720",
       "dayString": "2026-11-17",
       "endDayString": null,
       "startTime": "16:30",
@@ -467,11 +469,12 @@
           "status": "missing_capture"
         }
       ],
-      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)",
+      "resourceUrl": "https://meet.google.com/uzd-drdf-brv"
     },
     {
       "key": "fa26-hackathon-1-pain-hunters",
-      "name": "Hackathon 1: Pain Hunters",
+      "name": "Hackathon 1:  Pain Hunters",
       "kind": "team_challenge",
       "templateKey": "hackathon",
       "stage": null,
@@ -680,12 +683,12 @@
       "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
     },
     {
-      "key": "fa26-talk-benoit-miegeville",
-      "name": "Building your Sales Pipeline - Benoit Miegeville, CEO @Sonik",
+      "key": "fa26-talk-mom-test",
+      "name": "The Mom Test: How to talk to customers",
       "kind": "session",
       "templateKey": null,
       "stage": null,
-      "topic": "Benoit Miegeville, CEO of Sonik, on building a superstar sales pipeline from nothing.",
+      "topic": null,
       "dayString": "2026-11-18",
       "endDayString": null,
       "startTime": "17:30",
@@ -697,16 +700,7 @@
       "programWeek": "Week 1",
       "isMilestone": false,
       "audience": "batch",
-      "guests": [
-        {
-          "name": "Benoit Miegeville",
-          "role": "speaker",
-          "personId": null,
-          "founderId": null,
-          "mentorId": null,
-          "intro": null
-        }
-      ],
+      "guests": [],
       "metrics": null,
       "rankingMetricKey": null,
       "dataToCollect": [
@@ -715,15 +709,9 @@
           "target": "events/{id}/attendance",
           "capture": "staff (pointage)",
           "status": "ok"
-        },
-        {
-          "what": "Note en un geste (1-5)",
-          "target": "sessionRatings",
-          "capture": "formulaire",
-          "status": "missing_capture"
         }
       ],
-      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)"
     },
     {
       "key": "fa26-lunch-roulette-11-19",
@@ -758,7 +746,7 @@
     },
     {
       "key": "fa26-hackathon-2-phone-agents",
-      "name": "Hackathon 2: Phone Agents",
+      "name": "Hackathon 2:  Phone Agents",
       "kind": "team_challenge",
       "templateKey": "hackathon",
       "stage": null,
@@ -934,7 +922,7 @@
       "startDateISOString": "2026-11-19T18:00:00.000Z",
       "endDateISOString": "2026-11-19T19:30:00.000Z",
       "dateHint": null,
-      "location": "La Felicità",
+      "location": null,
       "programWeek": "Week 1",
       "isMilestone": false,
       "audience": "batch",
@@ -1127,7 +1115,7 @@
       "kind": "session",
       "templateKey": null,
       "stage": null,
-      "topic": "Alexis Robert, GP at Kima Ventures, on going from zero to one. One of the best sessions we run, don't miss it.",
+      "topic": "Alexis Robert, GP at Kima Ventures, on going from zero to one. One of the best sessions we run, don't miss it.\n\nParticiper via Google Meet : https://meet.google.com/bhb-ccfr-dgn\nOu composez le : (FR) +33 1 87 40 08 02 Code PIN : 311342011#\nPlus de numéros de téléphone: https://tel.meet/bhb-ccfr-dgn?pin=6882637421013&hs=7\n\nPour en savoir plus sur Meet : https://support.google.com/a/users/answer/9282720",
       "dayString": "2026-11-20",
       "endDayString": null,
       "startTime": "13:00",
@@ -1135,7 +1123,7 @@
       "startDateISOString": "2026-11-20T12:00:00.000Z",
       "endDateISOString": "2026-11-20T13:30:00.000Z",
       "dateHint": null,
-      "location": "Station F - Creativity Room",
+      "location": "Station F - Snowflake Room",
       "programWeek": "Week 1",
       "isMilestone": false,
       "audience": "batch",
@@ -1165,7 +1153,8 @@
           "status": "missing_capture"
         }
       ],
-      "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)"
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)",
+      "resourceUrl": "https://meet.google.com/bhb-ccfr-dgn"
     },
     {
       "key": "fa26-week-1-retro",
@@ -1232,8 +1221,8 @@
           "label": "Hackathon 1: Pain Hunters"
         },
         {
-          "id": "fa26-talk-benoit-miegeville",
-          "label": "Building your Sales Pipeline (Benoit Miegeville)"
+          "id": "fa26-talk-mom-test",
+          "label": "The Mom Test"
         },
         {
           "id": "fa26-hackathon-2-phone-agents",
@@ -1250,20 +1239,51 @@
       ]
     },
     {
-      "key": "fa26-lunch-roulette-11-23",
-      "name": "Lunch roulette",
-      "kind": "matching",
-      "templateKey": "lunch_roulette",
+      "key": "fa26-week-2-mission-brief",
+      "name": "Week 2 Mission Brief",
+      "kind": "session",
+      "templateKey": null,
       "stage": null,
-      "topic": null,
+      "topic": "What's happening this week, and how teams for the big hackathon get formed.",
       "dayString": "2026-11-23",
       "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "midi, heure a confirmer",
-      "location": null,
+      "startTime": "09:30",
+      "endTime": "10:00",
+      "startDateISOString": "2026-11-23T08:30:00.000Z",
+      "endDateISOString": "2026-11-23T09:00:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Creativity Room",
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        }
+      ],
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)"
+    },
+    {
+      "key": "fa26-masterclass-pitching",
+      "name": "Pitching & Presenting your Startup",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": "How to pitch your startup so people actually get it and remember it. You'll be pitching a lot from here on.",
+      "dayString": "2026-11-23",
+      "endDayString": null,
+      "startTime": "10:00",
+      "endTime": "11:00",
+      "startDateISOString": "2026-11-23T09:00:00.000Z",
+      "endDateISOString": "2026-11-23T10:00:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Creativity Room",
       "programWeek": "Week 2",
       "isMilestone": false,
       "audience": "batch",
@@ -1272,28 +1292,34 @@
       "schedule": null,
       "dataToCollect": [
         {
-          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
-          "target": "events/{id}/teams + memberships",
-          "capture": "generateur",
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
           "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
         }
       ],
-      "source": "brief"
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)"
     },
     {
-      "key": "fa26-lunch-roulette-11-24",
-      "name": "Lunch roulette",
+      "key": "fa26-lunch-roulette-11-23",
+      "name": "Lunch Roulette",
       "kind": "matching",
       "templateKey": "lunch_roulette",
       "stage": null,
-      "topic": null,
-      "dayString": "2026-11-24",
+      "topic": "Lunch with people from the batch who you don't know yet. We shuffle the groups every day, in groups of 4, and we post the groups on Slack. The top name is responsible for gathering the 3 others and selecting the lunch spot.",
+      "dayString": "2026-11-23",
       "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "midi, heure a confirmer",
+      "startTime": "12:00",
+      "endTime": "13:00",
+      "startDateISOString": "2026-11-23T11:00:00.000Z",
+      "endDateISOString": "2026-11-23T12:00:00.000Z",
+      "dateHint": null,
       "location": null,
       "programWeek": "Week 2",
       "isMilestone": false,
@@ -1309,23 +1335,23 @@
           "status": "ok"
         }
       ],
-      "source": "brief"
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)"
     },
     {
       "key": "fa26-hackathon-4-agent-agency",
-      "name": "Hackathon 4: Agent Agency",
+      "name": "Hackathon 4: Agent agency: revenue in 2 hours",
       "kind": "team_challenge",
       "templateKey": "hackathon",
       "stage": null,
-      "topic": "Build an agent for a real business and get paid within four hours. Winner: most money collected.",
+      "topic": "Find a business with a boring, repetitive task, build them a Twin agent that does it, and get paid. Money received counts, and a signed commitment breaks ties.",
       "dayString": "2026-11-23",
       "endDayString": null,
       "startTime": "14:00",
-      "endTime": "18:00",
+      "endTime": "16:00",
       "startDateISOString": "2026-11-23T13:00:00.000Z",
-      "endDateISOString": "2026-11-23T17:00:00.000Z",
+      "endDateISOString": "2026-11-23T15:00:00.000Z",
       "dateHint": null,
-      "location": null,
+      "location": "Station F - Creativity Room",
       "programWeek": "Week 2",
       "isMilestone": false,
       "audience": "batch",
@@ -1348,6 +1374,11 @@
         {
           "key": "loisSigned",
           "label": "LOIs signed",
+          "unit": null
+        },
+        {
+          "key": "closedWon",
+          "label": "Deals won",
           "unit": null
         }
       ],
@@ -1390,21 +1421,257 @@
           "status": "missing_capture"
         }
       ],
-      "source": "email, brief"
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11), SPECS §4.2",
+      "rankingMetricKey": null,
+      "criteria": [],
+      "submissionFields": [
+        "driveFolderUrl"
+      ],
+      "scoring": {
+        "items": [
+          {
+            "key": "amountPaid",
+            "label": "Money received",
+            "mode": "per_unit",
+            "sourceKey": "amountPaid",
+            "pointsPerUnit": 1
+          },
+          {
+            "key": "loisSigned",
+            "label": "Signed commitments",
+            "mode": "per_unit",
+            "sourceKey": "loisSigned",
+            "pointsPerUnit": 1,
+            "tieBreakOnly": true
+          },
+          {
+            "key": "closedWon",
+            "label": "Paying customers",
+            "mode": "per_unit",
+            "sourceKey": "closedWon",
+            "pointsPerUnit": 1,
+            "tieBreakOnly": true
+          }
+        ],
+        "tieBreaks": [
+          "loisSigned",
+          "closedWon"
+        ]
+      },
+      "forms": [
+        "picks"
+      ],
+      "formSettings": {
+        "debrief": {
+          "deadline": "15:45"
+        },
+        "peer_rating": {
+          "opens": "16:00"
+        },
+        "picks": {
+          "opens": "16:00",
+          "draft": true
+        }
+      }
+    },
+    {
+      "key": "fa26-hackathon-4-debrief",
+      "name": "Hackathon 4 Debrief: Results & Retro",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": "We go through the results, talk about what worked in your team and what didn't, and you fill in the peer rating form. Also send us your 3 picks for hackathon 5 teams before you leave: teams get formed Wednesday morning.",
+      "dayString": "2026-11-23",
+      "endDayString": null,
+      "startTime": "16:00",
+      "endTime": "16:30",
+      "startDateISOString": "2026-11-23T15:00:00.000Z",
+      "endDateISOString": "2026-11-23T15:30:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Creativity Room",
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        }
+      ],
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)"
+    },
+    {
+      "key": "fa26-talk-cyril",
+      "name": "Fireside chat with Cyril Seghers",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-23",
+      "endDayString": null,
+      "startTime": "17:00",
+      "endTime": "18:15",
+      "startDateISOString": "2026-11-23T16:00:00.000Z",
+      "endDateISOString": "2026-11-23T17:15:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Creativity Room",
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Cyril Seghers",
+          "role": "speaker",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)"
+    },
+    {
+      "key": "fa26-drinks-11-23",
+      "name": "Drinks @La Felicita",
+      "kind": "session",
+      "templateKey": "social",
+      "stage": null,
+      "topic": "Drinks at La Felicita before the big hackathon.",
+      "dayString": "2026-11-23",
+      "endDayString": null,
+      "startTime": "19:00",
+      "endTime": "20:45",
+      "startDateISOString": "2026-11-23T18:00:00.000Z",
+      "endDateISOString": "2026-11-23T19:45:00.000Z",
+      "dateHint": null,
+      "location": null,
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        }
+      ],
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)"
+    },
+    {
+      "key": "fa26-lunch-roulette-11-24",
+      "name": "Lunch Roulette",
+      "kind": "matching",
+      "templateKey": "lunch_roulette",
+      "stage": null,
+      "topic": "Lunch with people from the batch who you don't know yet. We shuffle the groups every day, in groups of 4, and we post the groups on Slack. The top name is responsible for gathering the 3 others and selecting the lunch spot.",
+      "dayString": "2026-11-24",
+      "endDayString": null,
+      "startTime": "12:00",
+      "endTime": "13:00",
+      "startDateISOString": "2026-11-24T11:00:00.000Z",
+      "endDateISOString": "2026-11-24T12:00:00.000Z",
+      "dateHint": null,
+      "location": null,
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "schedule": null,
+      "dataToCollect": [
+        {
+          "what": "Qui a rencontre qui (groupes de 4 publies sur Slack)",
+          "target": "events/{id}/teams + memberships",
+          "capture": "generateur",
+          "status": "ok"
+        }
+      ],
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)"
+    },
+    {
+      "key": "fa26-talk-benoit-miegeville",
+      "name": "Building your Sales Pipeline - Benoit Miegeville, CEO @Sonik",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": null,
+      "dayString": "2026-11-24",
+      "endDayString": null,
+      "startTime": "17:30",
+      "endTime": "18:45",
+      "startDateISOString": "2026-11-24T16:30:00.000Z",
+      "endDateISOString": "2026-11-24T17:45:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Creativity Room",
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [
+        {
+          "name": "Benoit Miegeville",
+          "role": "speaker",
+          "personId": null,
+          "founderId": null,
+          "mentorId": null,
+          "intro": null
+        }
+      ],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        },
+        {
+          "what": "Note en un geste (1-5)",
+          "target": "sessionRatings",
+          "capture": "formulaire",
+          "status": "missing_capture"
+        }
+      ],
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)"
     },
     {
       "key": "fa26-hackathon-5-zero-to-first-customer",
-      "name": "Hackathon 5: Zero to First Customer",
+      "name": "Hackathon 5: Zero to first customer",
       "kind": "team_challenge",
       "templateKey": "hackathon",
       "stage": null,
-      "topic": "Three days: teams build an agent-powered product and land a first customer. Demos on Monday 30 November at 10:00.",
+      "topic": "Three days to build an agent-powered company and land your first customer. Check-ins at 18:00 on Wednesday and Thursday, and builds freeze Friday at 17:00. Sales and users keep counting until Monday 9:00, and you demo Monday morning.",
       "dayString": "2026-11-25",
-      "endDayString": "2026-11-30",
-      "startTime": null,
-      "endTime": "12:00",
-      "startDateISOString": null,
-      "endDateISOString": "2026-11-30T11:00:00.000Z",
+      "endDayString": "2026-11-27",
+      "startTime": "09:30",
+      "endTime": "19:30",
+      "startDateISOString": "2026-11-25T08:30:00.000Z",
+      "endDateISOString": "2026-11-27T18:30:00.000Z",
       "dateHint": null,
       "location": null,
       "programWeek": "Week 2",
@@ -1523,53 +1790,142 @@
           "status": "missing_capture"
         }
       ],
-      "source": "email, brief"
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11), email, brief",
+      "formSettings": {
+        "debrief": {
+          "draft": true
+        },
+        "peer_rating": {
+          "draft": true
+        },
+        "jury": {
+          "draft": true
+        }
+      }
     },
     {
-      "key": "fa26-talk-cyril",
-      "name": "Talk: Cyril",
+      "key": "fa26-hackathon-5-kickoff",
+      "name": "Hackathon 5 Kickoff",
       "kind": "session",
-      "templateKey": "masterclass",
+      "templateKey": null,
       "stage": null,
-      "topic": null,
-      "dayString": null,
+      "topic": "We start by forming the teams, based on the picks you sent after Monday's debrief, with mutual picks first. Then we go through the rules and how you'll be scored, and each team picks its problem and writes a one-page plan. From 10:30 you set up your shared Twin workspace so you can start building straight after.",
+      "dayString": "2026-11-25",
       "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "semaines 1-2, date a confirmer",
-      "location": null,
-      "programWeek": null,
+      "startTime": "09:30",
+      "endTime": "10:00",
+      "startDateISOString": "2026-11-25T08:30:00.000Z",
+      "endDateISOString": "2026-11-25T09:00:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Pioneers space",
+      "programWeek": "Week 2",
       "isMilestone": false,
       "audience": "batch",
-      "guests": [
-        {
-          "name": "Cyril",
-          "role": "speaker",
-          "personId": null,
-          "founderId": null,
-          "mentorId": null,
-          "intro": null
-        }
-      ],
+      "guests": [],
       "metrics": null,
-      "schedule": null,
+      "rankingMetricKey": null,
       "dataToCollect": [
         {
           "what": "Presence",
           "target": "events/{id}/attendance",
           "capture": "staff (pointage)",
           "status": "ok"
-        },
-        {
-          "what": "Note en un geste (1-5)",
-          "target": "sessionRatings",
-          "capture": "formulaire",
-          "status": "missing_capture"
         }
       ],
-      "source": "brief"
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)"
+    },
+    {
+      "key": "fa26-hackathon-5-check-in-1",
+      "name": "Hackathon 5 Check-in #1",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": "Two minutes per team: where you are, what's blocking you, what's next tomorrow.",
+      "dayString": "2026-11-25",
+      "endDayString": null,
+      "startTime": "18:00",
+      "endTime": "18:30",
+      "startDateISOString": "2026-11-25T17:00:00.000Z",
+      "endDateISOString": "2026-11-25T17:30:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Pioneers space",
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        }
+      ],
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)"
+    },
+    {
+      "key": "fa26-hackathon-5-check-in-2",
+      "name": "Hackathon 5 Check-in #2",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": "Two minutes per team: where you are, what's blocking you, what's left for the last day.",
+      "dayString": "2026-11-26",
+      "endDayString": null,
+      "startTime": "18:00",
+      "endTime": "18:30",
+      "startDateISOString": "2026-11-26T17:00:00.000Z",
+      "endDateISOString": "2026-11-26T17:30:00.000Z",
+      "dateHint": null,
+      "location": "Station F - Pioneers space",
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        }
+      ],
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)"
+    },
+    {
+      "key": "fa26-hackathon-5-build-freeze",
+      "name": "Hackathon 5 Build Freeze",
+      "kind": "session",
+      "templateKey": null,
+      "stage": null,
+      "topic": "Stop building at 17:00. You can keep selling and counting users until Monday 9:00, but the product stays as it is.",
+      "dayString": "2026-11-27",
+      "endDayString": null,
+      "startTime": "17:00",
+      "endTime": "17:30",
+      "startDateISOString": "2026-11-27T16:00:00.000Z",
+      "endDateISOString": "2026-11-27T16:30:00.000Z",
+      "dateHint": null,
+      "location": null,
+      "programWeek": "Week 2",
+      "isMilestone": false,
+      "audience": "batch",
+      "guests": [],
+      "metrics": null,
+      "rankingMetricKey": null,
+      "dataToCollect": [
+        {
+          "what": "Presence",
+          "target": "events/{id}/attendance",
+          "capture": "staff (pointage)",
+          "status": "ok"
+        }
+      ],
+      "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)"
     },
     {
       "key": "fa26-talk-clement-revillion",
@@ -1599,43 +1955,6 @@
           "intro": null
         }
       ],
-      "metrics": null,
-      "schedule": null,
-      "dataToCollect": [
-        {
-          "what": "Presence",
-          "target": "events/{id}/attendance",
-          "capture": "staff (pointage)",
-          "status": "ok"
-        },
-        {
-          "what": "Note en un geste (1-5)",
-          "target": "sessionRatings",
-          "capture": "formulaire",
-          "status": "missing_capture"
-        }
-      ],
-      "source": "brief"
-    },
-    {
-      "key": "fa26-masterclass-pitching",
-      "name": "Masterclass: pitching",
-      "kind": "session",
-      "templateKey": "masterclass",
-      "stage": null,
-      "topic": null,
-      "dayString": null,
-      "endDayString": null,
-      "startTime": null,
-      "endTime": null,
-      "startDateISOString": null,
-      "endDateISOString": null,
-      "dateHint": "semaines 1-2, date a confirmer",
-      "location": null,
-      "programWeek": null,
-      "isMilestone": false,
-      "audience": "batch",
-      "guests": [],
       "metrics": null,
       "schedule": null,
       "dataToCollect": [

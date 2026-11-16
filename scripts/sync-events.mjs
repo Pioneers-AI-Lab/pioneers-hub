@@ -3,12 +3,15 @@
 // ----------------------------
 // node scripts/sync-events.mjs "Week 1"          a blanc : affiche ce qui changerait
 // node scripts/sync-events.mjs "Week 1" --prod   ecrit
+// --only cle1,cle2 : seulement ces evenements de la semaine (et rien a archiver) ; les
+// autres et leurs formulaires ne sont pas touches (une semaine en cours, retouchee par le staff).
 //
 // Contrairement a import-events.mjs (qui cree sans jamais toucher a l'existant),
 // ce script MET A JOUR un evenement deja en base sur le planning valide :
 //   - les champs d'agenda : nom, description (`topic`), etiquette, modele, debut,
 //     fin, lieu, statut (un brouillon devient programme quand l'heure est connue),
-//     semaine, jalon, invites, bareme (`scoring`) ;
+//     semaine, jalon, invites, bareme (`scoring`), et le lien `resourceUrl` s'il est dans le fichier
+//     (il REMPLACE alors le lien saisi par le staff, slides ou brief : un seul lien par evenement) ;
 //   - le matching, SAUF si l'evenement a deja des equipes (on ne casse pas un tirage) ;
 //   - les cles de `archived` (en tete du fichier) sont archivees, jamais supprimees.
 // Ses formulaires (shared/eventForms.ts : le pack du modele, plus `forms` du
@@ -30,16 +33,24 @@ const require = createRequire(import.meta.url);
 const { eventFormDocs, eventFormsPlan } = require("../functions/lib/shared/eventForms.js");
 
 const PROJECT_ID = "pioneers-3627c";
-const [week, flag] = process.argv.slice(2);
-const write = flag === "--prod";
-if (!week) {
-  console.error('usage: node scripts/sync-events.mjs "Week 1" [--prod]');
+const [week, ...flags] = process.argv.slice(2);
+const write = flags.includes("--prod");
+const onlyAt = flags.indexOf("--only");
+const only = onlyAt === -1 ? null : new Set((flags[onlyAt + 1] ?? "").split(",").filter(Boolean));
+if (!week || only?.size === 0) {
+  console.error('usage: node scripts/sync-events.mjs "Week 1" [--prod] [--only cle1,cle2]');
   process.exit(1);
 }
 const onEmulator = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
 if (onEmulator) console.log(`Emulateurs (${process.env.FIRESTORE_EMULATOR_HOST}) : projet de demo.`);
 
-const { data, selected } = readEventsFile(week);
+const { data, selected: weekEvents } = readEventsFile(week);
+const selected = only ? weekEvents.filter((e) => only.has(e.key)) : weekEvents;
+if (only && selected.length < only.size) {
+  const found = new Set(selected.map((e) => e.key));
+  throw new Error(`Pas dans « ${week} » : ${[...only].filter((key) => !found.has(key)).join(", ")}`);
+}
+if (only) console.log(`--only : ${selected.length} evenement(s) sur ${weekEvents.length}, les autres et \`archived\` ne sont pas touches.`);
 
 /** Les champs d'agenda que le planning fait foi ; le matching a part (equipes). */
 const AGENDA_FIELDS = [
@@ -91,6 +102,8 @@ for (const [n, e] of selected.entries()) {
     const current = snap.data();
     const patch = {};
     for (const f of AGENDA_FIELDS) if (!same(current[f], ev[f])) patch[f] = ev[f];
+    // Le lien : seulement si le fichier le donne (sinon celui saisi par le staff reste).
+    if ("resourceUrl" in e && !same(current.resourceUrl, ev.resourceUrl)) patch.resourceUrl = ev.resourceUrl;
     if (current.status === "draft" && ev.status === "scheduled") patch.status = "scheduled";
     // Un evenement d'avant le 13/11 n'a pas le champ : il deduirait un tirage de son type. On l'ecrit.
     if (current.matching === undefined || !same(current.matching, ev.matching)) {
@@ -141,7 +154,7 @@ for (const [n, e] of selected.entries()) {
   }
 }
 
-const toArchive = data.archived ?? [];
+const toArchive = only ? [] : (data.archived ?? []);
 for (const snap of toArchive.length ? await db.getAll(...toArchive.map((key) => db.doc(`events/${key}`))) : []) {
   if (!snap.exists || snap.data().archivedDateISOString) continue;
   ops.push({ kind: "update", path: snap.ref.path, data: { archivedDateISOString: now, updatedDateISOString: now } });

@@ -32,7 +32,7 @@ npm run grant -- <email> staff|investor ic|investor portfolio|mentor|none   # ro
 node scripts/import-sp26.mjs <bundle.json> --prod   # import du batch Spring 2026 (paquet hors depot, donnees personnelles)
 node scripts/import-fa26.mjs <lien-airtable> --prod [--dry-run]   # batch Fall 2026 depuis la vue partagee du Profile Book (lien hors depot)
 node scripts/import-events.mjs "Week 1" [--prod]   # evenements de data/events.json ET leurs formulaires (a blanc sans --prod, n'ecrase jamais)
-node scripts/sync-events.mjs "Week 1" [--prod]     # MET A JOUR les evenements sur data/events.json (agenda, bareme, matching sans equipes), recree les formulaires sans reponse, archive `archived`
+node scripts/sync-events.mjs "Week 1" [--prod] [--only cle1,cle2]   # MET A JOUR les evenements sur data/events.json (agenda, bareme, matching sans equipes), recree les formulaires sans reponse, archive `archived` ; `--only` : ces evenements seulement (semaine en cours)
 node scripts/elo-rank.mjs <batchId> [--prod] [--rounds 8]   # Elo des profils par Claude (claude-opus-5-5, ANTHROPIC_API_KEY ; a blanc sans --prod : aucun appel)
 node scripts/migrate-standard-forms.mjs <batchId> [--prod]   # modele standard : anciens metrics/criteria/picks -> formulaires (a blanc sans --prod)
 node scripts/migrate-education-tags.mjs <batchId|--all> [--prod]   # `founderDirectory.education` texte -> liste (separateurs `;` et ` · `, shared/text.ts#splitTextList), a blanc sans --prod
@@ -66,7 +66,7 @@ Donnees : batch `spring-2026` (termine) importe du dashboard spring2026.thepione
 reimport sans perte des rattachements). Batch `fall-2026` importe le 12/11 de la vue partagee
 « Pioneers Profile Book - FA26 » (32 fondateurs, ids Airtable, sans email : rattachement par /claim).
 Noms affiches des batchs : `fa26` et `sp26` (comme sur Slack) ; les ids restent `fall-2026` / `spring-2026`.
-Evenements de la semaine 1 : planning valide (24 evenements) synchronise le 14/11 par scripts/sync-events.mjs, avec leurs 12 formulaires.
+Evenements des semaines 1 et 2 : data/events.json aligne le 16/11 sur le Google Calendar officiel « Pioneers Residency FA2026 » (mise a jour MANUELLE, aucune synchro), 38 evenements en base. Semaine 1 synchronisee le 14/11, retouchee le 16/11 avec `--only` (lieux, The Mom Test le 18/11, Benoit Miegeville deplace au 24/11) ; semaine 2 importee le 16/11 (formulaires du hackathon 5 et Picks du hackathon 4 en brouillon). Le 16/11, les 38 sont identiques au calendrier champ par champ (nom exact, description exacte, lieu, debut, fin) ; visio Google Meet dans `resourceUrl` (« Resources », champ du fichier) ; seule exception : le hackathon 5, en journee entiere dans le calendrier, va du 25/11 9:30 au 27/11 19:30. NE PAS relancer la semaine 1 en entier : elle recreerait les Submissions H1 et H2 et Founder introductions, retouchees le 15/11 (utiliser `--only`).
 Reimport : un profil reclame garde son rattachement, ses valeurs non vides et sa photo (meme retiree) ; l'import ne touche que les photos des profils non reclames.
 Photo depuis « Mon profil » (fondateur ou staff) : `founders/{id}/photo-*.jpg` (storage.rules), vignette + `coverPhotoUrl` en un lot, croix pour la retirer.
 Photos et logos : vignettes JPEG 128 px en `data:` URL dans `photoUrl` / `logoUrl` (avatars).

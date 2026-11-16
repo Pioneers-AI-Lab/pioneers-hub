@@ -57,6 +57,8 @@ export function toEvent(data, e, now) {
       guests: e.guests,
       rankingMetricKey: e.rankingMetricKey ?? null,
       scoring: e.scoring ?? null,
+      // Le lien de l'evenement (« Resources » : la visio Google Meet). sync-events ne l'ecrit que s'il est dans le fichier.
+      resourceUrl: e.resourceUrl ?? null,
     },
   );
   return { ...event, createdDateISOString: now, updatedDateISOString: now };
