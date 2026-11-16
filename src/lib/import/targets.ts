@@ -108,6 +108,7 @@ const ALIASES: Record<string, ImportTarget> = {
   ifyesexplainitinafewwords: "founderDirectory.projectExplanation",
   doyouhaveexistingcofoundersinthebatch: "founderDirectory.hasExistingCoFounders",
   areyouopentojoinanotherprojectduringtheprogram: "founderDirectory.openToJoinAnotherProject",
+  anythingelseworthmentioning: "founderDirectory.anythingElse",
   birthdate: "founderProfile.birthDayString",
   age: "founderProfile.age",
   tshirtsize: "founderProfile.tShirtSize",

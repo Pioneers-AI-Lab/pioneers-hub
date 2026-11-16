@@ -537,6 +537,7 @@ export const DB_FIELDS = {
   "founderDirectory.industriesToExplore": field("Industries to gain experience in", { kind: "enumMulti", listKey: "industries", values: null }, {
     writePolicy: "merge_unique",
   }),
+  "founderDirectory.anythingElse": field("Anything else worth mentioning", longText()),
   /** @source SP26 « Age » : garde tel quel a l'import. */
   "founderProfile.age": field("Age", num(0, 120)),
   "founderProfile.birthDayString": field("Birth date", { kind: "day" }),

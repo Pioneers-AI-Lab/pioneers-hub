@@ -181,6 +181,12 @@ export type FounderDirectory = {
   coFounderSkillsWanted: string[];
   /** @source FA26 onboarding : secteurs ou il veut acquerir de l'experience. */
   industriesToExplore: string[];
+  /**
+   * @source FA26 onboarding « Anything else worth mentioning », avec la
+   * disponibilite (temps partiel) et les noms des cofondateurs donnes au meme
+   * formulaire. Facultatif. Absent des documents plus anciens.
+   */
+  anythingElse?: string | null;
 };
 
 /**

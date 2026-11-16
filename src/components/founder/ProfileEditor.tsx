@@ -178,6 +178,7 @@ export function ProfileEditor({ back }: EditorProps) {
             coFounderTypeWanted: directory.coFounderTypeWanted ?? null,
             coFounderSkillsWanted: directory.coFounderSkillsWanted ?? [],
             industriesToExplore: directory.industriesToExplore ?? [],
+            anythingElse: directory.anythingElse ?? null,
           },
           profile: { housingSupport: profile?.housingSupport ?? null, tShirtSize: profile?.tShirtSize ?? null },
           slackUserId: directory.slackUserId ?? null,
@@ -324,6 +325,7 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
             onChange={(v) => setD("hasExistingCoFounders", v as ExistingCoFounders | null)}
             clearable
           />
+          <Textarea label="Anything else worth mentioning" autosize minRows={2} value={dir.anythingElse ?? ""} onChange={(e) => setD("anythingElse", text(e.currentTarget.value))} />
         </Stack>
       </Section>
 

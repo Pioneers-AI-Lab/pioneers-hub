@@ -169,6 +169,7 @@ export const FOUNDER_SELF_EDITABLE = {
     "coFounderTypeWanted",
     "coFounderSkillsWanted",
     "industriesToExplore",
+    "anythingElse",
   ],
   founderProfile: ["housingSupport", "tShirtSize"],
   person: ["phone", "whatsapp", "linkedinUrl"],

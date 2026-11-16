@@ -128,6 +128,7 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
               {(dir.trackRecord3Liners ?? []).length > 0 && (
                 <Field label="Highlights">{dir.trackRecord3Liners.join("\n")}</Field>
               )}
+              <Field label="Anything else worth mentioning">{dir.anythingElse}</Field>
             </Stack>
           </Section>
 

@@ -335,7 +335,7 @@ service cloud.firestore {
             'education', 'degree', 'fieldOfStudy', 'yearsOfXP', 'notableCompanies', 'trackRecord',
             'interestedInWorkingOn', 'hasExistingProject', 'projectExplanation', 'hasExistingCoFounders',
             'openToJoinAnotherProject', 'mainStartup2025', 'lookingForCoFounder', 'coFounderTypeWanted',
-            'coFounderSkillsWanted', 'industriesToExplore'])
+            'coFounderSkillsWanted', 'industriesToExplore', 'anythingElse'])
           && copyMatches(founderData(founderId).personId, 'whatsapp')
           && copyMatches(founderData(founderId).personId, 'linkedinUrl')
           && copyMatches(founderData(founderId).personId, 'phone');
