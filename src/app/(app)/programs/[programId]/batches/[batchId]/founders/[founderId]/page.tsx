@@ -3,6 +3,7 @@
 import { Alert, Button, Group, Text } from "@mantine/core";
 import { useBatch } from "@/context/BatchContext";
 import { useFounder } from "@/context/FounderContext";
+import { useFounderDirectories } from "@/context/FounderDirectoriesContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useAction } from "@/hooks/useAction";
 import { setFounderArchived } from "@/lib/accounts";
@@ -17,9 +18,11 @@ export default function FounderPage() {
   const { program } = useProgram();
   const { batch } = useBatch();
   const { founder } = useFounder();
+  // Retour sur la vue quittee : vue, filtres et recherche (query gardee par le layout).
+  const { query } = useFounderDirectories();
   return (
     <>
-      <BackButton href={paths.founders(program.id, batch.id)} label="All founders" mb="md" />
+      <BackButton href={paths.founders(program.id, batch.id, query)} label="All founders" mb="md" />
       {founder.archivedDateISOString !== null && <ArchivedNotice />}
       <FounderCard selfSections={<MeSections />} />
     </>

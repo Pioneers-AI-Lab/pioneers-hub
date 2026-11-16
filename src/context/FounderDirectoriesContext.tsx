@@ -16,16 +16,17 @@ import { useFounders } from "@/context/FoundersContext";
 // Profile Book (formation, entreprises, nationalite ; le one-liner vient de la
 // fiche racine) : des champs de `private/directory`, un document par fondateur, lus si le role
 // y a droit. La grille est la vue par defaut (demande du 15/11), la liste reste
-// au choix. Le mode vit ici et non dans la page : on revient d'une fiche sur la
-// vue quittee, ecouteurs gardes. Ils s'ouvrent a la premiere visite de
+// au choix. Vue, filtres, tri et recherche vivent dans l'URL (demande du
+// 16/11, hooks/useUrlState.ts) ; ce contexte garde la derniere (`query`, notee
+// en quittant la page) pour que « All founders » d'une fiche ramene a la vue
+// quittee, ecouteurs gardes. Ils s'ouvrent a la premiere visite de
 // l'annuaire (la page appelle `ensureOpen`) : une fiche ouverte par un lien
 // direct ne lit pas tout le batch.
 
-export type FoundersView = "list" | "grid";
-
 type FounderDirectoriesValue = {
-  view: FoundersView;
-  setView: (view: FoundersView) => void;
+  /** Derniere query de la page Founders (`view=list&q=...`, sans `?`) ; vide avant la premiere visite. */
+  query: string;
+  rememberQuery: (query: string) => void;
   /** Ouvre les ecouteurs (page Founders, a son affichage) ; ils restent ouverts ensuite. */
   ensureOpen: () => void;
   /** Par id de fondateur ; vide pour un visiteur public. */
@@ -41,7 +42,7 @@ export { useFounderDirectories };
 export function FounderDirectoriesProvider({ children }: { children: ReactNode }) {
   const { role } = useBatch();
   const { founders } = useFounders();
-  const [view, setView] = useState<FoundersView>("grid");
+  const [query, rememberQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const ensureOpen = useCallback(() => setIsOpen(true), []);
 
@@ -53,13 +54,13 @@ export function FounderDirectoriesProvider({ children }: { children: ReactNode }
 
   const value = useMemo<FounderDirectoriesValue>(
     () => ({
-      view,
-      setView,
+      query,
+      rememberQuery,
       ensureOpen,
       directoriesById: directories.data,
       isLoading: !isOpen || directories.isLoading,
     }),
-    [view, ensureOpen, isOpen, directories.data, directories.isLoading],
+    [query, ensureOpen, isOpen, directories.data, directories.isLoading],
   );
 
   return <FounderDirectoriesContextProvider value={value}>{children}</FounderDirectoriesContextProvider>;

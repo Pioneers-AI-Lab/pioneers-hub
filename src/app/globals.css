@@ -209,6 +209,10 @@ button.row {
   text-transform: uppercase;
   color: var(--mantine-color-dark-2);
 }
+/* Carte de la grille Founders (16/11) : les libelles en bleu clair, comme les titres de section. */
+.card-body .label {
+  color: var(--mantine-color-pioneers-3);
+}
 
 /* Un bloc de page (`Section`) : un filet le separe du precedent. Le defilement
    vers son ancre s'arrete sous l'en-tete fixe de l'AppShell. */
@@ -217,13 +221,6 @@ button.row {
   padding-top: 16px;
   border-top: 1px solid var(--mantine-color-dark-4);
   scroll-margin-top: calc(var(--app-shell-header-offset, 0px) + 16px);
-}
-/* Le filet ne vient qu'APRES un bloc : en tete de son conteneur (onglet de batch
-   sans titre de page), ni marge ni filet. */
-.section:first-child {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
 }
 
 /* Barre d'enregistrement collee au bas de l'ecran (au-dessus des onglets sur mobile). */

@@ -4,7 +4,7 @@ import { Text } from "@mantine/core";
 import type { PioneersEvent, WithId } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useProgram } from "@/context/ProgramContext";
-import { formatDateTime, formatTime } from "@/lib/format";
+import { formatDateTime, formatTime, formatTimePlace } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { LinkRow } from "@/components/ui/Rows";
 import { eventLabel } from "./eventLabels";
@@ -26,9 +26,7 @@ export function EventRow({
 }) {
   const { program } = useProgram();
   const { batch } = useBatch();
-  const end = event.endDateISOString;
-  const startTime = formatTime(event.startDateISOString);
-  const when = !timeOnly ? formatDateTime(event.startDateISOString) : end ? `${startTime}–${formatTime(end)}` : startTime;
+  const start = event.startDateISOString;
   return (
     <LinkRow
       href={paths.event(program.id, batch.id, event.id)}
@@ -36,12 +34,14 @@ export function EventRow({
       leading={
         timeOnly && (
           <Text fw={500} className="num" style={{ flexShrink: 0, alignSelf: "flex-start" }}>
-            {startTime}
+            {formatTime(start)}
           </Text>
         )
       }
       title={event.name}
-      subtitle={[when, event.location].filter(Boolean).join(" · ")}
+      subtitle={
+        timeOnly ? formatTimePlace(event) : [formatDateTime(start), event.location].filter(Boolean).join(" · ")
+      }
       meta={eventLabel(event)}
     />
   );

@@ -24,7 +24,8 @@ export const paths = {
   programs: () => "/programs",
   program: (programId: string) => `/programs/${programId}`,
   batch: batchBase,
-  founders: (programId: string, batchId: string) => `${batchBase(programId, batchId)}/founders`,
+  /** `query` : la vue de l'annuaire (`view=list&q=...`, sans `?`), cf. hooks/useUrlState.ts. */
+  founders: (programId: string, batchId: string, query?: string) => `${batchBase(programId, batchId)}/founders${query ? `?${query}` : ""}`,
   founder: (programId: string, batchId: string, founderId: string) =>
     `${batchBase(programId, batchId)}/founders/${founderId}`,
   /** Edition d'un profil fondateur par le staff (le fondateur, lui, passe par `meEdit`). */

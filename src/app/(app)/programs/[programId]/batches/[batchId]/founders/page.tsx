@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Anchor, Group, SegmentedControl, SimpleGrid, Stack, Text, TextInput } from "@mantine/core";
 import type { ProfileCategory } from "@shared/types";
 import { useAuth } from "@/context/AuthContext";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
-import { useFounderDirectories, type FoundersView } from "@/context/FounderDirectoriesContext";
+import { useFounderDirectories } from "@/context/FounderDirectoriesContext";
+import { useUrlState } from "@/hooks/useUrlState";
 import { useFounders } from "@/context/FoundersContext";
 import { useMyConnections } from "@/context/MyConnectionsContext";
 import { useProgram } from "@/context/ProgramContext";
@@ -23,26 +25,53 @@ import { Empty } from "@/components/ui/Section";
 
 type Filter = "all" | ProfileCategory;
 /** Fondateur du batch : sa shortlist et ses rencontres (« Not met » exclut sa propre fiche). */
-type ConnectionFilter = "all" | "shortlisted" | "met" | "not_met";
 
+// Vue, filtres, tri et recherche dans l'URL (demande du 16/11) : un rechargement
+// ou un lien partage rouvre la meme vue (`?view=list&type=technical&q=...`).
+const VIEWS = ["grid", "list"] as const;
+const FILTERS = ["all", "technical", "business", "hybrid"] as const satisfies readonly Filter[];
+const CONNECTION_FILTERS = ["all", "shortlisted", "met", "not_met"] as const;
+type ConnectionFilter = (typeof CONNECTION_FILTERS)[number];
+const SORTS = ["score", "name"] as const;
+
+/** `useSearchParams` (useUrlState) : la page est sous un Suspense, comme l'exige le prerendu. */
 export default function FoundersPage() {
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <FoundersDirectory />
+    </Suspense>
+  );
+}
+
+function FoundersDirectory() {
   const { program } = useProgram();
   const { batch, role } = useBatch();
   const { firebaseUser } = useAuth();
   const { founders, isLoading } = useFounders();
   const { startupsById } = useStartups();
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useUrlState<string>("q", "");
+  // La saisie reste locale (l'URL suit sans faire sauter le curseur).
+  const [search, setSearch] = useState(query);
+  const [filter, setFilter] = useUrlState<Filter>("type", "all", FILTERS);
   const { founderId: myFounderId, shortlisted, met } = useMyConnections();
-  const [connectionFilter, setConnectionFilter] = useState<ConnectionFilter>("all");
+  const [connectionFilter, setConnectionFilter] = useUrlState<ConnectionFilter>("connections", "all", CONNECTION_FILTERS);
   const { canSeeScores, founderPerformance } = useCohort();
   // Staff et investors : classement par Program Performance (comme le dashboard).
-  const [sort, setSort] = useState<"score" | "name">("score");
+  const [sort, setSort] = useUrlState("sort", "score", SORTS);
   const byScore = canSeeScores && sort === "score";
   // Grille : la galerie du Profile Book (1 a 3 cartes par ligne selon la largeur).
-  const { view, setView, ensureOpen, directoriesById, isLoading: isGridLoading } = useFounderDirectories();
+  const [view, setView] = useUrlState("view", "grid", VIEWS);
+  const { ensureOpen, rememberQuery, directoriesById, isLoading: isGridLoading } = useFounderDirectories();
   // Premiere visite : l'annuaire ouvre ses ecouteurs (gardes ensuite, au layout de /founders).
   useEffect(ensureOpen, [ensureOpen]);
+  // « All founders » d'une fiche ramene a cette vue (FounderDirectoriesContext).
+  // Notee en quittant la page seulement : pas de rendu de plus a chaque frappe.
+  const params = useSearchParams();
+  const lastQuery = useRef("");
+  useEffect(() => {
+    lastQuery.current = params.toString();
+  }, [params]);
+  useEffect(() => () => rememberQuery(lastQuery.current), [rememberQuery]);
 
   // Texte cherchable de chaque fondateur, sans accents ni casse : calcule une fois par liste, pas a chaque frappe.
   const searchTextOf = useMemo(
@@ -114,13 +143,16 @@ export default function FoundersPage() {
         <TextInput
           placeholder="Search a name, skill or industry"
           value={search}
-          onChange={(e) => setSearch(e.currentTarget.value)}
+          onChange={(e) => {
+            setSearch(e.currentTarget.value);
+            setQuery(e.currentTarget.value.trim());
+          }}
           type="search"
         />
         <SegmentedControl
           fullWidth
           value={filter}
-          onChange={(v) => setFilter(v as Filter)}
+          onChange={setFilter}
           data={[
             { value: "all", label: "All" },
             { value: "technical", label: "Tech" },
@@ -132,7 +164,7 @@ export default function FoundersPage() {
           <SegmentedControl
             fullWidth
             value={connectionFilter}
-            onChange={(v) => setConnectionFilter(v as ConnectionFilter)}
+            onChange={setConnectionFilter}
             data={[
               { value: "all", label: "All" },
               { value: "shortlisted", label: "Shortlisted" },
@@ -146,7 +178,7 @@ export default function FoundersPage() {
             <SegmentedControl
               size="xs"
               value={sort}
-              onChange={(v) => setSort(v as "score" | "name")}
+              onChange={setSort}
               data={[
                 { value: "score", label: "By score" },
                 { value: "name", label: "By name" },
@@ -157,7 +189,7 @@ export default function FoundersPage() {
             size="xs"
             ml="auto"
             value={view}
-            onChange={(v) => setView(v as FoundersView)}
+            onChange={setView}
             data={[
               { value: "list", label: "List" },
               { value: "grid", label: "Grid" },

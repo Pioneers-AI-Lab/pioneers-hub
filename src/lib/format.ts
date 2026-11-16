@@ -30,19 +30,36 @@ export function formatTime(iso: string | null | undefined): string {
   return d.isValid() ? d.format("HH:mm") : iso;
 }
 
+/** Sous le nom d'un evenement place sous son jour : `09:30–11:00 · Lieu` (sans fin : `09:30 · Lieu`). */
+export function formatTimePlace(e: {
+  startDateISOString: string;
+  endDateISOString: string | null;
+  location: string | null;
+}): string {
+  const start = formatTime(e.startDateISOString);
+  const time = e.endDateISOString ? `${start}–${formatTime(e.endDateISOString)}` : start;
+  return e.location ? `${time} · ${e.location}` : time;
+}
+
 /** Jours entiers d'aujourd'hui (ou du jour `from`, `YYYY-MM-DD`) au jour donne (negatif si passe). */
 export function daysUntil(day: string, from?: string): number {
   return dayjs(day).startOf("day").diff(dayjs(from).startOf("day"), "day");
 }
 
+/** `YYYY-MM-DD` -> `Wed 18 Nov` (annee ajoutee hors de l'annee de Paris en cours). */
+export function formatWeekDay(day: string, today = parisToday()): string {
+  const d = dayjs(day);
+  return d.isValid() ? d.format(day.slice(0, 4) === today.slice(0, 4) ? "ddd D MMM" : "ddd D MMM YYYY") : day;
+}
+
 /**
  * Titre d'un jour de l'agenda (`YYYY-MM-DD`, un jour de Paris : `parisDay`), compare au jour
  * de Paris (pas a celui du navigateur) : `Today · Sun 15 Nov`, `Tomorrow · Mon 16 Nov`, sinon
- * `Wed 18 Nov` (annee ajoutee hors de l'annee en cours).
+ * `Wed 18 Nov` (`formatWeekDay`).
  */
 export function formatDayTitle(day: string): string {
   const today = parisToday();
-  const label = `${dayjs(day).format("ddd")} ${formatDay(day, day.slice(0, 4) === today.slice(0, 4))}`;
+  const label = formatWeekDay(day, today);
   const n = daysUntil(day, today);
   return n === 0 ? `Today · ${label}` : n === 1 ? `Tomorrow · ${label}` : label;
 }
