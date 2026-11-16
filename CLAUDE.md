@@ -34,6 +34,7 @@ node scripts/import-fa26.mjs <lien-airtable> --prod --overwrite-fa26 [--dry-run]
 node scripts/import-fa26-onboarding.mjs <export.csv> --skills <skills.json> [--prod]   # complete FA26 depuis l'export CSV de la vue onboarding (rattachement par nom, remplit le vide, a blanc sans --prod ; fait le 16/11)
 node scripts/set-one-liners.mjs <one-liners.json> [--overwrite] [--prod]   # ecrit `founders.trackRecordOneLiner` ({ founderId: texte }), remplit le vide sauf --overwrite, a blanc sans --prod ; textes FA26 rediges en session Claude le 16/11 (fichier hors depot)
 node scripts/set-photo.mjs <founderId> <image> [--prod]   # photo d'un fondateur deposee par le staff, comme « Mon profil » (photo-*.jpg + vignette), a blanc sans --prod ; Rida Taleb le 16/11
+node scripts/set-photo.mjs <founderId> <image> [--prod]   # photo d'un fondateur deposee par le staff, comme « Mon profil » (photo-*.jpg + vignette), a blanc sans --prod ; Rida Taleb le 16/11
 node scripts/import-events.mjs "Week 1" [--prod]   # evenements de data/events.json ET leurs formulaires (a blanc sans --prod, n'ecrase jamais)
 node scripts/sync-events.mjs "Week 1" [--prod] [--only cle1,cle2]   # MET A JOUR les evenements sur data/events.json (agenda, bareme, matching sans equipes), recree les formulaires sans reponse, archive `archived` ; `--only` : ces evenements seulement (semaine en cours)
 node scripts/elo-rank.mjs <batchId> [--prod] [--rounds 8]   # Elo des profils par Claude (claude-opus-5-5, ANTHROPIC_API_KEY ; a blanc sans --prod : aucun appel)
@@ -41,7 +42,7 @@ node scripts/migrate-standard-forms.mjs <batchId> [--prod]   # modele standard :
 node scripts/migrate-education-tags.mjs <batchId|--all> [--prod]   # `founderDirectory.education` texte -> liste (separateurs `;` et ` · `, shared/text.ts#splitTextList), a blanc sans --prod
 node scripts/seed-tasks.mjs <batchId> [--prod]   # taches de depart du To do (Slack, LinkedIn, shortlist), a blanc sans --prod, n'ecrase jamais
 node scripts/migrate-metric-keys.mjs <batchId> [--prod]   # cles de metriques standard (SPECS A.5), a blanc sans --prod ; puis backfill-kpis.mjs
-npx firebase deploy --only storage --project prod   # regles Storage (tout refuse : lecture par URL a jeton)
+npx firebase deploy --only storage --project prod   # regles Storage (photo-*.jpg du fondateur ou du staff, reste refuse ; lecture par URL a jeton) ; deployees le 16/11, PAS par deploy:rules
 npm run typecheck     # route types + front + functions
 npm run lint
 npm run build
