@@ -258,7 +258,7 @@ export type Callables = {
   };
   /**
    * Staff : synchronise le batch avec son agenda Google (SPECS §2, decision du
-   * 16/11), comme toutes les 5 minutes. `dryRun` : ce qui serait cree, relie et
+   * 16/11), comme a chaque notification de l'agenda. `dryRun` : ce qui serait cree, relie et
    * archive, sans rien ecrire ; `calendarId` (a blanc seulement) : essayer un
    * agenda avant de l'enregistrer. Journalise.
    */

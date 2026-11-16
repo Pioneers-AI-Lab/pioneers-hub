@@ -1152,6 +1152,7 @@ console.log("google calendar sync");
     archivedDateISOString: null, opensDateISOString: "2026-11-18T11:30:00.000Z", deadlineDateISOString: null,
     createdDateISOString: stamp, updatedDateISOString: stamp,
   });
+  const offsite = { id: "g5", summary: "Offsite", start: { date: "2026-11-20" }, end: { date: "2026-11-21" } };
   const g = (id, summary, start, end, extra = {}) => ({ id, summary, start: { dateTime: start }, end: { dateTime: end }, htmlLink: `https://calendar.google.com/event?eid=${id}`, ...extra });
   const fake = admin.doc(`calendarFakes/${encodeURIComponent(CAL)}`);
   await fake.set({
@@ -1160,7 +1161,7 @@ console.log("google calendar sync");
       g("g2", "Masterclass pricing", "2026-11-19T10:00:00+01:00", "2026-11-19T11:30:00+01:00", { description: '<p>Bring your <a href="https://x.y">slides</a></p>', location: " Station F ", hangoutLink: "https://meet.google.com/abc-defg-hij" }),
       g("g3", "After the batch", "2026-12-10T10:00:00+01:00", "2026-12-10T11:00:00+01:00"),
       { id: "g4", status: "cancelled" },
-      { id: "g5", summary: "Offsite", start: { date: "2026-11-20" }, end: { date: "2026-11-21" } },
+      offsite,
     ],
   });
 
@@ -1219,7 +1220,7 @@ console.log("google calendar sync");
   await fake.set({
     events: [
       g("g1", "Lunch roulette", "2026-11-18T13:30:00+01:00", "2026-11-18T14:30:00+01:00"),
-      { id: "g5", summary: "Offsite", start: { date: "2026-11-20" }, end: { date: "2026-11-21" } },
+      offsite,
     ],
   }, { merge: true }); // garde le canal du faux agenda
   await expectOk("a moved event moves its forms; a deleted one is hidden; a hidden one stays hidden", async () => {
@@ -1249,10 +1250,12 @@ console.log("google calendar sync");
   const notify = (secretValue, resourceState = "exists") => ({ "X-Goog-Channel-ID": channel.id, "X-Goog-Channel-Token": secretValue, "X-Goog-Resource-ID": channel.resourceId, "X-Goog-Resource-State": resourceState });
   await fake.set({
     events: [
-      g("g1", "Lunch roulette", "2026-11-18T13:30:00+01:00", "2026-11-18T14:30:00+01:00", { location: "Room 2" }),
-      { id: "g5", summary: "Offsite", start: { date: "2026-11-20" }, end: { date: "2026-11-21" } },
+      g("g1", "Lunch roulette", "2026-11-18T13:30:00+01:00", "2026-11-18T14:30:00+01:00", { location: "Room 2", hangoutLink: "https://meet.google.com/lun-chro-ule" }),
+      offsite,
     ],
   }, { merge: true }); // garde le canal du faux agenda
+  // Avant le 16/11, la visio etait la ressource : la synchro ne la garde pas en double.
+  await admin.doc("events/cal-existing").update({ resourceUrl: "https://meet.google.com/lun-chro-ule" });
   await expectOk("a notification with a wrong secret is refused", async () => must((await webhook(notify("wrong"))) === 403, "not 403"));
   await expectOk("the first notification (sync) changes nothing", async () => {
     must((await webhook(notify(token, "sync"))) === 200, "not 200");
@@ -1262,6 +1265,7 @@ console.log("google calendar sync");
     must((await webhook(notify(token))) === 200, "not 200");
     const lunch = (await admin.doc("events/cal-existing").get()).data();
     must(lunch?.location === "Room 2", `location ${lunch?.location}`);
+    must(lunch.videoCallUrl === "https://meet.google.com/lun-chro-ule" && lunch.resourceUrl === null, `links ${lunch.videoCallUrl} ${lunch.resourceUrl}`);
   });
   await deleteApp(staff.app);
 }

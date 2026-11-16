@@ -203,9 +203,9 @@ export type PioneersEvent = BatchScoped &
      */
     scoring?: EventScoring | null;
     /**
-     * L'evenement Google Calendar qu'il reflete (decision du 16/11) : son nom,
-     * ses dates, son lieu et sa description viennent de l'agenda et ne se
-     * modifient plus dans le Hub (`CALENDAR_FIELDS`, shared/calendarSync.ts).
+     * L'evenement Google Calendar qu'il reflete (decision du 16/11) : ses champs
+     * d'agenda (`CALENDAR_FIELDS`, shared/calendarSync.ts : nom, dates, lieu,
+     * description, visio) viennent de l'agenda et ne se modifient plus dans le Hub.
      * Absent ou `null` : cree dans le Hub.
      */
     calendarSource?: CalendarSource | null;

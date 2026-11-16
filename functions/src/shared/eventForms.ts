@@ -69,7 +69,6 @@ type EventForPlan = Pick<
 const shiftMs = (iso: string, ms: number) => new Date(Date.parse(iso) + ms).toISOString();
 const msBetween = (from: string, to: string) => Date.parse(to) - Date.parse(from);
 /** Le meme instant (ou deux dates vides), quel que soit le format ISO. */
-/** Le meme instant (deux ecritures ISO d'une meme heure comptent pour une). */
 export const sameTime = (a: string | null, b: string | null) => a === b || (a !== null && b !== null && Date.parse(a) === Date.parse(b));
 
 /** Le debut et la fin d'un evenement : tout ce dont dependent les dates de ses formulaires. */

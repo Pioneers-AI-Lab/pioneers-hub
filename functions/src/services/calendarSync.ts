@@ -7,6 +7,7 @@ import { FUNCTIONS_REGION } from "../shared/callables";
 import { COL, docPaths } from "../shared/collections";
 import { formsClosedByArchive, planEventMove } from "../shared/eventForms";
 import type { Batch, CalendarChannel, CalendarSync, CalendarSyncCounts, CalendarSyncResult, Form, PioneersEvent, WithId } from "../shared/types";
+import { isEmulator } from "../api/config";
 import { secret, sha256 } from "../api/crypto";
 import { writeAudit } from "./audit";
 
@@ -61,7 +62,7 @@ const defaultExpiry = () => new Date(Date.now() + CHANNEL_TTL_SECONDS * 1000).to
 /** Ou Google envoie les notifications : la fonction `googleCalendarWebhook` (index.ts). */
 const webhookAddress = () => {
   const project = process.env.GCLOUD_PROJECT;
-  return process.env.FUNCTIONS_EMULATOR === "true"
+  return isEmulator
     ? `http://${process.env.FUNCTIONS_EMULATOR_HOST ?? "127.0.0.1:5101"}/${project}/${FUNCTIONS_REGION}/googleCalendarWebhook`
     : `https://${FUNCTIONS_REGION}-${project}.cloudfunctions.net/googleCalendarWebhook`;
 };
@@ -135,7 +136,7 @@ const fakeReader: CalendarReader = {
   stop: async () => {},
 };
 
-const source: CalendarReader = process.env.FUNCTIONS_EMULATOR === "true" ? fakeReader : googleReader();
+const source: CalendarReader = isEmulator ? fakeReader : googleReader();
 
 const docsOf = async <T>(collection: string, batchId: string): Promise<WithId<T>[]> =>
   (await db().collection(collection).where("batchId", "==", batchId).get()).docs.map((d) => ({ ...(d.data() as T), id: d.id }));
@@ -175,10 +176,10 @@ export async function syncBatchCalendar(
 
   // Rien de neuf (le cas de presque toutes les synchros) : ni lecture du batch, ni ecriture.
   const isQuiet = !changes.isFull && changes.items.length === 0;
-  const plan: CalendarSyncPlan = isQuiet
-    ? { creates: [], updates: [], archives: [], seen: 0 }
+  const plan: BatchPlan = isQuiet
+    ? { creates: [], updates: [], archives: [], seen: 0, events: [] }
     : await planBatch(batchId, batch, calendarId, changes);
-  const forms = isQuiet || (plan.updates.length === 0 && plan.archives.length === 0) ? [] : await docsOf<Form>(COL.forms, batchId);
+  const forms = plan.updates.length || plan.archives.length ? await docsOf<Form>(COL.forms, batchId) : [];
   const moves = formMoves(plan, forms, now);
   const counts: CalendarSyncCounts = {
     created: plan.creates.length,
@@ -277,11 +278,10 @@ async function planBatch(batchId: string, batch: Batch, calendarId: string, chan
 }
 
 /** Les deplacements de formulaires qu'entrainent les nouveaux horaires (un creneau Debrief de l'agenda suit le sien). */
-function formMoves(plan: CalendarSyncPlan | BatchPlan, forms: WithId<Form>[], nowISO: string) {
-  const events = "events" in plan ? plan.events : [];
+function formMoves(plan: BatchPlan, forms: WithId<Form>[], nowISO: string) {
   return plan.updates.filter(isMovedBy).flatMap((u) => {
     const { startDateISOString, endDateISOString } = { ...u.event, ...u.patch };
-    return planEventMove({ event: u.event, next: { startDateISOString, endDateISOString }, events, forms, moveLinked: false, nowISO }).moves;
+    return planEventMove({ event: u.event, next: { startDateISOString, endDateISOString }, events: plan.events, forms, moveLinked: false, nowISO }).moves;
   });
 }
 

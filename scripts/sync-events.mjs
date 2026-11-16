@@ -23,7 +23,7 @@
 // `deadline` (heure de Paris, le jour de l'evenement) et `draft`.
 //
 // Batch relie a un agenda Google (SPECS §2, 16/11) : l'agenda fait foi. Un evenement
-// qui en vient garde ses CALENDAR_FIELDS (nom, description, dates, lieu) ; un
+// qui en vient garde ses CALENDAR_FIELDS (shared/calendarSync.ts) ; un
 // evenement du fichier absent de la base n'est pas cree (il se cree dans l'agenda).
 //
 // Lit le code partage compile : `npm --prefix functions run build` apres un changement de functions/src/shared.
@@ -85,7 +85,7 @@ const now = new Date().toISOString();
 
 const batchDoc = (await db.doc(`batches/${data.batchId}`).get()).data();
 const isCalendarBatch = batchDoc ? calendarIdOf(batchDoc) !== null : false;
-if (isCalendarBatch) console.log(`Batch ${data.batchId} relie a Google Calendar : nom, description, dates et lieu viennent de l'agenda.`);
+if (isCalendarBatch) console.log(`Batch ${data.batchId} relie a Google Calendar : ${CALENDAR_FIELDS.join(", ")} viennent de l'agenda.`);
 
 const ops = []; // { kind: "set" | "update", path, data }
 const counts = { created: 0, updated: 0, unchanged: 0, archived: 0, formsCreated: 0, formsRecreated: 0, formsKept: 0, formsArchived: 0 };

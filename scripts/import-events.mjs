@@ -47,7 +47,7 @@ const now = new Date().toISOString();
 // Un batch relie a un agenda Google cree ses evenements dans l'agenda (SPECS §2, 16/11).
 const batchDoc = (await db.doc(`batches/${data.batchId}`).get()).data();
 if (batchDoc && calendarIdOf(batchDoc)) {
-  console.error(`Batch ${data.batchId} relie a Google Calendar : cree les evenements dans l'agenda (synchro toutes les 5 min), puis node scripts/sync-events.mjs pour les baremes et les formulaires.`);
+  console.error(`Batch ${data.batchId} relie a Google Calendar : cree les evenements dans l'agenda (ils arrivent aussitot), puis node scripts/sync-events.mjs pour les baremes et les formulaires.`);
   process.exit(1);
 }
 

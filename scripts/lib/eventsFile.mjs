@@ -22,10 +22,10 @@ export function readEventsFile(week) {
   return { data, selected };
 }
 
-/** Heure de Paris -> ISO. Les dates du batch sont en hiver (UTC+1). */
 /** Les liens d'un evenement que le fichier peut donner ; sync-events ne les ecrit que s'ils y sont. */
 export const FILE_LINK_FIELDS = ["resourceUrl", "videoCallUrl"];
 
+/** Heure de Paris -> ISO. Les dates du batch sont en hiver (UTC+1). */
 export const parisISO = (day, time) => new Date(`${day}T${time}:00+01:00`).toISOString();
 export const parisLabel = (iso) => new Date(iso).toLocaleString("sv-SE", { timeZone: "Europe/Paris" }).slice(0, 16);
 

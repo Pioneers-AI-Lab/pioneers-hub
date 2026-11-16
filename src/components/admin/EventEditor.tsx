@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Box, Button, Checkbox, Group, Menu, Select, Stack, Text } from "@mantine/core";
 import { IconChevronDown } from "@tabler/icons-react";
-import { calendarIdOf } from "@shared/calendarSync";
+import { CALENDAR_BATCH_MESSAGE, calendarIdOf } from "@shared/calendarSync";
 import { formsClosedByArchive, formsReopenedByRestore, planEventMove, type EventTimes, type FormKept } from "@shared/eventForms";
 import { defaultMatching, newEvent, type EventData } from "@shared/events";
 import { EVENT_TEMPLATES, eventTemplateOf, templatesOfKind, type EventTemplateKey } from "@shared/presets/eventTemplates";
@@ -57,8 +57,8 @@ import { HelpBlock } from "@/components/ui/useHelp";
 // picks (EventResultsAdmin), et l'archive.
 //
 // Agenda Google (SPECS §2, 16/11) : un batch relie ne cree pas d'evenement ici
-// (« New » renvoie a l'agenda). Un evenement venu de l'agenda a son nom, ses
-// dates, son lieu et sa description grises ; on lui applique un template
+// (« New » renvoie a l'agenda). Un evenement venu de l'agenda a ses champs
+// d'agenda (CALENDAR_FIELDS) grises ; on lui applique un template
 // (TemplateField) ; l'archiver le masque, la synchro le laisse masque.
 
 // ---- Creer ------------------------------------------------------------------------
@@ -88,8 +88,7 @@ export function NewEventEditor() {
         <PageHeader back={back} title="New event" subtitle={`In ${batch.name}.`} />
         <Section title="From Google Calendar">
           <Text size="sm">
-            {batch.name}&apos;s events come from its Google Calendar: create the event there, it shows up in Events within a minute. Then
-            open it here to pick a template (matching and forms).
+            {CALENDAR_BATCH_MESSAGE} Then open it here to pick a template (matching and forms).
           </Text>
         </Section>
       </>
@@ -426,16 +425,16 @@ function MatchingField() {
   );
 }
 
-/**
- * Le template de l'evenement : un evenement venu de l'agenda arrive sans. En
- * appliquer un donne son etiquette, son matching (s'il n'en a pas) et les
- * formulaires du pack qu'il n'a pas encore (templatePlan, lib/eventsAdmin.ts).
- */
 const TEMPLATE_OPTIONS = EVENT_KINDS.map((kind) => ({
   group: EVENT_KIND_LABEL[kind],
   items: templatesOfKind(kind).map((k) => ({ value: k, label: EVENT_TEMPLATES[k].label })),
 }));
 
+/**
+ * Le template de l'evenement : un evenement venu de l'agenda arrive sans. En
+ * appliquer un donne son etiquette, son matching (s'il n'en a pas) et les
+ * formulaires du pack qu'il n'a pas encore (templatePlan, lib/eventsAdmin.ts).
+ */
 function TemplateField() {
   const { event, forms, teams } = useAdminEvent();
   const { isBusy, run } = useAction();

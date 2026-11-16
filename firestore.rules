@@ -408,9 +408,9 @@ service cloud.firestore {
     // ---- Evenements --------------------------------------------------------
 
     // Agenda Google (SPECS §2, 16/11) : un batch relie cree ses evenements dans
-    // l'agenda, et l'agenda fait foi pour le nom, les dates, le lieu et la
-    // description d'un evenement qui en vient (shared/calendarSync.ts,
-    // CALENDAR_FIELDS). Seule la synchro (SDK admin) les ecrit.
+    // l'agenda, et l'agenda fait foi pour les champs d'agenda d'un evenement qui
+    // en vient (CALENDAR_FIELDS, shared/calendarSync.ts : nom, dates, lieu,
+    // description, visio). Seule la synchro (SDK admin) les ecrit.
     function batchHasCalendar(batchId) {
       return get(/databases/$(database)/documents/batches/$(batchId)).data.settings.get('googleCalendarId', null) != null;
     }

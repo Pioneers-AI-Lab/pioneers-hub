@@ -110,7 +110,7 @@ const nameKey = (name: string) => searchKey(name).replace(/\s+/g, " ");
 export type CalendarUpdate = {
   event: WithId<PioneersEvent>;
   /** Les champs qui changent (et `calendarSource` pour un evenement relie). */
-  patch: Partial<CalendarFields> & { calendarSource?: CalendarSource };
+  patch: Partial<CalendarFields> & { calendarSource?: CalendarSource; resourceUrl?: null };
   /** Un evenement du Hub relie pour la premiere fois a son evenement Google. */
   isLink: boolean;
 };
@@ -167,7 +167,7 @@ export function planCalendarSync(input: {
     const source: CalendarSource = { provider: "google", calendarId, eventId: g.id, htmlLink: g.htmlLink ?? null };
 
     if (event) {
-      const patch = changedFields(event, fields);
+      const patch = syncedFields(event, fields);
       if (event.calendarSource?.htmlLink !== source.htmlLink) Object.assign(patch, { calendarSource: source });
       if (Object.keys(patch).length) plan.updates.push({ event, patch, isLink: false });
       continue;
@@ -178,7 +178,7 @@ export function planCalendarSync(input: {
     const match = sameStart.find((e) => nameKey(e.name) === key) ?? (sameStart.length === 1 ? sameStart[0] : undefined);
     if (match) {
       unlinked.splice(unlinked.indexOf(match), 1);
-      plan.updates.push({ event: match, patch: { ...changedFields(match, fields), calendarSource: source }, isLink: true });
+      plan.updates.push({ event: match, patch: { ...syncedFields(match, fields), calendarSource: source }, isLink: true });
       continue;
     }
 
@@ -204,6 +204,17 @@ export function planCalendarSync(input: {
 }
 
 const TIME_FIELDS: ReadonlySet<keyof CalendarFields> = new Set(["startDateISOString", "endDateISOString"]);
+
+/**
+ * Ce que la synchro change sur un evenement relie : ses champs d'agenda qui
+ * different, et sa ressource si c'etait la visio (avant le 16/11, le lien Meet
+ * etait la ressource : il n'apparait pas deux fois).
+ */
+function syncedFields(event: CalendarFields & Pick<PioneersEvent, "resourceUrl">, fields: CalendarFields): CalendarUpdate["patch"] {
+  const patch: CalendarUpdate["patch"] = changedFields(event, fields);
+  if (event.resourceUrl && event.resourceUrl === fields.videoCallUrl) patch.resourceUrl = null;
+  return patch;
+}
 
 /** Les champs d'agenda qui different (un champ absent d'un evenement d'avant vaut `null`). */
 function changedFields(event: CalendarFields, fields: CalendarFields): Partial<CalendarFields> {

@@ -11,7 +11,7 @@
 
 import { API_PUBLIC_URL } from "../shared/api";
 
-const isEmulator = process.env.FUNCTIONS_EMULATOR === "true";
+export const isEmulator = process.env.FUNCTIONS_EMULATOR === "true";
 
 export const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL ?? (isEmulator ? "http://127.0.0.1:5102" : API_PUBLIC_URL);
 
