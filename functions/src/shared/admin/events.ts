@@ -1,0 +1,129 @@
+import { CALENDAR_FIELDS, isFromCalendar, withoutCalendarFields } from "../calendarSync";
+import { docPaths } from "../collections";
+import { archiveWrite, mergeWrite, type DocWrite } from "../docWrites";
+import {
+  eventFormsPlan,
+  eventFormWrites,
+  formsClosedByArchive,
+  formsReopenedByRestore,
+  sameTime,
+  type EventFormPlan,
+  type EventMovePlan,
+  type EventTimes,
+} from "../eventForms";
+import { matchingOf } from "../events";
+import { EVENT_TEMPLATES, type EventTemplateKey } from "../presets/eventTemplates";
+import { scoringOf, type Form, type PioneersEvent, type WithId } from "../types";
+
+// ----------------------------
+// Admin > Events : regler, deplacer, archiver un evenement, lui appliquer un modele
+// ----------------------------
+// Les gestes de la page d'un evenement, en logique pure (shared/docWrites.ts) :
+// le front (lib/eventsAdmin.ts) et l'API (services/admin/events.ts) ecrivent
+// les memes documents. Rien n'est supprime : on archive. Deplacer ou archiver
+// entraine ses formulaires (dates, fermeture) dans le meme lot.
+
+/** Les reglages modifiables depuis la page de l'evenement. */
+export const EVENT_SETTINGS_KEYS = [
+  "name",
+  "topic",
+  "startDateISOString",
+  "endDateISOString",
+  "location",
+  "isMilestone",
+  "status",
+  "signUpUrl",
+  "resourceUrl",
+  "videoCallUrl",
+  "audience",
+  "guests",
+  "guestFounderIds",
+  "mentorIds",
+  "startupIds",
+] as const satisfies readonly (keyof PioneersEvent)[];
+
+export type EventSettings = Pick<PioneersEvent, (typeof EVENT_SETTINGS_KEYS)[number]>;
+
+/**
+ * Les champs d'agenda donnes pour un evenement venu de l'agenda Google : ils ne
+ * s'ecrivent que par la synchro (la regle refuserait tout le lot). L'API les
+ * refuse en le disant ; l'editeur les retire (`editableSettings`).
+ */
+export const lockedSettingKeys = (event: Pick<PioneersEvent, "calendarSource">, settings: Partial<EventSettings>): string[] =>
+  isFromCalendar(event) ? CALENDAR_FIELDS.filter((k) => settings[k] !== undefined) : [];
+
+export const editableSettings = (event: Pick<PioneersEvent, "calendarSource">, settings: Partial<EventSettings>): Partial<EventSettings> =>
+  isFromCalendar(event) ? withoutCalendarFields(settings) : settings;
+
+/** Le nouvel horaire deplace l'evenement (meme instant ecrit autrement : non). */
+export const isEventMoved = (event: EventTimes, next: EventTimes) =>
+  !sameTime(event.startDateISOString, next.startDateISOString) || !sameTime(event.endDateISOString, next.endDateISOString);
+
+/**
+ * Les reglages et, s'il est deplace, ce que le nouvel horaire entraine
+ * (`planEventMove`, shared/eventForms.ts) : le creneau Debrief accole et les
+ * dates des formulaires. Seules les dates changent : aucune nouvelle version.
+ */
+export function eventSettingsWrites(
+  event: WithId<Pick<PioneersEvent, "calendarSource">>,
+  settings: Partial<EventSettings>,
+  move: EventMovePlan<WithId<unknown>, WithId<unknown>> | null,
+  now: string,
+): DocWrite[] {
+  const writes = [mergeWrite(docPaths.event(event.id), { ...editableSettings(event, settings), updatedDateISOString: now })];
+  if (move?.linked?.isMoved) writes.push(mergeWrite(docPaths.event(move.linked.event.id), { ...move.linked.to, updatedDateISOString: now }));
+  for (const m of move?.moves ?? []) {
+    writes.push(mergeWrite(docPaths.form(m.form.id), { opensDateISOString: m.opensDateISOString, deadlineDateISOString: m.deadlineDateISOString, updatedDateISOString: now }));
+  }
+  return writes;
+}
+
+/**
+ * Archiver : l'evenement sort des listes, du calendrier et des pages des
+ * fondateurs, et ses formulaires ouverts se ferment. Restaurer rouvre ceux que
+ * l'archivage a fermes. `forms` : les formulaires de l'evenement.
+ */
+export function eventArchiveWrites<F extends WithId<Pick<Form, "status" | "updatedDateISOString">>>(
+  event: WithId<Pick<PioneersEvent, "archivedDateISOString">>,
+  archived: boolean,
+  forms: readonly F[],
+  now: string,
+): { writes: DocWrite[]; touchedForms: F[] } {
+  const touchedForms = archived ? formsClosedByArchive(forms) : formsReopenedByRestore(event, forms);
+  const status = archived ? "closed" : "open";
+  return {
+    writes: [archiveWrite(docPaths.event(event.id), archived, now), ...touchedForms.map((f) => mergeWrite(docPaths.form(f.id), { status, updatedDateISOString: now }))],
+    touchedForms,
+  };
+}
+
+export type EventTemplatePlan = { patch: Partial<PioneersEvent>; forms: EventFormPlan[] };
+
+/**
+ * Ce qu'apporte un modele a un evenement existant (venu de l'agenda Google,
+ * SPECS §2) : son etiquette, son matching s'il n'en a pas (et qu'aucun groupe
+ * n'est tire), et les formulaires du pack qu'il n'a pas encore, publies comme a
+ * la creation (shared/eventForms.ts).
+ */
+export function eventTemplatePlan(
+  event: WithId<PioneersEvent>,
+  templateKey: EventTemplateKey,
+  eventForms: readonly WithId<Pick<Form, "kind" | "archivedDateISOString">>[],
+  hasTeams: boolean,
+  now: string,
+): EventTemplatePlan {
+  const t = EVENT_TEMPLATES[templateKey];
+  const patch: Partial<PioneersEvent> = { templateKey, kind: t.kind, stage: t.stage };
+  if (!matchingOf(event) && !hasTeams && t.matching) patch.matching = t.matching;
+  // Le bareme du modele (grille Pitch, lot 5) s'il n'en a pas.
+  if (!scoringOf(event) && t.scoring) patch.scoring = t.scoring;
+  const kinds = new Set(eventForms.filter((f) => f.archivedDateISOString === null).map((f) => f.kind));
+  const ids = new Set(eventForms.map((f) => f.id));
+  const forms = eventFormsPlan(event.id, { ...event, ...patch }, {}, now).filter((p) => !ids.has(p.id) && !kinds.has(p.form.kind));
+  return { patch, forms };
+}
+
+export const eventTemplateWrites = (eventId: string, plan: EventTemplatePlan, now: string): DocWrite[] => [
+  mergeWrite(docPaths.event(eventId), { ...plan.patch, updatedDateISOString: now }),
+  ...plan.forms.flatMap((p) => eventFormWrites(p, now)),
+];

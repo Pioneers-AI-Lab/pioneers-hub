@@ -4,6 +4,7 @@ import { CreateFormInput } from "../services/formCreate";
 import { AddNoteInput } from "../services/notes";
 import { SetFieldsInput } from "../services/fields";
 import { ListInput, REST_OBJECTS } from "../services/read";
+import { declaredActions } from "../services/actions";
 import { toInputJsonSchema } from "../services/schemas";
 import { APP_NAME } from "../shared/brand";
 import { PUBLIC_BASE_URL } from "./config";
@@ -23,14 +24,14 @@ const errorResponse = { description: "Refusal: `error.code`, `error.message`, an
 const errors = (...codes: number[]) => Object.fromEntries(codes.map((code) => [String(code), errorResponse]));
 const ok = (description: string) => ({ description, content: { "application/json": { schema: { type: "object" } } } });
 
-const writeOperation = (summary: string, description: string, body: z.ZodType) => ({
+const writeOperation = (summary: string, description: string, body: z.ZodType | Record<string, unknown>) => ({
   summary,
   description: `${description}\n\nWith \`?dryRun=true\`, nothing is written: the response shows the preview. With an \`Idempotency-Key\` header, replaying the same request returns the same response (24 h) instead of writing twice.`,
   parameters: [
     { name: "dryRun", in: "query", schema: { type: "boolean" }, description: "Preview only, write nothing." },
     { name: "Idempotency-Key", in: "header", schema: { type: "string", maxLength: 255 }, description: "Makes a retried request safe." },
   ],
-  requestBody: { required: true, content: { "application/json": { schema: schema(body) } } },
+  requestBody: { required: true, content: { "application/json": { schema: body instanceof z.ZodType ? schema(body) : body } } },
   responses: {
     "200": ok("Preview (`dryRun`), nothing to write, or a replayed response (`replayed: true`)."),
     "201": ok("Written. `result` says what changed."),
@@ -72,7 +73,7 @@ function build() {
         get: {
           summary: "List",
           description:
-            "A SHORT form of each object, enough to pick one. `batchId` is required for founders, startups and events; `programId` for batches; `founderId` or `startupId` for notes. `fields` lists every writable field address with what it needs and accepts; `lists` the accepted values of closed lists.",
+            "A SHORT form of each object, enough to pick one. `batchId` is required for founders, startups, events, forms and tasks; `programId` for batches; `founderId` or `startupId` for notes. `fields` lists every writable field address with what it needs and accepts; `lists` the accepted values of closed lists; `actions` the admin actions (`POST /v1/actions/{action}`) with their arguments.",
           parameters: [
             { name: "object", in: "path", required: true, schema: objectParam },
             ...Object.entries(queryParams).map(([name, s]) => ({ name, in: "query", schema: s, description: s.description })),
@@ -83,7 +84,7 @@ function build() {
       "/v1/{object}/{id}": {
         get: {
           summary: "Get",
-          description: "One object in full. A founder comes with person, Profile Book, private profile, internal data and stats; a startup with profile, internal assessment and recent weekly updates; an event with teams, attendance and submissions.",
+          description: "One object in full. A founder comes with person, Profile Book, private profile, internal data and stats; a startup with profile, internal assessment and recent weekly updates; an event with forms, teams, attendance and submissions; a form with its questions.",
           parameters: [
             { name: "object", in: "path", required: true, schema: { type: "string", enum: Object.keys(REST_OBJECTS) } },
             { name: "id", in: "path", required: true, schema: { type: "string" } },
@@ -115,6 +116,10 @@ function build() {
           CreateFormInput,
         ),
       },
+      // Une route par action de l'Admin (services/actions.ts), tiree de son contrat.
+      ...Object.fromEntries(
+        declaredActions().map((a) => [`/v1/actions/${a.op.name}`, { post: { ...writeOperation(a.op.name, `Staff. ${a.description}`, a.args), tags: ["Admin actions"] } }]),
+      ),
     },
   };
 }

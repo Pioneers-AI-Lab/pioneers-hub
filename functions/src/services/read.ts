@@ -1,7 +1,21 @@
 import { getFirestore, type DocumentSnapshot } from "firebase-admin/firestore";
 import { z } from "zod";
 import { COL, docPaths, eventCollectionPaths } from "../shared/collections";
-import { LIST_KEYS, readDirectory, readFounderInternal, type Batch, type ClosedList, type Founder, type Note, type PioneersEvent, type Program, type Startup } from "../shared/types";
+import {
+  LIST_KEYS,
+  readDirectory,
+  readFounderInternal,
+  type Batch,
+  type BatchTask,
+  type ClosedList,
+  type Form,
+  type Founder,
+  type Mentor,
+  type Note,
+  type PioneersEvent,
+  type Program,
+  type Startup,
+} from "../shared/types";
 import {
   canReadFounderDirectory,
   canReadFounderProfile,
@@ -11,6 +25,7 @@ import {
   canSeeEvent,
   isInsider,
   isInsiderViewer,
+  isStaffViewer,
 } from "../shared/access";
 import { isPublishedEvent } from "../shared/events";
 import type { Caller } from "../api/caller";
@@ -18,6 +33,9 @@ import { badRequest, forbidden, notFound } from "../api/errors";
 import { founderIdIn, roleOf } from "../api/viewer";
 import { searchKey } from "../shared/text";
 import { describeFields } from "./fields";
+import { listAccounts } from "./accounts";
+import { actionsFor } from "./actions";
+import { formUrl } from "../api/config";
 
 // ----------------------------
 // services - LIRE
@@ -89,11 +107,43 @@ const SIMPLE_LISTS = {
   },
 } as const;
 
-const LIST_OBJECTS = [...(Object.keys(SIMPLE_LISTS) as (keyof typeof SIMPLE_LISTS)[]), "notes", "fields", "lists"] as const;
+const LIST_OBJECTS = [
+  ...(Object.keys(SIMPLE_LISTS) as (keyof typeof SIMPLE_LISTS)[]),
+  "notes",
+  "forms",
+  "tasks",
+  "mentors",
+  "accounts",
+  "fields",
+  "lists",
+  "actions",
+] as const;
+
+/** Un formulaire se lit par son lien (regle `forms` : public) ; un brouillon n'est montre qu'au staff. */
+const canSeeForm = (role: string, form: Pick<Form, "status">) => role === "staff" || form.status !== "draft";
+
+function requiredBatchId(input: { batchId?: string }, object: string): string {
+  if (!input.batchId) throw badRequest("missing_argument", `\`batchId\` is required to list \`${object}\`.`, "batchId");
+  return input.batchId;
+}
+
+/** La forme courte d'un formulaire : de quoi le choisir (`get form` pour ses questions). */
+const shortForm = (f: Doc<Form>) => ({
+  id: f.id,
+  title: f.title,
+  kind: f.kind,
+  status: f.status,
+  version: f.version,
+  eventId: f.eventId,
+  opensDateISOString: f.opensDateISOString,
+  deadlineDateISOString: f.deadlineDateISOString,
+  identityCheck: f.identityCheck,
+  approval: f.approval,
+});
 
 /** Les objets qu'on lit seuls, sans sous-document. */
 const SIMPLE_GETS = { program: COL.programs, batch: COL.batches, note: COL.notes } as const;
-export const GET_OBJECTS = [...(Object.keys(SIMPLE_GETS) as (keyof typeof SIMPLE_GETS)[]), "founder", "startup", "event"] as const;
+export const GET_OBJECTS = [...(Object.keys(SIMPLE_GETS) as (keyof typeof SIMPLE_GETS)[]), "founder", "startup", "event", "form"] as const;
 
 /** Le type d'objet de chaque URL REST (`/v1/founders/{id}` -> `founder`) : le routeur ET la spec OpenAPI le lisent. */
 export const REST_OBJECTS = {
@@ -103,13 +153,15 @@ export const REST_OBJECTS = {
   startups: "startup",
   events: "event",
   notes: "note",
+  forms: "form",
 } as const satisfies Record<string, (typeof GET_OBJECTS)[number]>;
 
 export const ListInput = z
   .object({
     object: z.enum(LIST_OBJECTS),
     programId: z.string().min(1).optional().describe("batches: the program."),
-    batchId: z.string().min(1).optional().describe("Required for founders, startups, events."),
+    batchId: z.string().min(1).optional().describe("Required for founders, startups, events, forms, tasks."),
+    eventId: z.string().min(1).optional().describe("forms: only this event's forms."),
     founderId: z.string().min(1).optional().describe("notes: notes about this founder (or their startup)."),
     startupId: z.string().min(1).optional().describe("notes: notes about this startup."),
     search: z.string().trim().min(1).optional().describe("Keep objects whose name contains this (accents and case ignored)."),
@@ -188,6 +240,54 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
           excerpt: n.body.length > 280 ? `${n.body.slice(0, 280)}...` : n.body,
         })),
     };
+  }
+
+  if (object === "actions") return { object, items: actionsFor(caller) };
+
+  if (object === "accounts") {
+    if (!isStaffViewer(caller.viewer)) throw forbidden("not_visible", "Accounts are visible to staff only.");
+    const search = input.search ? searchKey(input.search) : null;
+    const rows = (await listAccounts()).filter((a) => !search || searchKey(`${a.displayName ?? ""} ${a.email ?? ""}`).includes(search));
+    return { object, items: rows };
+  }
+
+  if (object === "mentors") {
+    if (!isInsiderViewer(caller.viewer)) throw forbidden("not_visible", "Mentors are visible to staff and IC investors only.");
+    const mentors = (await db.collection(COL.mentors).get()).docs
+      .map((d) => withId<Mentor>(d))
+      .filter((m) => input.includeArchived || !m.archivedDateISOString);
+    const people = mentors.length ? await db.getAll(...mentors.map((m) => db.doc(docPaths.person(m.personId)))) : [];
+    const search = input.search ? searchKey(input.search) : null;
+    const items = mentors
+      .map((m, i) => ({ id: m.id, name: (people[i]?.get("displayName") as string | undefined) ?? null, company: m.company, title: m.title, status: m.status, programIds: m.programIds }))
+      .filter((m) => !search || searchKey(`${m.name ?? ""} ${m.company ?? ""}`).includes(search))
+      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    return { object, items };
+  }
+
+  if (object === "tasks") {
+    const batchId = requiredBatchId(input, object);
+    // Regle `batchTasks` : le batch, le staff et les investors.
+    if (roleOf(caller, batchId) === "public") throw forbidden("not_visible", "A batch's tasks are visible to its founders, staff and investors.");
+    const tasks = (await db.collection(COL.batchTasks).where("batchId", "==", batchId).get()).docs
+      .map((d) => withId<BatchTask>(d))
+      .filter((t) => input.includeArchived || !t.archivedDateISOString)
+      .sort((a, b) => a.order - b.order);
+    return { object, items: tasks.map((t) => ({ id: t.id, title: t.title, description: t.description, linkUrl: t.linkUrl, order: t.order, archived: t.archivedDateISOString !== null })) };
+  }
+
+  if (object === "forms") {
+    const batchId = requiredBatchId(input, object);
+    const role = roleOf(caller, batchId);
+    let q: FirebaseFirestore.Query = db.collection(COL.forms).where("batchId", "==", batchId);
+    if (input.eventId) q = q.where("eventId", "==", input.eventId);
+    const search = input.search ? searchKey(input.search) : null;
+    const forms = (await q.get()).docs
+      .map((d) => withId<Form>(d))
+      .filter((f) => (input.includeArchived || !f.archivedDateISOString) && canSeeForm(role, f))
+      .filter((f) => !search || searchKey(f.title).includes(search))
+      .sort((a, b) => String(a.opensDateISOString ?? "~").localeCompare(String(b.opensDateISOString ?? "~")));
+    return { object, items: forms.map(shortForm) };
   }
 
   const spec = SIMPLE_LISTS[object];
@@ -284,20 +384,30 @@ export async function getObject(caller: Caller, input: GetInput): Promise<Record
       return { object, ...withId(startupSnap), profile, internal, recentCheckins };
     }
 
+    case "form": {
+      const form = withId<Form>(required(await db.doc(docPaths.form(id)).get(), object, id));
+      if (!canSeeForm(roleOf(caller, form.batchId), form)) throw hidden();
+      return { object, ...form, url: form.status === "draft" ? null : formUrl(id) };
+    }
+
     case "event": {
       const insider = isInsiderViewer(caller.viewer);
-      const [event, teams, attendance, submissions] = await Promise.all([
+      const [event, teams, attendance, submissions, eventForms] = await Promise.all([
         db.doc(docPaths.event(id)).get(),
         db.collection(eventCollectionPaths.teams(id)).get(),
         insider ? db.collection(eventCollectionPaths.attendance(id)).get() : null,
         db.collection(eventCollectionPaths.submissions(id)).get(),
+        db.collection(COL.forms).where("eventId", "==", id).get(),
       ]);
       const data = required(event, object, id).data() as PioneersEvent;
       if (!(await eventFilterFor(caller, data.batchId))(data)) throw notFound(`${object}_not_found`, `No ${object} with id \`${id}\`.`, "id");
       const role = roleOf(caller, data.batchId);
+      // Ses formulaires : de quoi passer a `get form`.
+      const forms = eventForms.docs.map((d) => withId<Form>(d)).filter((f) => !f.archivedDateISOString && canSeeForm(role, f));
       return {
         object,
         ...withId(event),
+        forms: forms.map(shortForm),
         teams: teams.docs.map((d) => withId<{ publishedDateISOString: string | null }>(d)).filter((t) => canReadTeam(role, t)),
         attendance: attendance?.docs.map((d) => ({ founderId: d.id, status: d.get("status") })),
         submissions: submissions.docs.map((d) => withId(d)),

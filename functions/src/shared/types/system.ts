@@ -91,7 +91,8 @@ export type AuditLog = {
 // n'a change depuis l'apercu, puis ecrit. Un plan ne s'applique qu'une fois :
 // le rejouer rend le meme resultat (idempotence cote MCP).
 
-export type WritePlanStatus = "previewed" | "applied";
+/** `applying` : une action a effet hors transaction (compte, synchro, recalcul) est en cours. */
+export type WritePlanStatus = "previewed" | "applying" | "applied";
 
 export type WritePlan = {
   ownerUid: string;
@@ -119,6 +120,8 @@ export type IdempotencyRecord = {
   /** Empreinte stable de l'entree. */
   requestHash: string;
   result: unknown;
+  /** Reservee pendant une action hors transaction (compte, agenda, scores) : un rejeu attend. */
+  pending?: boolean;
   createdDateISOString: DateISOString;
   /** 24 h. */
   expiresDateISOString: DateISOString;

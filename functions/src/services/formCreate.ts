@@ -2,14 +2,14 @@ import { getFirestore } from "firebase-admin/firestore";
 import { z } from "zod";
 import { COL, docPaths, SUB } from "../shared/collections";
 import { isStaffViewer } from "../shared/access";
-import { isDbFieldKey, type DbFieldKey } from "../shared/fieldRegistry";
+import { questionsFromEdits, type QuestionEdit } from "../shared/admin/forms";
 import { addedFormDates } from "../shared/eventForms";
-import { formProblems, newQuestion, retiredFormProblems } from "../shared/formRules";
+import { formProblems, retiredFormProblems } from "../shared/formRules";
 import { firstPublication, newForm } from "../shared/forms";
 import { FORM_TEMPLATES, type FormTemplateKey, isOfferedTemplate } from "../shared/presets/formTemplates";
 import { isOffered, RETIRED_IDENTITY_CHECKS } from "../shared/presets/offered";
 import { FORM_APPROVALS, FORM_FIELD_TYPES, FORM_IDENTITY_CHECKS, PICKER_ENTITIES, QUESTION_SCOPES, type Batch, type Form, type FormIdentityCheck, type PioneersEvent } from "../shared/types";
-import { FRONTEND_BASE_URL } from "../api/config";
+import { formUrl } from "../api/config";
 import { badRequest, notFound } from "../api/errors";
 import type { Operation } from "./operations";
 import { isoDateTime } from "./schemas";
@@ -88,10 +88,8 @@ export const createForm: Operation<typeof CreateFormInput, Created> = {
     if (template?.needsEvent && !input.eventId) {
       throw badRequest("missing_argument", `The model \`${input.templateKey}\` is about an event: give \`eventId\`.`, "eventId");
     }
-    const unknownField = input.questions?.find((q) => q.dbField && !isDbFieldKey(q.dbField));
-    if (unknownField) {
-      throw badRequest("unknown_field", `\`${unknownField.dbField}\` is not a writable field. The full list: list \`fields\`.`, "questions");
-    }
+    // Creer un formulaire, c'est editer un formulaire vide (shared/admin/forms.ts) : memes refus, memes ids.
+    const questions = input.questions ? questionsFromEdits([], false, input.questions as QuestionEdit[]) : null;
 
     // L'evenement d'abord : un Debrief ou un jury construit ses questions depuis son modele.
     const [batchSnap, eventSnap] = await tx.getAll(
@@ -123,7 +121,7 @@ export const createForm: Operation<typeof CreateFormInput, Created> = {
       {
         ...(input.title ? { title: input.title } : {}),
         ...(input.description ? { description: input.description } : {}),
-        ...(input.questions ? { questions: input.questions.map((q, i) => newQuestion(`q${i + 1}`, { ...q, dbField: q.dbField as DbFieldKey | undefined })) } : {}),
+        ...(questions ? { questions } : {}),
         ...(input.approval ? { approval: input.approval } : {}),
         ...(input.identityCheck ? { identityCheck: input.identityCheck } : {}),
         ...dates,
@@ -157,8 +155,7 @@ export const createForm: Operation<typeof CreateFormInput, Created> = {
         const doc: Form = { ...(published?.form ?? form), createdDateISOString: now, updatedDateISOString: now };
         wtx.create(ref, doc);
         if (published) wtx.create(ref.collection(SUB.versions).doc(String(published.version.version)), published.version);
-        // Le meme chemin que `paths.form` du front (src/lib/paths.ts).
-        return { formId: ref.id, version: doc.version, status: doc.status, url: published ? `${FRONTEND_BASE_URL}/forms/${ref.id}` : null };
+        return { formId: ref.id, version: doc.version, status: doc.status, url: published ? formUrl(ref.id) : null };
       },
     };
   },

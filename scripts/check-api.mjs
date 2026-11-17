@@ -84,7 +84,7 @@ const call = async (key, name, args) => {
   check(typeof init.body.result?.instructions === "string", "instructions sent");
   const list = await mcp(key, "tools/list", {});
   const names = list.body.result?.tools?.map((t) => t.name);
-  check(names?.length === 7, `staff tools/list: ${names?.join(", ")}`, list.body);
+  check(names?.length === 9, `staff tools/list: ${names?.join(", ")}`, list.body);
   const catalogueChars = JSON.stringify(list.body.result.tools).length;
   console.log(`     catalogue ~${Math.round(catalogueChars / 4)} tokens`);
 
@@ -303,6 +303,156 @@ const call = async (key, name, args) => {
   const draft = (await getFirestore().doc(`forms/${t.data.result?.formId}`).get()).data();
   check(draft?.status === "draft" && draft?.version === 0 && draft?.questions?.length > 0, "a model form is created as a draft by default", draft);
 
+  // ---- Les actions de l'Admin (`pioneers_run`, POST /v1/actions/{action}) ----
+  const db = getFirestore();
+  const run = async (action, args) => {
+    const preview = await call(key, "pioneers_run", { action, args });
+    if (preview.isError || !preview.data.planId) return { preview, applied: null };
+    return { preview, applied: await call(key, "pioneers_run", { planId: preview.data.planId }) };
+  };
+  t = await call(key, "pioneers_list", { object: "actions" });
+  const actionNames = t.data?.items?.map((a) => a.action) ?? [];
+  check(actionNames.length >= 20 && actionNames.includes("update_event") && t.data.items.every((a) => a.args?.type === "object"), `list actions: ${actionNames.length} with their arguments`, t.data);
+  t = await call(key, "pioneers_guide", {});
+  check(!t.isError && t.data.topics?.some((x) => x.topic === "scores"), "guide lists its topics", t.data);
+  t = await call(key, "pioneers_guide", { topic: "events" });
+  check(!t.isError && /matching/.test(t.data.body), "guide returns a topic", t.data);
+  t = await call(key, "pioneers_run", { action: "update_event", args: { eventId, nope: 1 } });
+  check(t.isError && /nope|invalid_request/.test(t.data), "an action refuses an unknown argument", t.data);
+
+  // Evenement : regler, deplacer avec ses formulaires, archiver / restaurer
+  let a = await run("update_event", { eventId, location: "Room 2", audience: "guests" });
+  check(a.preview.data?.preview?.changes?.location?.to === "Room 2" && a.applied && !a.applied.isError, "update_event previews then applies the change", a);
+  let ev = (await db.doc(`events/${eventId}`).get()).data();
+  check(ev?.location === "Room 2" && ev?.audience === "guests", "update_event writes the event", ev);
+  const audit = await db.collection("auditLogs").where("action", "==", "update_event").get();
+  check(audit.docs.some((d) => d.get("via") === "mcp"), "an action is audited with its channel");
+  const pack = (await db.collection("events").where("name", "==", "Pack check").get()).docs[0];
+  const packForms = await db.collection("forms").where("eventId", "==", pack.id).get();
+  const opensBefore = packForms.docs.map((d) => d.get("opensDateISOString"));
+  const dayLater = (iso) => new Date(Date.parse(iso) + 86400000).toISOString();
+  a = await run("update_event", { eventId: pack.id, startDateISOString: dayLater(pack.get("startDateISOString")), endDateISOString: dayLater(pack.get("endDateISOString")) });
+  check(a.preview.data?.preview?.movedForms?.length > 0, "moving an event previews its forms' new dates", a.preview.data);
+  const opensAfter = (await db.collection("forms").where("eventId", "==", pack.id).get()).docs.map((d) => d.get("opensDateISOString"));
+  check(opensAfter.some((o, i) => o && o !== opensBefore[i]), "moving an event moves its forms", { opensBefore, opensAfter });
+  a = await run("archive_event", { eventId: pack.id, archived: true });
+  const closed = (await db.collection("forms").where("eventId", "==", pack.id).get()).docs.map((d) => d.get("status"));
+  check(a.applied && closed.every((s) => s !== "open") && (await db.doc(`events/${pack.id}`).get()).get("archivedDateISOString"), "archive_event hides the event and closes its forms", closed);
+  a = await run("archive_event", { eventId: pack.id, archived: false });
+  const reopened = (await db.collection("forms").where("eventId", "==", pack.id).get()).docs.map((d) => d.get("status"));
+  check(reopened.some((s) => s === "open"), "restoring the event reopens its forms", reopened);
+
+  // Formulaire : nouvelle version, statut, copie, archivage
+  const published = (await db.doc(`forms/${newForm.formId}`).get()).data();
+  a = await run("update_form", {
+    formId: newForm.formId,
+    questions: [{ id: published.questions[0].id, label: "How useful was the session?" }, { id: published.questions[1].id }, { type: "text", label: "Anything else?" }],
+  });
+  check(/new version 2/.test(a.preview.data?.preview?.version ?? ""), "editing a published form's questions previews a new version", a.preview.data);
+  const v2 = (await db.doc(`forms/${newForm.formId}`).get()).data();
+  check(
+    v2?.version === 2 && (await db.doc(`forms/${newForm.formId}/versions/2`).get()).exists && v2.questions[0].label === "How useful was the session?" && v2.questions.some((q) => q.archived && q.type === "single_choice"),
+    "update_form writes version 2, a left-out question is archived",
+    v2?.questions,
+  );
+  a = await run("set_form_status", { formId: newForm.formId, status: "closed" });
+  check((await db.doc(`forms/${newForm.formId}`).get()).get("status") === "closed", "set_form_status closes a form", a);
+  const draftId = (await db.collection("forms").where("kind", "==", draft.kind).where("status", "==", "draft").get()).docs[0]?.id;
+  a = await run("set_form_status", { formId: draftId, status: "open" });
+  const opened = (await db.doc(`forms/${draftId}`).get()).data();
+  check(opened?.status === "open" && opened.version === 1 && (await db.doc(`forms/${draftId}/versions/1`).get()).exists && /\/forms\//.test(a.applied?.data?.result?.url ?? ""), "opening a draft publishes it (version 1, link)", a.applied?.data);
+  a = await run("duplicate_form", { formId: draftId });
+  const copyId = a.applied?.data?.result?.formId;
+  const copy = copyId ? (await db.doc(`forms/${copyId}`).get()).data() : null;
+  check(copy?.status === "draft" && copy.version === 0, "duplicate_form makes a draft copy", copy);
+  a = await run("archive_form", { formId: copyId, archived: true });
+  check((await db.doc(`forms/${copyId}`).get()).get("archivedDateISOString"), "archive_form archives", a);
+  t = await call(key, "pioneers_list", { object: "forms", batchId: "fall-2026", eventId: pack.id });
+  check(!t.isError && t.data.items.length === packForms.size, "list forms of an event", t.data);
+  t = await call(key, "pioneers_get", { object: "form", id: newForm.formId });
+  check(!t.isError && t.data.questions?.length >= 3 && t.data.url, "get form returns its questions and link", t.data);
+  t = await call(key, "pioneers_get", { object: "event", id: pack.id });
+  check(!t.isError && t.data.forms?.length === packForms.size, "get event returns its forms", t.data?.forms);
+
+  // Taches du To do
+  a = await run("create_task", { batchId: "fall-2026", title: "Book your office hour", linkUrl: "calendly.com/pioneers" });
+  const taskId = a.applied?.data?.result?.taskId;
+  const task = taskId ? (await db.doc(`batchTasks/${taskId}`).get()).data() : null;
+  check(task?.linkUrl === "https://calendly.com/pioneers" && task.archivedDateISOString === null, "create_task completes the link and appends", task);
+  a = await run("move_task", { taskId, position: 1 });
+  t = await call(key, "pioneers_list", { object: "tasks", batchId: "fall-2026" });
+  check(t.data?.items?.[0]?.id === taskId, "move_task puts it first", t.data?.items?.map((x) => x.title));
+  a = await run("update_task", { taskId, title: "Book an office hour" });
+  a = await run("archive_task", { taskId, archived: true });
+  check((await db.doc(`batchTasks/${taskId}`).get()).get("archivedDateISOString"), "archive_task archives", a);
+
+  // Presence : le premier geste enregistre tous les attendus
+  const roster = (await db.collection("founders").where("batchId", "==", "fall-2026").get()).docs.filter((d) => !d.get("archivedDateISOString"));
+  a = await run("update_event", { eventId, audience: "batch" });
+  a = await run("mark_attendance", { eventId, marks: [{ founderId: "ada-example", status: "absent" }] });
+  const marks = await db.collection(`events/${eventId}/attendance`).get();
+  check(a.applied && marks.docs.find((d) => d.id === "ada-example")?.get("status") === "absent" && marks.size > 1, `mark_attendance records ${marks.size} founders`, a.preview.data);
+  t = await call(key, "pioneers_run", { action: "mark_attendance", args: { eventId, marks: [{ founderId: "nobody", status: "absent" }] } });
+  check(t.isError && /not_expected/.test(t.data), "mark_attendance refuses a founder not expected", t.data);
+  void roster;
+
+  // Programmes, batchs, listes
+  a = await run("create_program", { name: "Studio Check" });
+  check(a.applied?.data?.result?.programId === "studio-check", "create_program slugs its id", a.applied?.data);
+  a = await run("create_batch", { programId: "studio-check", name: "Spring 2028", startDayString: "2028-03-01", endDayString: "2028-05-30" });
+  check((await db.doc("batches/spring-2028").get()).get("status") === "upcoming", "create_batch creates an upcoming batch", a.applied?.data);
+  a = await run("update_batch", { batchId: "spring-2028", milestones: [{ key: "demo_day", dayString: "2028-05-28" }], leaderboardVisibility: "hidden" });
+  const b = (await db.doc("batches/spring-2028").get()).data();
+  check(b?.milestones.find((m) => m.key === "demo_day")?.dayString === "2028-05-28" && b.settings.leaderboardVisibility === "hidden" && b.milestones.length === 5, "update_batch sets a milestone and a setting", b);
+  a = await run("add_list_values", { list: "industries", values: ["Quantum check"] });
+  check(a.applied?.data?.result?.added?.[0] === "Quantum check", "add_list_values adds a new value", a.applied?.data);
+  t = await call(key, "pioneers_run", { action: "add_list_values", args: { list: "industries", values: ["quantum CHECK"] } });
+  check(t.data?.nothingToWrite === true, "a known value (any case) is not added twice", t.data);
+
+  // Rattachement : lier, refuser l'archivage, delier
+  a = await run("link_founder", { founderId: "chloe-demo", email: "stranger@pioneers.test" });
+  check(a.applied && (await db.doc("batchMemberships/fall-2026_stranger-1").get()).exists && (await db.doc("founders/chloe-demo").get()).get("uid") === "stranger-1", "link_founder links profile and account", a.applied?.data);
+  t = await call(key, "pioneers_run", { action: "archive_founder", args: { founderId: "chloe-demo", archived: true } });
+  check(t.isError && /linked/.test(t.data), "a linked profile is not archived", t.data);
+  a = await run("unlink_founder", { founderId: "chloe-demo" });
+  check(!(await db.doc("batchMemberships/fall-2026_stranger-1").get()).exists && (await db.doc("founders/chloe-demo").get()).get("uid") === null, "unlink_founder frees profile and access", a.applied?.data);
+
+  // Comptes : jamais le role staff
+  t = await call(key, "pioneers_run", { action: "set_account_access", args: { uid: "staff-1", roles: [] } });
+  check(t.isError && /staff_account/.test(t.data), "a staff account's access is not changed through the API", t.data);
+  t = await call(key, "pioneers_run", { action: "set_account_access", args: { uid: "lp-1", roles: ["staff"] } });
+  check(t.isError, "the staff role cannot be given through the API", t.data);
+  a = await run("set_account_access", { uid: "lp-1", roles: ["investor"], investorAccess: "ic" });
+  check(a.applied && !a.applied.isError && (await db.doc("users/lp-1").get()).get("investorAccess") === "ic", "set_account_access (an effect outside the transaction) applies", a.applied?.data);
+  a = await run("set_account_access", { uid: "lp-1", roles: ["investor"], investorAccess: "portfolio" });
+  a = await run("invite_account", { email: "new.investor@pioneers.test", roles: ["investor"], investorAccess: "portfolio" });
+  check(a.applied?.data?.result?.created === true, "invite_account creates the account", a.applied?.data);
+  a = await run("set_account_disabled", { uid: "stranger-1", disabled: true });
+  check((await getAuth().getUser("stranger-1")).disabled === true, "set_account_disabled blocks sign-in", a.applied?.data);
+  t = await call(key, "pioneers_run", { planId: a.preview.data.planId });
+  check(t.data?.replayed === true, "a confirmed effect replays without running twice", t.data);
+  await run("set_account_disabled", { uid: "stranger-1", disabled: false });
+  t = await call(key, "pioneers_list", { object: "accounts", search: "stranger" });
+  check(t.data?.items?.length === 1 && t.data.items[0].disabled === false, "list accounts (staff)", t.data);
+  a = await run("recompute_scores", { batchId: "fall-2026" });
+  check(a.applied && !a.applied.isError && a.applied.data.result?.batchId === "fall-2026", "recompute_scores runs", a.applied?.data);
+  t = await call(key, "pioneers_run", { action: "sync_calendar", args: { batchId: "spring-2028" } });
+  check(t.isError && /no_calendar/.test(t.data), "sync_calendar needs a linked calendar", t.data);
+  t = await call(key, "pioneers_list", { object: "mentors", search: "mia" });
+  check(t.data?.items?.[0]?.id === "mia-mentor" && t.data.items[0].name === "Mia Mentor", "list mentors with their names", t.data);
+
+  // REST
+  r = await fetch(`${HOSTING}/v1/actions/archive_task?dryRun=true`, { method: "POST", headers: { authorization: `Bearer ${key}`, "content-type": "application/json" }, body: JSON.stringify({ taskId, archived: false }) });
+  let rb = await r.json();
+  check(r.status === 200 && rb.applied === false && rb.preview?.archived === false, "POST /v1/actions/{action}?dryRun=true previews", rb);
+  r = await fetch(`${HOSTING}/v1/actions/constructor`, { method: "POST", headers: { authorization: `Bearer ${key}`, "content-type": "application/json" }, body: "{}" });
+  check(r.status === 404, "an unknown action is a 404");
+  r = await fetch(`${HOSTING}/v1/actions`, { headers: { authorization: `Bearer ${key}` } });
+  rb = await r.json();
+  check(r.status === 200 && rb.items?.length === actionNames.length, "GET /v1/actions lists them", rb);
+  t = await call(key, "pioneers_run", { planId: (await call(key, "pioneers_add_note", { targetType: "founder", targetId: "ada-example", body: "x", dayString: "2026-11-17" })).data?.planId });
+  check(t.isError, "pioneers_run refuses another tool's plan", t.data);
+
   // ---- Droits par role : chacun voit et ecrit ce que l'app lui permet ----
   const keyFor = async (uid) => (await callable("createApiKey", await idToken(uid), { name: `${uid} check` })).result?.key;
   const [adaKey, icKey, lpKey, strangerKey] = await Promise.all(["ada-1", "ic-1", "lp-1", "stranger-1"].map(keyFor));
@@ -314,7 +464,7 @@ const call = async (key, name, args) => {
 
   // Fondateur (ada, membre de lumen)
   const adaTools = (await mcp(adaKey, "tools/list", {})).body.result?.tools?.map((t) => t.name) ?? [];
-  check(adaTools.includes("pioneers_set_fields") && !adaTools.includes("pioneers_add_note"), `founder catalogue: ${adaTools.join(", ")}`);
+  check(adaTools.includes("pioneers_set_fields") && !adaTools.includes("pioneers_add_note") && !adaTools.includes("pioneers_run"), `founder catalogue: ${adaTools.join(", ")}`);
   let g = await rest(adaKey, "/v1/founders/ada-example");
   check(g.status === 200 && "profile" in g.body && !("internal" in g.body) && g.body.person, "founder sees own profile and person, not internal", Object.keys(g.body));
   g = await rest(adaKey, "/v1/founders/ben-sample");
@@ -424,7 +574,7 @@ const call = async (key, name, args) => {
   check(r.status === 200 && tokens.access_token?.startsWith("pha_") && tokens.refresh_token?.startsWith("phr_"), "token: code exchanged with PKCE", tokens);
 
   const oauthList = await mcp(tokens.access_token, "tools/list", {});
-  check(oauthList.status === 200 && oauthList.body.result?.tools?.length === 7, "MCP works with the OAuth access token", oauthList.body);
+  check(oauthList.status === 200 && oauthList.body.result?.tools?.length === 9, "MCP works with the OAuth access token", oauthList.body);
   r = await fetch(`${HOSTING}/v1/me`, { headers: { authorization: `Bearer ${tokens.access_token}` } });
   check(r.status === 401, "an OAuth token is refused on /v1 (audience is /mcp)");
 

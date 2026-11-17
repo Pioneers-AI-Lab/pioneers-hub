@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import express, { Router, type Request } from "express";
+import express, { Router, type Request, type Response } from "express";
 import { getFirestore } from "firebase-admin/firestore";
 import { batchCalendar, isBatchCalendarEvent } from "../shared/calendar";
 import { COL } from "../shared/collections";
@@ -11,6 +11,7 @@ import { createForm } from "../services/formCreate";
 import { addNote } from "../services/notes";
 import { setFields } from "../services/fields";
 import { runOperation, type Operation } from "../services/operations";
+import { actionOf } from "../services/actions";
 import { getObject, GetInput, listObjects, ListInput, REST_OBJECTS, whoami } from "../services/read";
 import { requireCaller } from "./caller";
 import { FRONTEND_BASE_URL } from "./config";
@@ -101,20 +102,29 @@ const idempotencyKeyOf = (req: Request) => {
 };
 
 /** Une ecriture : `?dryRun=true` rend l'apercu sans rien ecrire ; `Idempotency-Key` rend un rejeu sans effet. */
-function writeRoute(op: Operation) {
-  return route(async (req, res) => {
-    const out = await runOperation(op, req.caller!, req.body, {
-      dryRun: req.query.dryRun === "true",
-      idempotencyKey: idempotencyKeyOf(req),
-    });
-    res.status(out.applied && !out.replayed ? 201 : 200).json(out);
+async function sendWrite(op: Operation, req: Request, res: Response) {
+  const out = await runOperation(op, req.caller!, req.body, {
+    dryRun: req.query.dryRun === "true",
+    idempotencyKey: idempotencyKeyOf(req),
   });
+  res.status(out.applied && !out.replayed ? 201 : 200).json(out);
 }
+
+const writeRoute = (op: Operation) => route((req, res) => sendWrite(op, req, res));
 
 v1.post("/fields", writeRoute(setFields));
 v1.post("/notes", writeRoute(addNote));
 v1.post("/events", writeRoute(createEvent));
 v1.post("/forms", writeRoute(createForm));
+// Les actions de l'Admin (services/actions.ts) : `GET /v1/actions` en donne la liste et les arguments.
+v1.post(
+  "/actions/:action",
+  route(async (req, res) => {
+    const described = actionOf(String(req.params.action));
+    if (!described) throw notFound("unknown_action", `No action \`${req.params.action}\`. The list: GET /v1/actions.`);
+    await sendWrite(described.op, req, res);
+  }),
+);
 
 v1.get(
   "/me",

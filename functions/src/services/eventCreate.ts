@@ -4,9 +4,9 @@ import { CALENDAR_BATCH_MESSAGE, calendarIdOf } from "../shared/calendarSync";
 import { COL, docPaths } from "../shared/collections";
 import { isStaffViewer } from "../shared/access";
 import { eventFormDocs, eventFormsPlan } from "../shared/eventForms";
-import { newEvent } from "../shared/events";
+import { mentorGuest, newEvent } from "../shared/events";
 import { EVENT_TEMPLATES, type EventTemplateKey } from "../shared/presets/eventTemplates";
-import { EVENT_KINDS, type Batch, type EventGuest, type Mentor, type Person, type PioneersEvent, type Startup } from "../shared/types";
+import { EVENT_KINDS, type Batch, type Mentor, type Person, type PioneersEvent, type Startup } from "../shared/types";
 import { badRequest, notFound } from "../api/errors";
 import type { Operation } from "./operations";
 import { isoDateTime } from "./schemas";
@@ -81,14 +81,7 @@ export const createEvent: Operation<typeof CreateEventInput, { eventId: string }
 
     // Le nom affiche d'un mentor est celui de sa personne (Mentor n'a pas de nom).
     const mentorPeople = mentors.length ? await tx.getAll(...mentors.map((m) => db.doc(docPaths.person(m!.personId)))) : [];
-    const guests: EventGuest[] = mentors.map((m, i) => ({
-      name: (mentorPeople[i]?.data() as Person | undefined)?.displayName ?? mentorIds[i],
-      role: "mentor",
-      personId: m!.personId,
-      founderId: null,
-      mentorId: mentorIds[i],
-      intro: null,
-    }));
+    const guests = mentors.map((m, i) => mentorGuest(mentorIds[i], m!.personId, (mentorPeople[i]?.data() as Person | undefined)?.displayName));
 
     const data = newEvent(
       {

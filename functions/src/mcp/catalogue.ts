@@ -7,6 +7,8 @@ import { createForm } from "../services/formCreate";
 import { addNote } from "../services/notes";
 import { setFields } from "../services/fields";
 import { getObject, GetInput, listObjects, ListInput, whoami } from "../services/read";
+import { ACTION_NAMES, actionOf, anyActionFor } from "../services/actions";
+import { GUIDE_TOPICS, type GuideTopic } from "./guide";
 import { toInputJsonSchema } from "../services/schemas";
 
 // ----------------------------
@@ -51,6 +53,23 @@ const PLAN_ID = z.string().min(1).describe("Returned by the preview. Pass it ALO
  * Un outil d'ecriture en deux temps : sans `planId`, il previsualise ; avec
  * `planId` seul, il applique ce qui a ete montre.
  */
+/**
+ * Le premier appel (apercu) ou le second (`planId` seul) d'une ecriture. `op` :
+ * l'operation de l'outil, ou une table nom -> operation (`pioneers_run`).
+ */
+async function previewOrApply(op: Operation | ((name: string) => Operation | undefined), caller: Caller, args: Record<string, unknown>, planId: unknown) {
+  if (typeof planId === "string") {
+    const applied = await applyPlan(op, caller, planId);
+    return { applied: true, replayed: applied.replayed, result: applied.result };
+  }
+  if (typeof op === "function") throw badRequest("missing_argument", "Give `action`.", "action");
+  const { planId: id, preview } = await previewPlan(op, caller, args);
+  if (!id) return { applied: false, nothingToWrite: true, preview };
+  return { applied: false, planId: id, preview, next: "Show this to the user. If they confirm, call again with only `planId`." };
+}
+
+const planOnly = () => badRequest("plan_only", "With `planId`, pass nothing else: the plan already holds the values.", "planId");
+
 function writeTool<S extends z.ZodObject>(
   op: Operation<S>,
   meta: { name: string; title: string; description: string },
@@ -63,19 +82,23 @@ function writeTool<S extends z.ZodObject>(
     annotations: WRITE,
     async run(caller, args) {
       const { planId, ...rest } = args;
-      if (typeof planId === "string") {
-        if (Object.keys(rest).length > 0) {
-          throw badRequest("plan_only", "With `planId`, pass nothing else: the plan already holds the values.", "planId");
-        }
-        const applied = await applyPlan(op, caller, planId);
-        return { applied: true, replayed: applied.replayed, result: applied.result };
-      }
-      const { planId: id, preview } = await previewPlan(op, caller, rest);
-      if (!id) return { applied: false, nothingToWrite: true, preview };
-      return { applied: false, planId: id, preview, next: "Show this to the user. If they confirm, call again with only `planId`." };
+      if (typeof planId === "string" && Object.keys(rest).length > 0) throw planOnly();
+      return previewOrApply(op, caller, rest, planId);
     },
   };
 }
+
+const RunInput = z
+  .object({
+    action: z.enum(ACTION_NAMES).optional().describe("The action. Its arguments: `pioneers_list` with `object: \"actions\"`."),
+    args: z.record(z.string(), z.unknown()).optional().describe("The action's arguments."),
+    planId: PLAN_ID.optional(),
+  })
+  .strict();
+
+const GuideInput = z
+  .object({ topic: z.enum(Object.keys(GUIDE_TOPICS) as [GuideTopic, ...GuideTopic[]]).optional().describe("Omit to get the list of topics.") })
+  .strict();
 
 const TOOLS: Tool[] = [
   {
@@ -91,9 +114,9 @@ const TOOLS: Tool[] = [
     title: "List",
     description:
       "Lists objects of one type in SHORT form, enough to pick one; call `pioneers_get` for the full object.\n\n" +
-      "`batchId` is required for founders, startups and events; `programId` for batches; `founderId` or `startupId` for notes.\n" +
+      "`batchId` is required for founders, startups, events, forms and tasks; `programId` for batches; `founderId` or `startupId` for notes.\n" +
       "`fields` lists every writable field address for `pioneers_set_fields`, with the ids it needs and the values it accepts. " +
-      "`lists` gives the accepted values of closed lists (skills, industries...).",
+      "`lists` gives the accepted values of closed lists (skills, industries...). `actions` lists the admin actions of `pioneers_run` with their arguments.",
     schema: ListInput,
     annotations: READ_ONLY,
     run: (caller, args) => listObjects(caller, ListInput.parse(args)),
@@ -104,7 +127,7 @@ const TOOLS: Tool[] = [
     description:
       "Returns ONE object in full by id, with what YOUR role may see. A founder comes with their person, Profile Book, " +
       "private profile, internal data and aggregated stats; a startup with its profile, internal assessment and recent " +
-      "weekly updates; an event with its teams, attendance and submissions. A missing part is one you cannot see.",
+      "weekly updates; an event with its forms, teams, attendance and submissions; a form with its questions. A missing part is one you cannot see.",
     schema: GetInput,
     annotations: READ_ONLY,
     run: (caller, args) => getObject(caller, GetInput.parse(args)),
@@ -132,6 +155,44 @@ const TOOLS: Tool[] = [
       "Creates an event in a batch: blank (an office hour: kind `meeting`), or from a model, a pack that also creates its " +
       "matching and forms (a hackathon: teams, debrief, jury, feedback), with the startups and mentors concerned. `scheduled` shows it to founders and publishes its forms.",
   }),
+  {
+    name: "pioneers_run",
+    title: "Run an admin action",
+    description:
+      "Runs one named admin action, everything staff do in Admin: edit, move or archive an event; edit, open, close, copy or archive a form; " +
+      "To do tasks; attendance; programs and batches; link or unlink a founder's account; accounts; sync the Google Calendar; recompute scores.\n\n" +
+      "First list the actions and their `args` (`pioneers_list` `actions`). Same two calls as every write: without `planId` it previews; then `planId` alone applies.",
+    schema: RunInput,
+    annotations: WRITE,
+    visibleTo: anyActionFor,
+    async run(caller, raw) {
+      const { action, args, planId } = RunInput.parse(raw);
+      if (typeof planId === "string") {
+        if (action || args) throw planOnly();
+        // L'action se lit dans le plan lui-meme (une lecture, dans la transaction d'applyPlan).
+        return previewOrApply((name) => actionOf(name)?.op, caller, {}, planId);
+      }
+      if (!action) throw badRequest("missing_argument", "Give `action` and its `args` (list `actions`).", "action");
+      return previewOrApply(actionOf(action)!.op, caller, args ?? {}, undefined);
+    },
+  },
+  {
+    name: "pioneers_guide",
+    title: "Guide",
+    description:
+      "How the data fits together, read before changing it: the model and who sees what, events (matching, teams, forms, results), forms, " +
+      "scores (derived: fix the input, then recompute), what is private, and step-by-step recipes for common corrections.",
+    schema: GuideInput,
+    annotations: READ_ONLY,
+    // Le guide de l'Admin : pour qui a ses actions.
+    visibleTo: anyActionFor,
+    run: async (_caller, args) => {
+      const { topic } = GuideInput.parse(args);
+      if (!topic) return { topics: Object.entries(GUIDE_TOPICS).map(([key, t]) => ({ topic: key, title: t.title, summary: t.summary })) };
+      const t = GUIDE_TOPICS[topic];
+      return { topic, title: t.title, body: t.body };
+    },
+  },
   writeTool(createForm, {
     name: "pioneers_create_form",
     title: "Create form",

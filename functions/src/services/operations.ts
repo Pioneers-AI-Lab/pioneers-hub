@@ -27,11 +27,21 @@ import { writeAudit } from "./audit";
 export type OperationPlan<R> = {
   /** Ce qui sera ecrit, tel que l'humain doit le voir avant de confirmer. */
   preview: unknown;
-  /** Ecrit dans la transaction et rend le resultat. Absent si rien ne change. */
-  commit: ((tx: Transaction) => R) | null;
+  /** Ecrit dans la transaction et rend le resultat. Absent (ou `null`) si rien ne change. */
+  commit?: ((tx: Transaction) => R) | null;
+  /**
+   * A la place de `commit`, une action qui ne tient pas dans une transaction
+   * (Firebase Auth, agenda Google, recalcul des scores) : executee APRES la
+   * transaction de verification (qui la reserve), puis tracee.
+   */
+  effect?: () => Promise<R>;
+  /** L'effet ecrit lui-meme son audit, au nom de l'appelant (services/accounts.ts) : pas de seconde ligne. */
+  effectAudits?: boolean;
   /** Chemins ecrits, pour le journal d'audit. */
   targetPaths: string[];
 };
+
+const hasWork = (plan: OperationPlan<unknown>) => Boolean(plan.commit || plan.effect);
 
 export type Operation<S extends z.ZodType = z.ZodType, R = unknown> = {
   name: string;
@@ -78,6 +88,13 @@ function parseInput<S extends z.ZodType>(op: Operation<S>, raw: unknown): z.outp
   return parsed.data;
 }
 
+const auditEntry = (action: string, input: unknown, plan: OperationPlan<unknown>, idempotencyKey: string | null) => ({
+  action,
+  targetPath: plan.targetPaths.join(", ").slice(0, 1500),
+  payload: { input },
+  idempotencyKey,
+});
+
 function commitWithAudit<R>(
   tx: Transaction,
   caller: Caller,
@@ -88,14 +105,29 @@ function commitWithAudit<R>(
 ): R | null {
   if (!plan.commit) return null;
   const result = plan.commit(tx);
-  writeAudit(tx, caller, {
-    action,
-    targetPath: plan.targetPaths.join(", ").slice(0, 1500),
-    payload: { input },
-    idempotencyKey,
-  });
+  writeAudit(tx, caller, auditEntry(action, input, plan, idempotencyKey));
   return result;
 }
+
+/** Execute l'effet d'une action hors transaction, puis sa ligne d'audit (sauf s'il l'ecrit lui-meme). */
+async function runEffect<R>(
+  caller: Caller,
+  action: string,
+  input: unknown,
+  plan: OperationPlan<R> & { effect: () => Promise<R> },
+  idempotencyKey: string | null,
+): Promise<R> {
+  const result = await plan.effect();
+  if (!plan.effectAudits) {
+    const batch = getFirestore().batch();
+    writeAudit(batch, caller, auditEntry(action, input, plan, idempotencyKey));
+    await batch.commit();
+  }
+  return result;
+}
+
+type EffectPlan<R> = OperationPlan<R> & { effect: () => Promise<R> };
+const isEffect = <R>(plan: OperationPlan<R>): plan is EffectPlan<R> => plan.effect !== undefined;
 
 // ---- /v1 -----------------------------------------------------------------------
 
@@ -132,35 +164,56 @@ export async function runOperation<S extends z.ZodType, R>(
       }
     : null;
 
-  return db.runTransaction(async (tx) => {
+  /** `out` absent : la cle est reservee pendant un effet (un rejeu concurrent attend, il ne relance pas). */
+  const recordOf = (out: RunResult<R> | null): IdempotencyRecord => {
+    const now = Date.now();
+    return {
+      ownerUid: caller.uid,
+      operation: op.name,
+      requestHash: idem!.requestHash,
+      result: out ? { ...out, replayed: true } : null,
+      ...(out ? {} : { pending: true }),
+      createdDateISOString: new Date(now).toISOString(),
+      expiresDateISOString: new Date(now + DAY_MS).toISOString(),
+    };
+  };
+
+  const done = await db.runTransaction(async (tx): Promise<{ out: RunResult<R>; effectPlan: null } | { out: null; effectPlan: EffectPlan<R> }> => {
     if (idem) {
       const record = (await tx.get(idem.ref)).data() as IdempotencyRecord | undefined;
       if (record && Date.parse(record.expiresDateISOString) > Date.now()) {
         if (record.requestHash !== idem.requestHash) {
           throw conflict("idempotency_conflict", "This `Idempotency-Key` was already used for a different request.");
         }
-        return record.result as RunResult<R>;
+        if (record.pending) throw conflict("in_progress", "This request is still running. Retry in a moment.");
+        return { out: record.result as RunResult<R>, effectPlan: null };
       }
     }
 
     const plan = await op.plan(tx, caller, input);
-    const result = commitWithAudit(tx, caller, op.name, input, plan, key);
-    const out: RunResult<R> = { applied: plan.commit !== null, preview: plan.preview, result, replayed: false };
-
-    if (idem) {
-      const now = Date.now();
-      const record: IdempotencyRecord = {
-        ownerUid: caller.uid,
-        operation: op.name,
-        requestHash: idem.requestHash,
-        result: { ...out, replayed: true },
-        createdDateISOString: new Date(now).toISOString(),
-        expiresDateISOString: new Date(now + DAY_MS).toISOString(),
-      };
-      tx.set(idem.ref, plain(record));
+    // Un effet hors transaction s'execute apres elle ; la cle est reservee ici.
+    if (isEffect(plan)) {
+      if (idem) tx.set(idem.ref, plain(recordOf(null)));
+      return { out: null, effectPlan: plan };
     }
-    return out;
+    const result = commitWithAudit(tx, caller, op.name, input, plan, key);
+    const out: RunResult<R> = { applied: Boolean(plan.commit), preview: plan.preview, result, replayed: false };
+    if (idem) tx.set(idem.ref, plain(recordOf(out)));
+    return { out, effectPlan: null };
   });
+  if (done.out) return done.out;
+
+  const plan = done.effectPlan;
+  try {
+    const result = await runEffect(caller, op.name, input, plan, key);
+    const out: RunResult<R> = { applied: true, preview: plan.preview, result, replayed: false };
+    if (idem) await idem.ref.set(plain(recordOf(out)));
+    return out;
+  } catch (err) {
+    // L'effet a echoue : la cle se libere, la requete peut etre rejouee.
+    if (idem) await idem.ref.delete().catch(() => undefined);
+    throw err;
+  }
 }
 
 // ---- MCP : apercu puis confirmation ------------------------------------------
@@ -175,7 +228,7 @@ export async function previewPlan<S extends z.ZodType, R>(
   const db = getFirestore();
   const plan = await db.runTransaction((tx) => op.plan(tx, caller, input), { readOnly: true });
   // Rien a ecrire : pas de plan a confirmer.
-  if (!plan.commit) return { planId: null, preview: plan.preview };
+  if (!hasWork(plan)) return { planId: null, preview: plan.preview };
 
   const now = Date.now();
   const ref = db.collection(COL.writePlans).doc();
@@ -194,23 +247,27 @@ export async function previewPlan<S extends z.ZodType, R>(
   return { planId: ref.id, preview: plan.preview };
 }
 
-export async function applyPlan<S extends z.ZodType, R>(
-  op: Operation<S, R>,
+/**
+ * `opOf` : l'operation de l'outil (le plan doit lui appartenir), ou une table
+ * nom -> operation (`pioneers_run` : l'operation se lit dans le plan lui-meme).
+ */
+export async function applyPlan<R>(
+  opOf: Operation<z.ZodType, R> | ((name: string) => Operation<z.ZodType, R> | undefined),
   caller: Caller,
   planId: string,
 ): Promise<{ result: R | null; replayed: boolean }> {
-  assertAllowed(op, caller);
   const db = getFirestore();
   const ref = db.collection(COL.writePlans).doc(planId);
 
-  return db.runTransaction(async (tx) => {
+  const done = await db.runTransaction(async (tx) => {
     const plan = (await tx.get(ref)).data() as WritePlan | undefined;
     if (!plan) throw notFound("plan_not_found", "This plan does not exist. Call the tool again without `planId` to preview.", "planId");
     if (plan.ownerUid !== caller.uid) throw forbidden("plan_not_yours", "This plan was previewed by another account.");
-    if (plan.operation !== op.name) {
-      throw badRequest("plan_mismatch", `This plan belongs to \`${plan.operation}\`, not to \`${op.name}\`.`, "planId");
-    }
-    if (plan.status === "applied") return { result: plan.result as R, replayed: true };
+    const op = typeof opOf === "function" ? opOf(plan.operation) : opOf.name === plan.operation ? opOf : undefined;
+    if (!op) throw badRequest("plan_mismatch", `This plan belongs to \`${plan.operation}\`, not to this tool.`, "planId");
+    assertAllowed(op, caller);
+    if (plan.status === "applied") return { result: plan.result as R, replayed: true, effect: null };
+    if (plan.status === "applying") throw conflict("plan_in_progress", "This plan is being applied. Wait a moment, then check the result.");
     if (Date.parse(plan.expiresDateISOString) < Date.now()) {
       throw conflict("plan_expired", "This preview is older than one hour. Preview again, then confirm.");
     }
@@ -226,8 +283,24 @@ export async function applyPlan<S extends z.ZodType, R>(
       throw conflict("plan_stale", "The data changed since the preview. Preview again and show the new result before confirming.");
     }
 
+    // Un effet hors transaction : le plan est reserve ici, execute apres.
+    if (isEffect(fresh)) {
+      tx.update(ref, { status: "applying" });
+      return { result: null, replayed: false, effect: { plan: fresh, input, name: op.name } };
+    }
     const result = commitWithAudit(tx, caller, op.name, input, fresh, planId);
     tx.update(ref, { status: "applied", result: plain(result), appliedDateISOString: new Date().toISOString() });
-    return { result, replayed: false };
+    return { result, replayed: false, effect: null };
   });
+  if (!done.effect) return { result: done.result, replayed: done.replayed };
+
+  try {
+    const result = await runEffect(caller, done.effect.name, done.effect.input, done.effect.plan, planId);
+    await ref.update({ status: "applied", result: plain(result), appliedDateISOString: new Date().toISOString() });
+    return { result, replayed: false };
+  } catch (err) {
+    // L'effet a echoue : le plan redevient confirmable (rien n'a ete trace).
+    await ref.update({ status: "previewed" }).catch(() => undefined);
+    throw err;
+  }
 }

@@ -1,9 +1,12 @@
 import type { User as FirebaseUser } from "firebase/auth";
-import { arrayUnion, getDoc, getDocs, query, where, writeBatch, type WriteBatch } from "firebase/firestore";
+import { getDoc, getDocs, query, where, writeBatch } from "firebase/firestore";
+import { founderLinkWrites, linkFounderWrites, unlinkFounderWrites } from "@shared/admin/batch";
+import { docPaths } from "@shared/collections";
+import { archiveWrite } from "@shared/docWrites";
 import type { Founder, WithId } from "@shared/types";
 import { db } from "@/lib/firebase";
 import { refs } from "@/lib/firestore/refs";
-import { patchDoc } from "@/lib/firestore/write";
+import { addWrites, commitWrites } from "@/lib/firestore/write";
 
 // ----------------------------
 // Rattachement des comptes et acces (SPECS §3.1, §3.2 « Acces »)
@@ -22,18 +25,6 @@ export type ClaimedProfile = { programId: string; batchId: string; founderId: st
  * batch (`batchMemberships`, un par batch et par compte). Les regles verifient
  * ce lot tel quel (rattachement automatique, « c'est moi »).
  */
-function addLinkWrites(batch: WriteBatch, founder: Pick<Founder, "programId" | "batchId">, founderId: string, uid: string, now: string) {
-  batch.set(refs.founder(founderId), { uid, claimedDateISOString: now, updatedDateISOString: now }, { merge: true });
-  batch.set(refs.membership(founder.batchId, uid), {
-    id: "",
-    programId: founder.programId,
-    batchId: founder.batchId,
-    uid,
-    founderId,
-    createdDateISOString: now,
-  });
-}
-
 /**
  * Rattachement automatique : l'email VERIFIE du compte est celui d'une
  * personne importee. Rattache chacun de ses profils non reclames (un par batch).
@@ -59,7 +50,7 @@ export async function autoClaimByEmail(firebaseUser: FirebaseUser): Promise<Clai
 
       const now = nowISO();
       const batch = writeBatch(db);
-      addLinkWrites(batch, founder, founderId, firebaseUser.uid, now);
+      addWrites(batch, founderLinkWrites(founder, founderId, firebaseUser.uid, now));
       if (person.uid === null) {
         batch.set(refs.person(person.id), { uid: firebaseUser.uid, updatedDateISOString: now }, { merge: true });
       }
@@ -86,7 +77,7 @@ export async function claimProfile(firebaseUser: FirebaseUser, founder: WithId<F
   const write = (withIdentity: boolean) => {
     const now = nowISO();
     const batch = writeBatch(db);
-    addLinkWrites(batch, founder, founder.id, firebaseUser.uid, now);
+    addWrites(batch, founderLinkWrites(founder, founder.id, firebaseUser.uid, now));
     if (withIdentity) {
       batch.set(refs.person(founder.personId), { uid: firebaseUser.uid, updatedDateISOString: now }, { merge: true });
       batch.set(refs.user(firebaseUser.uid), { personId: founder.personId }, { merge: true });
@@ -125,31 +116,23 @@ const isPermissionDenied = (err: unknown) => (err as { code?: string }).code ===
  * `altEmails`) : le fondateur peut alors modifier WhatsApp et LinkedIn.
  */
 export async function linkFounder(founder: WithId<Founder>, account: { uid: string; email: string | null }) {
-  const { uid } = account;
-  const email = account.email?.toLowerCase() ?? null;
   const [current, membership, person, user] = await Promise.all([
     getDoc(refs.founder(founder.id)),
-    getDoc(refs.membership(founder.batchId, uid)),
+    getDoc(refs.membership(founder.batchId, account.uid)),
     getDoc(refs.person(founder.personId)),
-    getDoc(refs.user(uid)),
+    getDoc(refs.user(account.uid)),
   ]);
-  if (!current.exists()) throw new Error("This profile no longer exists.");
-  if (current.data().uid !== null) throw new Error("This profile is already linked to an account.");
-  if (membership.exists()) throw new Error("This account is already linked to a profile in this batch.");
-
-  const now = nowISO();
-  const batch = writeBatch(db);
-  addLinkWrites(batch, founder, founder.id, uid, now);
-  const p = person.data();
-  if (p && p.uid === null) {
-    batch.set(
-      refs.person(p.id),
-      { uid, ...(email && email !== p.email ? { altEmails: arrayUnion(email) } : {}), updatedDateISOString: now },
-      { merge: true },
-    );
-    if (user.data()?.personId === null) batch.set(refs.user(uid), { personId: p.id }, { merge: true });
-  }
-  await batch.commit();
+  await commitWrites(
+    linkFounderWrites({
+      founder: current.data(),
+      founderId: founder.id,
+      account,
+      hasMembership: membership.exists(),
+      person: person.data(),
+      userPersonId: user.data()?.personId,
+      now: nowISO(),
+    }),
+  );
 }
 
 /**
@@ -169,17 +152,14 @@ export async function unlinkFounder(founder: { id: string; batchId: string; pers
     getDoc(refs.person(founder.personId)),
     getDoc(refs.user(uid)),
   ]);
-  const p = person.data();
-  const keepsPerson = sameAccount.docs.some((d) => d.id !== founder.id) || Boolean(p?.mentorId || p?.investorId);
-  const now = nowISO();
-  const batch = writeBatch(db);
-  batch.set(refs.founder(founder.id), { uid: null, claimedDateISOString: null, updatedDateISOString: now }, { merge: true });
-  batch.delete(refs.membership(founder.batchId, uid));
-  if (!keepsPerson) {
-    if (p?.uid === uid) batch.set(refs.person(founder.personId), { uid: null, updatedDateISOString: now }, { merge: true });
-    if (user.data()?.personId === founder.personId) batch.set(refs.user(uid), { personId: null }, { merge: true });
-  }
-  await batch.commit();
+  const { writes } = unlinkFounderWrites({
+    founder: { ...founder, uid },
+    sameAccountFounderIds: sameAccount.docs.map((d) => d.id),
+    person: person.data(),
+    userPersonId: user.data()?.personId,
+    now: nowISO(),
+  });
+  await commitWrites(writes);
 }
 
 /**
@@ -188,5 +168,4 @@ export async function unlinkFounder(founder: { id: string; batchId: string; pers
  * plus ouverte qu'au staff. Rien n'est supprime. Un profil rattache se delie
  * d'abord (Admin > Founder profiles) : un compte ne garde pas un profil archive.
  */
-export const setFounderArchived = (founderId: string, archived: boolean) =>
-  patchDoc<Founder>(refs.founder(founderId), { archivedDateISOString: archived ? nowISO() : null });
+export const setFounderArchived = (founderId: string, archived: boolean) => commitWrites([archiveWrite(docPaths.founder(founderId), archived, nowISO())]);

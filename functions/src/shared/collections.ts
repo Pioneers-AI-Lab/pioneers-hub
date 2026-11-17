@@ -154,7 +154,11 @@ export const docIds = {
  * s'en servent tous les deux.
  */
 export const docPaths = {
+  program: (programId: string) => `${COL.programs}/${programId}`,
   batch: (batchId: string) => `${COL.batches}/${batchId}`,
+  user: (uid: string) => `${COL.users}/${uid}`,
+  /** Une tache du To do d'un batch (ecrite par le staff). */
+  batchTask: (taskId: string) => `${COL.batchTasks}/${taskId}`,
   calendarSync: (batchId: string) => `${COL.calendarSyncs}/${batchId}`,
   /** Rattachement d'un compte a un profil fondateur du batch. */
   membership: (batchId: string, uid: string) => `${COL.batchMemberships}/${docIds.membership(batchId, uid)}`,

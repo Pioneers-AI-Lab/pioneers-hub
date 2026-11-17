@@ -210,12 +210,16 @@ function ApiKeys() {
 
 const ENDPOINTS: { route: string; what: string }[] = [
   { route: "GET /v1/me", what: "Your account, and the programs and batches with their ids" },
-  { route: "GET /v1/{type}", what: "List programs, batches, founders, startups, events or notes" },
-  { route: "GET /v1/{type}/{id}", what: "One object in full (a founder with their profile, a startup with its updates)" },
+  { route: "GET /v1/{type}", what: "List programs, batches, founders, startups, events, forms, tasks, notes (staff: mentors, accounts)" },
+  { route: "GET /v1/{type}/{id}", what: "One object in full (a founder with their profile, an event with its forms, a form with its questions)" },
   { route: "GET /v1/fields", what: "Every writable field, the ids it needs and the values it accepts" },
   { route: "GET /v1/lists", what: "Accepted values of closed lists (skills, industries...)" },
   { route: "POST /v1/fields", what: "Write field values: profile, weekly update, attendance, submission" },
   { route: "POST /v1/notes", what: "Add an internal note to a startup or a founder" },
+  { route: "POST /v1/events", what: "Staff: create an event, blank or from a model (with its matching and forms)" },
+  { route: "POST /v1/forms", what: "Staff: create a form from a model or from your questions" },
+  { route: "GET /v1/actions", what: "Staff: every Admin action (events, forms, tasks, attendance, batches, accounts...) and its arguments" },
+  { route: "POST /v1/actions/{action}", what: "Staff: run one Admin action (dryRun and Idempotency-Key, like every write)" },
 ];
 
 function ApiReference() {

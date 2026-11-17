@@ -232,8 +232,22 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   cachee au CDN. Adresses publiques et longueur du nom de cle : `shared/api.ts`. Table des types REST : `REST_OBJECTS`.
 - Page `/api-docs` (menu du compte, `canUseApi`) : brancher Claude, creer / revoquer ses cles (`ApiKeysContext`),
   reference de l'API. Le menu du compte a aussi « Me » (profil fondateur du dernier batch rattache).
-- Catalogue MCP : 5 outils (~1 200 jetons). Une capacite de plus = un type d'objet dans `list` / `get`
-  avant un nouvel outil. Pas de valeur chiffree dans `mcp/instructions.ts`.
+- **Actions de l'Admin** (17/11) : chaque geste de l'Admin est une `Operation` nommee de `services/actions.ts`
+  (`services/admin/*.ts`), servie par UN outil MCP `pioneers_run` (`list actions` donne les arguments) et
+  `POST /v1/actions/{action}`. Le geste se calcule UNE fois en logique pure dans `shared/admin/*.ts` (liste de
+  `DocWrite`, `shared/docWrites.ts`) : le front l'execute en lot (`lib/firestore/write.ts#commitWrites`), l'API dans sa
+  transaction (`services/admin/writes.ts#applyWrites`). Modifier un geste de l'Admin = modifier `shared/admin`, puis
+  `check:api`. Actions hors transaction (comptes Firebase Auth, synchro de l'agenda, recalcul des scores) : `effect`
+  d'`OperationPlan`, execute apres la transaction de verification (plan `applying`), service des callables reutilise
+  (ses `HttpsError` deviennent des erreurs HTTP, `api/errors.ts`). Jamais par l'API : donner / retirer le role staff,
+  bloquer un compte staff (injection de consignes via un texte de fondateur), ecrire un score (on corrige l'entree
+  puis `recompute_scores`). PAS ENCORE (refonte semaine 1 en cours) : tirage et retouche des equipes, resultats
+  d'equipe, jury, grilles et publication du classement, validation des reponses en attente, lecture des reponses.
+- **Guide de l'agent** : outil `pioneers_guide` (`mcp/guide.ts`, staff) : modele, evenements, formulaires, scores,
+  vie privee, recettes de correction. En anglais, aucun chiffre ; a tenir a jour avec les actions.
+- Catalogue MCP : 9 outils pour le staff (~3 400 jetons), 4 pour un fondateur, 3 pour un investor. Une capacite de
+  plus = un type d'objet dans `list` / `get` ou une action de `pioneers_run`, jamais un nouvel outil. Pas de valeur
+  chiffree dans `mcp/instructions.ts`.
 - `MCP-Protocol-Version` inconnu : retire avant le transport (panne totale vecue chez Trippple).
 - URL publique : `api/config.ts` (`PUBLIC_BASE_URL`), jamais l'en-tete `Host`.
 

@@ -5,7 +5,7 @@ import { COL } from "../shared/collections";
 import type { AccountAccess, AccountRow } from "../shared/callables";
 import { USER_ROLES, type BatchMembership, type User, type UserRole } from "../shared/types";
 import { FRONTEND_BASE_URL } from "../api/config";
-import { writeUiAudit } from "./audit";
+import { actorOf, writeUiAudit, type AuditActor } from "./audit";
 
 // ----------------------------
 // services - les comptes (Admin > Access)
@@ -102,7 +102,8 @@ const getAccount = (uid: string) =>
       throw new HttpsError("not-found", "No such account.");
     });
 
-export async function setAccountAccess(actorUid: string, uid: string, access: AccountAccess): Promise<void> {
+export async function setAccountAccess(actor: string | AuditActor, uid: string, access: AccountAccess): Promise<void> {
+  const actorUid = actorOf(actor).uid;
   await getAccount(uid);
   const ref = db().doc(`${COL.users}/${uid}`);
   await db().runTransaction(async (tx) => {
@@ -111,14 +112,15 @@ export async function setAccountAccess(actorUid: string, uid: string, access: Ac
     await assertKeepsStaff(tx, actorUid, uid, Boolean(before?.roles.includes("staff")) && !access.roles.includes("staff"));
     if (before) tx.update(ref, { ...access });
     else tx.create(ref, newUserDoc(new Date().toISOString(), access));
-    writeUiAudit(tx, actorUid, "account.setAccess", ref.path, {
+    writeUiAudit(tx, actor, "account.setAccess", ref.path, {
       before: before ? { roles: before.roles, investorAccess: before.investorAccess } : null,
       after: access,
     });
   });
 }
 
-export async function inviteAccount(actorUid: string, rawEmail: string, access: AccountAccess) {
+export async function inviteAccount(actor: string | AuditActor, rawEmail: string, access: AccountAccess) {
+  const actorUid = actorOf(actor).uid;
   const email = rawEmail.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpsError("invalid-argument", "A valid email is required.");
   let created = false;
@@ -136,13 +138,13 @@ export async function inviteAccount(actorUid: string, rawEmail: string, access: 
     await assertKeepsStaff(tx, actorUid, user.uid, Boolean(before?.roles.includes("staff")) && !access.roles.includes("staff"));
     if (before) tx.update(ref, { ...access });
     else tx.create(ref, newUserDoc(new Date().toISOString(), access));
-    writeUiAudit(tx, actorUid, "account.invite", ref.path, { email, created, after: access });
+    writeUiAudit(tx, actor, "account.invite", ref.path, { email, created, after: access });
   });
   return { uid: user.uid, created };
 }
 
-export async function setAccountDisabled(actorUid: string, uid: string, disabled: boolean): Promise<void> {
-  if (disabled && uid === actorUid) throw new HttpsError("failed-precondition", "You cannot block your own account.");
+export async function setAccountDisabled(actor: string | AuditActor, uid: string, disabled: boolean): Promise<void> {
+  if (disabled && uid === actorOf(actor).uid) throw new HttpsError("failed-precondition", "You cannot block your own account.");
   await getAuth()
     .updateUser(uid, { disabled })
     .catch(() => {
@@ -150,7 +152,7 @@ export async function setAccountDisabled(actorUid: string, uid: string, disabled
     });
   // Bloque : les sessions en cours tombent au prochain rafraichissement du jeton.
   if (disabled) await getAuth().revokeRefreshTokens(uid);
-  await writeUiAudit(null, actorUid, disabled ? "account.disable" : "account.enable", `${COL.users}/${uid}`, { disabled });
+  await writeUiAudit(null, actor, disabled ? "account.disable" : "account.enable", `${COL.users}/${uid}`, { disabled });
 }
 
 /**

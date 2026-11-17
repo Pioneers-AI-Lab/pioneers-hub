@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { Anchor, Button, Collapse, Group, MultiSelect, Select, Stack, Switch, Text, TextInput, Textarea } from "@mantine/core";
-import { endAfter, guestCopiesOf } from "@shared/events";
+import { endAfter, founderGuest, guestCopiesOf } from "@shared/events";
 import { normalizeHttpUrl } from "@shared/text";
 import type { CalendarSource, EventAudience, EventGuest, PioneersEvent } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
@@ -225,7 +225,7 @@ function GuestsField({ draft, onChange, canChangeBatch }: { draft: SettingsDraft
       if (v.startsWith("founder:")) {
         const id = v.slice("founder:".length);
         const f = foundersById.get(id);
-        return [{ name: f?.name ?? id, role: "founder", personId: f?.personId ?? null, founderId: id, mentorId: null, intro: null }];
+        return [founderGuest(id, f)];
       }
       if (v.startsWith("guest:")) return draft.guests.filter((g) => !g.founderId && `guest:${g.name}` === v);
       return [];

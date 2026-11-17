@@ -1,4 +1,5 @@
 import { docPaths } from "./collections";
+import { setWrite, type DocWrite } from "./docWrites";
 import { endAfter, eventEndOf as endOf, isUpcomingEvent, isWorkTeamEvent } from "./events";
 import { firstPublication, newForm, type FormData } from "./forms";
 import { eventTemplateOf } from "./presets/eventTemplates";
@@ -195,6 +196,9 @@ export const eventFormDocs = (plan: EventFormPlan, nowISO: string): { path: stri
   { path: docPaths.form(plan.id), data: { ...plan.form, createdDateISOString: nowISO, updatedDateISOString: nowISO } },
   ...(plan.version ? [{ path: docPaths.formVersion(plan.id, plan.version.version), data: plan.version }] : []),
 ];
+
+/** Les memes documents, en ecritures (shared/docWrites.ts) : le front et l'API les executent. */
+export const eventFormWrites = (plan: EventFormPlan, nowISO: string): DocWrite[] => eventFormDocs(plan, nowISO).map((d) => setWrite(d.path, d.data));
 
 // ----------------------------
 // Deplacer un evenement : ses formulaires suivent (Admin > Events, piste 7.3)

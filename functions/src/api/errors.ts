@@ -1,4 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
+import { HttpsError, type FunctionsErrorCode } from "firebase-functions/v2/https";
+import { RuleError } from "../shared/docWrites";
 import { ZodError } from "zod";
 
 // ----------------------------
@@ -41,9 +43,34 @@ export function fromZod(error: ZodError): ApiError {
   return badRequest("invalid_request", field ? `\`${field}\`: ${issue.message}` : (issue?.message ?? "Invalid request."), field);
 }
 
+/** Les erreurs des services partages avec les callables (comptes, agenda) : meme message, statut HTTP. */
+const HTTPS_STATUS: Record<FunctionsErrorCode, number> = {
+  ok: 200,
+  cancelled: 499,
+  unknown: 500,
+  "invalid-argument": 400,
+  "deadline-exceeded": 504,
+  "not-found": 404,
+  "already-exists": 409,
+  "permission-denied": 403,
+  "resource-exhausted": 429,
+  "failed-precondition": 409,
+  aborted: 409,
+  "out-of-range": 400,
+  unimplemented: 501,
+  internal: 500,
+  unavailable: 503,
+  "data-loss": 500,
+  unauthenticated: 401,
+};
+
 export function toApiError(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
   if (error instanceof ZodError) return fromZod(error);
+  if (error instanceof RuleError) return badRequest(error.code, error.message, error.field);
+  if (error instanceof HttpsError && error.code !== "internal" && error.code !== "unknown") {
+    return new ApiError(HTTPS_STATUS[error.code], error.code.replace(/-/g, "_"), error.message);
+  }
   console.error("[api] unexpected error", error);
   return new ApiError(500, "internal", "Unexpected error. It has been logged.");
 }

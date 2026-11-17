@@ -35,6 +35,26 @@ export const guestCopiesOf = (guests: readonly EventGuest[]): Pick<PioneersEvent
   mentorIds: guests.flatMap((g) => (g.mentorId ? [g.mentorId] : [])),
 });
 
+/** Un fondateur invite (`founder` : sa fiche, si elle est connue). */
+export const founderGuest = (founderId: string, founder: { name: string; personId: string } | undefined, intro: string | null = null): EventGuest => ({
+  name: founder?.name ?? founderId,
+  role: "founder",
+  personId: founder?.personId ?? null,
+  founderId,
+  mentorId: null,
+  intro,
+});
+
+/** Un mentor invite : son nom affiche est celui de sa personne (`Mentor` n'a pas de nom). */
+export const mentorGuest = (mentorId: string, personId: string, displayName: string | undefined, intro: string | null = null): EventGuest => ({
+  name: displayName ?? mentorId,
+  role: "mentor",
+  personId,
+  founderId: null,
+  mentorId,
+  intro,
+});
+
 /** Duree d'un evenement sans fin ni modele : une heure (comme le calendrier). */
 export const DEFAULT_DURATION_MINUTES = 60;
 

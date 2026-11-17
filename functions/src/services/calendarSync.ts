@@ -9,7 +9,7 @@ import { formsClosedByArchive, planEventMove } from "../shared/eventForms";
 import type { Batch, CalendarChannel, CalendarSync, CalendarSyncCounts, CalendarSyncResult, Form, PioneersEvent, WithId } from "../shared/types";
 import { isEmulator } from "../api/config";
 import { secret, sha256 } from "../api/crypto";
-import { writeAudit } from "./audit";
+import { writeAudit, actorOf, type AuditActor } from "./audit";
 
 // ----------------------------
 // services - la synchro de l'agenda Google d'un batch (decision du 16/11)
@@ -148,7 +148,7 @@ const docsOf = async <T>(collection: string, batchId: string): Promise<WithId<T>
  */
 export async function syncBatchCalendar(
   batchId: string,
-  options: { dryRun?: boolean; calendarId?: string | null; actorUid: string | null },
+  options: { dryRun?: boolean; calendarId?: string | null; actorUid: string | AuditActor | null },
 ): Promise<CalendarSyncResult> {
   const stateRef = db().doc(docPaths.calendarSync(batchId));
   const [batchSnap, stateSnap] = await Promise.all([db().doc(docPaths.batch(batchId)).get(), stateRef.get()]);
@@ -295,7 +295,7 @@ async function writePlan(
   now: string,
   batchId: string,
   calendarId: string,
-  actorUid: string | null,
+  actorUid: string | AuditActor | null,
 ): Promise<void> {
   const stamp = { updatedDateISOString: now };
   const archivedIds = new Set(plan.archives.map((e) => e.id));
@@ -313,7 +313,7 @@ async function writePlan(
   ];
   if (writes.length === 0) return;
 
-  const actor = { uid: actorUid ?? "system", apiKeyId: null, via: actorUid ? ("ui" as const) : ("function" as const) };
+  const actor: AuditActor = actorUid ? actorOf(actorUid) : { uid: "system", apiKeyId: null, via: "function" };
   const payload = { calendarId, created: plan.creates.map((c) => c.id), updated: plan.updates.map((u) => u.event.id), archived: [...archivedIds], formsMoved: moves.length };
   for (let i = 0; i < writes.length; i += 400) {
     const b = db().batch();

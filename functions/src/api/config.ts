@@ -23,3 +23,6 @@ export const MCP_URL = `${PUBLIC_BASE_URL}/mcp`;
 
 /** Decouverte OAuth de /mcp (RFC 9728) : servie par oauth/router.ts, citee par le defi 401 de /mcp. */
 export const PROTECTED_RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource/mcp";
+
+/** Le lien public d'un formulaire : le meme chemin que `paths.form` du front (src/lib/paths.ts). */
+export const formUrl = (formId: string) => `${FRONTEND_BASE_URL}/forms/${formId}`;
