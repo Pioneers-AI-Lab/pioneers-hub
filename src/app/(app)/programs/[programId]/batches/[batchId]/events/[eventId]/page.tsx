@@ -1,6 +1,6 @@
 "use client";
 
-import { Stack, Text } from "@mantine/core";
+import { Text } from "@mantine/core";
 import { formConcernsFounder } from "@shared/formRules";
 import { formState } from "@shared/forms";
 import { leaderIdOf } from "@shared/teamGenerator";
@@ -11,9 +11,9 @@ import { useFounders } from "@/context/FoundersContext";
 import { useLeaderboards } from "@/context/LeaderboardsContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatDateTimeRange } from "@/lib/format";
 import { paths } from "@/lib/paths";
-import { eventLabel } from "@/components/event/eventLabels";
+import { shownEventLabel } from "@/components/event/eventLabels";
 import { TEAM_LABELS } from "@/components/event/teamLabels";
 import { Field } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -40,7 +40,6 @@ export default function EventPage() {
   const isStaff = role === "staff";
   const nowISO = new Date().toISOString();
 
-  const label = eventLabel(event);
   const tool = matching ? TEAM_LABELS[matching.mode] : null;
   const mine = viewerFounderId ? (groups.find((g) => g.memberIds.includes(viewerFounderId)) ?? null) : null;
   const leaderId = mine && leaderIdOf(mine);
@@ -56,18 +55,19 @@ export default function EventPage() {
 
   return (
     <>
-      <PageHeader back={{ href: paths.batch(program.id, batch.id), label: batch.name }} title={event.name} subtitle={[label, event.status === "draft" ? "Draft" : null].filter(Boolean).join(" · ")} />
+      {/* Retour : la page que porte l'onglet actif (Calendar), sous son nom (docs/UI-RULES.md).
+          Le type, seulement s'il apprend quelque chose (`shownEventLabel`). */}
+      <PageHeader
+        back={{ href: paths.calendar(program.id, batch.id), label: "Calendar" }}
+        title={event.name}
+        subtitle={[shownEventLabel(event), event.status === "draft" ? "Draft" : null].filter(Boolean).join(" · ")}
+      />
 
       <Section title="When and where">
-        <Stack gap="sm">
-          <Field label="When">
-            {formatDateTime(event.startDateISOString)}
-            {event.endDateISOString ? ` to ${formatDateTime(event.endDateISOString)}` : ""}
-          </Field>
-          <Field label="Where">{event.location}</Field>
-          <Field label="Guests">{guests}</Field>
-          <Field label="About">{event.topic}</Field>
-        </Stack>
+        <Field label="When">{formatDateTimeRange(event.startDateISOString, event.endDateISOString)}</Field>
+        <Field label="Where">{event.location}</Field>
+        <Field label="Guests">{guests}</Field>
+        <Field label="About">{event.topic}</Field>
       </Section>
 
       {(event.videoCallUrl || event.signUpUrl || event.resourceUrl) && (
@@ -92,7 +92,7 @@ export default function EventPage() {
       {matching && tool && (
         <Section title={mine ? `Your ${tool.groupWord} · ${mine.name}` : `${tool.groupLabel}s`}>
           {mine && leaderId && (
-            <Text size="sm" mb="sm">
+            <Text size="sm">
               {leaderId === viewerFounderId
                 ? `You are the ${tool.groupWord} lead: ${tool.leaderDuty}.`
                 : `${tool.groupLabel} lead: ${foundersById.get(leaderId)?.name ?? "a teammate"}.`}

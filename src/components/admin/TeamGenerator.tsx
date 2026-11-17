@@ -147,7 +147,8 @@ function PublishedSection({ mode }: { mode: TeamToolMode }) {
   return (
     <Section
       title="Published"
-      hint={`Published ${formatDateTime(publishedOn)}. Founders see their ${tool.groupWord}, and the pairs count for the next draws. Anyone with the link sees the ${tool.groupWord}s, with first names and last initials only. You can still swap, move or change a leader below.`}
+      hint={`Published ${formatDateTime(publishedOn)}.`}
+      help={`Founders see their ${tool.groupWord}, and the pairs count for the next draws. Anyone with the link sees the ${tool.groupWord}s, with first names and last initials only. You can still swap, move or change a leader below.`}
     >
       <Group grow gap="xs">
         <Button variant="default" component={Link} href={publicPath} target="_blank">
@@ -383,7 +384,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
             {showParticipants ? "Hide" : "Edit"}
           </Button>
         }
-        hint={`${isPublished ? "Tick a founder who arrived late, then place them; untick one who isn't there." : "Untick the founders who won't take part."} Absent founders come from the event's attendance${absentIds.size > 0 ? ` (${absentIds.size} today)` : ""}: change them there. Founders who left the program are not listed.`}
+        help={`${isPublished ? "Tick a founder who arrived late, then place them; untick one who isn't there." : "Untick the founders who won't take part."} Absent founders come from the event's attendance${absentIds.size > 0 ? ` (${absentIds.size} today)` : ""}: change them there. Founders who left the program are not listed.`}
       >
         {showParticipants && (
           <>
@@ -434,20 +435,19 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
 
           <PairEditor
             title="Keep apart"
-            hint="Never in the same group."
+            help="Never in the same group."
             pairs={keepApart}
             onChange={setPairs(setKeepApart)}
             candidates={inFounders}
           />
           <PairEditor
             title="Keep together"
-            hint="Co-founders already formed: always in the same group."
+            help="Co-founders already formed: always in the same group."
             pairs={keepTogether}
             onChange={setPairs(setKeepTogether)}
             candidates={inFounders}
           />
 
-          <Section title="Rules" hint={tool.rulesHint}>
           {startupTeams && (
             <Section
               title={`Startups · ${startupTeams.groups.length}`}
@@ -467,6 +467,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
             </Section>
           )}
 
+          <Section title="Rules" help={tool.rulesHelp}>
             <Button size="md" fullWidth onClick={draw} loading={connections.isLoading} disabled={participants.length < GROUP_SIZE_MIN}>
               {groups.length > 0 ? "Draw again" : "Draw"}
             </Button>
@@ -482,7 +483,8 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
       {groups.length > 0 && (
         <Section
           title={`${tool.groupLabel}s · ${groups.length}`}
-          hint={picked ? `${nameOf(picked)} selected: tap someone to swap, or "Move here".` : "Tap a person, then another one to swap them."}
+          hint={picked ? `${nameOf(picked)} selected: tap someone to swap, or "Move here".` : undefined}
+          help={`Tap a person, then another one to swap them. ${tool.leaderReminder}`}
         >
           <Text fw={600}>{report.summary}</Text>
           {report.relaxed.map((line) => (
@@ -490,13 +492,10 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
               {line}
             </Text>
           ))}
-          <Text size="sm" c="dimmed" mt="xs">
-            {tool.leaderReminder}
-          </Text>
-          <Stack gap="md" mt="xs">
+          <Stack gap="md">
             {groups.map((g, index) => (
               <Box key={index} pb="sm" style={{ borderBottom: "1px solid var(--mantine-color-dark-5)" }}>
-                <Group justify="space-between" wrap="nowrap" mb={6}>
+                <Group justify="space-between" wrap="nowrap" mb="xs">
                   <Text fw={600}>
                     {g.name} <Text span c="dimmed" size="sm" className="num">· {g.memberIds.length}</Text>
                   </Text>
@@ -513,7 +512,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
                     )}
                   </Group>
                 </Group>
-                <Group gap={6}>
+                <Group gap="xs">
                   {g.memberIds.map((id) => (
                     <MemberButton
                       key={id}
@@ -543,8 +542,8 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
       )}
 
       {unplaced.length > 0 && groups.length > 0 && (
-        <Section title={`Not placed · ${unplaced.length}`} hint={`Tap a person, then "Move here" on a ${tool.groupWord}. Or draw again.`}>
-          <Group gap={6}>
+        <Section title={`Not placed · ${unplaced.length}`} help={`Tap a person, then "Move here" on a ${tool.groupWord}. Or draw again.`}>
+          <Group gap="xs">
             {unplaced.map((id) => (
               <MemberButton key={id} founder={foundersById.get(id)} fallback={id} isPicked={picked === id} onClick={() => setPicked(picked === id ? null : id)} />
             ))}
@@ -569,7 +568,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
             </Group>
           )}
           {unplaced.length > 0 && (
-            <Text size="xs" c="dimmed" ta="center" mt={6}>
+            <Text size="xs" c="dimmed" ta="center" mt="xs">
               Place everyone before {isPublished ? "saving" : "publishing"}.
             </Text>
           )}
@@ -643,13 +642,13 @@ function MemberButton({
 
 function PairEditor({
   title,
-  hint,
+  help,
   pairs,
   onChange,
   candidates,
 }: {
   title: string;
-  hint: string;
+  help: string;
   pairs: Pair[];
   onChange: (pairs: Pair[]) => void;
   candidates: WithId<Founder>[];
@@ -661,7 +660,7 @@ function PairEditor({
   const exists = a !== null && b !== null && pairs.some(([x, y]) => pairKey(x, y) === pairKey(a, b));
 
   return (
-    <Section title={`${title}${pairs.length > 0 ? ` · ${pairs.length}` : ""}`} hint={hint}>
+    <Section title={`${title}${pairs.length > 0 ? ` · ${pairs.length}` : ""}`} help={help}>
       {pairs.length === 0 ? null : (
         <RowList>
           {pairs.map(([x, y]) => (

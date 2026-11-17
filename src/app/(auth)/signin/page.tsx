@@ -83,7 +83,7 @@ function SignInForm() {
             value={email}
             onChange={(e) => setEmail(e.currentTarget.value)}
           />
-          <Stack gap={6}>
+          <Stack gap="xs">
             <PasswordInput
               label="Password"
               autoComplete="current-password"

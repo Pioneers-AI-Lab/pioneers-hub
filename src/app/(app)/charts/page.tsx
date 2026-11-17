@@ -27,7 +27,7 @@ const week = (n: number) => `Week ${n}`;
 export default function ChartsGalleryPage() {
   return (
     <Stack gap="lg" pb="xl">
-      <PageHeader title="Charts" subtitle="Components reproducing the Spring 2026 dashboard, with sample data." />
+      <PageHeader title="Charts" help="Components reproducing the Spring 2026 dashboard, with sample data." />
 
       <Section title="Dashboard">
         <Stack gap="lg">

@@ -34,9 +34,9 @@ export function ProfileDonut({ slices, size = 128 }: { slices: DonutSlice[]; siz
         tooltipDataSource="segment"
         valueFormatter={(v) => `${v} (${Math.round((v / total) * 100)}%)`}
       />
-      <Stack gap={8} style={{ flex: 1, minWidth: 0 }}>
+      <Stack gap="xs" style={{ flex: 1, minWidth: 0 }}>
         {data.map((d) => (
-          <Group key={d.name} gap={8} wrap="nowrap">
+          <Group key={d.name} gap="xs" wrap="nowrap">
             <Box w={10} h={10} style={{ borderRadius: "50%", flexShrink: 0, background: `var(--mantine-color-${d.color.replace(".", "-")})` }} />
             <Text size="sm" c="dimmed" style={{ flex: 1 }} truncate>
               {d.name}

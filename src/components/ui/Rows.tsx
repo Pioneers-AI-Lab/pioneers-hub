@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Avatar, Box, Group, Text } from "@mantine/core";
-import { IconChevronRight } from "@tabler/icons-react";
+import { Avatar, Box, Text } from "@mantine/core";
+import { IconArrowUpRight, IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import { isAppPath } from "@shared/text";
 
 // ----------------------------
@@ -9,6 +9,8 @@ import { isAppPath } from "@shared/text";
 // ----------------------------
 // Une ligne = un titre, une ligne de contexte, une valeur a droite. Toute la
 // ligne est la cible tactile (60 px de haut au moins, globals.css `.row`).
+// Icone de bout de ligne (docs/UI-RULES.md, 17/11) : `>` mene a une page de l'app,
+// `↗` ouvre un autre site, `v` deplie (et se retourne une fois ouvert).
 
 export function RowList({ children }: { children: ReactNode }) {
   return <Box>{children}</Box>;
@@ -50,7 +52,8 @@ function RowText({ title, subtitle, wrap = false }: Pick<RowProps, "title" | "su
   );
 }
 
-function RowBody({ title, subtitle, meta, avatar, leading }: RowProps) {
+/** `trailing` : l'icone de bout de ligne (navigation, depliage), apres la valeur. */
+function RowBody({ title, subtitle, meta, avatar, leading, trailing }: RowProps & { trailing?: ReactNode }) {
   return (
     <>
       <RowLeading avatar={avatar} leading={leading} />
@@ -68,8 +71,22 @@ function RowBody({ title, subtitle, meta, avatar, leading }: RowProps) {
           )}
         </Box>
       )}
+      {trailing}
     </>
   );
+}
+
+/** Les icones de bout de ligne (docs/UI-RULES.md §9) : meme taille, meme gris, meme boite. */
+const TRAILING_ICON = { size: 16, color: "var(--mantine-color-dimmed)", style: { display: "block", flexShrink: 0 } } as const;
+
+/** `>` : la ligne, la tuile ou la carte mene a une autre page de l'app (ou ouvre une fenetre). */
+export function NavChevron() {
+  return <IconChevronRight {...TRAILING_ICON} />;
+}
+
+/** `↗` : la ligne ouvre un autre site, dans un nouvel onglet. */
+function ExternalArrow() {
+  return <IconArrowUpRight {...TRAILING_ICON} />;
 }
 
 /** Corps d'un `LinkRow` a action : le lien prend toute la place a gauche du bouton. */
@@ -92,8 +109,8 @@ const LINK_ROW_BODY_STYLE = {
 export function LinkRow({ href, action, ...props }: RowProps & { href: string; action?: ReactNode }) {
   if (action === undefined) {
     return (
-      <Link href={href} className="row">
-        <RowBody {...props} />
+      <Link href={href} className="row state-layer">
+        <RowBody {...props} trailing={<NavChevron />} />
       </Link>
     );
   }
@@ -111,23 +128,22 @@ export function LinkRow({ href, action, ...props }: RowProps & { href: string; a
 export function ExternalLinkRow({ href, ...props }: RowProps & { href: string }) {
   const url = /^https?:\/\//.test(href) ? href : `https://${href}`;
   return (
-    <a href={url} target="_blank" rel="noreferrer" className="row">
-      <RowBody {...props} />
+    <a href={url} target="_blank" rel="noreferrer" className="row state-layer">
+      <RowBody {...props} trailing={<ExternalArrow />} />
     </a>
   );
 }
 
-/** Chevron de depliage : `>` qui tourne vers le bas une fois ouvert ; `hidden` garde sa place (colonnes alignees). */
-export function ExpandChevron({ expanded, size = 16, hidden }: { expanded: boolean; size?: number; hidden?: boolean }) {
+/** Chevron de depliage : `v` qui se retourne une fois ouvert ; `hidden` garde sa place (colonnes alignees). */
+export function ExpandChevron({ expanded, size = TRAILING_ICON.size, hidden }: { expanded: boolean; size?: number; hidden?: boolean }) {
   return (
-    <IconChevronRight
+    <IconChevronDown
       size={size}
-      color="var(--mantine-color-dimmed)"
+      color={TRAILING_ICON.color}
       style={{
-        display: "block",
-        flexShrink: 0,
+        ...TRAILING_ICON.style,
         visibility: hidden ? "hidden" : undefined,
-        transform: expanded ? "rotate(90deg)" : undefined,
+        transform: expanded ? "rotate(180deg)" : undefined,
         transition: "transform 150ms ease",
       }}
     />
@@ -135,32 +151,21 @@ export function ExpandChevron({ expanded, size = 16, hidden }: { expanded: boole
 }
 
 /**
- * Ligne qui declenche une action ; `expanded` si elle deplie un contenu (chevron a droite, sauf `meta`),
- * `opens` si elle ouvre une fenetre ou une feuille (chevron `>` fixe).
+ * Ligne qui declenche une action. Son icone de bout de ligne : `v` si elle deplie un contenu
+ * (`expanded`), `>` si elle ouvre une fenetre ou une feuille (`opens` : on y entre, comme une
+ * page), aucune si elle agit tout de suite (archiver, marquer, choisir).
  */
 export function ButtonRow({
   onClick,
   disabled,
   expanded,
   opens = false,
-  meta,
   ...props
-}: RowProps & { onClick: () => void; disabled?: boolean; expanded?: boolean; opens?: boolean }) {
-  const chevron = expanded !== undefined ? <ExpandChevron expanded={expanded} /> : opens ? <ExpandChevron expanded={false} /> : null;
+}: RowProps & { onClick: () => void; disabled?: boolean } & ({ expanded: boolean; opens?: never } | { expanded?: undefined; opens?: boolean })) {
+  const trailing = expanded !== undefined ? <ExpandChevron expanded={expanded} /> : opens ? <NavChevron /> : undefined;
   return (
-    <button type="button" className="row" onClick={onClick} disabled={disabled} aria-expanded={expanded}>
-      {/* Une ligne repliable porte toujours son chevron, a droite de son `meta` s'il y en a un. */}
-      <RowBody
-        {...props}
-        meta={
-          chevron === null ? meta : (
-            <Group gap={8} wrap="nowrap">
-              {meta}
-              {chevron}
-            </Group>
-          )
-        }
-      />
+    <button type="button" className="row state-layer" onClick={onClick} disabled={disabled} aria-expanded={expanded}>
+      <RowBody {...props} trailing={trailing} />
     </button>
   );
 }

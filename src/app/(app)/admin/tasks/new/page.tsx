@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 export default function AdminTaskNewPage() {
   return (
     <>
-      <PageHeader back={{ href: paths.adminTasks(), label: "Tasks" }} title="New task" subtitle="It shows up at once in every founder's To do." />
+      <PageHeader back={{ href: paths.adminTasks(), label: "Tasks" }} title="New task" help="It shows up at once in every founder's To do." />
       <BatchPicker />
       <TaskEditor />
     </>

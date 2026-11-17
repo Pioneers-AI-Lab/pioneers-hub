@@ -4,16 +4,16 @@ import { Text } from "@mantine/core";
 import type { PioneersEvent, WithId } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useProgram } from "@/context/ProgramContext";
-import { formatDateTime, formatTime, formatTimePlace } from "@/lib/format";
+import { formatDateTime, formatTime, formatEndPlace } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { LinkRow } from "@/components/ui/Rows";
-import { eventLabel } from "./eventLabels";
+import { shownEventLabel } from "./eventLabels";
 
 /**
- * Un evenement : nom, date et lieu, etiquette a droite (To do, Me, Calendar). La
- * ligne ouvre la page de l'evenement : ce qui lui est attache. `timeOnly` : sous un
- * titre de jour (Calendar), sans repeter la date : l'heure de debut a gauche du nom, dans
- * son style, et `debut–fin · lieu` dessous.
+ * Un evenement : nom, date et lieu, etiquette a droite quand elle apprend quelque chose
+ * (`shownEventLabel`). La ligne ouvre la page de l'evenement : ce qui lui est attache.
+ * `timeOnly` : sous un titre de jour (Calendar), sans repeter la date : l'heure de debut
+ * a gauche du nom, dans son style, et `Until fin · lieu` dessous.
  */
 export function EventRow({
   event,
@@ -40,9 +40,9 @@ export function EventRow({
       }
       title={event.name}
       subtitle={
-        timeOnly ? formatTimePlace(event) : [formatDateTime(start), event.location].filter(Boolean).join(" · ")
+        timeOnly ? formatEndPlace(event) : [formatDateTime(start), event.location].filter(Boolean).join(" · ")
       }
-      meta={eventLabel(event)}
+      meta={shownEventLabel(event)}
     />
   );
 }

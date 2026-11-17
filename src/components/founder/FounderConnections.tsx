@@ -56,7 +56,7 @@ export function FounderConnections() {
   return lists.map(({ list, title, ids, empty, hint }) => {
     const people = founders.filter((f) => ids.has(f.id));
     return (
-      <Section key={title} title={`${title} · ${people.length}`} hint={hint} right={manage}>
+      <Section key={title} title={`${title} · ${people.length}`} help={hint} right={manage}>
         {people.length === 0 ? (
           <Empty>{empty}</Empty>
         ) : (

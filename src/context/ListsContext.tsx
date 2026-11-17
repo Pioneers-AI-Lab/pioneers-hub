@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import type { ClosedList, ListKey, TagColor, WithId } from "@shared/types";
+import type { ClosedList, ListKey, WithId } from "@shared/types";
 import { refs } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
 import { useDocListener } from "@/hooks/useFirestoreListener";
@@ -16,8 +16,6 @@ type ListsValue = {
   /** Valeurs non archivees d'une liste ; vide si la liste n'existe pas. */
   values: (key: ListKey) => string[];
   labelOf: (key: ListKey, value: string) => string;
-  /** Couleur d'etiquette de la valeur (`null` : pas de couleur enregistree). */
-  colorOf: (key: ListKey, value: string) => TagColor | null;
   isLoading: boolean;
 };
 
@@ -39,11 +37,9 @@ export function ListsProvider({ children }: { children: ReactNode }) {
       ["degrees", degrees.data],
       ["programWeeks", programWeeks.data],
     ]);
-    const itemOf = (key: ListKey, v: string) => byKey.get(key)?.items.find((i) => i.value === v);
     return {
       values: (key) => (byKey.get(key)?.items ?? []).filter((i) => !i.archived).map((i) => i.value),
-      labelOf: (key, v) => itemOf(key, v)?.label ?? v,
-      colorOf: (key, v) => itemOf(key, v)?.color ?? null,
+      labelOf: (key, v) => byKey.get(key)?.items.find((i) => i.value === v)?.label ?? v,
       isLoading: hardSkills.isLoading || industries.isLoading || positionFit.isLoading || degrees.isLoading || programWeeks.isLoading,
     };
     // Les donnees, pas les objets d'ecoute (recrees a chaque rendu) : la valeur ne

@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
 import { isFromCalendar } from "@shared/calendarSync";
 import { defaultStartTime, eventLabelOf, type EventPhase } from "@shared/events";
+import { searchKey } from "@shared/text";
 import { ATTENDANCE_STATUS_LABELS, type AttendanceStatus, type EventKind, type EventStatus, type PioneersEvent } from "@shared/types";
 
 /** Archiver un evenement venu de l'agenda Google, c'est le masquer : la synchro le laisse masque (SPECS §2, 16/11). */
@@ -20,6 +21,16 @@ export const EVENT_KIND_LABEL: Record<EventKind, string> = {
 
 /** L'etiquette affichee d'un evenement : le nom de son modele, sinon celle de son type. */
 export const eventLabel = (event: Pick<PioneersEvent, "templateKey" | "kind">) => eventLabelOf(event, EVENT_KIND_LABEL[event.kind]);
+
+/**
+ * L'etiquette a montrer A COTE DU NOM, ou rien (docs/UI-RULES.md, « ne rien repeter ») :
+ * ni « Session » (presque tous les evenements, aucune information), ni un mot que le nom
+ * dit deja (« Lunch roulette », « Hackathon 1: ... »).
+ */
+export const shownEventLabel = (event: Pick<PioneersEvent, "name" | "templateKey" | "kind">): string | null => {
+  const label = eventLabel(event);
+  return label === EVENT_KIND_LABEL.session || searchKey(event.name).includes(searchKey(label)) ? null : label;
+};
 
 /** Le cycle d'un evenement, avec ce qu'il change pour les fondateurs et le jury. */
 export const EVENT_STATUS_OPTIONS: { value: EventStatus; label: string; description: string }[] = [

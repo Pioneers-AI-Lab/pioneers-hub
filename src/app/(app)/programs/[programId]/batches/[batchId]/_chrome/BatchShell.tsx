@@ -23,6 +23,7 @@ import { ViewAsFounderPicker, ViewAsSwitch } from "./ViewAsSwitch";
 // la place de son etiquette de role, le « View as » (ViewAsSwitch).
 // Pas de titre de page sous les onglets : l'onglet actif le dit deja. Le nom et
 // les dates du batch sont dans la ligne du haut, pour tous les onglets.
+
 /** Rembourrage vertical d'un lien du fil d'Ariane : avec le texte, une cible de 40 px. */
 const CRUMB_PAD = 11;
 
@@ -41,11 +42,13 @@ export function BatchShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const base = paths.batch(program.id, batch.id);
 
-  const tabs = [
-    { label: "Home", href: base, exact: true },
+  // `also` : les pages sans onglet propre gardent celui d'ou l'on y va (« vous etes ici ») :
+  // un evenement est sous Calendar, le leaderboard sous Home.
+  const tabs: { label: string; href: string; exact?: boolean; also?: string[] }[] = [
+    { label: "Home", href: base, exact: true, also: [paths.leaderboard(program.id, batch.id)] },
     { label: "Founders", href: paths.founders(program.id, batch.id) },
     ...(SHOW_STARTUPS_TAB ? [{ label: "Startups", href: paths.startups(program.id, batch.id) }] : []),
-    { label: "Calendar", href: paths.calendar(program.id, batch.id) },
+    { label: "Calendar", href: paths.calendar(program.id, batch.id), also: [`${base}/events`] },
     ...(role === "founder"
       ? [
           { label: "To do", href: paths.todo(program.id, batch.id) },
@@ -54,8 +57,9 @@ export function BatchShell({ children }: { children: ReactNode }) {
         ]
       : []),
   ];
+  const under = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const matches = (tab: (typeof tabs)[number]) =>
-    tab.exact ? pathname === tab.href : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+    (tab.exact ? pathname === tab.href : under(tab.href)) || (tab.also ?? []).some(under);
   // L'onglet le plus precis gagne : sa propre fiche (/founders/{moi}) est « Me », pas « Founders ».
   const activeHref = tabs.filter(matches).sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
   const isActive = (tab: (typeof tabs)[number]) => tab.href === activeHref;
@@ -92,7 +96,7 @@ export function BatchShell({ children }: { children: ReactNode }) {
 
       <Box component="nav" className="toptabs" visibleFrom="sm" mb="lg">
         {tabs.map((tab) => (
-          <Link key={tab.href} href={tab.href} data-active={isActive(tab)}>
+          <Link key={tab.href} href={tab.href} data-active={isActive(tab)} className="state-layer">
             {tab.label}
           </Link>
         ))}
@@ -104,7 +108,7 @@ export function BatchShell({ children }: { children: ReactNode }) {
 
       <Box component="nav" className="tabbar" hiddenFrom="sm" aria-label="Batch navigation">
         {tabs.map((tab) => (
-          <Link key={tab.href} href={tab.href} data-active={isActive(tab)}>
+          <Link key={tab.href} href={tab.href} data-active={isActive(tab)} className="state-layer">
             {tab.label}
           </Link>
         ))}

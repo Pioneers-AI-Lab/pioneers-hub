@@ -14,6 +14,7 @@ import { ActionBar } from "@/components/admin/ActionBar";
 import { BatchPicker } from "@/components/admin/BatchPicker";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
+import { WithHelp } from "@/components/ui/Help";
 
 const BLANK = "blank";
 
@@ -53,7 +54,7 @@ export default function NewFormPage() {
       <PageHeader
         back={{ href: paths.adminForms(), label: "Forms" }}
         title="New form"
-        subtitle={`Created as a draft in ${batch.name}. Nothing is sent until you publish it.`}
+        help={`Created as a draft in ${batch.name}. Nothing is sent until you publish it.`}
       />
       <BatchPicker />
       <Section title="Start from">
@@ -72,15 +73,18 @@ export default function NewFormPage() {
             ]}
           />
           {template?.needsEvent && (
-            <Select
-              label="Event"
-              description="The form is tied to this event: a submission or a jury takes its metrics or its scoring grid from the event's model."
-              clearable
-              searchable
-              value={eventId}
-              onChange={setEventId}
-              data={events.map((e) => ({ value: e.id, label: `${e.name} · ${formatDateTime(e.startDateISOString)}` }))}
-            />
+            <WithHelp label="Event" help="The form is tied to this event: a submission or a jury takes its metrics or its scoring grid from the event's model.">
+              {(field) => (
+                <Select
+                  {...field}
+                  clearable
+                  searchable
+                  value={eventId}
+                  onChange={setEventId}
+                  data={events.map((e) => ({ value: e.id, label: `${e.name} · ${formatDateTime(e.startDateISOString)}` }))}
+                />
+              )}
+            </WithHelp>
           )}
         </Stack>
       </Section>

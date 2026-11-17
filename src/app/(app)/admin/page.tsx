@@ -10,7 +10,7 @@ import { Section } from "@/components/ui/Section";
 export default function AdminHomePage() {
   return (
     <>
-      <PageHeader title="Admin" subtitle="Staff tools. Only the Pioneers team sees this space." />
+      <PageHeader title="Admin" help="Staff tools. Only the Pioneers team sees this space." />
       <Section title="Accounts">
         <RowList>
           <LinkRow

@@ -19,6 +19,7 @@ import { PageLoader } from "@/components/ui/PageLoader";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
+import { WithHelp } from "@/components/ui/Help";
 
 // ----------------------------
 // Admin > Access : tous les comptes, leurs droits, invitation et blocage
@@ -69,7 +70,7 @@ function SetPasswordLink({ uid }: { uid: string }) {
   };
 
   return (
-    <Stack gap={6}>
+    <Stack gap="xs">
       {link ? (
         <Group gap="xs" wrap="nowrap">
           <TextInput readOnly aria-label="Set-password link" value={link} onFocus={(e) => e.currentTarget.select()} style={{ flex: 1, minWidth: 0 }} />
@@ -98,24 +99,27 @@ function SetPasswordLink({ uid }: { uid: string }) {
 function AccessEditor({ value, onChange }: { value: AccountAccess; onChange: (next: AccountAccess) => void }) {
   return (
     <Stack gap="sm">
-      <Checkbox.Group
-        label="Roles"
-        description="A founder gets access through their profile, not here."
-        value={value.roles}
-        onChange={(roles) => {
-          const next = roles as UserRole[];
-          onChange({
-            roles: next,
-            investorAccess: next.includes("investor") ? (value.investorAccess ?? "portfolio") : null,
-          });
-        }}
-      >
-        <Stack gap="xs" mt="xs">
-          <Checkbox value="staff" label="Staff · every tool and every piece of data" />
-          <Checkbox value="investor" label="Investor · the investor space" />
-          <Checkbox value="mentor" label="Mentor · no access yet (bonus)" />
-        </Stack>
-      </Checkbox.Group>
+      <WithHelp label="Roles" help="A founder gets access through their profile, not here.">
+        {(field) => (
+          <Checkbox.Group
+            {...field}
+            value={value.roles}
+            onChange={(roles) => {
+              const next = roles as UserRole[];
+              onChange({
+                roles: next,
+                investorAccess: next.includes("investor") ? (value.investorAccess ?? "portfolio") : null,
+              });
+            }}
+          >
+            <Stack gap="xs" mt="xs">
+              <Checkbox value="staff" label="Staff · every tool and every piece of data" />
+              <Checkbox value="investor" label="Investor · the investor space" />
+              <Checkbox value="mentor" label="Mentor · no access yet (bonus)" />
+            </Stack>
+          </Checkbox.Group>
+        )}
+      </WithHelp>
       {value.roles.includes("investor") && (
         <Stack gap={4}>
           <Text size="sm" fw={500}>
@@ -226,7 +230,7 @@ export default function AdminAccessPage() {
       <PageHeader
         back={{ href: paths.admin(), label: "Admin" }}
         title="Access"
-        subtitle="Every account and its access. Each change is logged."
+        help="Every account and its access. Each change is logged."
       />
 
       <Section title={`Accounts · ${accounts.length}`}>
@@ -237,7 +241,7 @@ export default function AdminAccessPage() {
           ) : (
             <RowList>
               {filtered.map((a) => (
-                <ButtonRow
+                <ButtonRow opens
                   key={a.uid}
                   onClick={() => open(a)}
                   avatar={{ name: a.displayName ?? a.email ?? "?", photoUrl: a.photoUrl }}

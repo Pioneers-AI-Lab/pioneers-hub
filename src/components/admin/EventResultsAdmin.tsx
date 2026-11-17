@@ -22,7 +22,7 @@ import { LeaderboardSection } from "@/components/admin/ScoringEditor";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, LinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
-import { HelpBlock } from "@/components/ui/useHelp";
+import { HelpBlock } from "@/components/ui/Help";
 
 // ----------------------------
 // Admin d'un evenement : ses formulaires et ce qui fait son resultat
@@ -96,7 +96,7 @@ export function EventFormsField() {
               />
             );
           })}
-        <ButtonRow onClick={() => setPicking(true)} title="Add a form" subtitle="Blank or from a model, then adjust its questions" />
+        <ButtonRow opens onClick={() => setPicking(true)} title="Add a form" subtitle="Blank or from a model, then adjust its questions" />
       </RowList>
 
       <ResponsiveDialog opened={isPicking} onClose={() => setPicking(false)} title="Add a form">
@@ -122,7 +122,7 @@ function ResultsSection() {
   const entered = published.filter((t) => submissionsByTeamId.get(t.id)?.submittedDateISOString).length;
 
   return (
-    <Section title={`Results · ${entered} of ${published.length}`} hint="What each team entered in its submission. Open a team to enter or correct its numbers.">
+    <Section title={`Results · ${entered} of ${published.length}`} help="What each team entered in its submission. Open a team to enter or correct its numbers.">
       {published.length === 0 ? (
         <Empty>Teams show up here once they are published.</Empty>
       ) : (
@@ -191,7 +191,7 @@ function JurySection({ juryForm }: { juryForm: WithId<Form> }) {
     <Section
       title={`Jury · ${judgesCount} ${judgesCount === 1 ? "judge" : "judges"}`}
       right={<Text size="sm" c={isOpen ? "pioneers" : "dimmed"}>{juryState === "closed" ? "Locked" : FORM_STATE_LABELS[juryState]}</Text>}
-      hint="One link for the whole jury, no account needed: each judge picks or types their name, then scores every team. A founder cannot score their own team. For a paper sheet, open the link and type the judge's name."
+      help="One link for the whole jury, no account needed: each judge picks or types their name, then scores every team. A founder cannot score their own team. For a paper sheet, open the link and type the judge's name."
     >
       <Stack gap="sm" maw={480}>
         <LinkRow
@@ -247,7 +247,7 @@ function JurySection({ juryForm }: { juryForm: WithId<Form> }) {
       ) : (
         <RowList>
           {evaluations.map((e) => (
-            <ButtonRow
+            <ButtonRow opens
               key={e.id}
               onClick={() => setSelected(e)}
               title={e.evaluatorName}
@@ -318,7 +318,7 @@ function PicksSection() {
   const pickable = founders.filter((f) => isPickable(f, batch.id)).length;
 
   return (
-    <Section title="Picks (archived)" hint="Private choices given before the Shortlist replaced the picks (17/11). Only the staff sees them.">
+    <Section title="Picks (archived)" help="Private choices given before the Shortlist replaced the picks (17/11). Only the staff sees them.">
       <Text size="sm" c="dimmed">
         {picks.data.length} of {pickable} founders picked · {mutual.length} mutual {mutual.length === 1 ? "pair" : "pairs"}
       </Text>

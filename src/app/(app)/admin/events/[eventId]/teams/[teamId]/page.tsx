@@ -3,7 +3,6 @@
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminEvent } from "@/context/AdminEventContext";
 import { useParamsTS } from "@/hooks/useParamsTS";
-import { formatDateTime } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { StaffTeamResults } from "@/components/admin/StaffTeamResults";
 import { TeamSubmission } from "@/components/admin/TeamSubmission";
@@ -40,10 +39,6 @@ export default function AdminTeamResultsPage() {
           teamId={team.id}
           metrics={metrics}
           current={submission}
-          hint={[
-            submission?.submittedDateISOString ? `Last saved ${formatDateTime(submission.submittedDateISOString)}.` : "Nothing entered yet.",
-            "The metrics are the questions of the event's submission. Numbers you save here are marked as entered by the staff.",
-          ].join(" ")}
         />
       ) : (
         <Empty>The event has not started yet. Results open once it does.</Empty>

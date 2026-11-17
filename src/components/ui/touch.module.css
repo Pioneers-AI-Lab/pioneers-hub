@@ -39,7 +39,7 @@
     min-height: 40px;
   }
 
-  /* Bouton d'aide d'un libelle (useHelp) : 40 x 40, marges negatives pour ne
+  /* Bouton d'aide d'un libelle (Help.tsx) : 40 x 40, marges negatives pour ne
      pas grandir la ligne du libelle. */
   .helpButton.helpButton {
     width: 40px;

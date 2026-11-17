@@ -14,7 +14,7 @@ export function FounderCover({ founder }: { founder: Pick<Founder, "name" | "pho
         // eslint-disable-next-line @next/next/no-img-element -- URL Storage a jeton ou data URL : next/image n'apporte rien.
         <img src={src} alt="" loading="lazy" decoding="async" />
       ) : (
-        <Avatar name={founder.name} color="initials" size={96} radius="xl" />
+        <Avatar name={founder.name} color="initials" size={96} radius="100%" />
       )}
     </div>
   );

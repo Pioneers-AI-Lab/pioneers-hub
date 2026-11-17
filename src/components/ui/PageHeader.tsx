@@ -32,8 +32,9 @@ export function BackButton({ href, label, mb }: { href: string; label: string; m
 }
 
 /**
- * Titre de page, precede au besoin du bouton de retour (`back`). Sous le titre : `subtitle`,
- * ce qui reste visible, puis `help`, l'explication, repliee derriere un (?) (comme `Section`).
+ * Titre de page, precede au besoin du bouton de retour (`back`). Sous le titre, comme
+ * `Section` : `subtitle`, ce qui reste visible (un etat, une donnee : date, statut), puis
+ * `help`, l'explication de la page, repliee derriere un (?) a droite du titre (UI-RULES §10).
  */
 export function PageHeader({
   title,
@@ -42,15 +43,15 @@ export function PageHeader({
   back,
   right,
 }: {
-  title: ReactNode;
+  title: string;
   subtitle?: ReactNode;
   help?: ReactNode;
   back?: { href: string; label: string };
   right?: ReactNode;
 }) {
-  const { isOpen: isHelpOpen, toggle } = useHelpToggle(typeof title === "string" ? title : "this page");
+  const { isOpen: isHelpOpen, toggle } = useHelpToggle(title);
   return (
-    <Stack gap={10} mb="md">
+    <Stack gap="xs" mb="md">
       {back && <BackButton {...back} />}
       <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
         <Stack gap={2} style={{ minWidth: 0 }}>

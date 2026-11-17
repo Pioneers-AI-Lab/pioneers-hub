@@ -27,7 +27,7 @@ export default function AdminTasksPage() {
       <PageHeader
         back={{ href: paths.admin(), label: "Admin" }}
         title="Tasks"
-        subtitle="The checklist in every founder's To do. Each founder ticks a task once done."
+        help="The checklist in every founder's To do. Each founder ticks a task once done."
       />
       <BatchPicker />
       {isLoading ? (

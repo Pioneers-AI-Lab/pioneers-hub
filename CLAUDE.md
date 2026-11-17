@@ -373,6 +373,12 @@ Regles :
 
 ## Interface : mobile d'abord (decision du 11/11)
 
+**Regles d'ecran : `docs/UI-RULES.md` (17/11), a lire avant toute modification d'ecran** : echelle
+d'espacement (12 px entre cartes soeurs, partout), surface `.card`, une couleur par champ pour les tags
+(`TAG_KIND_COLOR`), liens soulignes, memes etats survol / appui / focus pour tout element cliquable
+(`.state-layer`), onglet actif et retour nommes, rien de repete, explications repliees derriere un (?) (`PageHeader` / `Section`
+`help`, `WithHelp`, `components/ui/Help.tsx`). Verifier par captures (390 et 1 280 px).
+
 - Theme sombre force, bleu `#0DB0F5` reserve a l'element actif et a l'action principale ; bleu clair
   `pioneers.3` (`#5fcaf7`) pour les titres de section (decision du 15/11).
 - Typographie (15/11) : Eina 04 Light pour le texte, Eina 04 SemiBold pour les titres et tout ce qui est en
@@ -380,14 +386,15 @@ Regles :
   `next/font/local` (`app/layout.tsx`) et `theme.ts`. Eina Regular et Medium MANQUENT : les `@font-face`
   couvrent des plages (Light jusqu'a 400, SemiBold a partir de 500), donc deux graisses visibles seulement
   (un `fw={500}` s'affiche en SemiBold). Licence web Eina (Textaxis) a confirmer avec Pioneers ; TTF a convertir en woff2.
-- Minimaliste : du texte, des filets, peu de cadres. **Pas d'icone** sauf manque de place ou chevron
-  de depliage (`ExpandChevron` de `Rows.tsx`, dessine par `ButtonRow` des `expanded` : `>` tourne vers le bas une fois ouvert) ou de retour (`BackButton`),
-  **jamais d'emoji**.
+- Minimaliste : du texte, des filets, peu de cadres. **Pas d'icone** sauf manque de place, aide repliee (?) ou
+  NAVIGATION (17/11, `docs/UI-RULES.md` §9) : `>` au bout d'une ligne ou d'une carte qui mene a une page (`NavChevron`,
+  pose par `LinkRow`, `CardLink` et `ButtonRow opens` qui ouvre une fenetre), `↗` pour un autre site (`ExternalLinkRow`), `v` de depliage qui se retourne
+  une fois ouvert (`ExpandChevron`, `ButtonRow` des `expanded`), `<` de retour (`BackButton`). **Jamais d'emoji**.
 - Aucune table : des lignes empilees (`components/ui/Rows.tsx` : `LinkRow`, `ButtonRow`, `Row`, `ActionRow` = bouton a droite hors du lien),
   cibles tactiles de 60 px. Titres : `PageHeader` ; blocs : `Section` (filet au-dessus, titre bleu clair
   16 px) ; titre de section ecrit a la main : `SectionTitle` (meme fichier), jamais un `.label` ; titre d'un bloc dans une
   section (cadre de graphique, liste) : `SubsectionTitle` ; valeurs :
-  `Field` (masque si vide ; son libelle `.label` reste gris).
+  `Field` (masque si vide ; son libelle `.label` est gris, partout, cartes comprises : 17/11).
 - Retour : `PageHeader` `back`, ou `BackButton` (meme fichier) hors en-tete : bouton gris leger avec chevron,
   40 px. Jamais un lien texte « All founders ».
 - Dans un batch : onglets en bas sur mobile (64 px, texte 15 px, jusqu'a 5 onglets en 390 px), en haut des
@@ -398,7 +405,7 @@ Regles :
   Background (grille du staff dans `private/internal.background`, proposition de Claude pre-remplie), Reviews (revue
   des Weekly updates par semaine : `founderReviews` oui / non, `startupReviews` Traction et Progress sur 5).
   Onglets : Home, Founders, Calendar (+ To do, Me). Pas de titre de page sous un onglet (16/11, place verticale) :
-  nom et dates du batch dans la ligne du haut de `BatchShell` ; compteur d'une liste dans sa recherche
+  nom et dates du batch dans la ligne du haut de `BatchShell` (dates masquees sur mobile) ; compteur d'une liste dans sa recherche
   (`components/ui/SearchCount.tsx`) ; « Add to calendar » en bas de Calendar ; une `Section` en tete de son
   conteneur n'a ni marge ni filet (`.section:first-child`, `globals.css`). Startups et la section Milestones de l'accueil sont MASQUES
   par drapeau (`lib/features.ts`, decision du 15/11 : startups formees le 25/11) ; le code reste.

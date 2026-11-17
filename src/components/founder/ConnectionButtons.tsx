@@ -53,7 +53,7 @@ export function ConnectionToggles({ founderId }: { founderId: string }) {
   const toggles = useConnectionToggles(founderId);
   if (!toggles) return null;
   return (
-    <Group gap={6} wrap="nowrap">
+    <Group gap="xs" wrap="nowrap">
       {toggles.map(({ list, on, write, label, Icon, OnIcon }) => (
         <ToggleIcon key={list} on={on} onToggle={write} label={label}>
           {on ? <OnIcon size={20} /> : <Icon size={20} />}

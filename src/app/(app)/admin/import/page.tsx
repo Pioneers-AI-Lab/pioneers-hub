@@ -117,7 +117,7 @@ function ImportFounders() {
   const shown = filter === "issues" ? withIssues : (plan ?? []);
   return (
     <>
-      <PageHeader back={{ href: paths.admin(), label: "Admin" }} title="Import founders" subtitle="Existing values are never overwritten." />
+      <PageHeader back={{ href: paths.admin(), label: "Admin" }} title="Import founders" help="Existing values are never overwritten." />
       <BatchPicker />
 
       {result && (
@@ -154,13 +154,14 @@ function ImportFounders() {
       {csv && (
         <Section
           title="2. Columns"
-          hint={`${mappedTargets.length} of ${csv.headers.length} columns mapped. Leave a column empty to ignore it.`}
+          hint={`${mappedTargets.length} of ${csv.headers.length} columns mapped.`}
+          help="Leave a column empty to ignore it."
         >
           <RowList>
             {csv.headers.map((h) => {
               const sample = csv.rows.find((r) => r[h]?.trim())?.[h] ?? "";
               return (
-                <Stack key={h} gap={6} py="sm" style={{ borderBottom: "1px solid var(--mantine-color-dark-4)" }}>
+                <Stack key={h} gap="xs" py="sm" style={{ borderBottom: "1px solid var(--mantine-color-dark-4)" }}>
                   <Box>
                     <Text fw={500} size="sm" style={{ overflowWrap: "anywhere" }}>
                       {h}
@@ -249,7 +250,7 @@ function ImportFounders() {
           )}
           <Box className="savebar">
             {progress ? (
-              <Stack gap={6}>
+              <Stack gap="xs">
                 <Progress value={progress.total ? (100 * progress.done) / progress.total : 0} />
                 <Text size="sm" c="dimmed" className="num">
                   {progress.done} / {progress.total}

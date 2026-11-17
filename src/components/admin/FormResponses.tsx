@@ -70,7 +70,7 @@ export const FormResponses = memo(function FormResponses() {
   return (
     <Section
       title="Responses"
-      hint={
+      help={
         basisLabel
           ? `Distinct founders who answered, among the ${basisLabel}.`
           : audience.kind === "jury"
@@ -98,7 +98,7 @@ export const FormResponses = memo(function FormResponses() {
         ) : (
           <RowList>
             {responses.map((r) => (
-              <ButtonRow
+              <ButtonRow opens
                 key={r.id}
                 onClick={() => setOpenId(r.id)}
                 title={respondentOf(r)}

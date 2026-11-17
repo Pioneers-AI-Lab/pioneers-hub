@@ -2,7 +2,6 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Box, Group, Text } from "@mantine/core";
 import type { Founder, FounderDirectory, WithId } from "@shared/types";
-import { useLists } from "@/context/ListsContext";
 import { PROFILE_CATEGORY_LABEL } from "@/lib/format";
 import { Field } from "@/components/ui/Field";
 import { tagsOrNull as tags } from "@/components/ui/Tags";
@@ -35,13 +34,12 @@ export function FounderGridCard({
   /** Sur la photo, en haut a droite, HORS du lien (un bouton dans un lien n'est pas valide) : Shortlist / Met. */
   overlay?: ReactNode;
 }) {
-  const { colorOf } = useLists();
   const category = founder.profileCategory ? PROFILE_CATEGORY_LABEL[founder.profileCategory] : null;
   const context = [category, directory?.nationality, startupName].filter(Boolean).join(" · ");
 
   return (
     <div className="card-wrap">
-      <Link href={href} className="card-link">
+      <Link href={href} className="card card-link state-layer">
         <FounderCover founder={founder} />
 
         <div className="card-body">
@@ -60,10 +58,14 @@ export function FounderGridCard({
           </Group>
 
           {founder.trackRecordOneLiner && <Text size="sm">{founder.trackRecordOneLiner}</Text>}
-          <Field label="Hard skills">{tags(founder.hardSkills, (v) => colorOf("hardSkills", v))}</Field>
-          <Field label="Industries">{tags(founder.industries, (v) => colorOf("industries", v))}</Field>
-          <Field label="Education">{tags(directory?.education)}</Field>
-          <Field label="Notable companies">{tags(directory?.notableCompanies)}</Field>
+          {/* Grille etroite (2 colonnes sur mobile) : la photo, le nom et la phrase suffisent a
+              parcourir le batch ; les etiquettes restent sur la fiche (`.card-details`, globals.css). */}
+          <div className="card-details">
+            <Field label="Hard skills">{tags(founder.hardSkills, "skill")}</Field>
+            <Field label="Industries">{tags(founder.industries, "industry")}</Field>
+            <Field label="Education">{tags(directory?.education, "school")}</Field>
+            <Field label="Notable companies">{tags(directory?.notableCompanies, "company")}</Field>
+          </div>
         </div>
       </Link>
       {overlay && <div className="card-overlay">{overlay}</div>}

@@ -11,6 +11,7 @@ import { paths } from "@/lib/paths";
 import { createTask, parseTaskLink, updateTask, type TaskDraft } from "@/lib/tasksAdmin";
 import { ActionBar } from "@/components/admin/ActionBar";
 import { Section } from "@/components/ui/Section";
+import { WithHelp } from "@/components/ui/Help";
 
 // ----------------------------
 // Les reglages d'une tache (Admin > Tasks) : titre, description, lien
@@ -49,21 +50,27 @@ export function TaskEditor({ task, children }: { task?: WithId<BatchTask>; child
       <Section title="Task">
         <Stack gap="sm">
           <TextInput label="Title" required value={title} onChange={(e) => setTitle(e.currentTarget.value)} placeholder="Introduce yourself on Slack" />
-          <Textarea
-            label="Description"
-            description="One short sentence, under the title."
-            autosize
-            minRows={2}
-            value={description}
-            onChange={(e) => setDescription(e.currentTarget.value)}
-          />
-          <TextInput
-            label="Link"
-            description="A web address (Slack, LinkedIn…), or a page of the app starting with /programs/…"
-            value={link}
-            onChange={(e) => setLink(e.currentTarget.value)}
-            error={linkError}
-          />
+          <WithHelp label="Description" help="One short sentence, under the title.">
+            {(field) => (
+              <Textarea
+                {...field}
+                autosize
+                minRows={2}
+                value={description}
+                onChange={(e) => setDescription(e.currentTarget.value)}
+              />
+            )}
+          </WithHelp>
+          <WithHelp label="Link" help="A web address (Slack, LinkedIn…), or a page of the app starting with /programs/…">
+            {(field) => (
+              <TextInput
+                {...field}
+                value={link}
+                onChange={(e) => setLink(e.currentTarget.value)}
+                error={linkError}
+              />
+            )}
+          </WithHelp>
         </Stack>
       </Section>
       {children}

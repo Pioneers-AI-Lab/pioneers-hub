@@ -205,7 +205,7 @@ export function FounderAttendance() {
     >
       {days.length > 0 && (
         <>
-          <Group gap={6}>
+          <Group gap="xs">
             {days.map(({ a, event }) => (
               <UnstyledButton
                 key={a.parentId}
@@ -246,7 +246,7 @@ export function FounderAttendance() {
             {(Object.keys(ATTENDANCE_STYLE) as AttendanceStatus[])
               .filter((s) => counts[s])
               .map((s) => (
-                <Group key={s} gap={6}>
+                <Group key={s} gap="xs">
                   <Box w={10} h={10} style={{ borderRadius: 3, background: ATTENDANCE_STYLE[s].color }} />
                   <Text size="xs" c="dimmed">
                     {ATTENDANCE_STYLE[s].label} <span className="num">{counts[s]}</span>
@@ -298,7 +298,7 @@ export function FounderWeeks() {
   if (weeks.length === 0) return null;
 
   return (
-    <Section title="Weekly check-ins" hint={isSelf ? "Only you and the Pioneers team see these." : undefined}>
+    <Section title="Weekly check-ins" help={isSelf ? "Only you and the Pioneers team see these." : undefined}>
       <Stack gap="lg">
         {weeks.map((w) => {
           return (

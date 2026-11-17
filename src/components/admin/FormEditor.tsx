@@ -55,6 +55,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
+import { WithHelp } from "@/components/ui/Help";
 
 // ----------------------------
 // Editeur de formulaire (SPECS §4.4)
@@ -403,7 +404,7 @@ function Editor({ form }: { form: WithId<Form> }) {
       />
 
       {isPublished && (
-        <Section title="Status" hint="A closed form no longer accepts answers.">
+        <Section title="Status" help="A closed form no longer accepts answers.">
           <SegmentedControl
             fullWidth
             value={draft.status === "draft" ? "open" : draft.status}
@@ -417,7 +418,7 @@ function Editor({ form }: { form: WithId<Form> }) {
       )}
 
       {form.identityCheck === "jury_link" ? (
-        <Section title="Jury link" hint="The jury link carries a secret: copy it, or make a new one, from the event's page (Admin > Events).">
+        <Section title="Jury link" help="The jury link carries a secret: copy it, or make a new one, from the event's page (Admin > Events).">
           <Empty>Scores are locked by closing this form.</Empty>
         </Section>
       ) : (
@@ -446,19 +447,22 @@ function Editor({ form }: { form: WithId<Form> }) {
               .filter(([value]) => isOffered(RETIRED_FORM_KINDS, value, form.kind))
               .map(([value, label]) => ({ value, label }))}
           />
-          <Select
-            label="Event"
-            description="Submission, peer rating, jury, retro or pitch deck: the answers are tied to this event, its teams and its teams scored."
-            clearable
-            searchable
-            value={draft.eventId}
-            onChange={(v) => set("eventId", v)}
-            data={events.map((e) => ({ value: e.id, label: `${e.name} · ${formatDateTime(e.startDateISOString)}` }))}
-          />
+          <WithHelp label="Event" help="Submission, peer rating, jury, retro or pitch deck: the answers are tied to this event, its teams and its teams scored.">
+            {(field) => (
+              <Select
+                {...field}
+                clearable
+                searchable
+                value={draft.eventId}
+                onChange={(v) => set("eventId", v)}
+                data={events.map((e) => ({ value: e.id, label: `${e.name} · ${formatDateTime(e.startDateISOString)}` }))}
+              />
+            )}
+          </WithHelp>
         </Stack>
       </Section>
 
-      <Section title="Respondent" hint={IDENTITY_HINTS[draft.identityCheck]}>
+      <Section title="Respondent" help={IDENTITY_HINTS[draft.identityCheck]}>
         <SegmentedControl
           fullWidth
           value={draft.identityCheck === "email_code" ? "account" : draft.identityCheck}
@@ -468,7 +472,7 @@ function Editor({ form }: { form: WithId<Form> }) {
         />
       </Section>
 
-      <Section title="Database writes" hint="Questions linked to a field write their answer into the founder or startup record.">
+      <Section title="Database writes" help="Questions linked to a field write their answer into the founder or startup record.">
         <Select
           allowDeselect={false}
           value={draft.approval}
@@ -479,7 +483,7 @@ function Editor({ form }: { form: WithId<Form> }) {
 
       <Section
         title="Schedule"
-        hint="One form per occurrence. A weekly form writes to the week it opens: for next week, duplicate it."
+        help="One form per occurrence. A weekly form writes to the week it opens: for next week, duplicate it."
       >
         <Stack>
           <TextInput
@@ -511,7 +515,7 @@ function Editor({ form }: { form: WithId<Form> }) {
         ) : (
           <RowList>
             {active.map(({ q }, i) => (
-              <ButtonRow
+              <ButtonRow opens
                 key={q.id}
                 onClick={() => setEditing({ original: q, index: i })}
                 title={`${i + 1}. ${q.label || "Untitled question"}`}
@@ -563,7 +567,7 @@ function Editor({ form }: { form: WithId<Form> }) {
                 ? `You both changed: ${conflicts.join(", ")}. Saving keeps your version of ${conflicts.length === 1 ? "it" : "them"}, and their other changes.`
                 : "Your changes are kept. Saving adds them to theirs."}
             </Text>
-            <Group grow gap="xs" mt={6}>
+            <Group grow gap="xs" mt="xs">
               <Button variant="default" onClick={loadTheirs}>
                 Load their version
               </Button>
@@ -574,7 +578,7 @@ function Editor({ form }: { form: WithId<Form> }) {
           </Box>
         )}
         {problems.length > 0 && (
-          <Text size="sm" c="red.4" mb={6}>
+          <Text size="sm" c="red.4" mb="xs">
             {problems[0]}
           </Text>
         )}
@@ -593,7 +597,7 @@ function Editor({ form }: { form: WithId<Form> }) {
           </Group>
         )}
         {!isPublished && (
-          <Text size="xs" c="dimmed" ta="center" mt={6}>
+          <Text size="xs" c="dimmed" ta="center" mt="xs">
             Publishing opens the public link and lists the form in the founders&apos; To do.
           </Text>
         )}
@@ -823,30 +827,32 @@ function QuestionModal({
           </Group>
         )}
 
-        <Select
-          label="Database field"
-          description={
-            isIndicatorLocked
-              ? "This question feeds an indicator (curves, scores): its field cannot change."
-              : "Where the answer is written. Leave empty to keep it as a free answer, analysed by Claude."
-          }
-          placeholder="Not linked"
-          clearable
-          searchable
-          disabled={isIndicatorLocked}
-          value={newFamily ? NEW_KEY(newFamily.family) : q.dbField}
-          onChange={chooseField}
-          data={fieldData}
-          comboboxProps={{ withinPortal: true }}
-        />
+        <WithHelp label="Database field" help="Where the answer is written. Leave empty to keep it as a free answer, analysed by Claude." note={isIndicatorLocked ? "This question feeds an indicator (curves, scores): its field cannot change." : undefined}>
+          {(field) => (
+            <Select
+              {...field}
+              placeholder="Not linked"
+              clearable
+              searchable
+              disabled={isIndicatorLocked}
+              value={newFamily ? NEW_KEY(newFamily.family) : q.dbField}
+              onChange={chooseField}
+              data={fieldData}
+              comboboxProps={{ withinPortal: true }}
+            />
+          )}
+        </WithHelp>
 
         {newFamily && (
-          <TextInput
-            label={`Key of the new ${FAMILY_CHOICES[newFamily.family].noun}`}
-            description="Stable across events, to compare them: reuse the same key for the same number. camelCase, e.g. callsMade."
-            value={newFamily.key}
-            onChange={(e) => setNewFamily({ ...newFamily, key: e.currentTarget.value.trim() })}
-          />
+          <WithHelp label={`Key of the new ${FAMILY_CHOICES[newFamily.family].noun}`} help="Stable across events, to compare them: reuse the same key for the same number. camelCase, e.g. callsMade.">
+            {(field) => (
+              <TextInput
+                {...field}
+                value={newFamily.key}
+                onChange={(e) => setNewFamily({ ...newFamily, key: e.currentTarget.value.trim() })}
+              />
+            )}
+          </WithHelp>
         )}
 
         {aligned.dbField ? (
@@ -856,24 +862,30 @@ function QuestionModal({
             </Text>
           )
         ) : (
-          <Select
-            label="Asked for"
-            description="A question about each teammate or each team scored is repeated for every one of them."
-            allowDeselect={false}
-            value={scopeOf(q)}
-            onChange={(v) => v && set("scope", v as QuestionScope)}
-            data={(Object.keys(SCOPE_LABELS) as QuestionScope[]).map((value) => ({ value, label: SCOPE_LABELS[value] }))}
-          />
+          <WithHelp label="Asked for" help="A question about each teammate or each team scored is repeated for every one of them.">
+            {(field) => (
+              <Select
+                {...field}
+                allowDeselect={false}
+                value={scopeOf(q)}
+                onChange={(v) => v && set("scope", v as QuestionScope)}
+                data={(Object.keys(SCOPE_LABELS) as QuestionScope[]).map((value) => ({ value, label: SCOPE_LABELS[value] }))}
+              />
+            )}
+          </WithHelp>
         )}
 
         {isJuryCriterion(aligned) && (
-          <NumberInput
-            label="Weight"
-            description="In the jury's weighted average (the IC grid is 40 / 40 / 20)."
-            min={0}
-            value={q.weight ?? 1}
-            onChange={(v) => set("weight", typeof v === "number" && v > 0 ? v : null)}
-          />
+          <WithHelp label="Weight" help="In the jury's weighted average (the IC grid is 40 / 40 / 20).">
+            {(field) => (
+              <NumberInput
+                {...field}
+                min={0}
+                value={q.weight ?? 1}
+                onChange={(v) => set("weight", typeof v === "number" && v > 0 ? v : null)}
+              />
+            )}
+          </WithHelp>
         )}
 
         {q.dbField && (
@@ -922,7 +934,7 @@ function PublicLinkSection({ formId, isPublished, needsAccount }: { formId: stri
   return (
     <Section
       title="Public link"
-      hint={
+      help={
         !isPublished
           ? "Preview the form as founders will see it. Publish it to collect answers."
           : needsAccount

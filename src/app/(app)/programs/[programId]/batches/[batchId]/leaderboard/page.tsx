@@ -78,7 +78,7 @@ export default function LeaderboardPage() {
             }
             right={
               <Anchor component={Link} href={paths.event(program.id, batch.id, event.id)} size="sm" className="tap-link">
-                Event
+                See event
               </Anchor>
             }
           >

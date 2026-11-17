@@ -46,7 +46,7 @@ export default function AdminEventsPage() {
 
   return (
     <div className="fixed-page">
-      <PageHeader back={{ href: paths.admin(), label: "Admin" }} title="Events" subtitle="Every event of the batch: schedule, settings, archive." />
+      <PageHeader back={{ href: paths.admin(), label: "Admin" }} title="Events" help="Every event of the batch: schedule, settings, archive." />
       <BatchPicker />
       <Group justify="space-between" gap="xs" wrap="nowrap" mt="lg" mb="xs">
         <SectionTitle>Events · {rows.length}</SectionTitle>
@@ -81,7 +81,7 @@ function CalendarSyncBar({ batchId }: { batchId: string }) {
   const { isBusy, run } = useAction();
   return (
     <Box className="savebar">
-      <CalendarSyncStatus batchId={batchId} mb={6} />
+      <CalendarSyncStatus batchId={batchId} mb="xs" />
       <Button size="md" fullWidth loading={isBusy} onClick={() => void run(() => call("syncBatchCalendar")({ batchId }), "Events synced")}>
         Sync with Google Calendar now
       </Button>

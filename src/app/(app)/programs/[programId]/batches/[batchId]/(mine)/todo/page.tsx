@@ -31,7 +31,7 @@ export default function TodoPage() {
     <>
       {nothing && <Empty>You are all set. New forms and events show up here.</Empty>}
 
-      <Section title="Checklist" hint="Tick a task once you have done it.">
+      <Section title="Checklist" help="Tick a task once you have done it.">
         <RowList>
           {checklist.map((c) => (
             <ChecklistRow key={c.id} item={c} />
@@ -50,7 +50,7 @@ export default function TodoPage() {
       )}
 
       {debriefs.length > 0 && (
-        <Section title="Hackathons" hint="Your team's submission before the deadline, then a word on each teammate at the debrief.">
+        <Section title="Hackathons" help="Your team's submission before the deadline, then a word on each teammate at the debrief.">
           <RowList>
             {debriefs.map((d) => (
               <FormRow key={d.form.id} item={d} />

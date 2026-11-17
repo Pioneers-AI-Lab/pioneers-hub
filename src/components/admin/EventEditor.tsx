@@ -37,7 +37,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, LinkRow, RowList } from "@/components/ui/Rows";
 import { Section } from "@/components/ui/Section";
-import { HelpBlock } from "@/components/ui/useHelp";
+import { HelpBlock, WithHelp } from "@/components/ui/Help";
 
 // ----------------------------
 // Admin > Events : creer un evenement, puis sa page (le point d'entree de tout
@@ -166,7 +166,7 @@ function NewEventSettings({ templateKey, onBack }: { templateKey: EventTemplateK
       <EventSettingsFields draft={draft} onChange={setDraft} canChangeBatch />
       <Box className="savebar">
         {problems[0] && (
-          <Text size="sm" c="red.4" mb={6}>
+          <Text size="sm" c="red.4" mb="xs">
             {problems[0]}
           </Text>
         )}
@@ -250,7 +250,7 @@ function Hub({ event }: { event: WithId<PioneersEvent> }) {
       {isArchived ? (
         <Section
           title={archiveWord.state}
-          hint={`Hidden from founders, the calendar and the staff tools.${archiveWord.note ? ` ${archiveWord.note}` : ""} Its teams, results and scores are kept.${
+          help={`Hidden from founders, the calendar and the staff tools.${archiveWord.note ? ` ${archiveWord.note}` : ""} Its teams, results and scores are kept.${
             toReopen.length ? ` Restoring it opens again the forms the archive closed: ${titles(toReopen)}.` : ""
           }`}
         >
@@ -359,13 +359,16 @@ function MoveDialog({
           deadline, keep their dates.
         </Text>
         {plan.linked && (
-          <Checkbox
-            size="md"
-            checked={moveLinked}
-            onChange={(e) => setMoveLinked(e.currentTarget.checked)}
-            label={`Also move ${plan.linked.event.name} to ${formatDateTime(plan.linked.to.startDateISOString)}`}
-            description="It starts when this event ends, and the peer rating opens at its start."
-          />
+          <WithHelp label={`Also move ${plan.linked.event.name} to ${formatDateTime(plan.linked.to.startDateISOString)}`} help="It starts when this event ends, and the peer rating opens at its start.">
+            {(field) => (
+              <Checkbox
+                size="md"
+                checked={moveLinked}
+                onChange={(e) => setMoveLinked(e.currentTarget.checked)}
+                {...field}
+              />
+            )}
+          </WithHelp>
         )}
         {plan.moves.map(({ form, opensDateISOString, deadlineDateISOString }) => (
           <div key={form.id}>
@@ -415,9 +418,9 @@ function MatchingField() {
     <HelpBlock label="Matching" help={tool ? `${tool.summary}.` : "Draw teams or tables from the guests. The submission and the peer rating need teams."}>
       <RowList>
         {matching && tool ? (
-          <ButtonRow onClick={() => setOpen(true)} title={`${tool.title} of ${matching.size.max}`} subtitle={drawStatus(teams.length, isDrawPublished, tool.groupWord)} />
+          <ButtonRow opens onClick={() => setOpen(true)} title={`${tool.title} of ${matching.size.max}`} subtitle={drawStatus(teams.length, isDrawPublished, tool.groupWord)} />
         ) : (
-          <ButtonRow onClick={() => setOpen(true)} title="Add a matching" subtitle="Teams to work together, or tables to meet new people" />
+          <ButtonRow opens onClick={() => setOpen(true)} title="Add a matching" subtitle="Teams to work together, or tables to meet new people" />
         )}
       </RowList>
       <MatchingDialog opened={isOpen} onClose={() => setOpen(false)} />
@@ -460,7 +463,7 @@ function TemplateField() {
         comboboxProps={{ withinPortal: true }}
       />
       {chosen && plan && (
-        <Stack gap={6} mt="xs">
+        <Stack gap="xs" mt="xs">
           <Text size="sm" c="dimmed">
             {[
               `Label: ${EVENT_KIND_LABEL[EVENT_TEMPLATES[chosen].kind].toLowerCase()}`,

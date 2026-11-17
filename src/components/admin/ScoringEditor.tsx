@@ -18,6 +18,7 @@ import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, RankNumber, Row, RowList } from "@/components/ui/Rows";
 import { ToggleButton } from "@/components/ui/ToggleButton";
 import { Section, SubsectionTitle } from "@/components/ui/Section";
+import { WithHelp } from "@/components/ui/Help";
 
 // ----------------------------
 // Le leaderboard d'un evenement : son bareme, ou les notes du jury
@@ -77,20 +78,21 @@ export function LeaderboardSection() {
 
   if (!scoring && metrics.length === 0 && criteria.length === 0) return null;
   const total = scoring ? scoringMaxTotal(scoring, criteria) : null;
-  const hint = !scoring
+  const hint = scoring && isPublished ? `Published ${formatDateTime(event.leaderboardRevealDateISOString!)}: founders see the ranking.` : undefined;
+  const help = !scoring
     ? "What ranks the teams: the jury's scores, or one number of the submission. Or give points to several variables."
     : isPublished
-      ? `Published ${formatDateTime(event.leaderboardRevealDateISOString!)}: founders see the ranking. A change recomputes it.`
+      ? "A change recomputes it."
       : "Founders see the ranking once you publish it. A late submission scores 0.";
 
   return (
-    <Section title={scoring ? `Leaderboard · ${total === null ? "open total" : `out of ${total}`}` : "Leaderboard"} hint={hint}>
+    <Section title={scoring ? `Leaderboard · ${total === null ? "open total" : `out of ${total}`}` : "Leaderboard"} hint={hint} help={help}>
       {!scoring && <RankingControl />}
       <RowList>
         {items.map((item, i) => {
           const missing = !variableExists(item, metrics, criteria);
           return (
-            <ButtonRow
+            <ButtonRow opens
               key={item.key}
               onClick={() => setEditing(i)}
               title={item.label}
@@ -98,7 +100,7 @@ export function LeaderboardSection() {
             />
           );
         })}
-        <ButtonRow onClick={() => setEditing("new")} title={scoring ? "Add an item" : "Score with points instead"} subtitle={scoring ? undefined : "Points per jury criterion, tie-breaks"} />
+        <ButtonRow opens onClick={() => setEditing("new")} title={scoring ? "Add an item" : "Score with points instead"} subtitle={scoring ? undefined : "Points per jury criterion, tie-breaks"} />
       </RowList>
       <Group mt="sm" gap="sm">
         {scoring && (
@@ -303,14 +305,14 @@ function CriterionItemForm({ index, items, isSaving, onSave }: ItemSheetProps) {
           <NumberInput label="Scored out of" min={1} max={100} value={newScaleMax} onChange={(v) => setNewScaleMax(typeof v === "number" ? v : 5)} />
         </Group>
       )}
-      <NumberInput
-        label="Points"
-        description="Empty: the jury's score as it is."
-        min={0}
-        value={points ?? ""}
-        onChange={(v) => setPoints(typeof v === "number" ? v : null)}
-      />
-      <Switch label="Tie-break only" description="It does not count in the total; it separates equal totals, in the order of the list." checked={tieBreakOnly} onChange={(e) => setTieBreakOnly(e.currentTarget.checked)} />
+      <WithHelp label="Points" help="Empty: the jury's score as it is.">
+        {(field) => <NumberInput {...field} min={0} value={points ?? ""} onChange={(v) => setPoints(typeof v === "number" ? v : null)} />}
+      </WithHelp>
+      <WithHelp label="Tie-break only" help="It does not count in the total; it separates equal totals, in the order of the list.">
+        {(field) => (
+          <Switch {...field} checked={tieBreakOnly} onChange={(e) => setTieBreakOnly(e.currentTarget.checked)} />
+        )}
+      </WithHelp>
       {draft && (
         <Text size="sm" c="dimmed">
           A jury average of {(scaleMax ?? 0) / 2} out of {scaleMax} gives {(effectivePoints ?? 0) / 2} pts.

@@ -153,6 +153,7 @@ function WhoAreYou() {
       {form.allowTypedName && (
         <TextInput
           label={options.length > 0 ? "Not in the list? Type your name" : "Your name"}
+          // Formulaire public : la consigne reste visible (docs/UI-RULES.md §10).
           description="First and last name, so the team knows who scored."
           maxLength={JUDGE_LIMITS.name}
           value={name}
@@ -298,12 +299,12 @@ function Sheet() {
 
       {self.length > 0 && <Section title="You">{fields(self, null)}</Section>}
       {team.length > 0 && (
-        <Section title={form.team ? `Your team · ${form.team.name}` : "Your team"} hint="One teammate can fill this in for the whole team. The last save counts.">
+        <Section title={form.team ? `Your team · ${form.team.name}` : "Your team"} help="One teammate can fill this in for the whole team. The last save counts.">
           {fields(team, null)}
         </Section>
       )}
       {mates.length > 0 && (
-        <Section title="Your teammates" hint="Private: only the Pioneers team reads it.">
+        <Section title="Your teammates" help="Private: only the Pioneers team reads it.">
           {teammates.length === 0 ? (
             <Empty>No teammate to rate.</Empty>
           ) : (
@@ -457,7 +458,7 @@ function SheetField({
         return <NumberInput {...common} min={scale.min} max={scale.max} value={typeof value === "number" ? value : ""} onChange={(v) => onChange(typeof v === "number" ? v : undefined)} />;
       }
       return (
-        <Stack gap={6}>
+        <Stack gap="xs">
           <Text size="sm" fw={500}>
             {label}
             <Text span c="dimmed" size="sm">{` · ${scale.min} to ${scale.max}`}</Text>

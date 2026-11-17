@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { SimpleGrid, Stack, Text } from "@mantine/core";
+import { Anchor, SimpleGrid, Stack, Text } from "@mantine/core";
 
 const isEmpty = (v: ReactNode) => v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
 
@@ -34,8 +34,9 @@ export function ExternalLink({ href, children }: { href: string | null | undefin
   if (!href) return null;
   const url = /^https?:\/\//.test(href) ? href : `https://${href}`;
   return (
-    <a href={url} target="_blank" rel="noreferrer" className="tap-link" style={{ color: "var(--mantine-color-pioneers-4)", overflowWrap: "anywhere" }}>
+    // Un `Anchor` : couleur et soulignement du theme, comme tout lien de texte.
+    <Anchor href={url} target="_blank" rel="noreferrer" className="tap-link" style={{ overflowWrap: "anywhere" }}>
       {children ?? href.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
-    </a>
+    </Anchor>
   );
 }

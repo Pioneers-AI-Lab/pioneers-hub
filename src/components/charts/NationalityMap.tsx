@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { geoNaturalEarth1, geoPath } from "d3-geo";
 import { feature } from "topojson-client";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
@@ -108,10 +108,13 @@ export function NationalityMap({ counts }: { counts: Record<string, number> }) {
     </Box>
     <Text size="xs" c="dimmed" mt="xs">
       {listed.map(([name, n], i) => (
-        <span key={name}>
+        <Fragment key={name}>
           {i > 0 ? " · " : ""}
-          {name} <Text span c="white" fw={600} inherit className="num">{n}</Text>
-        </span>
+          {/* Un pays et son nombre ne se separent jamais d'une ligne a l'autre. */}
+          <span style={{ whiteSpace: "nowrap" }}>
+            {name} <Text span c="white" fw={600} inherit className="num">{n}</Text>
+          </span>
+        </Fragment>
       ))}
     </Text>
     </>

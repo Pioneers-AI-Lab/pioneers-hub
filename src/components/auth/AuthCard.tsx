@@ -16,7 +16,7 @@ export function AuthCard({
   return (
     <div className="auth-card">
       <Stack gap="lg">
-        <Stack gap={6}>
+        <Stack gap="xs">
           <Title order={2}>{title}</Title>
           {subtitle && <Text c="dimmed" size="sm">{subtitle}</Text>}
         </Stack>

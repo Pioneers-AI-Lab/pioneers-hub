@@ -35,7 +35,7 @@ export function CompletionProgress({
   const missing = missingNames.join(", ");
   return (
     <Stack gap="md">
-      <Stack gap={6}>
+      <Stack gap="xs">
         <Text size="xl" fw={600} className="num">
           {doneNames.length} / {total}
           <Text span size="sm" c="dimmed" fw="var(--mantine-font-weight-regular)" ml="xs">

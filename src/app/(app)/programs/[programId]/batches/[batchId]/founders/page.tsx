@@ -58,8 +58,9 @@ function FoundersDirectory() {
   // Staff et investors : classement par Program Performance (comme le dashboard).
   const [sort, setSort] = useUrlState("sort", "score", SORTS);
   const byScore = canSeeScores && sort === "score";
-  // Grille : la galerie du Profile Book (1 a 3 cartes par ligne selon la largeur).
+  // Grille : la galerie du Profile Book (2 a 3 cartes par ligne selon la largeur).
   const [view, setView] = useUrlState("view", "grid", VIEWS);
+  const isGrid = view === "grid";
   const { ensureOpen, rememberQuery, directoriesById, isLoading: isGridLoading } = useFounderDirectories();
   // Premiere visite : l'annuaire ouvre ses ecouteurs (gardes ensuite, au layout de /founders).
   useEffect(ensureOpen, [ensureOpen]);
@@ -93,10 +94,10 @@ function FoundersDirectory() {
   // Complet = aucun champ obligatoire vide (le profil prive n'en porte aucun).
   // Sans annuaire (visiteur public), on ne sait pas : ordre inchange.
   const gridFounders = useMemo(() => {
-    if (view !== "grid" || directoriesById.size === 0) return visible;
+    if (!isGrid || directoriesById.size === 0) return visible;
     const isComplete = new Map(visible.map((f) => [f.id, missingRequiredFields(f, directoriesById.get(f.id) ?? null, null).length === 0]));
     return [...visible.filter((f) => isComplete.get(f.id)), ...visible.filter((f) => !isComplete.get(f.id))];
-  }, [view, visible, directoriesById]);
+  }, [isGrid, visible, directoriesById]);
 
   if (isLoading) return <PageLoader />;
 
@@ -116,7 +117,8 @@ function FoundersDirectory() {
   const startupNameOf = (startupId: string | null) => (startupId && startupsById.get(startupId)?.name) || null;
 
   return (
-    <>
+    // Grille : toute la page deborde (`.bleed-wide`), filtres compris : un seul bord gauche.
+    <div className={isGrid ? "bleed-wide" : undefined}>
       {role === "public" && (
         <Text size="sm" c="dimmed" mb="md">
           {isSignedIn ? (
@@ -145,17 +147,7 @@ function FoundersDirectory() {
           type="search"
           {...searchCount(visible.length, founders.length)}
         />
-        <SegmentedControl
-          fullWidth
-          value={filter}
-          onChange={setFilter}
-          data={[
-            { value: "all", label: "All" },
-            { value: "technical", label: "Tech" },
-            { value: "business", label: "Business" },
-            { value: "hybrid", label: "Hybrid" },
-          ]}
-        />
+
         {myFounderId && (
           <SegmentedControl
             fullWidth
@@ -169,7 +161,19 @@ function FoundersDirectory() {
             ]}
           />
         )}
-        <Group gap="xs">
+        {/* Filtre de profil et vue sur une ligne ; la vue passe dessous si la place manque. */}
+        <Group gap="sm" align="center">
+          <SegmentedControl
+            style={{ flex: "1 1 280px" }}
+            value={filter}
+            onChange={setFilter}
+            data={[
+              { value: "all", label: "All" },
+              { value: "technical", label: "Tech" },
+              { value: "business", label: "Business" },
+              { value: "hybrid", label: "Hybrid" },
+            ]}
+          />
           {canSeeScores && (
             <SegmentedControl
               size="xs"
@@ -195,24 +199,24 @@ function FoundersDirectory() {
       </Stack>
       {visible.length === 0 ? (
         <Empty>{founders.length === 0 ? "No founder yet." : "No founder matches."}</Empty>
-      ) : view === "grid" && isGridLoading ? (
+      ) : isGrid && isGridLoading ? (
         <PageLoader />
-      ) : view === "grid" ? (
-        <div className="bleed-wide">
-          <SimpleGrid type="container" cols={{ base: 1, "540px": 2, "840px": 3 }} spacing="md" verticalSpacing="md" mt="xs">
-            {gridFounders.map((f) => (
-              <FounderGridCard
-                key={f.id}
-                href={paths.founder(program.id, batch.id, f.id)}
-                founder={f}
-                directory={directoriesById.get(f.id)}
-                startupName={startupNameOf(f.startupId)}
-                meta={metaOf(f.id, f.uid)}
-                overlay={<ConnectionToggles founderId={f.id} />}
-              />
-            ))}
-          </SimpleGrid>
-        </div>
+      ) : isGrid ? (
+        // 2 colonnes des le mobile (cartes resumees, `.card-details`), 3 au-dela de 840 px ;
+        // 12 px entre cartes, comme partout (docs/UI-RULES.md).
+        <SimpleGrid type="container" cols={{ base: 2, "840px": 3 }} spacing="sm" verticalSpacing="sm" mt="xs">
+          {gridFounders.map((f) => (
+            <FounderGridCard
+              key={f.id}
+              href={paths.founder(program.id, batch.id, f.id)}
+              founder={f}
+              directory={directoriesById.get(f.id)}
+              startupName={startupNameOf(f.startupId)}
+              meta={metaOf(f.id, f.uid)}
+              overlay={<ConnectionToggles founderId={f.id} />}
+            />
+          ))}
+        </SimpleGrid>
       ) : (
         <RowList>
           {visible.map((f) => {
@@ -234,6 +238,6 @@ function FoundersDirectory() {
           })}
         </RowList>
       )}
-    </>
+    </div>
   );
 }

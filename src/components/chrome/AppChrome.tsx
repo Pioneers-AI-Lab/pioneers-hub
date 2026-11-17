@@ -38,7 +38,10 @@ export function AppChrome({ children }: { children: ReactNode }) {
               aria-label={APP_NAME}
               underline="never"
               h={44}
-              style={{ display: "inline-flex", alignItems: "center" }}
+              px="xs"
+              mx="calc(-1 * var(--mantine-spacing-xs))"
+              className="state-layer"
+              style={{ display: "inline-flex", alignItems: "center", borderRadius: "var(--mantine-radius-md)" }}
             >
               <AppLogo height={22} />
               <LocalDbBadge />
@@ -60,6 +63,15 @@ export function AppChrome({ children }: { children: ReactNode }) {
 }
 
 type AccountLink = { label: string; href: string };
+
+/** Le bouton du compte (avatar), mobile et ordinateur : 44 px, rond, voile d'etat (globals.css). */
+const ACCOUNT_TRIGGER = {
+  "aria-label": "Account menu",
+  w: 44,
+  h: 44,
+  className: "state-layer",
+  style: { display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%" },
+} as const;
 
 /**
  * Le compte : une feuille qui monte du bas sur mobile (lignes de 52 px a
@@ -113,7 +125,7 @@ function ViewerMenu() {
   if (isMobile) {
     return (
       <>
-        <UnstyledButton aria-label="Account menu" onClick={() => setSheetOpen(true)} w={44} h={44} style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <UnstyledButton {...ACCOUNT_TRIGGER} onClick={() => setSheetOpen(true)}>
           {avatar}
         </UnstyledButton>
         <Drawer
@@ -128,7 +140,7 @@ function ViewerMenu() {
           }}
         >
           {/* Poignee : la feuille se ferme en touchant hors d'elle. */}
-          <Box mx="auto" mt={4} mb={12} w={36} h={4} bg="dark.4" style={{ borderRadius: 99 }} />
+          <Box mx="auto" mt={4} mb="sm" w={36} h={4} bg="dark.4" style={{ borderRadius: 99 }} />
           <Group gap="sm" wrap="nowrap" pb="md" style={{ borderBottom: "1px solid var(--mantine-color-dark-4)" }}>
             <Avatar src={firebaseUser.photoURL} name={name} color="initials" size={44} radius="xl" />
             <Stack gap={0} style={{ minWidth: 0 }}>
@@ -137,13 +149,13 @@ function ViewerMenu() {
           </Group>
           <Stack gap={0}>
             {links.map((l) => (
-              <Link key={l.label} href={l.href} className="row" style={{ minHeight: 52 }} onClick={() => setSheetOpen(false)}>
+              <Link key={l.label} href={l.href} className="row state-layer" style={{ minHeight: 52 }} onClick={() => setSheetOpen(false)}>
                 <Text fw={500}>{l.label}</Text>
               </Link>
             ))}
             <button
               type="button"
-              className="row"
+              className="row state-layer"
               style={{ minHeight: 52 }}
               onClick={() => {
                 setSheetOpen(false);
@@ -163,7 +175,7 @@ function ViewerMenu() {
   return (
     <Menu position="bottom-end" withinPortal width={240}>
       <Menu.Target>
-        <UnstyledButton aria-label="Account menu" w={44} h={44} style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <UnstyledButton {...ACCOUNT_TRIGGER}>
           {avatar}
         </UnstyledButton>
       </Menu.Target>

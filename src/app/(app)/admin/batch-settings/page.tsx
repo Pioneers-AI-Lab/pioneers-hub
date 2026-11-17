@@ -32,7 +32,7 @@ export default function BatchSettingsPage() {
       {/* Remonte a chaque modification distante ou changement de batch : le brouillon repart de la base. */}
       <SettingsForm key={`${batch.id}:${batch.updatedDateISOString}`} batch={batch}>
         <ScoresSection batch={batch} />
-        <Section title="Programs and batches" hint={`${programs.length} programs, ${batches.length} batches. A new batch becomes the one you work on.`}>
+        <Section title="Programs and batches" help={`${programs.length} programs, ${batches.length} batches. A new batch becomes the one you work on.`}>
           <Group>
             <CreateBatchButton programs={programs} defaultProgramId={batch.programId} onCreated={selectBatch} />
             <CreateProgramButton />
@@ -100,7 +100,7 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
         />
       </Section>
 
-      <Section title="Leaderboard" hint="Hide it from founders during the mutual picks. Staff and investors always see it.">
+      <Section title="Leaderboard" help="Hide it from founders during the mutual picks. Staff and investors always see it.">
         <SegmentedControl
           fullWidth
           value={visibility}
@@ -114,7 +114,7 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
 
       <Section
         title="Slack"
-        hint="Opens the workspace from the batch home, and a direct message with a founder from their profile. Workspace ID: Slack, workspace settings. Channel ID: bottom of the channel details."
+        help="Opens the workspace from the batch home, and a direct message with a founder from their profile. Workspace ID: Slack, workspace settings. Channel ID: bottom of the channel details."
       >
         <Stack>
           <TextInput label="Workspace ID" placeholder="T0123ABCD" value={slackTeamId} error={teamError} onChange={(e) => setSlackTeamId(e.currentTarget.value)} />
@@ -150,7 +150,7 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
           {dirty ? "Save settings" : "No changes"}
         </Button>
         {!dirty && (
-          <Text size="xs" c="dimmed" ta="center" mt={6}>
+          <Text size="xs" c="dimmed" ta="center" mt="xs">
             Changes apply to everyone right away.
           </Text>
         )}
@@ -207,7 +207,7 @@ function CalendarSection({
   return (
     <Section
       title="Google Calendar"
-      hint="The batch's events come from this calendar: every event in the batch's dates, updated as soon as the calendar changes. Their name, times, location, description and video call are then changed in Google Calendar only. Share the calendar with the Hub's account (See all event details), then paste its ID: Google Calendar, the calendar's settings, Integrate calendar."
+      help="The batch's events come from this calendar: every event in the batch's dates, updated as soon as the calendar changes. Their name, times, location, description and video call are then changed in Google Calendar only. Share the calendar with the Hub's account (See all event details), then paste its ID: Google Calendar, the calendar's settings, Integrate calendar."
     >
       <Stack gap="xs">
         <TextInput label="Calendar ID" placeholder="…@group.calendar.google.com" value={input} onChange={(e) => onChange(e.currentTarget.value)} />
@@ -251,7 +251,7 @@ function ScoresSection({ batch }: { batch: WithId<Batch> }) {
   }
   const recompute = () => void run(() => call("recomputeBatchScores")({ batchId: batch.id }), "Scores recomputed");
   return (
-    <Section title="Scores" hint="Program Performance, startup scores, attendance and network. Recomputed every night at 2:00 and when a ranking is published.">
+    <Section title="Scores" help="Program Performance, startup scores, attendance and network. Recomputed every night at 2:00 and when a ranking is published.">
       <Group>
         <Button size="md" variant="default" loading={isBusy} onClick={recompute}>
           Recompute scores

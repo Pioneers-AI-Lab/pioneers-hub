@@ -69,12 +69,12 @@ function ConnectClaude() {
   return (
     <Section
       title="Connect Claude"
-      hint="Claude reads the batch data and fills it in with your rights. Every write is shown to you and confirmed first, and logged with your name. Nothing can be deleted."
+      help="Claude reads the batch data and fills it in with your rights. Every write is shown to you and confirmed first, and logged with your name. Nothing can be deleted."
     >
       <CodeBlock code={MCP_PUBLIC_URL} />
 
       <Label>claude.ai and Claude Desktop</Label>
-      <Stack gap={6}>
+      <Stack gap="xs">
         <Step n={1}>Open Settings, then Connectors, then Add custom connector.</Step>
         <Step n={2}>Name it {APP_NAME} and paste the address above.</Step>
         <Step n={3}>Click Connect, sign in with your {APP_NAME} account, then Allow.</Step>
@@ -138,7 +138,7 @@ function ApiKeys() {
   return (
     <Section
       title="API keys"
-      hint="For scripts and integrations (n8n, Zapier, Airtable). A key acts with your rights. Its value is shown only once."
+      help="For scripts and integrations (n8n, Zapier, Airtable). A key acts with your rights. Its value is shown only once."
     >
       <form
         onSubmit={(e) => {
@@ -155,7 +155,7 @@ function ApiKeys() {
       </form>
 
       {created && (
-        <Stack gap={6} mt="sm">
+        <Stack gap="xs" mt="sm">
           <Text size="sm" fw={600}>
             {created.name}: copy it now, it will not be shown again.
           </Text>
@@ -224,7 +224,7 @@ const ENDPOINTS: { route: string; what: string }[] = [
 
 function ApiReference() {
   return (
-    <Section title="REST API" hint="The same data and rules as Claude, for any tool. Authenticate with an API key.">
+    <Section title="REST API" help="The same data and rules as Claude, for any tool. Authenticate with an API key.">
       <CodeBlock code={`${API_PUBLIC_URL}/v1`} />
 
       <Label>Endpoints</Label>
@@ -264,7 +264,7 @@ function ApiReference() {
 export default function ApiDocsPage() {
   return (
     <>
-      <PageHeader title="API & MCP" subtitle={`Connect Claude to ${APP_NAME}, or plug any tool into its API.`} />
+      <PageHeader title="API & MCP" help={`Connect Claude to ${APP_NAME}, or plug any tool into its API.`} />
       <ConnectClaude />
       <ApiKeys />
       <ApiReference />

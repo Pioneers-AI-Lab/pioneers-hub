@@ -5,7 +5,6 @@ import type { ReactNode } from "react";
 import { Alert, Avatar, Box, Button, Group, Stack, Text, Title } from "@mantine/core";
 import { EXISTING_CO_FOUNDERS_LABELS, type FounderStatus } from "@shared/types";
 import { useFounder } from "@/context/FounderContext";
-import { useLists } from "@/context/ListsContext";
 import { useStartups } from "@/context/StartupsContext";
 import { useBatch } from "@/context/BatchContext";
 import { useProgram } from "@/context/ProgramContext";
@@ -51,7 +50,6 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
   const dir = isDetailsLoading ? null : directory;
   const missing = canEdit && dir ? missingRequiredFields(founder, dir, profile) : [];
   const { startupsById } = useStartups();
-  const { colorOf } = useLists();
   const startup = founder.startupId ? startupsById.get(founder.startupId) : undefined;
   const category = founder.profileCategory ? PROFILE_CATEGORY_LABEL[founder.profileCategory] : null;
   const basedIn = dir
@@ -135,8 +133,8 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
               <Field label="Interested in working on">{dir.interestedInWorkingOn}</Field>
               <Field label="Looking for a co-founder">{yesNo(dir.lookingForCoFounder)}</Field>
               <Field label="Type of co-founder">{dir.coFounderTypeWanted}</Field>
-              <Field label="Skills wanted">{tags(dir.coFounderSkillsWanted, (v) => colorOf("hardSkills", v))}</Field>
-              <Field label="Industries to explore">{tags(dir.industriesToExplore, (v) => colorOf("industries", v))}</Field>
+              <Field label="Skills wanted">{tags(dir.coFounderSkillsWanted, "skill")}</Field>
+              <Field label="Industries to explore">{tags(dir.industriesToExplore, "industry")}</Field>
               <Field label="Open to join another project">{yesNo(dir.openToJoinAnotherProject)}</Field>
               <Field label="Existing project">{dir.hasExistingProject ? dir.projectExplanation ?? "Yes" : yesNo(dir.hasExistingProject)}</Field>
               <Field label="Existing co-founders">
@@ -150,12 +148,12 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
       {dir && (
         <Section title="Background">
           <FieldGrid>
-            <Field label="Education">{tags(dir.education)}</Field>
+            <Field label="Education">{tags(dir.education, "school")}</Field>
             <Field label="Degree">{[dir.degree, dir.fieldOfStudy].filter(Boolean).join(", ")}</Field>
             <Field label="Years of experience">
               {dir.yearsOfXP !== null ? <span className="num">{dir.yearsOfXP}</span> : null}
             </Field>
-            <Field label="Notable companies">{tags(dir.notableCompanies)}</Field>
+            <Field label="Notable companies">{tags(dir.notableCompanies, "company")}</Field>
             <Field label="Gender">{dir.gender}</Field>
             <Field label="Main startup in 2025">{dir.mainStartup2025}</Field>
             <Field label="Repeat founder">{yesNo(dir.repeatFounder)}</Field>
@@ -171,9 +169,9 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
 
       <Section title="Skills">
         <Stack gap="md">
-          <Field label="Hard skills">{tags(founder.hardSkills, (v) => colorOf("hardSkills", v))}</Field>
-          <Field label="Industries">{tags(founder.industries, (v) => colorOf("industries", v))}</Field>
-          <Field label="Roles I could take">{tags(founder.rolesICouldTake)}</Field>
+          <Field label="Hard skills">{tags(founder.hardSkills, "skill")}</Field>
+          <Field label="Industries">{tags(founder.industries, "industry")}</Field>
+          <Field label="Roles I could take">{tags(founder.rolesICouldTake, "role")}</Field>
         </Stack>
       </Section>
 
@@ -198,7 +196,7 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
       <FounderWeeks />
 
       {profile && [profile.age, profile.birthDayString, profile.tShirtSize, profile.housingSupport].some((v) => v !== null && v !== undefined) && (
-        <Section title="Private" hint="Visible to you, the Pioneers team and the investment committee.">
+        <Section title="Private" help="Visible to you, the Pioneers team and the investment committee.">
           <FieldGrid>
             <Field label="Age">{profile.age !== null ? <span className="num">{profile.age}</span> : null}</Field>
             <Field label="Birth date">{profile.birthDayString ? <span className="num">{formatDay(profile.birthDayString)}</span> : null}</Field>
@@ -209,7 +207,7 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
       )}
 
       {internal && (
-        <Section title="Internal" hint="Pioneers team and investment committee only.">
+        <Section title="Internal" help="Pioneers team and investment committee only.">
           <FieldGrid>
             <Field label="Account">{founder.uid ? `Linked ${formatDay(founder.claimedDateISOString?.slice(0, 10))}` : "Not linked"}</Field>
           </FieldGrid>

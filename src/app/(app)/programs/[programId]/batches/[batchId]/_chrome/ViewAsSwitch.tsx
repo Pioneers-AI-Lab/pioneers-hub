@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Button, Menu, Select, Text } from "@mantine/core";
 import type { BatchRole } from "@shared/access";
 import { useBatch } from "@/context/BatchContext";
@@ -26,19 +27,21 @@ const VIEW_LABEL: Record<BatchRole, string> = {
 export function ViewAsSwitch() {
   const { batch, role, viewerFounderId } = useBatch();
   const { founderId: pageFounderId } = useParamsTS<{ founderId?: string }>();
+  const [isOpen, setOpen] = useState(false);
   const previewing = role !== "staff";
   const pick = (next: BatchRole) =>
     setViewAs(next === "staff" ? null : { role: next, batchId: batch.id, founderId: pageFounderId || viewerFounderId });
 
   return (
-    <Menu position="bottom-end" withinPortal>
+    // Le chevron se retourne tant que le menu est ouvert (docs/UI-RULES.md §9).
+    <Menu position="bottom-end" withinPortal opened={isOpen} onChange={setOpen}>
       <Menu.Target>
         <Button
           size="compact-sm"
           h={40}
           variant={previewing ? "light" : "subtle"}
           color={previewing ? "orange" : "pioneers"}
-          rightSection={<ExpandChevron expanded={false} size={14} />}
+          rightSection={<ExpandChevron expanded={isOpen} size={14} />}
           style={{ flexShrink: 0 }}
         >
           {previewing ? `As ${VIEW_LABEL[role]}` : VIEW_LABEL.staff}

@@ -7,7 +7,7 @@ import { isUpcomingEvent } from "@shared/events";
 import { useBatch } from "@/context/BatchContext";
 import { useEvents } from "@/context/EventsContext";
 import { useProgram } from "@/context/ProgramContext";
-import { formatTime, formatTimePlace, formatWeekDay, relativeDays } from "@/lib/format";
+import { formatTime, formatEndPlace, formatWeekDay, relativeDays } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { Section } from "@/components/ui/Section";
 import { CardLink } from "@/components/ui/StatTile";
@@ -17,7 +17,7 @@ import { CardLink } from "@/components/ui/StatTile";
  * voit, quel qu'il soit (`useEvents`, deja filtre par `canSeeEvent`), en cours
  * compris (« Now ») : pendant un hackathon, c'est la qu'on cherche son groupe
  * et ses formulaires. Comme une ligne du Calendar : l'heure de debut a gauche du
- * nom, dans son style, `debut–fin · lieu` dessous ; puis le jour et son ecart a
+ * nom, dans son style, `Until fin · lieu` dessous ; puis le jour et son ecart a
  * aujourd'hui. L'encadre ouvre sa page, « See all » l'onglet Calendar. Rien a
  * venir : rien (l'onglet reste la).
  */
@@ -41,7 +41,7 @@ export function NextSession() {
       }
     >
       <CardLink href={paths.event(program.id, batch.id, next.id)}>
-        <Group gap={12} wrap="nowrap" align="flex-start">
+        <Group gap="sm" wrap="nowrap" align="flex-start">
           <Text fz={22} fw={600} c="white" className="num" style={{ flexShrink: 0 }}>
             {formatTime(start)}
           </Text>
@@ -50,7 +50,7 @@ export function NextSession() {
               {next.name}
             </Text>
             <Text size="sm" c="dimmed" mt={2} className="num">
-              {formatTimePlace(next)}
+              {formatEndPlace(next)}
             </Text>
             <Text size="sm" c="dimmed">
               {formatWeekDay(day)} ·{" "}

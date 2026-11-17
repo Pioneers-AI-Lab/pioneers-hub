@@ -28,7 +28,7 @@ export function RangeBar({
   const css = `var(--mantine-color-${color.replace(".", "-")})`;
 
   return (
-    <Stack gap={6}>
+    <Stack gap="xs">
       <Group justify="space-between" gap="xs" wrap="nowrap">
         <Text size="sm" c="dimmed">
           {range.label}

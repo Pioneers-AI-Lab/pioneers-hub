@@ -21,7 +21,7 @@ export function TeamSubmission({ eventId, teamId, submission }: Props) {
   const { isBusy, run } = useAction();
 
   return (
-    <Section title="Submission" hint="What the team sent. The jury checks the proofs in the Drive folder when it scores.">
+    <Section title="Submission" help="What the team sent. The jury checks the proofs in the Drive folder when it scores.">
       <Stack gap="md" maw={480}>
         <Field label="Drive folder">{submission.driveFolderUrl ? <ExternalLink href={submission.driveFolderUrl} /> : null}</Field>
         <Field label="Pain in one sentence">{submission.painSentence}</Field>

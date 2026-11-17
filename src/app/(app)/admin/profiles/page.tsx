@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
+import { WithHelp } from "@/components/ui/Help";
 
 // ----------------------------
 // Admin > Founder profiles : quel compte est rattache a chaque profil du batch
@@ -103,19 +104,19 @@ export default function AdminProfilesPage() {
       <PageHeader
         back={{ href: paths.admin(), label: "Admin" }}
         title="Founder profiles"
-        subtitle="The account linked to each founder profile. Founders link their own at sign-in; fix a mistake here."
+        help="The account linked to each founder profile. Founders link their own at sign-in; fix a mistake here."
       />
       <BatchPicker />
 
       <TextInput placeholder="Search by name or email" value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
 
-      <Section title={`Linked · ${linked.length}`} hint="Most recent first.">
+      <Section title={`Linked · ${linked.length}`} help="Most recent first.">
         {linked.length === 0 ? (
           <Empty>{q ? "No linked profile matches." : `No account linked in ${batch.name} yet.`}</Empty>
         ) : (
           <RowList>
             {linked.map((f) => (
-              <ButtonRow
+              <ButtonRow opens
                 key={f.id}
                 onClick={() => open(f)}
                 avatar={{ name: f.name, photoUrl: f.photoUrl }}
@@ -127,20 +128,20 @@ export default function AdminProfilesPage() {
         )}
       </Section>
 
-      <Section title={`Not linked · ${notLinked.length}`} hint="They link themselves at sign-in: by email, or by picking their name.">
+      <Section title={`Not linked · ${notLinked.length}`} help="They link themselves at sign-in: by email, or by picking their name.">
         {notLinked.length === 0 ? (
           <Empty>{q ? "No profile matches." : "Every profile is linked."}</Empty>
         ) : (
           <RowList>
             {notLinked.map((f) => (
-              <ButtonRow key={f.id} onClick={() => open(f)} avatar={{ name: f.name, photoUrl: f.photoUrl }} title={f.name} subtitle="Not linked" />
+              <ButtonRow opens key={f.id} onClick={() => open(f)} avatar={{ name: f.name, photoUrl: f.photoUrl }} title={f.name} subtitle="Not linked" />
             ))}
           </RowList>
         )}
       </Section>
 
       {archivedFounders.length > 0 && (
-        <Section title={`Archived · ${archivedFounders.length}`} hint="Out of the lists, draws and forms. Restore a profile archived by mistake.">
+        <Section title={`Archived · ${archivedFounders.length}`} help="Out of the lists, draws and forms. Restore a profile archived by mistake.">
           <RowList>
             {archivedFounders.map((f) => (
               <ButtonRow
@@ -208,18 +209,21 @@ export default function AdminProfilesPage() {
               </>
             ) : (
               <>
-                <Select
-                  label="Account"
-                  description="Accounts without a profile in this batch. To add someone new, invite them in Admin > Access first."
-                  placeholder={data ? "Search by name or email" : "Loading accounts…"}
-                  searchable
-                  data={linkable}
-                  value={accountUid}
-                  onChange={setAccountUid}
-                  filter={accountFilter}
-                  nothingFoundMessage="No account matches."
-                  comboboxProps={{ withinPortal: true }}
-                />
+                <WithHelp label="Account" help="Accounts without a profile in this batch. To add someone new, invite them in Admin > Access first.">
+                  {(field) => (
+                    <Select
+                      {...field}
+                      placeholder={data ? "Search by name or email" : "Loading accounts…"}
+                      searchable
+                      data={linkable}
+                      value={accountUid}
+                      onChange={setAccountUid}
+                      filter={accountFilter}
+                      nothingFoundMessage="No account matches."
+                      comboboxProps={{ withinPortal: true }}
+                    />
+                  )}
+                </WithHelp>
                 <Button size="md" fullWidth loading={busy === "link"} disabled={!accountUid || busy !== null} onClick={() => link(selected)}>
                   Link
                 </Button>

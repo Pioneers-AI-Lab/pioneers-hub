@@ -107,8 +107,8 @@ function BackgroundGrid({ row, nextFounderId }: { row: BackgroundRow; nextFounde
               <Field label="Existing project">{yesNoLabel(d.hasExistingProject)}</Field>
               <Field label="Existing co-founders">{d.hasExistingCoFounders ? EXISTING_CO_FOUNDERS_LABELS[d.hasExistingCoFounders] : null}</Field>
             </FieldGrid>
-            <Field label="Education">{tagsOrNull(d.education)}</Field>
-            <Field label="Notable companies">{tagsOrNull(d.notableCompanies)}</Field>
+            <Field label="Education">{tagsOrNull(d.education, "school")}</Field>
+            <Field label="Notable companies">{tagsOrNull(d.notableCompanies, "company")}</Field>
             <Field label="Project">{d.projectExplanation}</Field>
             <Field label="LinkedIn">
               <ExternalLink href={d.linkedinUrl} />

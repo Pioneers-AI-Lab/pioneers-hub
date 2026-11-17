@@ -76,7 +76,7 @@ export default function StartupPage() {
 
       {canSeeProfile && isProfileLoading && <PageLoader />}
       {canSeeProfile && !isProfileLoading && (
-        <Section title="Profile" hint={isMember ? "Visible to your team, the Pioneers team and investors." : undefined}>
+        <Section title="Profile" help={isMember ? "Visible to your team, the Pioneers team and investors." : undefined}>
           {profile ? (
             <Stack gap="md">
               <Field label="ICP">{profile.icp}</Field>
@@ -100,7 +100,7 @@ export default function StartupPage() {
       <MarketAnalysisSection />
 
       {internal && (
-        <Section title="Internal" hint="Pioneers team and investment committee only.">
+        <Section title="Internal" help="Pioneers team and investment committee only.">
           <FieldGrid>
             <Field label="Go">{yesNo(internal.go)}</Field>
             <Field label="Clear idea">{yesNo(internal.clearIdea)}</Field>

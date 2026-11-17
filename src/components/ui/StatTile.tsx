@@ -1,13 +1,21 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Paper, SimpleGrid, Text } from "@mantine/core";
+import { SimpleGrid, Text } from "@mantine/core";
+import { NavChevron } from "./Rows";
 
-/** Une carte cliquable (tuile, prochaine seance) : le cadre des tuiles, toute la carte est le lien. */
+/**
+ * Une carte cliquable (tuile, prochaine seance) : toute la carte est le lien. `.card` : la
+ * surface commune des cartes ; `state-layer` : ses etats (survol, appui) (globals.css) ;
+ * `>` en haut a droite, comme au bout d'une ligne qui mene a une page (`.card-nav`).
+ */
 export function CardLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <Paper component={Link} href={href} withBorder p="md" radius="md" bg="dark.6" style={{ textDecoration: "none", color: "inherit" }}>
+    <Link href={href} className="card card-pad card-link card-nav state-layer">
       {children}
-    </Paper>
+      <span className="card-nav-icon">
+        <NavChevron />
+      </span>
+    </Link>
   );
 }
 
@@ -21,12 +29,11 @@ export function StatTile({ label, value, href }: { label: string; value: ReactNo
       </Text>
     </>
   );
+  // Meme boite, cliquable ou non : libelle et chiffre au meme endroit dans toutes les tuiles.
   return href ? (
     <CardLink href={href}>{body}</CardLink>
   ) : (
-    <Paper withBorder p="md" radius="md" bg="dark.6">
-      {body}
-    </Paper>
+    <div className="card card-pad">{body}</div>
   );
 }
 

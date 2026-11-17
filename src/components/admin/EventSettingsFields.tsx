@@ -8,7 +8,8 @@ import type { CalendarSource, EventAudience, EventGuest, PioneersEvent } from "@
 import { useAdmin } from "@/context/AdminContext";
 import { fromLocalInput, toLocalInput } from "@/lib/format";
 import type { EventSettings } from "@/lib/eventsAdmin";
-import { useHelp } from "@/components/ui/useHelp";
+import { ExpandChevron } from "@/components/ui/Rows";
+import { WithHelp } from "@/components/ui/Help";
 
 // ----------------------------
 // Les reglages d'un evenement, dans l'ordre d'un agenda (decision du 13/11)
@@ -123,7 +124,6 @@ export function EventSettingsFields({
   children?: ReactNode;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
-  const milestoneHelp = useHelp("Batch milestone", "Flagged in the Slack summaries.");
   const set = <K extends keyof SettingsDraft>(key: K, value: SettingsDraft[K]) => onChange({ ...draft, [key]: value });
   const minutes = minutesBetween(draft.start, draft.end);
   const durationValue = minutes !== null && DURATIONS.includes(minutes) ? String(minutes) : CUSTOM;
@@ -174,7 +174,14 @@ export function EventSettingsFields({
       {children}
 
       <div>
-        <Button variant="subtle" color="gray" px={0} onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen}>
+        <Button
+          variant="subtle"
+          color="gray"
+          px={0}
+          onClick={() => setMoreOpen((o) => !o)}
+          aria-expanded={moreOpen}
+          rightSection={<ExpandChevron expanded={moreOpen} />}
+        >
           {moreOpen ? "Fewer options" : "More options: location, description, video call, links"}
         </Button>
         <Collapse expanded={moreOpen}>
@@ -182,7 +189,9 @@ export function EventSettingsFields({
             <TextInput label="Location" placeholder="Station F" disabled={locked} value={draft.location} onChange={(e) => set("location", e.currentTarget.value)} />
             <Textarea label="Description" autosize minRows={2} placeholder="What the event is about" disabled={locked} value={draft.topic} onChange={(e) => set("topic", e.currentTarget.value)} />
             <TextInput label="Video call link" placeholder="Google Meet, Zoom" disabled={locked} value={draft.videoCallUrl} onChange={(e) => set("videoCallUrl", e.currentTarget.value)} />
-            <Switch size="md" {...milestoneHelp} checked={draft.isMilestone} onChange={(e) => set("isMilestone", e.currentTarget.checked)} />
+            <WithHelp label="Batch milestone" help="Flagged in the Slack summaries.">
+              {(field) => <Switch size="md" {...field} checked={draft.isMilestone} onChange={(e) => set("isMilestone", e.currentTarget.checked)} />}
+            </WithHelp>
             <TextInput label="Sign-up link" placeholder="https://" value={draft.signUpUrl} onChange={(e) => set("signUpUrl", e.currentTarget.value)} />
             <TextInput label="Resource link" placeholder="Slides, brief, recording" value={draft.resourceUrl} onChange={(e) => set("resourceUrl", e.currentTarget.value)} />
           </Stack>
@@ -200,7 +209,6 @@ export function EventSettingsFields({
 function GuestsField({ draft, onChange, canChangeBatch }: { draft: SettingsDraft; onChange: (next: SettingsDraft) => void; canChangeBatch: boolean }) {
   const { batch, batches, selectBatch, founders, foundersById, startups } = useAdmin();
   const [external, setExternal] = useState("");
-  const guestsHelp = useHelp("Guests", "The whole batch, or only some founders, startups and guests: only they see the event.");
 
   const batchValue = `batch:${batch.id}`;
   const value = [
@@ -247,16 +255,20 @@ function GuestsField({ draft, onChange, canChangeBatch }: { draft: SettingsDraft
   };
 
   return (
-    <Stack gap={6}>
-      <MultiSelect
-        {...guestsHelp}
-        placeholder={value.length ? undefined : "Add guests"}
-        searchable
-        data={data}
-        value={value}
-        onChange={change}
-        comboboxProps={{ withinPortal: true }}
-      />
+    <Stack gap="xs">
+      <WithHelp label="Guests" help="The whole batch, or only some founders, startups and guests: only they see the event.">
+        {(field) => (
+          <MultiSelect
+            {...field}
+            placeholder={value.length ? undefined : "Add guests"}
+            searchable
+            data={data}
+            value={value}
+            onChange={change}
+            comboboxProps={{ withinPortal: true }}
+          />
+        )}
+      </WithHelp>
       <TextInput
         aria-label="Add an outside guest"
         placeholder="Outside guest: type a name, then Enter"

@@ -1,5 +1,5 @@
 import dayjs from "dayjs";
-import { parisToday } from "@shared/dates";
+import { parisDay, parisToday } from "@shared/dates";
 import type { ScoreScale } from "@shared/types";
 
 export { searchKey } from "@shared/text";
@@ -31,15 +31,26 @@ export function formatTime(iso: string | null | undefined): string {
   return d.isValid() ? d.format("HH:mm") : iso;
 }
 
-/** Sous le nom d'un evenement place sous son jour : `09:30–11:00 · Lieu` (sans fin : `09:30 · Lieu`). */
-export function formatTimePlace(e: {
+/** La fin d'un evenement : l'heure seule le meme jour (de Paris, comme les titres de jour), sinon jour et heure. */
+const formatEnd = (start: string, end: string) => (parisDay(start) === parisDay(end) ? formatTime(end) : formatDateTime(end));
+
+/**
+ * Sous le nom d'un evenement dont l'heure de debut est deja affichee a gauche (Calendar,
+ * Next session) : `Until 11:00 · Lieu`, sans repeter le debut (`Until Fri 27 Nov, 19:30`
+ * s'il finit un autre jour ; sans fin : le lieu seul).
+ */
+export function formatEndPlace(e: {
   startDateISOString: string;
   endDateISOString: string | null;
   location: string | null;
 }): string {
-  const start = formatTime(e.startDateISOString);
-  const time = e.endDateISOString ? `${start}–${formatTime(e.endDateISOString)}` : start;
-  return e.location ? `${time} · ${e.location}` : time;
+  const until = e.endDateISOString ? `Until ${formatEnd(e.startDateISOString, e.endDateISOString)}` : null;
+  return [until, e.location].filter(Boolean).join(" · ");
+}
+
+/** `Wed 18 Nov, 09:30 to 11:30` : le jour n'est repete que si la fin tombe un autre jour. */
+export function formatDateTimeRange(start: string, end: string | null): string {
+  return end ? `${formatDateTime(start)} to ${formatEnd(start, end)}` : formatDateTime(start);
 }
 
 /** Jours entiers d'aujourd'hui (ou du jour `from`, `YYYY-MM-DD`) au jour donne (negatif si passe). */

@@ -102,7 +102,7 @@ export function AttendanceSheet({ event }: { event: WithId<PioneersEvent> }) {
 
       <Section
         title={attendanceSummary(roster)}
-        hint="Everyone is present until you mark them. Tap a founder once for absent, twice for late, three times for present again. Absent founders are left out of the draw, the event's forms and its picks: take attendance before them."
+        help="Everyone is present until you mark them. Tap a founder once for absent, twice for late, three times for present again. Absent founders are left out of the draw, the event's forms and its picks: take attendance before them."
       >
         {roster.rows.length > 12 && (
           <TextInput mb="sm" maw={480} placeholder="Search a founder" value={search} onChange={(e) => setSearch(e.currentTarget.value)} />

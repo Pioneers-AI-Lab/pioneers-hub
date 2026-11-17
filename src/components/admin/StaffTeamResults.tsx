@@ -7,7 +7,9 @@ import type { EventMetric, Submission, WithId } from "@shared/types";
 import { useAuth } from "@/context/AuthContext";
 import { useAction } from "@/hooks/useAction";
 import { saveTeamResults } from "@/lib/resultsAdmin";
+import { formatDateTime } from "@/lib/format";
 import { Section } from "@/components/ui/Section";
+import { WithHelp } from "@/components/ui/Help";
 
 // ----------------------------
 // Les resultats d'une equipe, corriges par le staff
@@ -16,9 +18,9 @@ import { Section } from "@/components/ui/Section";
 // une valeur saisie ici est marquee `staff`. A monter avec une `key` tiree de
 // l'enregistrement : il repart alors des valeurs de la base.
 
-type Props = { eventId: string; teamId: string; metrics: EventMetric[]; current: WithId<Submission> | null; hint: string };
+type Props = { eventId: string; teamId: string; metrics: EventMetric[]; current: WithId<Submission> | null };
 
-export function StaffTeamResults({ eventId, teamId, metrics: declared, current, hint }: Props) {
+export function StaffTeamResults({ eventId, teamId, metrics: declared, current }: Props) {
   const { firebaseUser } = useAuth();
   const [metrics, setMetrics] = useState<Record<string, number | null>>(() =>
     Object.fromEntries(declared.map((m) => [m.key, current?.metrics?.[m.key] ?? null])),
@@ -51,7 +53,11 @@ export function StaffTeamResults({ eventId, teamId, metrics: declared, current, 
     );
 
   return (
-    <Section title="Results" hint={hint}>
+    <Section
+      title="Results"
+      hint={current?.submittedDateISOString ? `Last saved ${formatDateTime(current.submittedDateISOString)}.` : "Nothing entered yet."}
+      help="The metrics are the questions of the event's submission. Numbers you save here are marked as entered by the staff."
+    >
       <Stack gap="sm" maw={480}>
         {declared.map((m) => (
           <NumberInput
@@ -63,7 +69,11 @@ export function StaffTeamResults({ eventId, teamId, metrics: declared, current, 
           />
         ))}
         <TextInput label="Product link" inputMode="url" placeholder="https://" value={productUrl} onChange={(e) => setProductUrl(e.currentTarget.value)} />
-        <Textarea label="Proof links" description="One link per line." autosize minRows={2} value={proofs} onChange={(e) => setProofs(e.currentTarget.value)} />
+        <WithHelp label="Proof links" help="One link per line.">
+          {(field) => (
+            <Textarea {...field} autosize minRows={2} value={proofs} onChange={(e) => setProofs(e.currentTarget.value)} />
+          )}
+        </WithHelp>
         <Textarea label="Notes" autosize minRows={2} value={notes} onChange={(e) => setNotes(e.currentTarget.value)} />
         <Button size="md" fullWidth loading={isBusy} onClick={save}>
           Save results

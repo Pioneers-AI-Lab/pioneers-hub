@@ -22,7 +22,7 @@ export function ActionBar({ label, loading, disabled, problem, href, onClick }: 
   return (
     <Box className="savebar">
       {problem && (
-        <Text size="sm" c="red.4" mb={6}>
+        <Text size="sm" c="red.4" mb="xs">
           {problem}
         </Text>
       )}

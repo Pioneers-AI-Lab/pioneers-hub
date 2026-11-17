@@ -29,15 +29,16 @@ export function RankedBars({
   if (rows.length === 0) return null;
 
   return (
-    <Stack gap={10}>
+    <Stack gap="xs">
       {rows.map((r) => (
+        // Le libelle contre sa barre (proximite) : libelle cale a droite, barre, valeur.
         <Group key={r.key} gap="sm" wrap="nowrap">
-          <Box w="38%" h={5} bg={CHART_COLORS.track} style={{ borderRadius: 99, flexShrink: 0, overflow: "hidden" }}>
-            <Box h="100%" w={`${(r.value / top) * 100}%`} style={{ borderRadius: 99, background: cssColor(r.color ?? CHART_COLORS.primary) }} />
-          </Box>
-          <Text size="sm" c="dimmed" style={{ flex: 1, minWidth: 0 }} truncate ta="right">
+          <Text size="sm" c="dimmed" w="40%" style={{ flexShrink: 0 }} truncate ta="right">
             {r.label}
           </Text>
+          <Box h={5} bg={CHART_COLORS.track} style={{ flex: 1, minWidth: 0, borderRadius: 99, overflow: "hidden" }}>
+            <Box h="100%" w={`${(r.value / top) * 100}%`} style={{ borderRadius: 99, background: cssColor(r.color ?? CHART_COLORS.primary) }} />
+          </Box>
           <Text size="sm" fw={600} className="num" w={28} ta="right" style={{ flexShrink: 0 }}>
             {r.value}
           </Text>

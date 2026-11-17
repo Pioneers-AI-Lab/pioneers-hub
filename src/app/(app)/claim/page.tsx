@@ -95,7 +95,7 @@ export default function ClaimPage() {
   return (
     <Stack gap={0}>
       <Title order={2}>Find your profile</Title>
-      <Text c="dimmed" mt={6}>
+      <Text c="dimmed" mt="xs">
         Pick your name in your batch: your account (<Text span c="white" inherit>{firebaseUser.email}</Text>) is linked
         right away.
       </Text>

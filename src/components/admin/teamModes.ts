@@ -8,19 +8,19 @@ import { TEAM_LABELS, type TeamLabels } from "@/components/event/teamLabels";
 
 export type TeamToolMode = GeneratorMode;
 
-export const TEAM_TOOLS: Record<TeamToolMode, TeamLabels & { title: string; summary: string; rulesHint: string }> = {
+export const TEAM_TOOLS: Record<TeamToolMode, TeamLabels & { title: string; summary: string; rulesHelp: string }> = {
   challenge: {
     ...TEAM_LABELS.challenge,
     title: "Teams",
     summary: "Work teams: a leader, at least one technical profile each",
-    rulesHint:
+    rulesHelp:
       "Rules, strictest first: never the same pair twice in a challenge (unless kept together); at least one technical profile per team (hybrid counts); bring together founders who shortlisted each other; then one-way shortlists; avoid pairs who already met at a lunch roulette.",
   },
   matching: {
     ...TEAM_LABELS.matching,
     title: "Tables",
     summary: "Tables to meet new people",
-    rulesHint:
+    rulesHelp:
       "Rules, strictest first: never the same pair twice at a lunch roulette; avoid pairs who both marked each other as met; then avoid pairs who already teamed up in a challenge.",
   },
 };

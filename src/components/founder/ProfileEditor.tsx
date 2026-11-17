@@ -30,6 +30,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PhotoUpload } from "./PhotoUpload";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { Section } from "@/components/ui/Section";
+import { WithHelp } from "@/components/ui/Help";
 
 // ----------------------------
 // Edition d'un profil fondateur : par lui-meme (« Mon profil », me/edit) ou par
@@ -97,7 +98,7 @@ function splitCharsOf(key: DbFieldKey): string[] | undefined {
 /** Oui / Non / non renseigne, en un geste. */
 function YesNo({ label, value, onChange, withAsterisk }: { label: string; value: boolean | null; onChange: (v: boolean | null) => void; withAsterisk?: boolean }) {
   return (
-    <Stack gap={6}>
+    <Stack gap="xs">
       <Text size="sm" fw={500}>
         {label}
         {withAsterisk && <Text span c="var(--input-asterisk-color)"> *</Text>}
@@ -247,7 +248,7 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
       <PageHeader
         back={back}
         title={isSelf ? "Edit profile" : `Edit ${founder.name}`}
-        subtitle={copy.subtitle}
+        help={copy.subtitle}
       />
 
       <Section title="Photo" hint={canWriteIdentity ? undefined : "Your account is not linked to your identity yet: ask the team to change your photo."}>
@@ -276,21 +277,28 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
       <Section title="About">
         <Stack>
           <Textarea label="Introduce yourself" {...req("founderDirectory.introduceYourself")} autosize minRows={3} value={dir.introduceYourself ?? ""} onChange={(e) => setD("introduceYourself", text(e.currentTarget.value))} />
-          <Textarea label="Track record" {...req("founderDirectory.trackRecord")} description="What you are most proud of, in 2 to 4 points." autosize minRows={3} value={dir.trackRecord ?? ""} onChange={(e) => setD("trackRecord", text(e.currentTarget.value))} />
+          <WithHelp label="Track record" help="What you are most proud of, in 2 to 4 points.">
+            {(field) => (
+              <Textarea {...field} {...req("founderDirectory.trackRecord")} autosize minRows={3} value={dir.trackRecord ?? ""} onChange={(e) => setD("trackRecord", text(e.currentTarget.value))} />
+            )}
+          </WithHelp>
         </Stack>
       </Section>
 
       <Section title="Background">
         <Stack>
-          <TagsInput
-            label="Education"
-            description="One school or degree per entry."
-            splitChars={splitCharsOf("founderDirectory.education")}
-            {...req("founderDirectory.education")}
-            value={dir.education}
-            onChange={(v) => setD("education", v)}
-            placeholder="Type and press Enter"
-          />
+          <WithHelp label="Education" help="One school or degree per entry.">
+            {(field) => (
+              <TagsInput
+                {...field}
+                splitChars={splitCharsOf("founderDirectory.education")}
+                {...req("founderDirectory.education")}
+                value={dir.education}
+                onChange={(v) => setD("education", v)}
+                placeholder="Type and press Enter"
+              />
+            )}
+          </WithHelp>
           <Select
             label="Degree"
             data={[...new Set([...degrees, ...(dir.degree ? [dir.degree] : [])])]}
@@ -335,7 +343,7 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
         </Stack>
       </Section>
 
-      <Section title="Private" hint={copy.privateHint}>
+      <Section title="Private" help={copy.privateHint}>
         <Stack>
           <Select label="T-shirt size" data={T_SHIRTS} value={draft.profile.tShirtSize} onChange={(v) => setP("tShirtSize", v)} clearable />
           <YesNo label="I need help with housing" value={draft.profile.housingSupport} onChange={(v) => setP("housingSupport", v)} />
@@ -343,25 +351,31 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
       </Section>
 
       {isStaff && (
-        <Section title="Staff only" hint="Only the Pioneers team edits this. Not part of profile completeness.">
+        <Section title="Staff only" help="Only the Pioneers team edits this. Not part of profile completeness.">
           <Stack>
-            <Textarea
-              label="One-liner"
-              description="One sentence on the founder's edge, under their name in the founders grid and list."
-              autosize
-              minRows={1}
-              maxLength={ONE_LINER_MAX}
-              value={draft.staff.trackRecordOneLiner ?? ""}
-              onChange={(e) => setS("trackRecordOneLiner", text(e.currentTarget.value))}
-            />
-            <TextInput
-              label="Slack member ID"
-              description="In Slack: their profile, then Copy member ID."
-              placeholder="U0123ABCD"
-              value={draft.staff.slackUserId ?? ""}
-              onChange={(e) => setS("slackUserId", normalizeSlackId(e.currentTarget.value))}
-              error={slackInvalid ? "Starts with U (or W), like U0123ABCD." : undefined}
-            />
+            <WithHelp label="One-liner" help="One sentence on the founder's edge, under their name in the founders grid and list.">
+              {(field) => (
+                <Textarea
+                  {...field}
+                  autosize
+                  minRows={1}
+                  maxLength={ONE_LINER_MAX}
+                  value={draft.staff.trackRecordOneLiner ?? ""}
+                  onChange={(e) => setS("trackRecordOneLiner", text(e.currentTarget.value))}
+                />
+              )}
+            </WithHelp>
+            <WithHelp label="Slack member ID" help="In Slack: their profile, then Copy member ID.">
+              {(field) => (
+                <TextInput
+                  {...field}
+                  placeholder="U0123ABCD"
+                  value={draft.staff.slackUserId ?? ""}
+                  onChange={(e) => setS("slackUserId", normalizeSlackId(e.currentTarget.value))}
+                  error={slackInvalid ? "Starts with U (or W), like U0123ABCD." : undefined}
+                />
+              )}
+            </WithHelp>
           </Stack>
         </Section>
       )}

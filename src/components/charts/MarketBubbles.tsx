@@ -44,7 +44,7 @@ export function MarketBubbles({ sizes, cagr }: { sizes: MarketSize[]; cagr?: num
           const d = diameter(s.mid);
           const isActive = active === s.key;
           return (
-            <Stack key={s.key} align="center" gap={6} style={{ flex: 1, minWidth: 0 }}>
+            <Stack key={s.key} align="center" gap="xs" style={{ flex: 1, minWidth: 0 }}>
               <UnstyledButton
                 className="bubble"
                 onClick={() => setActive(isActive ? null : s.key)}

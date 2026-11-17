@@ -13,7 +13,7 @@ import { CHART_COLORS } from "./ChartCard";
 // Une ligne par composante : initiale, nom, poids, valeur sur son echelle, mini barre ;
 // sous le nom, d'ou vient la valeur (`source` : « Hackathons (3): 74 · Peer ratings (4): 63 »),
 // toujours affiche. Un appui deplie les signaux qui l'expliquent : la ligne entiere est
-// le bouton, un chevron (tourne vers le bas une fois ouvert) signale les lignes depliables.
+// le bouton, un chevron `v` (retourne une fois ouvert) signale les lignes depliables.
 
 export type BreakdownRow = {
   key: string;
@@ -41,7 +41,7 @@ export function ScoreBreakdown({ rows, scale }: { rows: BreakdownRow[]; scale: S
           <Box key={r.key} style={{ borderBottom: "1px solid var(--mantine-color-dark-4)" }}>
             <UnstyledButton
               w="100%"
-              py={10}
+              py="xs"
               onClick={() => canOpen && setOpen(isOpen ? null : r.key)}
               aria-expanded={canOpen ? isOpen : undefined}
               style={{ cursor: canOpen ? "pointer" : "default" }}
@@ -74,7 +74,7 @@ export function ScoreBreakdown({ rows, scale }: { rows: BreakdownRow[]; scale: S
             </UnstyledButton>
             {canOpen && (
               <Collapse expanded={isOpen}>
-                <Box pb={10} pl={34}>
+                <Box pb="xs" pl={34}>
                   {r.details}
                 </Box>
               </Collapse>

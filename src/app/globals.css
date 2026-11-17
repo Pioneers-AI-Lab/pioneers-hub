@@ -30,36 +30,87 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Une ligne de liste : toute la ligne est la cible tactile. */
+/* ----------------------------------------------------------------------------
+   Etats d'interaction (docs/UI-RULES.md) : TOUT element cliquable dessine par nous porte
+   la classe `state-layer` (lignes de Rows.tsx, cartes-liens, onglets, avatar du compte,
+   logo) : un voile clair pose sur lui, plus fort a l'appui qu'au survol (modele
+   Material). Les composants Mantine ont deja leurs etats. Focus clavier : un seul anneau.
+   ---------------------------------------------------------------------------- */
+:root {
+  --state-hover: rgba(255, 255, 255, 0.05);
+  --state-pressed: rgba(255, 255, 255, 0.1);
+}
+/* Ligne avec une action a droite (`LinkRow` + `action`) : le voile suit son seul lien. */
+.state-layer,
+.row:has(> .row-link) {
+  position: relative;
+}
+.state-layer::after,
+.row:has(> .row-link)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  transition: background-color 120ms ease;
+}
+@media (hover: hover) {
+  .state-layer:enabled:hover::after,
+  a.state-layer:hover::after,
+  .row:has(> .row-link:hover)::after {
+    background: var(--state-hover);
+  }
+  .card-link:hover {
+    border-color: var(--mantine-color-dark-3);
+  }
+}
+.state-layer:enabled:active::after,
+a.state-layer:active::after,
+.row:has(> .row-link:active)::after,
+/* Menu ouvert depuis l'element (avatar du compte) : il reste « appuye ». */
+.state-layer[data-expanded]::after {
+  background: var(--state-pressed);
+}
+/* Modificateurs. Une ligne garde son texte aligne sur le titre de section : son voile deborde. */
+.row::after {
+  inset: 0 calc(-1 * var(--mantine-spacing-xs));
+  border-radius: var(--mantine-radius-sm);
+}
+.toptabs a::after {
+  border-radius: var(--mantine-radius-sm) var(--mantine-radius-sm) 0 0;
+}
+/* Focus clavier : le meme anneau que les composants Mantine (`mantine-focus-auto`) ; la
+   specificite (element + pseudo-classe) passe devant un `outline: 0` de Mantine. */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+}
+/* Pleine largeur ou dans une barre : l'anneau a l'interieur, sinon il est coupe. */
+.row:focus-visible,
+.row-link:focus-visible,
+.card-link:focus-visible,
+.toptabs a:focus-visible,
+.tabbar a:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Une ligne de liste : toute la ligne est la cible tactile. Pas de marge laterale : son
+   texte s'aligne sur le titre de la section (le voile d'etat, lui, deborde). */
 .row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--mantine-spacing-sm);
   min-height: 60px;
-  padding: 10px 4px;
+  padding: 10px 0;
   border-bottom: 1px solid var(--mantine-color-dark-4);
   color: inherit;
   text-decoration: none;
 }
 .row:last-child {
   border-bottom: 0;
-}
-a.row:active,
-button.row:active,
-.row:has(> .row-link:active),
-.card-link:active {
-  background: var(--mantine-color-dark-5);
-}
-@media (hover: hover) {
-  a.row:hover,
-  button.row:hover,
-  .row:has(> .row-link:hover),
-  .card-link:hover {
-    background: var(--mantine-color-dark-6);
-  }
-  .card-link:hover {
-    border-color: var(--mantine-color-dark-3);
-  }
 }
 button.row {
   width: 100%;
@@ -72,18 +123,38 @@ button.row {
   cursor: pointer;
 }
 
-/* Une carte de grille (annuaire) : toute la carte est la cible tactile, la
-   photo en couverture bord a bord, le contenu en dessous. */
-.card-link {
+/* LA surface d'une carte (docs/UI-RULES.md) : fond `dark.6`, filet `dark.4`, rayon `md`.
+   Tuiles, graphiques (`ChartCard`), prochaine seance, cartes de l'annuaire. `.card-pad` : le
+   rembourrage `md` (pas la carte de l'annuaire : sa photo va bord a bord). `.card-link` :
+   la carte entiere est un lien. */
+.card {
   display: flex;
   flex-direction: column;
+  background: var(--mantine-color-dark-6);
   border: 1px solid var(--mantine-color-dark-4);
   border-radius: var(--mantine-radius-md);
-  overflow: hidden;
-  color: inherit;
-  text-decoration: none;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+/* Photo bord a bord : elle suit les coins arrondis. Pas les autres cartes (infobulles des graphiques). */
+.card:has(> .card-cover) {
+  overflow: hidden;
+}
+.card-pad {
+  padding: var(--mantine-spacing-md);
+}
+.card-link {
+  color: inherit;
+  text-decoration: none;
+}
+/* Carte qui mene a une page : `>` en haut a droite, le contenu lui laisse sa place. */
+.card-nav {
+  padding-right: calc(var(--mantine-spacing-md) + 20px);
+}
+.card-nav-icon {
+  position: absolute;
+  top: var(--mantine-spacing-md);
+  right: var(--mantine-spacing-md);
 }
 .card-cover {
   position: relative;
@@ -91,7 +162,7 @@ button.row {
   align-items: center;
   justify-content: center;
   aspect-ratio: 4 / 3;
-  background: var(--mantine-color-dark-6);
+  background: var(--mantine-color-dark-7);
   border-bottom: 1px solid var(--mantine-color-dark-4);
 }
 /* Boutons poses sur une photo, en haut a droite : retirer la photo (PhotoUpload),
@@ -136,8 +207,22 @@ button.row {
 .card-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px;
+  gap: var(--mantine-spacing-sm);
+  padding: var(--mantine-spacing-md);
+}
+/* Les champs d'une carte : enfants directs de `.card-body` pour l'espacement. */
+.card-details {
+  display: contents;
+}
+/* Grille de l'annuaire en 2 colonnes etroites (mobile : conteneur `simple-grid` de Mantine
+   sous 540 px) : la carte se resume a la photo, au nom et a la phrase. */
+@container simple-grid (max-width: 539px) {
+  .card-body {
+    padding: var(--mantine-spacing-sm);
+  }
+  .card-details {
+    display: none;
+  }
 }
 
 /* Deborde du conteneur de 760 px (AppChrome) pour qu'une grille tienne jusqu'a
@@ -204,8 +289,9 @@ button.row {
   margin-bottom: -1px;
   white-space: nowrap;
 }
+/* Onglet actif : le bleu vif, comme dans la barre du bas (un seul signal pour « vous etes ici »). */
 .toptabs a[data-active="true"] {
-  color: var(--mantine-color-white);
+  color: var(--mantine-color-pioneers-6);
   border-bottom-color: var(--mantine-color-pioneers-6);
 }
 
@@ -221,24 +307,21 @@ button.row {
 
 /* Sur-titre d'un champ, d'une tuile, d'un score : petit, en capitales,
    estompe, en IBM Plex Mono (l'accent de la charte ; Regular seul, d'ou 400).
-   Un titre de section, lui, est un `SectionTitle` (components/ui/Section.tsx). */
+   Un titre de section, lui, est un `SectionTitle` (components/ui/Section.tsx).
+   UN style partout, gris (17/11, docs/UI-RULES.md : le bleu clair est aux titres de
+   section) ; 12 px, seule exception aux 13 px minimum : des capitales a chasse fixe. */
 .label {
   font-family: var(--mantine-font-family-monospace);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--mantine-color-dark-2);
 }
-/* Carte de la grille Founders (16/11) : les libelles en bleu clair, comme les titres de section. */
-.card-body .label {
-  color: var(--mantine-color-pioneers-3);
-}
-
 /* Un bloc de page (`Section`) : un filet le separe du precedent. Le defilement
    vers son ancre s'arrete sous l'en-tete fixe de l'AppShell. */
 .section {
-  margin-top: 28px;
+  margin-top: var(--mantine-spacing-xl);
   padding-top: 16px;
   border-top: 1px solid var(--mantine-color-dark-4);
   scroll-margin-top: calc(var(--app-shell-header-offset, 0px) + 16px);

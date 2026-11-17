@@ -17,7 +17,7 @@ export default function AdminFormsPage() {
 
   return (
     <>
-      <PageHeader back={{ href: paths.admin(), label: "Admin" }} title="Forms" subtitle="Templates from Spring 2026 and 2025, or a blank form." />
+      <PageHeader back={{ href: paths.admin(), label: "Admin" }} title="Forms" help="Templates from Spring 2026 and 2025, or a blank form." />
       <BatchPicker />
 
       <Section title={`Forms · ${forms.length}`}>

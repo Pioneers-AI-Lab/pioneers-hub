@@ -28,7 +28,7 @@ export function Distribution({
     );
   }
   return (
-    <Stack gap={10}>
+    <Stack gap="xs">
       {entries.map(([key, n]) => (
         <Stack key={key} gap={4}>
           <Group justify="space-between" gap="xs" wrap="nowrap">

@@ -58,6 +58,9 @@ const eina = "var(--font-eina), -apple-system, BlinkMacSystemFont, 'Segoe UI', R
 const inputDefaults = { defaultProps: { size: "md" } } as const;
 
 export const theme = createTheme({
+  // Echelle d'espacement unique, multiples de 4 (docs/UI-RULES.md) : xs 8, sm 12,
+  // md 16, lg 24, xl 32. Mantine avait xs 10 et lg 20 : hors echelle.
+  spacing: { xs: "0.5rem", sm: "0.75rem", md: "1rem", lg: "1.5rem", xl: "2rem" },
   primaryColor: "pioneers",
   primaryShade: 6,
   colors: { pioneers, dark },
@@ -93,6 +96,10 @@ export const theme = createTheme({
     InputWrapper: inputDefaults,
     // Place pour l'oeil du mot de passe (40 px : `--psi-button-size-md`, globals.css).
     PasswordInput: { defaultProps: { size: "md", rightSectionWidth: 44 } },
+    // Un lien de texte est souligne : le bleu seul ne le distingue pas d'un titre de
+    // section (bleu clair) ni d'un mot en accent (WCAG 1.4.1). Le fil d'Ariane, lui,
+    // garde `underline="hover"` (convention).
+    Anchor: { defaultProps: { underline: "always" }, styles: { root: { textUnderlineOffset: "3px" } } },
     SegmentedControl: { defaultProps: { radius: "md" }, classNames: { label: touch.segmentLabel } },
     Pill: { classNames: { remove: touch.pillRemove } },
     Switch: { classNames: { body: touch.inlineBody } },

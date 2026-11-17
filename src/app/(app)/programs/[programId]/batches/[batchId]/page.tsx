@@ -60,6 +60,30 @@ export default function BatchHomePage() {
         .slice(0, 5)
     : [];
 
+  // Visiteur public : ce qu'il manque, sous le titre de la vue d'ensemble (pas au milieu de ses cartes).
+  const publicHint =
+    role === "public" ? (
+      <>
+        {isSignedIn ? (
+          // Connecte sans profil dans ce batch : se connecter n'y changerait rien.
+          <>
+            Your account is not linked to a founder profile of this batch.{" "}
+            <Anchor component={Link} href={paths.claim()} inherit>
+              Find your profile
+            </Anchor>
+          </>
+        ) : (
+          <>
+            Founders of this batch:{" "}
+            <Anchor component={Link} href={paths.signIn(paths.batch(program.id, batch.id))} inherit>
+              sign in
+            </Anchor>
+          </>
+        )}{" "}
+        to see everyone.
+      </>
+    ) : undefined;
+
   return (
     <Stack gap={0}>
       {slackWorkspace && (
@@ -80,7 +104,7 @@ export default function BatchHomePage() {
 
       <NextSession />
 
-      <Section title="Batch overview">
+      <Section title="Batch overview" hint={publicHint}>
         <StatGrid>
           <StatTile label="Founders" value={stats?.founders ?? founders.length} href={paths.founders(program.id, batch.id)} />
           {stats && <StatTile label="Nationalities" value={Object.keys(stats.nationalities).length} />}
@@ -93,27 +117,6 @@ export default function BatchHomePage() {
           )}
         </StatGrid>
 
-        {role === "public" && (
-          <Text size="sm" c="dimmed">
-            {isSignedIn ? (
-              // Connecte sans profil dans ce batch : se connecter n'y changerait rien.
-              <>
-                Your account is not linked to a founder profile of this batch.{" "}
-                <Anchor component={Link} href={paths.claim()} inherit>
-                  Find your profile
-                </Anchor>
-              </>
-            ) : (
-              <>
-                Founders of this batch:{" "}
-                <Anchor component={Link} href={paths.signIn(paths.batch(program.id, batch.id))} inherit>
-                  sign in
-                </Anchor>
-              </>
-            )}{" "}
-            to see everyone.
-          </Text>
-        )}
 
         {stats && (
           <>
@@ -139,7 +142,7 @@ export default function BatchHomePage() {
       </Section>
 
       {topFounders.length > 0 && (
-        <Section title="Top founders" hint={`Program performance, out of ${founderScaleOf(topFounders[0].f.id)}.`}>
+        <Section title="Top founders" help={`Program performance, out of ${founderScaleOf(topFounders[0].f.id)}.`}>
           <RowList>
             {topFounders.map(({ f, score }) => (
               <LinkRow
@@ -156,7 +159,7 @@ export default function BatchHomePage() {
       )}
 
       {topStartups.length > 0 && (
-        <Section title="Top startups" hint={`${startupWeightingHint({ scale: startupScaleOf(topStartups[0].s.id) })}.`}>
+        <Section title="Top startups" help={`${startupWeightingHint({ scale: startupScaleOf(topStartups[0].s.id) })}.`}>
           <RowList>
             {topStartups.map(({ s, score }) => (
               <LinkRow
