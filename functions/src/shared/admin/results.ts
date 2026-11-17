@@ -1,0 +1,38 @@
+import { docPaths } from "../collections";
+import { mergeWrite, setWrite, type DocWrite } from "../docWrites";
+import { emptySubmission, submissionStamp, type Submission } from "../types";
+
+// ----------------------------
+// Les resultats d'une equipe, corriges par le staff (SPECS §4.2)
+// ----------------------------
+// En logique pure (shared/docWrites.ts) : Admin > Events > une equipe
+// (lib/resultsAdmin.ts) et l'API (`set_team_results`, `waive_late`,
+// `set_outstanding`). Le declencheur `onSubmissionWritten` en tire les releves de
+// metriques (source `staff`) et recalcule le leaderboard, comme pour le Debrief.
+
+/** Ce que le staff corrige d'une Submission. */
+export type TeamResultsPatch = Partial<Pick<Submission, "metrics" | "productUrl" | "proofUrls" | "notes">>;
+
+/** La Submission corrigee par le staff : ses valeurs, marquee `staff` (le retard d'origine reste). */
+export function teamResultsWrite(eventId: string, teamId: string, current: (Submission & { id?: string }) | null, patch: TeamResultsPatch, staffUid: string, now: string): DocWrite {
+  // L'id vit dans le chemin, jamais dans le document.
+  const { id: _id, ...saved } = current ?? {};
+  void _id;
+  const submission: Submission = { ...emptySubmission(teamId), ...saved, ...patch, teamId, ...submissionStamp(staffUid, "staff", now) };
+  return setWrite(docPaths.submission(eventId, teamId), submission);
+}
+
+/**
+ * Lever (ou remettre) le retard d'une soumission : sinon le bareme lui donne 0.
+ * Ni l'heure d'envoi ni la source des releves ne changent.
+ */
+export const lateWaivedWrite = (eventId: string, teamId: string, lateWaived: boolean): DocWrite => mergeWrite(docPaths.submission(eventId, teamId), { lateWaived });
+
+/**
+ * L'Outstanding mention d'une equipe (decision du 17/11) : seulement une equipe
+ * qui a le maximum de la grille (`outstandingEligible` du leaderboard). Elle vit
+ * sur la soumission, comme l'exception de retard ; une equipe notee par le jury
+ * sans avoir rien envoye recoit une soumission vide (ni heure d'envoi, ni metrique).
+ */
+export const outstandingWrite = (eventId: string, teamId: string, outstanding: boolean, hasSubmission: boolean): DocWrite =>
+  hasSubmission ? mergeWrite(docPaths.submission(eventId, teamId), { outstanding }) : setWrite(docPaths.submission(eventId, teamId), { ...emptySubmission(teamId), outstanding });

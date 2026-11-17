@@ -1,14 +1,19 @@
 import { getFirestore, type DocumentSnapshot } from "firebase-admin/firestore";
 import { z } from "zod";
-import { COL, docPaths, eventCollectionPaths } from "../shared/collections";
+import { COL, docIds, docPaths, eventCollectionPaths } from "../shared/collections";
+import { FOUNDER_REVIEWS_COLLECTION, STARTUP_REVIEWS_COLLECTION } from "../shared/weeklyReviews";
+import { groupTeamLocks, TEAM_LOCKS_COLLECTION, teamLockPath } from "../shared/teamLocks";
 import {
   LIST_KEYS,
+  parseAnswerKey,
   readDirectory,
   readFounderInternal,
   type Batch,
   type BatchTask,
   type ClosedList,
   type Form,
+  type FormResponse,
+  type TeamLock,
   type Founder,
   type Mentor,
   type Note,
@@ -25,6 +30,7 @@ import {
   canSeeEvent,
   isInsider,
   isInsiderViewer,
+  isStaffOrInvestor,
   isStaffViewer,
 } from "../shared/access";
 import { isPublishedEvent } from "../shared/events";
@@ -51,8 +57,11 @@ import { formUrl } from "../api/config";
 // qu'aux agregats des avis entre pairs, `founderStats.peerRating`), `picks`
 // (mutual picks individuels), `events/*/judges` (secret du lien partage
 // du jury), `apiKeys`, `writePlans`, `founders/*/private/connections` (shortlist et
-// rencontres : un outil du fondateur, lu a l'ecran seulement). Aucun chemin de ce fichier ne les nomme ;
-// les sous-collections d'evenement lues sont celles de `eventCollectionPaths`.
+// rencontres : un outil du fondateur, lu a l'ecran seulement), `shortlistHistory`
+// (shortlists une par une). Aucun chemin de ce fichier ne les nomme ; les
+// sous-collections d'evenement lues sont celles de `eventCollectionPaths`.
+// STAFF SEULEMENT : `teamLocks`, `founderReviews`, `startupReviews`, les notes du
+// jury une par une (`evaluations`), `formResponses` (sans avis ni picks).
 //
 // ⛔️ CHAQUE OBJET EST FILTRE PAR LES DROITS DE L'APPELANT, ici et nulle part
 // ailleurs : l'Admin SDK ignore firestore.rules, donc ce fichier en est le
@@ -114,10 +123,20 @@ const LIST_OBJECTS = [
   "tasks",
   "mentors",
   "accounts",
+  "responses",
+  "team_locks",
   "fields",
   "lists",
   "actions",
 ] as const;
+
+/** Les revues d'un fondateur ou d'une startup, la plus recente d'abord. */
+const sortedReviews = (snap: FirebaseFirestore.QuerySnapshot) =>
+  snap.docs.map((d) => d.data()).sort((a, b) => String(b.weekStartDayString).localeCompare(String(a.weekStartDayString)));
+
+/** Les formulaires dont les reponses individuelles ne se lisent jamais ici, et les champs qu'ils ecrivent. */
+const PRIVATE_FORM_KINDS = new Set<string>(["peer_feedback", "picks"]);
+const isPrivateField = (dbField: string) => dbField.startsWith("peerRating.") || dbField.startsWith("picks.");
 
 /** Un formulaire se lit par son lien (regle `forms` : public) ; un brouillon n'est montre qu'au staff. */
 const canSeeForm = (role: string, form: Pick<Form, "status">) => role === "staff" || form.status !== "draft";
@@ -162,6 +181,8 @@ export const ListInput = z
     programId: z.string().min(1).optional().describe("batches: the program."),
     batchId: z.string().min(1).optional().describe("Required for founders, startups, events, forms, tasks."),
     eventId: z.string().min(1).optional().describe("forms: only this event's forms."),
+    formId: z.string().min(1).optional().describe("responses: the form's answers (staff)."),
+    pendingOnly: z.boolean().optional().describe("responses: only those with a value waiting for staff approval."),
     founderId: z.string().min(1).optional().describe("notes: notes about this founder (or their startup)."),
     startupId: z.string().min(1).optional().describe("notes: notes about this startup."),
     search: z.string().trim().min(1).optional().describe("Keep objects whose name contains this (accents and case ignored)."),
@@ -242,7 +263,7 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
     };
   }
 
-  if (object === "actions") return { object, items: actionsFor(caller) };
+  if (object === "actions") return { object, items: actionsFor(caller, input.search) };
 
   if (object === "accounts") {
     if (!isStaffViewer(caller.viewer)) throw forbidden("not_visible", "Accounts are visible to staff only.");
@@ -263,6 +284,45 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
       .filter((m) => !search || searchKey(`${m.name ?? ""} ${m.company ?? ""}`).includes(search))
       .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
     return { object, items };
+  }
+
+  if (object === "responses") {
+    if (!isStaffViewer(caller.viewer)) throw forbidden("not_visible", "Form responses are visible to staff only.");
+    if (!input.formId) throw badRequest("missing_argument", "`formId` is required to list `responses`.", "formId");
+    const form = (await db.doc(docPaths.form(input.formId)).get()).data() as Form | undefined;
+    if (!form) throw notFound("form_not_found", `No form \`${input.formId}\`.`, "formId");
+    // ⛔️ Avis entre pairs et picks : jamais un par un (SPECS §4.8), ni leur formulaire, ni leurs valeurs ailleurs.
+    if (PRIVATE_FORM_KINDS.has(form.kind)) throw forbidden("private_answers", "Peer ratings and picks are never read one by one: only their aggregates exist here.");
+    // Une question qui ecrit un avis ou un pick, dans un autre formulaire : ses reponses sont retirees.
+    const privateQuestions = new Set(form.questions.filter((q) => q.dbField && isPrivateField(q.dbField)).map((q) => q.id));
+    const rows = (await db.collection(COL.formResponses).where("formId", "==", input.formId).get()).docs
+      .map((d) => withId<FormResponse>(d))
+      .filter((r) => !input.pendingOnly || r.status === "pending_approval")
+      .sort((a, b) => b.submittedDateISOString.localeCompare(a.submittedDateISOString));
+    return {
+      object,
+      items: rows.map((r) => ({
+        id: r.id,
+        submittedDateISOString: r.submittedDateISOString,
+        respondent: r.respondentName ?? r.respondentFounderId ?? null,
+        status: r.status,
+        answers: Object.fromEntries(Object.entries(r.answers).filter(([key]) => !privateQuestions.has(parseAnswerKey(key).questionId))),
+        writes: r.writes.map((w, writeIndex) => ({ writeIndex, ...w })).filter((w) => !isPrivateField(w.dbField)),
+      })),
+    };
+  }
+
+  if (object === "team_locks") {
+    const batchId = requiredBatchId(input, object);
+    if (roleOf(caller, batchId) !== "staff") throw forbidden("not_visible", "Lock my team answers are visible to staff only.");
+    const [locks, founders] = await Promise.all([
+      db.collection(TEAM_LOCKS_COLLECTION).where("batchId", "==", batchId).get(),
+      db.collection(COL.founders).where("batchId", "==", batchId).get(),
+    ]);
+    const answers = locks.docs.map((d) => d.data() as TeamLock);
+    const assigned = new Set(founders.docs.filter((d) => d.get("startupId")).map((d) => d.id));
+    // Les equipes reciproques proposees (comme Admin > Startups), puis les reponses une par une.
+    return { object, items: [{ groups: groupTeamLocks(answers, assigned), answers }] };
   }
 
   if (object === "tasks") {
@@ -355,15 +415,34 @@ export async function getObject(caller: Caller, input: GetInput): Promise<Record
       const role = roleOf(caller, founder.batchId);
       const insider = isInsider(role);
       // La personne : lue pour l'insider ou si c'est le compte lui-meme (`founder.uid` est son rattachement).
-      const [person, directory, profile, internal, stats] = await Promise.all([
+      const scoreId = docIds.score("founder", id);
+      const [person, directory, profile, internal, stats, score, scoreSignals, reviews, teamLock] = await Promise.all([
         readIf(insider || founder.uid === caller.uid, docPaths.person(founder.personId)),
         readIf(canReadFounderDirectory(role), docPaths.founderDirectory(id)),
         readIf(canReadFounderProfile(role, founderIdIn(caller, founder.batchId), id), docPaths.founderProfile(id)),
         readIf(insider, docPaths.founderInternal(id)),
         readIf(insider, `${COL.founderStats}/${id}`),
+        // Le score et ce qui l'explique (regles `scores` : staff et investors ; `scoreSignals` : staff et IC).
+        readIf(isStaffOrInvestor(role), `${COL.scores}/${scoreId}`),
+        readIf(insider, `${COL.scoreSignals}/${scoreId}`),
+        // Staff seulement (regles `founderReviews`, `teamLocks`) : ses revues de Weekly updates et sa reponse a Lock my team.
+        role === "staff" ? db.collection(FOUNDER_REVIEWS_COLLECTION).where("founderId", "==", id).get() : null,
+        readIf(role === "staff", teamLockPath(id)),
       ]);
       const personVisible = person && canReadPerson(role, caller.uid, person as { uid: string | null });
-      return { object, ...withId(founderSnap), person: personVisible ? person : undefined, directory: directory && readDirectory(directory), profile, internal: internal && readFounderInternal(internal), stats };
+      return {
+        object,
+        ...withId(founderSnap),
+        person: personVisible ? person : undefined,
+        directory: directory && readDirectory(directory),
+        profile,
+        internal: internal && readFounderInternal(internal),
+        stats,
+        score,
+        scoreSignals,
+        weeklyReviews: reviews && sortedReviews(reviews),
+        teamLock,
+      };
     }
 
     case "startup": {
@@ -372,16 +451,20 @@ export async function getObject(caller: Caller, input: GetInput): Promise<Record
       const startup = startupSnap.data() as Startup;
       const role = roleOf(caller, startup.batchId);
       const insideTeam = canReadStartupProfile(role, founderIdIn(caller, startup.batchId), startup);
-      const [profile, internal, checkins] = await Promise.all([
+      const scoreId = docIds.score("startup", id);
+      const [profile, internal, checkins, score, scoreSignals, reviews] = await Promise.all([
         readIf(insideTeam, docPaths.startupProfile(id)),
         readIf(isInsider(role), docPaths.startupInternal(id)),
         insideTeam ? db.collection(COL.checkins).where("startupId", "==", id).get() : null,
+        readIf(isStaffOrInvestor(role), `${COL.scores}/${scoreId}`),
+        readIf(isInsider(role), `${COL.scoreSignals}/${scoreId}`),
+        role === "staff" ? db.collection(STARTUP_REVIEWS_COLLECTION).where("startupId", "==", id).get() : null,
       ]);
       const recentCheckins = checkins?.docs
         .map((d) => withId<{ weekStartDayString: string }>(d))
         .sort((a, b) => b.weekStartDayString.localeCompare(a.weekStartDayString))
         .slice(0, 8);
-      return { object, ...withId(startupSnap), profile, internal, recentCheckins };
+      return { object, ...withId(startupSnap), profile, internal, recentCheckins, score, scoreSignals, weeklyReviews: reviews && sortedReviews(reviews) };
     }
 
     case "form": {
@@ -392,12 +475,16 @@ export async function getObject(caller: Caller, input: GetInput): Promise<Record
 
     case "event": {
       const insider = isInsiderViewer(caller.viewer);
-      const [event, teams, attendance, submissions, eventForms] = await Promise.all([
+      const staff = isStaffViewer(caller.viewer);
+      const [event, teams, attendance, submissions, eventForms, evaluations, leaderboard] = await Promise.all([
         db.doc(docPaths.event(id)).get(),
         db.collection(eventCollectionPaths.teams(id)).get(),
         insider ? db.collection(eventCollectionPaths.attendance(id)).get() : null,
         db.collection(eventCollectionPaths.submissions(id)).get(),
         db.collection(COL.forms).where("eventId", "==", id).get(),
+        // Les notes du jury, une par une : le staff seulement (les fondateurs n'en voient que le classement).
+        staff ? db.collection(eventCollectionPaths.evaluations(id)).get() : null,
+        insider ? db.doc(docPaths.leaderboard(id)).get() : null,
       ]);
       const data = required(event, object, id).data() as PioneersEvent;
       if (!(await eventFilterFor(caller, data.batchId))(data)) throw notFound(`${object}_not_found`, `No ${object} with id \`${id}\`.`, "id");
@@ -411,6 +498,8 @@ export async function getObject(caller: Caller, input: GetInput): Promise<Record
         teams: teams.docs.map((d) => withId<{ publishedDateISOString: string | null }>(d)).filter((t) => canReadTeam(role, t)),
         attendance: attendance?.docs.map((d) => ({ founderId: d.id, status: d.get("status") })),
         submissions: submissions.docs.map((d) => withId(d)),
+        evaluations: evaluations?.docs.map((d) => withId(d)),
+        leaderboard: leaderboard?.exists ? leaderboard.data() : undefined,
       };
     }
   }

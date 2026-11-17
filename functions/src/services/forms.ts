@@ -960,7 +960,7 @@ function responseStatus(writes: FieldWrite[]): FormResponse["status"] {
  * d'aujourd'hui : un champ « rempli si vide » rempli entre-temps reste tel quel.
  */
 export async function decideFormWrite(
-  staffUid: string,
+  by: string | Caller,
   req: Partial<CallableRequest<"decideFormWrite">>,
 ): Promise<CallableResponse<"decideFormWrite">> {
   const responseId = cleanId(req.responseId, "responseId");
@@ -968,7 +968,8 @@ export async function decideFormWrite(
   if (typeof index !== "number" || !Number.isInteger(index) || index < 0) throw invalidArgument("writeIndex", "required.");
   const ref = db().collection(COL.formResponses).doc(responseId);
   // Le staff qui valide ecrit avec ses propres droits (son compte, pas l'autorite du formulaire).
-  const staff = await uiCaller(staffUid);
+  // L'interface passe un uid ; l'API, son appelant (son canal dans l'audit).
+  const staff = typeof by === "string" ? await uiCaller(by) : by;
 
   return db().runTransaction(async (tx) => {
     const response = (await tx.get(ref)).data() as FormResponse | undefined;
@@ -989,9 +990,9 @@ export async function decideFormWrite(
       }
     }
     const nowISO = new Date().toISOString();
-    const writes = response.writes.map((w, i) => (i === index ? { ...w, status, decidedByUid: staffUid, decidedDateISOString: nowISO } : w));
+    const writes = response.writes.map((w, i) => (i === index ? { ...w, status, decidedByUid: staff.uid, decidedDateISOString: nowISO } : w));
     tx.update(ref, { writes, status: responseStatus(writes) });
-    await writeUiAudit(tx, staffUid, "decide_form_write", ref.path, { writeIndex: index, dbField: write.dbField, status });
+    await writeUiAudit(tx, staff, "decide_form_write", ref.path, { writeIndex: index, dbField: write.dbField, status });
     return { status };
   });
 }

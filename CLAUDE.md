@@ -222,8 +222,10 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   `metricSnapshots`, source `recordedSource` de la soumission, puis leaderboard, `services/teamResults.ts`) et
   `onEvaluationWritten` (leaderboard), en europe-west9. `onFormWritten` (`forms/{id}`) recalcule le leaderboard quand
   la grille du jury ou les metriques d'un formulaire changent (pas pour une date, un statut, un titre).
-- **Jamais lus par l'API** : `peerRatings`, `picks`, `judges`, `apiKeys`, `writePlans`, `founders/*/private/connections` (SPECS §4.8). Avis, picks
-  et notes du jury ne s'ecrivent que par leur formulaire (`DOC_KINDS[...].formOnly`, refus `form_only`).
+- **Jamais lus par l'API** : `peerRatings`, `picks`, `judges`, `apiKeys`, `writePlans`, `founders/*/private/connections`, `shortlistHistory`
+  (SPECS §4.8 ; `draw_teams` lit les connections pour tirer, sans les rendre). **Staff seulement par l'API** : `teamLocks`, `founderReviews`,
+  `startupReviews`, les notes du jury une par une, `formResponses` (jamais ceux d'un formulaire d'avis ou de picks, ni leurs valeurs ailleurs).
+  Avis, picks et notes du jury ne s'ecrivent que par leur formulaire (`DOC_KINDS[...].formOnly`, refus `form_only`).
 - **OAuth 2.1** (`functions/src/oauth`, connecteur claude.ai et Claude Code) : decouverte RFC 9728 / 8414, enregistrement
   dynamique, `/oauth/authorize` -> page front `/oauth/consent` (callables `oauthDescribeRequest` / `oauthDecide`),
   `/oauth/token` avec PKCE S256. Acces 1 h, rafraichissement 30 j a rotation ; un code ou un rafraichissement rejoue
@@ -250,11 +252,10 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   d'`OperationPlan`, execute apres la transaction de verification (plan `applying`), service des callables reutilise
   (ses `HttpsError` deviennent des erreurs HTTP, `api/errors.ts`). Jamais par l'API : donner / retirer le role staff,
   bloquer un compte staff (injection de consignes via un texte de fondateur), ecrire un score (on corrige l'entree
-  puis `recompute_scores`). PAS ENCORE (refonte semaine 1 en cours) : tirage et retouche des equipes, resultats
-  d'equipe, jury, grilles et publication du classement, validation des reponses en attente, lecture des reponses.
+  puis `recompute_scores`). Tirage : `draw_teams` est REJOUABLE (`seed`, aleatoire `shared/admin/teams.ts#seededRandom`) : l'apercu montre ce que la confirmation ecrit ; il lit les `private/connections` comme TeamGenerator et n'en rend que des comptes. Plans et cles d'idempotence stockent entree, apercu et resultat en JSON (Firestore refuse un tableau de tableaux) ; l'audit aussi (`storable`). `list actions` : noms et descriptions ; arguments d'une action avec `search`.
 - **Guide de l'agent** : outil `pioneers_guide` (`mcp/guide.ts`, staff) : modele, evenements, formulaires, scores,
   vie privee, recettes de correction. En anglais, aucun chiffre ; a tenir a jour avec les actions.
-- Catalogue MCP : 9 outils pour le staff (~3 400 jetons), 4 pour un fondateur, 3 pour un investor. Une capacite de
+- Catalogue MCP : 9 outils pour le staff (~3 600 jetons ; 42 actions derriere `pioneers_run`), 4 pour un fondateur, 3 pour un investor. Une capacite de
   plus = un type d'objet dans `list` / `get` ou une action de `pioneers_run`, jamais un nouvel outil. Pas de valeur
   chiffree dans `mcp/instructions.ts`.
 - `MCP-Protocol-Version` inconnu : retire avant le transport (panne totale vecue chez Trippple).
@@ -304,8 +305,8 @@ document ENTIER, jamais un champ) :
 | `formCompletions/{formId}_{founderId}`, `picks` | le fondateur lui-meme + staff (« J'ai repondu » et picks, ecrits par `submitFormResponse` ; jamais pour un formulaire anonyme) |
 | `founders/{id}/private/internal`, `founderStats`, `notes`, `assessments`, `eloMatches` (archive) | staff + investors IC |
 | `shortlistHistory/{founderId}_{targetId}` | staff (SPECS §6.2 ; ecrit par le serveur seul, jamais lu par l'API) |
-| `teamLocks/{founderId}` | le fondateur lui-meme + staff (SPECS §6.2 ; reponse a Lock my team, ecrite par `submitFormResponse`, corrigee par le staff ; jamais lue par l'API) |
-| `founderReviews/{founderId}_{lundi}`, `startupReviews/{startupId}_{lundi}` | staff (SPECS §6.2 ; revue des Weekly updates, ecrite par le staff ; jamais montree aux fondateurs ni lue par l'API) |
+| `teamLocks/{founderId}` | le fondateur lui-meme + staff (SPECS §6.2 ; reponse a Lock my team, ecrite par `submitFormResponse`, corrigee par le staff ; par l'API : staff seulement) |
+| `founderReviews/{founderId}_{lundi}`, `startupReviews/{startupId}_{lundi}` | staff (SPECS §6.2 ; revue des Weekly updates, ecrite par le staff ; jamais montree aux fondateurs ; par l'API : staff seulement) |
 | `startups/{id}` | public |
 | `startups/{id}/private/profile`, `kpiSeries` | membres + staff + investors |
 | `startups/{id}/private/internal` | staff + investors IC |

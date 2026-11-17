@@ -186,6 +186,8 @@ export const docPaths = {
   submission: (eventId: string, teamId: string) => `${COL.events}/${eventId}/${SUB.submissions}/${teamId}`,
   event: (eventId: string) => `${COL.events}/${eventId}`,
   team: (eventId: string, teamId: string) => `${COL.events}/${eventId}/${SUB.teams}/${teamId}`,
+  /** Appartenance datee d'un fondateur a une equipe (`docIds.teamMembership`). */
+  teamMembership: (membershipId: string) => `${COL.memberships}/${membershipId}`,
   evaluation: (eventId: string, evaluatorId: string, targetId: string) =>
     `${COL.events}/${eventId}/${SUB.evaluations}/${docIds.evaluation(evaluatorId, targetId)}`,
   leaderboard: (eventId: string) => `${COL.leaderboards}/${eventId}`,

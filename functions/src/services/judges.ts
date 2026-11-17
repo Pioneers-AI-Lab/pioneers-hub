@@ -3,7 +3,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { docPaths, eventCollectionPaths } from "../shared/collections";
 import type { JuryLink } from "../shared/types";
 import { secret } from "../api/crypto";
-import { writeUiAudit } from "./audit";
+import { writeUiAudit, actorOf, type AuditActor } from "./audit";
 import { cleanId } from "./clean";
 import { loadEvent } from "./events";
 
@@ -18,7 +18,8 @@ import { loadEvent } from "./events";
 const db = () => getFirestore();
 
 /** Cree ou remplace le lien partage : l'ancien cesse de marcher aussitot. */
-export async function resetJuryLink(actorUid: string, eventIdRaw: unknown): Promise<void> {
+export async function resetJuryLink(actor: string | AuditActor, eventIdRaw: unknown): Promise<void> {
+  const actorUid = actorOf(actor).uid;
   const eventId = cleanId(eventIdRaw, "eventId");
   await loadEvent(null, eventId);
   const ref = db().doc(docPaths.juryLink(eventId));
@@ -27,7 +28,7 @@ export async function resetJuryLink(actorUid: string, eventIdRaw: unknown): Prom
     const link: JuryLink = { secret: secret(), createdByUid: actorUid, createdDateISOString: new Date().toISOString() };
     tx.set(ref, link);
     // Jamais le secret dans l'audit.
-    writeUiAudit(tx, actorUid, "jury.resetLink", ref.path, { replaced });
+    writeUiAudit(tx, actor, "jury.resetLink", ref.path, { replaced });
   });
 }
 
@@ -36,13 +37,13 @@ export async function resetJuryLink(actorUid: string, eventIdRaw: unknown): Prom
  * supprime » : la note entiere reste dans l'audit, et un document garde
  * fausserait le leaderboard.
  */
-export async function deleteJuryScore(actorUid: string, eventIdRaw: unknown, evaluationIdRaw: unknown): Promise<void> {
+export async function deleteJuryScore(actor: string | AuditActor, eventIdRaw: unknown, evaluationIdRaw: unknown): Promise<void> {
   const eventId = cleanId(eventIdRaw, "eventId");
   const ref = db().doc(`${eventCollectionPaths.evaluations(eventId)}/${cleanId(evaluationIdRaw, "evaluationId")}`);
   await db().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError("not-found", "This score was already removed.");
     tx.delete(ref);
-    writeUiAudit(tx, actorUid, "evaluation.delete", ref.path, { before: snap.data() });
+    writeUiAudit(tx, actor, "evaluation.delete", ref.path, { before: snap.data() });
   });
 }

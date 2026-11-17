@@ -13,11 +13,9 @@ import {
   buildLeaderCounts,
   buildPairHistory,
   buildPairPreferences,
-  generateGroups,
   groupNumber,
   leaderIdOf,
   publishedDateOf,
-  type GeneratorInput,
   pairKey,
   scoreGroups,
   startupFixedGroups,
@@ -31,6 +29,7 @@ import { useDocsListener } from "@/hooks/useFirestoreListener";
 import { refs } from "@/lib/firestore/refs";
 import { PROFILE_CATEGORY_LABEL, formatDateTime } from "@/lib/format";
 import { paths } from "@/lib/paths";
+import { drawGroups, toDrafts, withoutMembers, withStartupTeams, type DrawInput } from "@shared/admin/teams";
 import { publishTeams, refreshPublicNames, saveDraftTeams, teamIdFor, updatePublishedTeams, type DraftTeam } from "@/lib/teamsAdmin";
 import { TEAM_TOOLS, type TeamToolMode } from "@/components/admin/teamModes";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -62,36 +61,11 @@ import { Empty, Section } from "@/components/ui/Section";
 
 type Pair = [string, string];
 
-// Une equipe publiee est enregistree verrouillee (le generateur n'y touche plus) ;
-// a la retouche, plus de tirage : rien n'y est verrouille.
-const toDrafts = (teams: WithId<EventTeam>[]): DraftTeam[] =>
-  teams.map((t) => ({ id: t.id, name: t.name, memberIds: [...t.memberIds], leaderId: leaderIdOf(t), locked: t.locked && t.publishedDateISOString === null }));
-
 /** Les paires enregistrees avec le brouillon (les memes sur chaque equipe). */
 const savedPairs = (teams: WithId<EventTeam>[], key: keyof DrawConstraints): Pair[] =>
   (teams[0]?.drawConstraints?.[key] ?? []).map((k) => k.split("|") as Pair);
 
 const pairKeys = (pairs: Pair[]) => pairs.map(([a, b]) => pairKey(a, b));
-
-type DrawInput = Omit<GeneratorInput, "groupSize" | "fixedGroups">;
-
-/** Un tirage : les groupes verrouilles restent tels quels, les autres sont tires puis numerotes. */
-function drawGroups(groups: DraftTeam[], groupSize: number, input: DrawInput, groupLabel: string): DraftTeam[] {
-  const locked = groups.filter((g) => g.locked);
-  const result = generateGroups({ ...input, groupSize, fixedGroups: locked.map((g, i) => ({ key: String(i), memberIds: g.memberIds })) });
-  const next = [...locked, ...result.groups.map((memberIds) => ({ id: null, name: "", memberIds, leaderId: null, locked: false }))];
-  return next.map((g, i) => ({ ...g, name: g.locked && g.name ? g.name : `${groupLabel} ${i + 1}` }));
-}
-
-/** Les groupes sans ces personnes ; un groupe vide disparait (le leader parti est remplace par `assignLeaders`). */
-const withoutMembers = (groups: DraftTeam[], ids: ReadonlySet<string>): DraftTeam[] =>
-  groups.map((g) => ({ ...g, memberIds: g.memberIds.filter((m) => !ids.has(m)) })).filter((g) => g.memberIds.length > 0);
-
-/** Les startups en equipes verrouillees, a leur nom, et les autres groupes sans leurs fondateurs. */
-const withStartupTeams = (groups: DraftTeam[], startupGroups: { name: string; memberIds: string[] }[]): DraftTeam[] => [
-  ...startupGroups.map((g) => ({ id: null, name: g.name, memberIds: [...g.memberIds], leaderId: null, locked: true })),
-  ...withoutMembers(groups, new Set(startupGroups.flatMap((g) => g.memberIds))),
-];
 
 /** « Alice Martin (leader) » : le nom, marque s'il mene le groupe. */
 const withLeaderMark = (name: string, isLeader: boolean) => (isLeader ? `${name} (leader)` : name);
@@ -277,7 +251,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
   }
 
   const draw = () => {
-    update(drawGroups(groups, Number(size), drawInput, tool.groupLabel));
+    update(drawGroups(groups, Number(size), drawInput, tool.groupLabel).groups);
     setDrawnSize(Number(size));
     setPicked(null);
   };

@@ -88,10 +88,17 @@ function parseInput<S extends z.ZodType>(op: Operation<S>, raw: unknown): z.outp
   return parsed.data;
 }
 
+/** Une valeur que Firestore accepte : un tableau dans un tableau (des paires) devient son JSON. */
+function storable(value: unknown, inArray = false): unknown {
+  if (Array.isArray(value)) return inArray ? JSON.stringify(value) : value.map((v) => storable(v, true));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined).map(([k, v]) => [k, storable(v)]));
+  return value;
+}
+
 const auditEntry = (action: string, input: unknown, plan: OperationPlan<unknown>, idempotencyKey: string | null) => ({
   action,
   targetPath: plan.targetPaths.join(", ").slice(0, 1500),
-  payload: { input },
+  payload: { input: storable(input) },
   idempotencyKey,
 });
 
@@ -171,7 +178,7 @@ export async function runOperation<S extends z.ZodType, R>(
       ownerUid: caller.uid,
       operation: op.name,
       requestHash: idem!.requestHash,
-      result: out ? { ...out, replayed: true } : null,
+      result: out ? JSON.stringify({ ...out, replayed: true }) : null,
       ...(out ? {} : { pending: true }),
       createdDateISOString: new Date(now).toISOString(),
       expiresDateISOString: new Date(now + DAY_MS).toISOString(),
@@ -186,7 +193,7 @@ export async function runOperation<S extends z.ZodType, R>(
           throw conflict("idempotency_conflict", "This `Idempotency-Key` was already used for a different request.");
         }
         if (record.pending) throw conflict("in_progress", "This request is still running. Retry in a moment.");
-        return { out: record.result as RunResult<R>, effectPlan: null };
+        return { out: JSON.parse(record.result ?? "null") as RunResult<R>, effectPlan: null };
       }
     }
 
@@ -235,8 +242,8 @@ export async function previewPlan<S extends z.ZodType, R>(
   const doc: WritePlan = {
     ownerUid: caller.uid,
     operation: op.name,
-    input: input as Record<string, unknown>,
-    preview: plan.preview,
+    input: JSON.stringify(input),
+    preview: JSON.stringify(plan.preview ?? null),
     result: null,
     status: "previewed",
     createdDateISOString: new Date(now).toISOString(),
@@ -266,20 +273,20 @@ export async function applyPlan<R>(
     const op = typeof opOf === "function" ? opOf(plan.operation) : opOf.name === plan.operation ? opOf : undefined;
     if (!op) throw badRequest("plan_mismatch", `This plan belongs to \`${plan.operation}\`, not to this tool.`, "planId");
     assertAllowed(op, caller);
-    if (plan.status === "applied") return { result: plan.result as R, replayed: true, effect: null };
+    if (plan.status === "applied") return { result: JSON.parse(plan.result ?? "null") as R, replayed: true, effect: null };
     if (plan.status === "applying") throw conflict("plan_in_progress", "This plan is being applied. Wait a moment, then check the result.");
     if (Date.parse(plan.expiresDateISOString) < Date.now()) {
       throw conflict("plan_expired", "This preview is older than one hour. Preview again, then confirm.");
     }
 
-    const input = parseInput(op, plan.input);
+    const input = parseInput(op, JSON.parse(plan.input));
     const fresh = await op.plan(tx, caller, input);
 
     // ⛔️ CE QUI EST ECRIT EST CE QUI A ETE MONTRE. Si la base a bouge entre
     // l'apercu et la confirmation (un formulaire, un autre membre du staff),
     // on refuse plutot que d'ecrire autre chose que ce que l'humain a valide.
     // (`stableStringify` ignore les `undefined`, comme la copie stockee.)
-    if (stableStringify(fresh.preview) !== stableStringify(plan.preview)) {
+    if (stableStringify(JSON.parse(JSON.stringify(fresh.preview ?? null))) !== stableStringify(JSON.parse(plan.preview))) {
       throw conflict("plan_stale", "The data changed since the preview. Preview again and show the new result before confirming.");
     }
 
@@ -289,14 +296,14 @@ export async function applyPlan<R>(
       return { result: null, replayed: false, effect: { plan: fresh, input, name: op.name } };
     }
     const result = commitWithAudit(tx, caller, op.name, input, fresh, planId);
-    tx.update(ref, { status: "applied", result: plain(result), appliedDateISOString: new Date().toISOString() });
+    tx.update(ref, { status: "applied", result: JSON.stringify(result ?? null), appliedDateISOString: new Date().toISOString() });
     return { result, replayed: false, effect: null };
   });
   if (!done.effect) return { result: done.result, replayed: done.replayed };
 
   try {
     const result = await runEffect(caller, done.effect.name, done.effect.input, done.effect.plan, planId);
-    await ref.update({ status: "applied", result: plain(result), appliedDateISOString: new Date().toISOString() });
+    await ref.update({ status: "applied", result: JSON.stringify(result ?? null), appliedDateISOString: new Date().toISOString() });
     return { result, replayed: false };
   } catch (err) {
     // L'effet a echoue : le plan redevient confirmable (rien n'a ete trace).

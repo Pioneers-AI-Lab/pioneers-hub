@@ -336,7 +336,9 @@ const call = async (key, name, args) => {
   };
   t = await call(key, "pioneers_list", { object: "actions" });
   const actionNames = t.data?.items?.map((a) => a.action) ?? [];
-  check(actionNames.length >= 20 && actionNames.includes("update_event") && t.data.items.every((a) => a.args?.type === "object"), `list actions: ${actionNames.length} with their arguments`, t.data);
+  check(actionNames.length >= 40 && actionNames.includes("draw_teams") && t.data.items.every((a) => a.description && !a.args), `list actions: ${actionNames.length}, short`, t.data);
+  t = await call(key, "pioneers_list", { object: "actions", search: "draw_teams" });
+  check(t.data?.items?.length === 1 && t.data.items[0].args?.properties?.seed, "list actions with search: that action's arguments", t.data);
   t = await call(key, "pioneers_guide", {});
   check(!t.isError && t.data.topics?.some((x) => x.topic === "scores"), "guide lists its topics", t.data);
   t = await call(key, "pioneers_guide", { topic: "events" });
@@ -417,9 +419,11 @@ const call = async (key, name, args) => {
       db.doc(`founderReviews/${founder.id}_2026-11-30`).set({ ...scoped, founderId: founder.id, weekStartDayString: "2026-11-30", goalAmbitious: true, goalReached: null, problemValidated: null }),
       db.doc(`shortlistHistory/${founder.id}_x`).set({ ...scoped, founderId: founder.id, targetFounderId: "x", firstShortlistedDateISOString: new Date().toISOString() }),
     ]);
+    // Staff : la reponse a Lock my team et les revues, par l'API aussi ; jamais l'historique des shortlists.
     t = await call(key, "pioneers_get", { object: "founder", id: founder.id });
     const text = JSON.stringify(t.data);
-    check(!t.isError && !/teamLock|Secret lock|founderReview|startupReview|goalAmbitious|shortlistHistory|firstShortlisted/.test(text), "get founder returns no team lock, weekly review or shortlist history", text.slice(0, 300));
+    check(!t.isError && t.data.teamLock?.startupName === "Secret lock" && t.data.weeklyReviews?.some((r) => r.goalAmbitious === true), "staff: get founder returns the team lock and weekly reviews", text.slice(0, 300));
+    check(!/shortlistHistory|firstShortlisted/.test(text), "get founder never returns the shortlist history", text.slice(0, 300));
     for (const object of ["teamLocks", "founderReviews", "startupReviews", "shortlistHistory"]) {
       t = await call(key, "pioneers_list", { object, batchId: "fall-2026" });
       check(t.isError, `list refuses \`${object}\``, t.data);
@@ -505,6 +509,88 @@ const call = async (key, name, args) => {
   t = await call(key, "pioneers_run", { planId: (await call(key, "pioneers_add_note", { targetType: "founder", targetId: "ada-example", body: "x", dayString: "2026-11-17" })).data?.planId });
   check(t.isError, "pioneers_run refuses another tool's plan", t.data);
 
+  // ---- Phase 2 : matching, resultats, jury, classement, reponses, revues ----
+  // Un hackathon neuf (pack : matching en equipes et ses formulaires).
+  t = await call(key, "pioneers_create_event", { batchId: "fall-2026", templateKey: "hackathon", name: "Draw check", startDateISOString: "2026-12-01T09:30:00+01:00" });
+  t = await call(key, "pioneers_create_event", { planId: t.data.planId });
+  const drawEventId = t.data?.result?.eventId;
+  a = await run("draw_teams", { eventId: drawEventId, groupSize: 2, keepApart: [["ada-example", "ben-sample"]], seed: 7 });
+  const drawn = a.preview.data?.preview?.groups ?? [];
+  check(drawn.length >= 2 && drawn.every((g) => g.leader) && a.applied && !a.applied.isError, `draw_teams drafts ${drawn.length} groups with leaders`, a.preview.data);
+  const draftTeams = (await db.collection(`events/${drawEventId}/teams`).get()).docs;
+  check(draftTeams.length === drawn.length && draftTeams.every((d) => d.get("publishedDateISOString") === null) && draftTeams[0].get("drawConstraints")?.keepApart?.length === 1, "the draw is saved as a draft with its constraints");
+  check(!draftTeams.some((d) => d.get("memberIds").includes("ada-example") && d.get("memberIds").includes("ben-sample")), "keepApart is respected");
+  t = await call(key, "pioneers_run", { action: "draw_teams", args: { eventId: drawEventId, groupSize: 2, seed: 7 } });
+  check(JSON.stringify(t.data?.preview?.groups) === JSON.stringify(drawn), "the same seed gives the same draw", t.data);
+  a = await run("publish_teams", { eventId: drawEventId });
+  const pubTeams = (await db.collection(`events/${drawEventId}/teams`).get()).docs;
+  const pubMemberships = await db.collection("memberships").where("eventId", "==", drawEventId).get();
+  check(pubTeams.every((d) => d.get("publishedDateISOString")) && pubMemberships.size === pubTeams.reduce((n, d) => n + d.get("memberIds").length, 0) && pubTeams[0].get("memberNames")?.length, "publish_teams publishes, names and records memberships");
+  t = await call(key, "pioneers_run", { action: "draw_teams", args: { eventId: drawEventId } });
+  check(t.isError && /published/.test(t.data), "a published draw is not drawn again", t.data);
+  const [t1, t2] = pubTeams.map((d) => ({ id: d.id, memberIds: d.get("memberIds") }));
+  const moved = t2.memberIds[0];
+  const editArgs = { eventId: drawEventId, teams: [{ id: t1.id, memberIds: [...t1.memberIds, moved] }, { id: t2.id, memberIds: t2.memberIds.slice(1) }, ...pubTeams.slice(2).map((d) => ({ id: d.id, memberIds: d.get("memberIds") }))] };
+  a = await run("edit_teams", editArgs);
+  const after1 = (await db.doc(`events/${drawEventId}/teams/${t1.id}`).get()).get("memberIds");
+  const movedShip = (await db.collection("memberships").where("eventId", "==", drawEventId).where("founderId", "==", moved).get()).docs.map((d) => d.get("teamId"));
+  check(a.applied && after1.includes(moved) && movedShip.length === 1 && movedShip[0] === t1.id, "edit_teams moves a founder; the membership follows", { after1, movedShip });
+  t = await call(key, "pioneers_run", { action: "edit_teams", args: { eventId: drawEventId, teams: [{ id: t1.id, memberIds: ["ada-example"] }, { id: t2.id, memberIds: ["ada-example"] }] } });
+  check(t.isError && /duplicate_member/.test(t.data), "edit_teams refuses a founder in two groups", t.data);
+  a = await run("set_matching", { eventId: "demo-masterclass", mode: "matching", size: 4 });
+  check((await db.doc("events/demo-masterclass").get()).get("matching")?.mode === "matching", "set_matching gives an event tables", a.applied?.data);
+  a = await run("set_matching", { eventId: "demo-masterclass", mode: null });
+
+  // Resultats d'une equipe publiee (hackathon 1)
+  a = await run("set_team_results", { eventId: "demo-hackathon-1", teamId: "team-a", metrics: { callsMade: 12 }, proofUrls: ["drive.google.com/x"] });
+  const subA = (await db.doc("events/demo-hackathon-1/submissions/team-a").get()).data();
+  check(subA?.metrics?.callsMade === 12 && subA.recordedSource === "staff" && subA.proofUrls[0] === "https://drive.google.com/x" && !("id" in subA), "set_team_results writes a staff correction", subA);
+  t = await call(key, "pioneers_run", { action: "waive_late", args: { eventId: "demo-hackathon-1", teamId: "team-a", waived: true } });
+  check(t.isError && /not_late/.test(t.data), "waive_late needs a late Submission", t.data);
+  t = await call(key, "pioneers_run", { action: "set_outstanding", args: { eventId: "demo-hackathon-1", teamId: "team-a", outstanding: true } });
+  check(t.isError && /not_eligible/.test(t.data), "the Outstanding mention needs the grid's maximum", t.data);
+
+  // Jury et classement
+  t = await call(key, "pioneers_run", { action: "delete_jury_score", args: { eventId: "demo-hackathon-2", evaluationId: "nope" } });
+  check(t.isError && /evaluation_not_found/.test(t.data), "delete_jury_score refuses an unknown score", t.data);
+  a = await run("reset_jury_link", { eventId: "demo-hackathon-2" });
+  check(a.applied && !a.applied.isError && !JSON.stringify(a.applied.data).includes("secret"), "reset_jury_link replaces the link without showing it", a.applied?.data);
+  t = await call(key, "pioneers_run", { action: "publish_ranking", args: { eventId: "demo-masterclass", publish: true } });
+  check(t.isError && /no_scoring/.test(t.data), "publish_ranking needs a scoring grid", t.data);
+  t = await call(key, "pioneers_get", { object: "event", id: "demo-hackathon-1" });
+  check(!t.isError && Array.isArray(t.data.evaluations) && Array.isArray(t.data.leaderboard?.rows), "get event: staff read jury scores and the leaderboard", Object.keys(t.data ?? {}));
+
+  // Reponses en attente : une valeur a refuser
+  await db.doc("formResponses/check-pending").set({
+    programId: "accelerator", batchId: "fall-2026", formId: "demo-weekly-form", formKind: "weekly_update", formVersion: 1,
+    respondentPersonId: null, respondentFounderId: "ada-example", subjects: { founderId: "ada-example" }, answers: { q1: "x" },
+    writes: [{ questionId: "q1", dbField: "founder.trackRecordOneLiner", path: "founders/ada-example", value: "x", previousValue: null, status: "pending_approval", reason: null, decidedByUid: null, decidedDateISOString: null }],
+    unmatched: [], status: "pending_approval", submittedDateISOString: new Date().toISOString(),
+  });
+  t = await call(key, "pioneers_list", { object: "responses", formId: "demo-weekly-form", pendingOnly: true });
+  check(t.data?.items?.length === 1 && t.data.items[0].writes[0].writeIndex === 0, "list responses: those waiting for approval", t.data);
+  t = await call(key, "pioneers_list", { object: "responses", formId: "demo-peer-1" });
+  check(t.isError && /private_answers/.test(t.data), "peer-rating responses are never listed", t.data);
+  a = await run("decide_form_write", { responseId: "check-pending", writeIndex: 0, approve: false });
+  check((await db.doc("formResponses/check-pending").get()).get("writes")[0].status === "rejected", "decide_form_write rejects a pending value", a.applied?.data);
+
+  // Revues, Background, startups, presence optionnelle
+  a = await run("review_founder_update", { founderId: "ada-example", weekStartDayString: "2026-11-16", goalAmbitious: true, goalReached: false, comment: "Good week" });
+  check((await db.doc("founderReviews/ada-example_2026-11-16").get()).get("goalAmbitious") === true, "review_founder_update writes the review", a.applied?.data);
+  t = await call(key, "pioneers_run", { action: "review_founder_update", args: { founderId: "ada-example", weekStartDayString: "2026-11-16" } });
+  check(t.isError && /invalid_review/.test(t.data), "a review answers at least one question", t.data);
+  a = await run("review_startup_update", { startupId: "lumen", weekStartDayString: "2026-11-16", scores: { traction: 4, progress: 3 } });
+  check((await db.doc("startupReviews/lumen_2026-11-16").get()).get("scores")?.traction === 4, "review_startup_update writes the review", a.applied?.data);
+  a = await run("rate_background", { founderId: "ben-sample", scores: { execution: 4, founderSignal: 3, pedigree: 3, geography: 2 } });
+  check((await db.doc("founders/ben-sample/private/internal").get()).get("background")?.scores?.execution === 4, "rate_background writes the staff rating", a.applied?.data);
+  a = await run("create_startups", { batchId: "fall-2026", startups: [{ name: "Check Labs", memberIds: ["chloe-demo", "dan-placeholder"] }] });
+  const newStartupId = a.applied?.data?.result?.startupIds?.[0];
+  check(newStartupId && (await db.doc("founders/chloe-demo").get()).get("startupId") === newStartupId, "create_startups creates the startup and links its members", a.applied?.data);
+  t = await call(key, "pioneers_run", { action: "create_startups", args: { batchId: "fall-2026", startups: [{ name: "Again", memberIds: ["chloe-demo"] }] } });
+  check(t.isError, "a founder already in a startup is refused", t.data);
+  a = await run("set_attendance_optional", { eventId: "demo-masterclass", optional: true });
+  check((await db.doc("events/demo-masterclass").get()).get("attendanceOptional") === true, "set_attendance_optional", a.applied?.data);
+
   // ---- Droits par role : chacun voit et ecrit ce que l'app lui permet ----
   const keyFor = async (uid) => (await callable("createApiKey", await idToken(uid), { name: `${uid} check` })).result?.key;
   const [adaKey, icKey, lpKey, strangerKey] = await Promise.all(["ada-1", "ic-1", "lp-1", "stranger-1"].map(keyFor));
@@ -517,6 +603,15 @@ const call = async (key, name, args) => {
   // Fondateur (ada, membre de lumen)
   const adaTools = (await mcp(adaKey, "tools/list", {})).body.result?.tools?.map((t) => t.name) ?? [];
   check(adaTools.includes("pioneers_set_fields") && !adaTools.includes("pioneers_add_note") && !adaTools.includes("pioneers_run"), `founder catalogue: ${adaTools.join(", ")}`);
+  {
+    // Lock my team et revues : jamais pour un fondateur ni un investor, meme IC (staff seulement).
+    for (const [k, who] of [[adaKey, "founder"], [icKey, "IC investor"]]) {
+      const got = await call(k, "pioneers_get", { object: "founder", id: "ada-example" });
+      check(!/Secret lock|teamLock|goalAmbitious|weeklyReviews/.test(JSON.stringify(got.data)), `${who}: no team lock nor weekly review`, JSON.stringify(got.data).slice(0, 200));
+      const locks = await call(k, "pioneers_list", { object: "team_locks", batchId: "fall-2026" });
+      check(locks.isError, `${who}: list team_locks refused`, locks.data);
+    }
+  }
   let g = await rest(adaKey, "/v1/founders/ada-example");
   check(g.status === 200 && "profile" in g.body && !("internal" in g.body) && g.body.person, "founder sees own profile and person, not internal", Object.keys(g.body));
   g = await rest(adaKey, "/v1/founders/ben-sample");

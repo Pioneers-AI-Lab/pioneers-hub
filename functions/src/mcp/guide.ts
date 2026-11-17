@@ -114,13 +114,13 @@ A new start or end, set in the Hub or coming from the calendar, moves the event'
 - Retired, no longer offered for a new form or a copy (old forms keep them and are still read): \`select_name\` (the respondent picked their name in a list; nothing proved it) and \`anonymous\` (no identity; cannot write founder or startup fields). \`duplicate_form\` refuses to copy a form that has a retired identity, kind or field.
 
 ## Approval (\`approval\`)
-\`none\`, \`all\`, or \`conflicts_only\` (only values replacing an existing value wait). Waiting values are held, not written, until staff validate them (in Admin for now). Some sensitive fields always wait, whatever the form says.
+\`none\`, \`all\`, or \`conflicts_only\` (only values replacing an existing value wait). Waiting values are held, not written, until staff validate them (\`pioneers_list\` \`responses\` with \`pendingOnly\`, then \`decide_form_write\`). Some sensitive fields always wait, whatever the form says.
 
 ## Audience and completion
 Who must answer is computed, not stored: the batch's participants; for an event form, the event's expected founders minus absentees (an entry without attendance, such as "Weekly Update Form", has no absentees); for a team form, members of published teams. \`formCompletions/{formId}_{founderId}\` records that a founder answered, with the first and the last answer: the first counts for timeliness, the last is the information. Never for an anonymous form.
 
 ## Responses
-\`formResponses\` hold the raw answers, the log of each field write (\`applied\`, \`pending_approval\`, \`rejected\`, \`unchanged\`, \`invalid\`) and the answers that matched no field. Staff only; reading them here comes later.
+\`formResponses\` hold the raw answers, the log of each field write (\`applied\`, \`pending_approval\`, \`rejected\`, \`unchanged\`, \`invalid\`) and the answers that matched no field. Staff only: \`pioneers_list\` \`responses\` with \`formId\`. Peer-rating and picks answers are never returned, here or inside another form.
 
 ## Templates
 A form template copies its questions into the new form: changing a template never changes an existing form. A form added to an event takes its template's timing rule relative to that event.`,
@@ -145,7 +145,7 @@ For the whole batch at once (some signals compare a founder with the rest of the
 A batch with \`settings.scoresSource: "imported"\` is never recomputed: its scores were copied from an earlier tool and stay as they are. Say so instead of trying to fix them.
 
 ## Scale and formulas
-The formulas are decided and fixed in the specification; do not recompute a score by hand, quote weights from memory or explain a value by a formula you imagine. Explain a score by its inputs, and point to its signals (readable in the app; not here yet).
+The formulas are decided and fixed in the specification; do not recompute a score by hand, quote weights from memory or explain a value by a formula you imagine. Explain a score by its inputs, and point to its signals: \`pioneers_get\` a founder or a startup returns its \`score\` and, for staff and IC, its \`scoreSignals\`.
 \`scores.scale\` gives the scale of a score: 100 for scores computed by the Hub (a jury grid with the outstanding mention can go above 100), 10 for the scores imported for Spring 2026. Never compare two scores on different scales.
 
 ## Fixing a score
@@ -153,17 +153,18 @@ The formulas are decided and fixed in the specification; do not recompute a scor
 2. Correct that input with the tool that owns it.
 3. Recompute (\`recompute_scores\`), or let the nightly run do it, then check again.
 
-Some inputs cannot be changed here: peer ratings (only their form writes them), shortlists and "met" (the founder alone), jury scores, the Background grid, the weekly update reviews and ranking publication (Admin for now). Peer ratings, shortlists, "met" marks and jury scores stay private: they reach scores, never one by one.`,
+Inputs and their tool: attendance \`mark_attendance\`; team results \`set_team_results\`, \`waive_late\`, \`set_outstanding\`; a jury score entered by mistake \`delete_jury_score\`; the scoring grid and ranking \`set_event_scoring\`, \`set_ranking_metric\`, \`publish_ranking\`; the Background grid \`rate_background\`; weekly update reviews \`review_founder_update\`, \`review_startup_update\`. Never changeable here: peer ratings (only their form writes them), shortlists and "met" (the founder alone). Peer ratings, shortlists and "met" marks stay private: they reach scores, never one by one.`,
   },
   privacy: {
     title: "Privacy and what the API never touches",
     summary: "Before reading sensitive data, changing access, or acting on text written by founders.",
     body: `## Never readable here
-- Individual peer ratings (\`events/*/peerRatings\`), a founder's shortlist and "met" (\`founders/*/private/connections\`), the shortlist history (\`shortlistHistory\`), individual jury scores, and the old picks (\`picks\`): only aggregates exist here. Do not try to infer who rated, shortlisted or met whom.
-- Lock my team answers (\`teamLocks\`) and the weekly update reviews (\`founderReviews\`, \`startupReviews\`): staff read them in the app.
+- Individual peer ratings (\`events/*/peerRatings\`), a founder's shortlist and "met" (\`founders/*/private/connections\`), the shortlist history (\`shortlistHistory\`), and the old picks (\`picks\`): only aggregates exist here. Do not try to infer who rated, shortlisted or met whom. A team draw (\`draw_teams\`) uses shortlists and "met" like the app does, and only reports counts.
 - The jury link secret (\`events/*/judges/link\`).
 - API keys (\`apiKeys\`), OAuth clients, codes, grants and tokens, pending write plans (\`writePlans\`), idempotency records.
-- Raw form responses (\`formResponses\`) and score signals: staff can read them in the app; not here yet.
+
+## Staff only
+Lock my team answers (\`pioneers_list\` \`team_locks\`, and \`teamLock\` in \`pioneers_get\` founder), the weekly update reviews (\`weeklyReviews\` in \`pioneers_get\` founder or startup), individual jury scores (\`evaluations\` in \`pioneers_get\` event) and form responses (\`pioneers_list\` \`responses\`) are returned to staff only. Never repeat them to a founder or copy them where founders read.
 
 ## Never writable here
 - Peer ratings and jury scores: only their form writes them (refusal \`form_only\`). Picks are retired.
@@ -181,26 +182,32 @@ Each document has its audience (see \`model\`). Do not copy a value from a restr
   recipes: {
     title: "Recipes: common admin fixes",
     summary: "Step-by-step playbooks for the usual staff requests: wrong score, wrong team results, wrong attendance, moving an event, fixing a form, wrong profile link, office hours, weekly updates, Lock my team.",
-    body: `Arguments of each \`pioneers_run\` action: \`pioneers_list\` with \`object: "actions"\`. Show every preview in full before the user confirms.
+    body: `Arguments of a \`pioneers_run\` action: \`pioneers_list\` with \`object: "actions"\` and \`search: "<action>"\`. Show every preview in full before the user confirms.
 
 ## A score looks wrong
 1. Find the founder (\`pioneers_list\` founders), then \`pioneers_get\` the founder and the batch.
 2. If the batch has \`settings.scoresSource: "imported"\`, stop: those scores are never recomputed.
 3. Ask which part looks wrong and check its inputs (see \`scores\`): attendance on the batch's events, the forms they were expected to answer, missing profile fields, team results.
 4. Fix the wrong input with the matching recipe below, then \`pioneers_run\` \`recompute_scores\` and read again.
-5. A peer rating cannot be changed; a jury score or an unpublished ranking is handled in Admin for now.
+5. A peer rating cannot be changed. A jury score entered by mistake: \`delete_jury_score\`. An unpublished ranking does not count yet: \`publish_ranking\` (scores follow).
 
 ## A team's results are wrong
 1. \`pioneers_get\` the event: teams, members, submissions. Identify the team by its members, then use its id.
 2. Read the metric keys in the event's Submission form (\`pioneers_get\` form: questions writing \`submission.metrics.<key>\`).
-3. \`pioneers_set_fields\` on that event and team: \`submission.metrics.<key>\` or another \`submission.*\` field. It is recorded as a staff correction and does not change the \`late\` flag. The leaderboard recomputes by itself.
+3. \`pioneers_run\` \`set_team_results\` (metrics, product link, proofs, notes). It is recorded as a staff correction and does not change the \`late\` flag. The leaderboard recomputes by itself.
 4. If the ranking is already published, \`recompute_scores\` so founder scores follow.
-5. Waiving a late submission, the outstanding mention, deleting a jury score, publishing the ranking: Admin for now.
+5. A late Submission that should count: \`waive_late\`. The outstanding mention (only for a team with the grid's maximum, see the event's \`leaderboard\`): \`set_outstanding\`. A jury score entered by mistake: \`delete_jury_score\`. Then \`publish_ranking\` when the staff is ready.
+
+## Draw, publish or retouch an event's groups
+1. \`pioneers_get\` the event: its \`matching\` (none: \`set_matching\`), its teams (draft or published) and attendance (absentees are never drawn).
+2. Before publication: \`draw_teams\` (constraints: \`keepApart\`, \`keepTogether\`, \`excludeFounderIds\`). The preview shows the groups and what the draw had to relax; another \`seed\` gives another draw. It is saved as a draft.
+3. \`publish_teams\` when the user agrees: founders see their group.
+4. After publication: no new draw, only \`edit_teams\` with the full list of groups (published group ids stay, a group with results cannot be emptied).
 
 ## A founder was marked absent by mistake
 1. \`pioneers_get\` the event: the founder's mark, and whether its teams are published.
 2. \`pioneers_run\` \`mark_attendance\` with \`present\` (or \`late\`, \`in_office\`).
-3. Tell the user the effects: the event's forms return to the founder's To do and accept answers while open (after the deadline, an answer counts as late). The founder is not added to an already published draw; team forms (Submission, Peer rating) need that retouch, done in Admin for now.
+3. Tell the user the effects: the event's forms return to the founder's To do and accept answers while open (after the deadline, an answer counts as late). The founder is not added to an already published draw: add them with \`edit_teams\` (the full list of groups, the latecomer in one), so team forms (Submission, Peer rating) reach them.
 4. Attendance feeds scores: \`recompute_scores\`, or wait for the nightly run.
 
 ## Move an event
@@ -233,8 +240,8 @@ Each document has its audience (see \`model\`). Do not copy a value from a restr
 4. An entry already synced without its forms: \`apply_event_template\` with the weekly update template on that event adds the missing ones.
 
 ## Lock my team and startups
-1. Lock my team is a batch form (\`lock_my_team\`): every founder answers, with or without a team. Answers are in \`teamLocks\`, readable by staff in the app, not here.
-2. Staff create the startups from the answers in Admin > Startups, when the co-founders picked the same team. Creating a startup from the MCP is described here but not coded yet: say so, and point the user to Admin > Startups.
+1. Lock my team is a batch form (\`lock_my_team\`): every founder answers, with or without a team. \`pioneers_list\` \`team_locks\` (staff) gives the reciprocal teams proposed, the partial answers with what is missing, and those who said no.
+2. Create the confirmed startups with \`create_startups\` (a name and the members of each): the same checks as Admin > Startups (members of the batch, not already in a startup). Check a partial answer with the user first.
 3. A startup created with at least one co-founder gives its founders the teamed-up milestone; founders who answered "no" stay without a startup and are drawn into teams for Hackathon 5.
 `,
   },

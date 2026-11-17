@@ -17,7 +17,7 @@ import {
 import { z } from "zod";
 import { FAMILY_KEY } from "../shared/fieldRegistry";
 import { compareTeamPoints, juryMeansOf, normalizeToBest, scoreTeams, scoringFrom, scoringProblems } from "../shared/scoringRules";
-import { writeUiAudit } from "./audit";
+import { writeUiAudit, type AuditActor } from "./audit";
 import { cleanId, invalidArgument } from "./clean";
 import { loadEvent, scoredTargets } from "./events";
 
@@ -170,7 +170,7 @@ export async function recomputeLeaderboard(eventId: string): Promise<void> {
  * les preuves verifiees. Le classement devient visible des fondateurs (avec la
  * visibilite du batch) ; l'appelant relance ensuite le calcul des scores.
  */
-export async function publishEventRanking(actorUid: string, eventIdRaw: unknown, publishRaw: unknown): Promise<{ batchId: string }> {
+export async function publishEventRanking(actor: string | AuditActor, eventIdRaw: unknown, publishRaw: unknown): Promise<{ batchId: string }> {
   const eventId = cleanId(eventIdRaw, "eventId");
   const publish = publishRaw !== false;
   const batchId = await db().runTransaction(async (tx) => {
@@ -180,7 +180,7 @@ export async function publishEventRanking(actorUid: string, eventIdRaw: unknown,
     const now = new Date().toISOString();
     const revealed = publish ? (event.leaderboardRevealDateISOString ?? now) : null;
     tx.update(db().doc(path), { leaderboardRevealDateISOString: revealed, updatedDateISOString: now });
-    writeUiAudit(tx, actorUid, publish ? "event.publishRanking" : "event.unpublishRanking", path, { before: event.leaderboardRevealDateISOString, after: revealed });
+    writeUiAudit(tx, actor, publish ? "event.publishRanking" : "event.unpublishRanking", path, { before: event.leaderboardRevealDateISOString, after: revealed });
     return event.batchId;
   });
   await recomputeLeaderboard(eventId);
@@ -209,7 +209,7 @@ const ScoringSchema = z.object({ items: z.array(ScoringItemSchema).max(20) });
  * le classement revient aux notes du jury (ou a la metrique choisie). Journalise,
  * puis recalcul du classement ; l'appelant recalcule les scores s'il est publie.
  */
-export async function setEventScoring(actorUid: string, eventIdRaw: unknown, scoringRaw: unknown): Promise<{ batchId: string; published: boolean }> {
+export async function setEventScoring(actor: string | AuditActor, eventIdRaw: unknown, scoringRaw: unknown): Promise<{ batchId: string; published: boolean }> {
   const eventId = cleanId(eventIdRaw, "eventId");
   const parsed = ScoringSchema.safeParse(scoringRaw ?? { items: [] });
   if (!parsed.success) throw invalidArgument("scoring", `${parsed.error.issues[0]?.message ?? "invalid"}.`);
@@ -225,7 +225,7 @@ export async function setEventScoring(actorUid: string, eventIdRaw: unknown, sco
     // Sans bareme, le classement est toujours public : la publication repart de zero.
     const patch = scoring ? { scoring, rankingMetricKey: null } : { scoring: null, leaderboardRevealDateISOString: null };
     tx.update(db().doc(path), { ...patch, updatedDateISOString: new Date().toISOString() });
-    writeUiAudit(tx, actorUid, "event.setScoring", path, { before: event.scoring ?? null, after: scoring });
+    writeUiAudit(tx, actor, "event.setScoring", path, { before: event.scoring ?? null, after: scoring });
     // Un classement publie compte dans les scores du batch : avant comme apres, ils suivent.
     return { batchId: event.batchId, published: event.leaderboardRevealDateISOString !== null };
   });
@@ -234,7 +234,7 @@ export async function setEventScoring(actorUid: string, eventIdRaw: unknown, sco
 }
 
 /** Staff : ce qui classe l'evenement (notes du jury, ou une metrique de sa Submission), puis recalcul. */
-export async function setEventRanking(actorUid: string, eventIdRaw: unknown, metricKeyRaw: unknown): Promise<void> {
+export async function setEventRanking(actor: string | AuditActor, eventIdRaw: unknown, metricKeyRaw: unknown): Promise<void> {
   const eventId = cleanId(eventIdRaw, "eventId");
   const metricKey = metricKeyRaw === null || metricKeyRaw === undefined ? null : String(metricKeyRaw);
   await db().runTransaction(async (tx) => {
@@ -244,7 +244,7 @@ export async function setEventRanking(actorUid: string, eventIdRaw: unknown, met
     }
     const path = docPaths.event(eventId);
     tx.update(db().doc(path), { rankingMetricKey: metricKey, updatedDateISOString: new Date().toISOString() });
-    writeUiAudit(tx, actorUid, "event.setRanking", path, { before: event.rankingMetricKey ?? null, after: metricKey });
+    writeUiAudit(tx, actor, "event.setRanking", path, { before: event.rankingMetricKey ?? null, after: metricKey });
   });
   await recomputeLeaderboard(eventId);
 }

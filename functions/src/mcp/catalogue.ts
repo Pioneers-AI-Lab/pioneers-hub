@@ -90,7 +90,7 @@ function writeTool<S extends z.ZodObject>(
 
 const RunInput = z
   .object({
-    action: z.enum(ACTION_NAMES).optional().describe("The action. Its arguments: `pioneers_list` with `object: \"actions\"`."),
+    action: z.enum(ACTION_NAMES).optional().describe("The action. Its arguments: `pioneers_list` with `object: \"actions\"` and `search: \"<action>\"`."),
     args: z.record(z.string(), z.unknown()).optional().describe("The action's arguments."),
     planId: PLAN_ID.optional(),
   })
@@ -116,7 +116,7 @@ const TOOLS: Tool[] = [
       "Lists objects of one type in SHORT form, enough to pick one; call `pioneers_get` for the full object.\n\n" +
       "`batchId` is required for founders, startups, events, forms and tasks; `programId` for batches; `founderId` or `startupId` for notes.\n" +
       "`fields` lists every writable field address for `pioneers_set_fields`, with the ids it needs and the values it accepts. " +
-      "`lists` gives the accepted values of closed lists (skills, industries...). `actions` lists the admin actions of `pioneers_run` with their arguments.",
+      "`lists` gives the accepted values of closed lists (skills, industries...). `actions` lists the admin actions of `pioneers_run`; with `search` (an action's name), its arguments.",
     schema: ListInput,
     annotations: READ_ONLY,
     run: (caller, args) => listObjects(caller, ListInput.parse(args)),
@@ -160,9 +160,10 @@ const TOOLS: Tool[] = [
     name: "pioneers_run",
     title: "Run an admin action",
     description:
-      "Runs one named admin action, everything staff do in Admin: edit, move or archive an event; edit, open, close, copy or archive a form; " +
-      "To do tasks; attendance; programs and batches; link or unlink a founder's account; accounts; sync the Google Calendar; recompute scores.\n\n" +
-      "First list the actions and their `args` (`pioneers_list` `actions`). Same two calls as every write: without `planId` it previews; then `planId` alone applies.",
+      "Runs one named admin action, everything staff do in Admin: events (edit, move, archive, model); matching and groups (draw, publish, " +
+      "retouch); team results, jury scores, scoring grid and ranking; forms (edit, open, close, copy, archive, approve pending answers); " +
+      "attendance; weekly update reviews, Background, startups; To do tasks; programs and batches; account links and accounts; calendar sync; recompute scores.\n\n" +
+      "First list the actions (`pioneers_list` `actions`), then read the arguments of the one you need (`search: \"<action>\"`). Same two calls as every write: without `planId` it previews; then `planId` alone applies.",
     schema: RunInput,
     annotations: WRITE,
     visibleTo: anyActionFor,

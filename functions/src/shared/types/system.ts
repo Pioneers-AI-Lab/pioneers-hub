@@ -97,9 +97,13 @@ export type WritePlanStatus = "previewed" | "applying" | "applied";
 export type WritePlan = {
   ownerUid: string;
   operation: string;
-  input: Record<string, unknown>;
-  preview: unknown;
-  result: unknown;
+  /**
+   * Entree, apercu et resultat en JSON : Firestore refuse un tableau de tableaux
+   * (des paires a separer, `draw_teams`), et rien ne se requete sur eux.
+   */
+  input: string;
+  preview: string;
+  result: string | null;
   status: WritePlanStatus;
   createdDateISOString: DateISOString;
   /** Une heure apres l'apercu : au-dela, on recalcule un apercu. */
@@ -119,7 +123,8 @@ export type IdempotencyRecord = {
   operation: string;
   /** Empreinte stable de l'entree. */
   requestHash: string;
-  result: unknown;
+  /** La reponse rejouee, en JSON (comme `WritePlan`). */
+  result: string | null;
   /** Reservee pendant une action hors transaction (compte, agenda, scores) : un rejeu attend. */
   pending?: boolean;
   createdDateISOString: DateISOString;
