@@ -331,8 +331,17 @@ export const versionedSnapshot = (form: Pick<Form, "questions" | "attachments" |
 /** Le formulaire parle de l'equipe du repondant ou de ses coequipiers : il faut etre membre d'une equipe publiee. */
 export const formNeedsTeam = (form: Pick<Form, "questions">) => activeQuestions(form).some((q) => SCOPE_RULES[scopeOf(q)].needsTeam);
 
+/** La question ecrit un document de la startup du repondant (`checkin.*`, `startup.*`...). */
+const writesStartup = (q: Pick<FormQuestion, "dbField">) => q.dbField !== null && requiredSubjects([q.dbField]).includes("startup");
+
+/** Le formulaire ecrit un document de la startup du repondant : seuls les fondateurs d'une startup y sont attendus. */
+export const formNeedsStartup = (form: Pick<Form, "questions">) => activeQuestions(form).some(writesStartup);
+
 /** Toutes ses questions portent sur l'equipe (la Submission) : un envoi vaut pour toute l'equipe. */
 export const isTeamForm = (questions: readonly FormQuestion[]) => questions.length > 0 && questions.every((q) => scopeOf(q) === "team");
+
+/** Toutes ses questions ecrivent la startup (Weekly update startup, lot 4) : un envoi vaut pour toute la startup. */
+export const isStartupForm = (questions: readonly FormQuestion[]) => questions.length > 0 && questions.every(writesStartup);
 
 /**
  * Les questions actives ajoutees depuis la reponse du fondateur (celles qu'il
@@ -369,9 +378,8 @@ export type FormAudience =
   | { kind: "founders"; basis: AudienceBasis; founderIds: string[] };
 
 type AudienceInput = {
-  identityCheck: FormIdentityCheck;
-  /** `formNeedsTeam` : seuls les membres des equipes publiees sont attendus. */
-  needsTeam: boolean;
+  /** Son identite et ses questions : `formNeedsTeam` (membres des equipes publiees), `formNeedsStartup` (fondateurs d'une startup). */
+  form: Pick<Form, "identityCheck" | "questions">;
   batchId: string;
   founders: (Pick<Founder, "batchId" | "status" | "archivedDateISOString" | "isExternalFounder" | "startupId"> & { id: string })[];
   event: Pick<PioneersEvent, "kind" | "matching" | "teamSize" | "audience" | "guestFounderIds" | "startupIds"> | null;
@@ -388,8 +396,10 @@ type AudienceInput = {
  * ete relevee (un feedback de seance ne se demande pas aux absents), sinon les
  * membres des equipes publiees (hackathon), sinon les invites ou le batch.
  */
-function addressees(input: Omit<AudienceInput, "identityCheck">): { basis: AudienceBasis; founderIds: string[] } {
-  const participants = input.founders.filter((f) => isBatchParticipant(f, input.batchId));
+function addressees(input: AudienceInput): { basis: AudienceBasis; founderIds: string[] } {
+  const needsTeam = formNeedsTeam(input.form);
+  const needsStartup = formNeedsStartup(input.form);
+  const participants = input.founders.filter((f) => isBatchParticipant(f, input.batchId) && (!needsStartup || !!f.startupId));
   const among = (basis: AudienceBasis, keep: (id: string) => boolean) => ({
     basis,
     founderIds: participants.filter((f) => keep(f.id)).map((f) => f.id),
@@ -397,10 +407,10 @@ function addressees(input: Omit<AudienceInput, "identityCheck">): { basis: Audie
 
   const { event } = input;
   const members = new Set(input.teamMemberIds);
-  if (!event) return input.needsTeam ? among("teams", (id) => members.has(id)) : among("batch", () => true);
+  if (!event) return needsTeam ? among("teams", (id) => members.has(id)) : among("batch", () => true);
   // Le Debrief : les membres des equipes publiees, personne avant le tirage.
   const absent = absentFounderIds(input.attendance);
-  if (input.needsTeam) return among("teams", (id) => members.has(id) && !absent.has(id));
+  if (needsTeam) return among("teams", (id) => members.has(id) && !absent.has(id));
   const roster = eventRoster(input.batchId, event, participants, input.attendance);
   const present = new Set(roster.rows.filter((r) => r.status !== "absent").map((r) => r.founder.id));
   if (roster.isTaken) return among("present", (id) => present.has(id));
@@ -410,7 +420,7 @@ function addressees(input: Omit<AudienceInput, "identityCheck">): { basis: Audie
 
 /** Les fondateurs qui doivent repondre (`addressees`) ; un formulaire anonyme ne dit pas lesquels ont repondu. */
 export function formAudience(input: AudienceInput): FormAudience {
-  const respondent = IDENTITY_RULES[input.identityCheck].respondent;
+  const respondent = IDENTITY_RULES[input.form.identityCheck].respondent;
   if (respondent === "none") return { kind: "anonymous" };
   if (respondent === "judge") return { kind: "jury" };
   return { kind: "founders", ...addressees(input) };
@@ -463,7 +473,7 @@ export function formConcernsFounder(
 ): boolean {
   if (isJuryForm(form)) return false;
   const { founderIds } = addressees({
-    needsTeam: formNeedsTeam(form),
+    form,
     batchId: form.batchId,
     founders: [founder],
     event,

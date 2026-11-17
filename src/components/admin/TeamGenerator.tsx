@@ -20,6 +20,7 @@ import {
   type GeneratorInput,
   pairKey,
   scoreGroups,
+  startupFixedGroups,
 } from "@shared/teamGenerator";
 import { matchingOf } from "@shared/events";
 import { sameIds } from "@shared/kpis";
@@ -54,6 +55,9 @@ import { Empty, Section } from "@/components/ui/Section";
 // Shortlists et « Met » des fondateurs (`private/connections`, lisibles par le
 // staff) : ecoutes ici, sur cette page seulement, et passees au generateur
 // (`buildPairPreferences`) ; le tirage attend qu'elles soient toutes arrivees.
+// Matching `lockedTeamsFromStartups` (H5) : les startups du batch arrivent en
+// equipes verrouillees, a leur nom, avant tout tirage (`startupFixedGroups`) ; le
+// tirage place les autres fondateurs.
 
 
 type Pair = [string, string];
@@ -82,6 +86,12 @@ function drawGroups(groups: DraftTeam[], groupSize: number, input: DrawInput, gr
 /** Les groupes sans ces personnes ; un groupe vide disparait (le leader parti est remplace par `assignLeaders`). */
 const withoutMembers = (groups: DraftTeam[], ids: ReadonlySet<string>): DraftTeam[] =>
   groups.map((g) => ({ ...g, memberIds: g.memberIds.filter((m) => !ids.has(m)) })).filter((g) => g.memberIds.length > 0);
+
+/** Les startups en equipes verrouillees, a leur nom, et les autres groupes sans leurs fondateurs. */
+const withStartupTeams = (groups: DraftTeam[], startupGroups: { name: string; memberIds: string[] }[]): DraftTeam[] => [
+  ...startupGroups.map((g) => ({ id: null, name: g.name, memberIds: [...g.memberIds], leaderId: null, locked: true })),
+  ...withoutMembers(groups, new Set(startupGroups.flatMap((g) => g.memberIds))),
+];
 
 /** « Alice Martin (leader) » : le nom, marque s'il mene le groupe. */
 const withLeaderMark = (name: string, isLeader: boolean) => (isLeader ? `${name} (leader)` : name);
@@ -178,7 +188,7 @@ function EventHeader({ mode }: { mode: TeamToolMode }) {
 function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
   const tool = TEAM_TOOLS[mode];
   const preset = GENERATOR_PRESETS[mode];
-  const { founders, foundersById, teamMemberships, eventsById } = useAdmin();
+  const { founders, foundersById, teamMemberships, eventsById, startups } = useAdmin();
   const { event, teams, absentIds, matching, isDrawPublished: isPublished, submissionsByTeamId, evaluations } = useAdminEvent();
 
   // Les partis gardent leur historique mais ne sont plus proposes (SPECS §4.1).
@@ -229,6 +239,18 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
   const [isConfirming, setIsConfirming] = useState(false);
   const report = useMemo(() => scoreGroups(groups.map((g) => g.memberIds), drawInput), [groups, drawInput]);
 
+  // H5 : les startups (au moins deux fondateurs presents) sont des equipes fixes.
+  const startupTeams = useMemo(
+    () =>
+      matching?.lockedTeamsFromStartups
+        ? startupFixedGroups(
+            startups.filter((s) => s.status === "active"),
+            new Set(participants.map((p) => p.id)),
+          )
+        : null,
+    [matching?.lockedTeamsFromStartups, startups, participants],
+  );
+
   const placed = new Set(groups.flatMap((g) => g.memberIds));
   const unplaced = participants.filter((p) => !placed.has(p.id)).map((p) => p.id);
   const nameOf = (id: string) => foundersById.get(id)?.name ?? id;
@@ -244,6 +266,13 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
   if (syncedAbsentIds !== absentIds) {
     setSyncedAbsentIds(absentIds);
     if (groups.some((g) => g.memberIds.some((m) => absentIds.has(m)))) update(withoutMembers(groups, absentIds));
+  }
+
+  // Avant tout tirage, les startups arrivent verrouillees (elles se chargent parfois apres la page).
+  const [isPrefilled, setPrefilled] = useState(teams.length > 0);
+  if (!isPrefilled && startupTeams && startupTeams.groups.length > 0 && groups.length === 0) {
+    setPrefilled(true);
+    update(withStartupTeams([], startupTeams.groups));
   }
 
   const draw = () => {
@@ -419,6 +448,25 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
           />
 
           <Section title="Rules" hint={tool.rulesHint}>
+          {startupTeams && (
+            <Section
+              title={`Startups · ${startupTeams.groups.length}`}
+              help="This event keeps the batch's startups as teams: they are locked below, under their startup's name, and Draw only places the other founders, with the usual rules."
+            >
+              {startupTeams.groups.length === 0 && <Empty>No startup with two founders taking part: everyone is drawn.</Empty>}
+              {startupTeams.skipped.map((s) => (
+                <Text key={s.id} size="sm" c="dimmed">
+                  {s.name}: fewer than two of its founders take part, so they are drawn with the others.
+                </Text>
+              ))}
+              {startupTeams.groups.length > 0 && (
+                <Button variant="default" onClick={() => update(withStartupTeams(groups, startupTeams.groups))}>
+                  Lock the startups as teams again
+                </Button>
+              )}
+            </Section>
+          )}
+
             <Button size="md" fullWidth onClick={draw} loading={connections.isLoading} disabled={participants.length < GROUP_SIZE_MIN}>
               {groups.length > 0 ? "Draw again" : "Draw"}
             </Button>

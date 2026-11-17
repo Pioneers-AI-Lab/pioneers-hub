@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Anchor, Group, SimpleGrid, Stack, Text } from "@mantine/core";
-import { STARTUP_SUBSCORES, STARTUP_WEIGHTING_HINT, type Checkin, type MetricKey, type StartupSubScore } from "@shared/types";
+import { scoreScaleOf, startupWeightingHint, STARTUP_SUBSCORES, type Checkin, type MetricKey, type StartupSubScore } from "@shared/types";
 import { criterionLabel } from "@shared/presets/eventTemplates";
 import { STANDARD_METRICS, withUnit, type StandardMetricKey } from "@shared/presets/standardMetrics";
 import { useBatch } from "@/context/BatchContext";
@@ -11,7 +11,7 @@ import { useEvents } from "@/context/EventsContext";
 import { useLeaderboards } from "@/context/LeaderboardsContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartup } from "@/context/StartupContext";
-import { formatDay, integer, percent } from "@/lib/format";
+import { formatDay, integer, percent, scoreSourceLine } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { Field } from "@/components/ui/Field";
 import { ExternalLinkRow, Row, RowList } from "@/components/ui/Rows";
@@ -37,20 +37,36 @@ const SUBSCORE_LABEL: Record<StartupSubScore, string> = {
   traction: "Traction",
 };
 
-/** Le score sur 10 et ses quatre sous-scores. */
+/** Le score (sur 100, ou sur 10 pour Spring 2026) et ses quatre sous-scores, chacun avec sa source. */
 export function StartupScoreSection() {
-  const { startup } = useStartup();
+  const { startup, signals } = useStartup();
   const { startupScores, startupScoreOf } = useCohort();
   const score = startupScores.get(startup.id);
   if (!score) return null;
+  const scale = scoreScaleOf(score);
 
   return (
     <Section title="Score" hint={`Data completeness ${percent(score.dataCompleteness)}.`}>
-      <ScoreHeadline label="Overall" value={startupScoreOf(startup.id)} hint={STARTUP_WEIGHTING_HINT} />
+      <ScoreHeadline label="Overall" value={startupScoreOf(startup.id)} scale={scale} hint={startupWeightingHint(score)} />
       <Stack gap="md" mt="xs">
-        {STARTUP_SUBSCORES.map((key) => (
-          <ScoreBar key={key} label={SUBSCORE_LABEL[key]} value={score.subScores[key]} />
-        ))}
+        {STARTUP_SUBSCORES.map((key) => {
+          const source = scoreSourceLine(signals?.signals[key], scale);
+          return (
+            <ScoreBar
+              key={key}
+              label={SUBSCORE_LABEL[key]}
+              value={score.subScores[key]}
+              scale={scale}
+              detail={
+                source && (
+                  <Text size="xs" c="dimmed" className="num">
+                    {source}
+                  </Text>
+                )
+              }
+            />
+          );
+        })}
       </Stack>
     </Section>
   );

@@ -64,15 +64,17 @@ export function roleInBatch(viewer: Viewer | null, viewerFounderId: string | nul
  *   batch                   fondateurs du batch, staff, investors
  *                           -> liste des fondateurs, private/directory, memberships, batchTasks
  *   self ou insider         le fondateur lui-meme, staff, investors IC
- *                           -> private/profile, private/connections, founderWeeks, sessionRatings, people
+ *                           -> private/profile, private/connections, founderWeeks, sessionRatings, people,
+ *                              teamLocks (Lock my team)
  *   self ou staff           le fondateur lui-meme, staff -> picks, formCompletions, taskCompletions
  *   membres ou investors    membres de la startup, staff, investors
  *                           -> startups/private/profile, kpiSeries, checkins, metricSnapshots
  *   staff ou investors      -> scores
  *   insider                 staff, investors IC
- *                           -> private/internal, founderStats, scoreSignals, notes,
+ *                           -> private/internal, founderStats, scoreSignals, shortlistHistory, notes,
  *                              evaluations, presences, assessments validees, eloMatches,
- *                              mentors, investors, equipes non publiees
+ *                              mentors, investors, equipes non publiees,
+ *                              founderReviews et startupReviews (revue des Weekly updates, lot 4)
  *   staff                   -> avis entre pairs individuels, mutual picks des autres,
  *                              apiKeys, auditLogs, outils
  */
@@ -117,10 +119,17 @@ export const canReadFounderDirectory = (role: BatchRole): boolean => role !== "p
 
 /**
  * Audience « self ou insider » : `private/profile`, `private/connections` (shortlist et rencontres ; ecrites par
- * le fondateur lui-meme seulement, jamais le staff : regle `private/{docId}`), `founderWeeks`, `sessionRatings`.
+ * le fondateur lui-meme seulement, jamais le staff : regle `private/{docId}`), `founderWeeks`, `sessionRatings`,
+ * `teamLocks` (Lock my team, lot 2 : ecrite par le formulaire `submitFormResponse`, corrigee par le staff).
  */
 export const canReadFounderProfile = (role: BatchRole, viewerFounderId: string | null, founderId: string): boolean =>
   isInsider(role) || viewerFounderId === founderId;
+
+/**
+ * Audience « insider » : la revue des Weekly updates (`founderReviews`, `startupReviews`, lot 4,
+ * shared/weeklyReviews.ts), ecrite par le staff seul (Admin > Reviews). Jamais montree aux fondateurs.
+ */
+export const canReadWeeklyReviews = (role: BatchRole): boolean => isInsider(role);
 
 /** Audience « membres ou investors » : profil startup, `kpiSeries`, `checkins`, `metricSnapshots`. */
 export const canReadStartupProfile = (

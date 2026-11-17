@@ -34,6 +34,9 @@ export default function AdminHomePage() {
           />
           <LinkRow href={paths.adminForms()} title="Forms" subtitle="Create, edit and publish forms, from templates" />
           <LinkRow href={paths.adminTasks()} title="Tasks" subtitle="The founders' checklist in To do: add, edit, see who is late" />
+          <LinkRow href={paths.adminStartups()} title="Startups" subtitle="From the Lock my team answers: confirm the teams, create the startups" />
+          <LinkRow href={paths.adminBackground()} title="Background" subtitle="Rate each founder's profile once: the Background grid" />
+          <LinkRow href={paths.adminReviews()} title="Reviews" subtitle="Review each weekly update, founder and startup, one after the other" />
           <LinkRow href={paths.adminImport()} title="Import founders" subtitle="From the onboarding CSV" />
           <LinkRow href={paths.adminBatchSettings()} title="Batch settings" subtitle="Status, milestones, leaderboard, Slack; new program or batch" />
         </RowList>

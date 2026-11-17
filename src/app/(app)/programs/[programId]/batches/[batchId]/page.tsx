@@ -4,13 +4,13 @@ import Link from "next/link";
 import { Anchor, Button, Divider, Stack, Text } from "@mantine/core";
 import { IconBrandSlack } from "@tabler/icons-react";
 import { slackWorkspaceUrl } from "@shared/slackLinks";
-import { STARTUP_WEIGHTING_HINT } from "@shared/types";
+import { startupWeightingHint } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
 import { useFounders } from "@/context/FoundersContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
-import { PROFILE_CATEGORY_LABEL, formatDay, percent, score10, todayDayString } from "@/lib/format";
+import { PROFILE_CATEGORY_LABEL, formatDay, formatScore, percent, todayDayString } from "@/lib/format";
 import { SHOW_MILESTONES, SHOW_STARTUPS_TAB } from "@/lib/features";
 import { paths } from "@/lib/paths";
 import { LinkRow, Row, RowList } from "@/components/ui/Rows";
@@ -37,7 +37,7 @@ export default function BatchHomePage() {
   const { batch, role, isSignedIn } = useBatch();
   const { founders } = useFounders();
   const { startups } = useStartups();
-  const { stats, canSeeScores, founderPerformance, startupScoreOf } = useCohort();
+  const { stats, canSeeScores, founderPerformance, startupScoreOf, founderScaleOf, startupScaleOf } = useCohort();
 
   const today = todayDayString();
   // Espace Slack du batch, pas un canal (le canal configure peut etre reserve au
@@ -139,7 +139,7 @@ export default function BatchHomePage() {
       </Section>
 
       {topFounders.length > 0 && (
-        <Section title="Top founders" hint="Program performance, out of 10.">
+        <Section title="Top founders" hint={`Program performance, out of ${founderScaleOf(topFounders[0].f.id)}.`}>
           <RowList>
             {topFounders.map(({ f, score }) => (
               <LinkRow
@@ -148,7 +148,7 @@ export default function BatchHomePage() {
                 avatar={{ name: f.name, photoUrl: f.photoUrl }}
                 title={f.name}
                 subtitle={f.trackRecordOneLiner ?? undefined}
-                meta={<Text fw={600} className="num">{score10(score)}</Text>}
+                meta={<Text fw={600} className="num">{formatScore(score, founderScaleOf(f.id))}</Text>}
               />
             ))}
           </RowList>
@@ -156,7 +156,7 @@ export default function BatchHomePage() {
       )}
 
       {topStartups.length > 0 && (
-        <Section title="Top startups" hint={`${STARTUP_WEIGHTING_HINT}.`}>
+        <Section title="Top startups" hint={`${startupWeightingHint({ scale: startupScaleOf(topStartups[0].s.id) })}.`}>
           <RowList>
             {topStartups.map(({ s, score }) => (
               <LinkRow
@@ -165,7 +165,7 @@ export default function BatchHomePage() {
                 avatar={{ name: s.name, photoUrl: s.logoUrl }}
                 title={s.name}
                 subtitle={s.ideaOneLine ?? undefined}
-                meta={<Text fw={600} className="num">{score10(score)}</Text>}
+                meta={<Text fw={600} className="num">{formatScore(score, startupScaleOf(s.id))}</Text>}
               />
             ))}
           </RowList>

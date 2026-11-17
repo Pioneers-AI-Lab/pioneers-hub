@@ -399,8 +399,6 @@ for (const f of founders) {
       targetType: "founder",
       targetId: f.id,
       subScores,
-      baseline: { execution: null, founderSignal: null, pedigree: null, geography: null },
-      baselineComputedDateISOString: null,
       dataCompleteness: (score.dataCompleteness ?? 0) / 100,
       computedDateISOString: now,
     });

@@ -1,7 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Button, Group, Stack, Text, Title, type MantineSpacing } from "@mantine/core";
 import { IconChevronLeft } from "@tabler/icons-react";
+import { useHelpToggle } from "./Help";
 
 /**
  * Retour vers la page parente : un vrai bouton (fond gris leger, chevron), 40 px
@@ -28,29 +31,43 @@ export function BackButton({ href, label, mb }: { href: string; label: string; m
   );
 }
 
-/** Titre de page, precede au besoin du bouton de retour (`back`). */
+/**
+ * Titre de page, precede au besoin du bouton de retour (`back`). Sous le titre : `subtitle`,
+ * ce qui reste visible, puis `help`, l'explication, repliee derriere un (?) (comme `Section`).
+ */
 export function PageHeader({
   title,
   subtitle,
+  help,
   back,
   right,
 }: {
   title: ReactNode;
   subtitle?: ReactNode;
+  help?: ReactNode;
   back?: { href: string; label: string };
   right?: ReactNode;
 }) {
+  const { isOpen: isHelpOpen, toggle } = useHelpToggle(typeof title === "string" ? title : "this page");
   return (
     <Stack gap={10} mb="md">
       {back && <BackButton {...back} />}
       <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
         <Stack gap={2} style={{ minWidth: 0 }}>
-          <Title order={2} style={{ overflowWrap: "anywhere" }}>
-            {title}
-          </Title>
+          <Group gap={0} wrap="nowrap" align="center">
+            <Title order={2} style={{ overflowWrap: "anywhere" }}>
+              {title}
+            </Title>
+            {help && toggle}
+          </Group>
           {subtitle && (
             <Text size="sm" c="dimmed">
               {subtitle}
+            </Text>
+          )}
+          {help && isHelpOpen && (
+            <Text size="sm" c="dimmed">
+              {help}
             </Text>
           )}
         </Stack>

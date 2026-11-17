@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Text, TextInput } from "@mantine/core";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
-import { score10 } from "@/lib/format";
+import { formatScore } from "@/lib/format";
 import { useFounders } from "@/context/FoundersContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
@@ -21,7 +21,7 @@ export default function StartupsPage() {
   const { foundersById } = useFounders();
   const [search, setSearch] = useState("");
   // Staff et investors : classement par score.
-  const { canSeeScores, startupScoreOf } = useCohort();
+  const { canSeeScores, startupScoreOf, startupScaleOf } = useCohort();
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -60,7 +60,7 @@ export default function StartupsPage() {
                 meta={
                   canSeeScores ? (
                     <Text fw={600} className="num" c={s.status !== "active" ? "dimmed" : undefined}>
-                      {score10(startupScoreOf(s.id))}
+                      {formatScore(startupScoreOf(s.id), startupScaleOf(s.id))}
                     </Text>
                   ) : viewerFounderId && s.memberIds.includes(viewerFounderId) ? (
                     <Text size="xs" c="pioneers">Yours</Text>

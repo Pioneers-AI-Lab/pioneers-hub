@@ -62,6 +62,12 @@ export type EventMatching = {
   mode: MatchingMode;
   /** Taille visee des groupes (2 a 5). */
   size: { min: number; max: number };
+  /**
+   * Les startups du batch (au moins deux fondateurs presents) sont des equipes fixes du
+   * tirage, les autres fondateurs sont tires entre eux (H5, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md
+   * §4.2 : `shared/teamGenerator.ts#startupFixedGroups`, TeamGenerator). Absent : tirage de tous.
+   */
+  lockedTeamsFromStartups?: boolean;
 };
 
 /**
@@ -209,6 +215,18 @@ export type PioneersEvent = BatchScoped &
      * Absent ou `null` : cree dans le Hub.
      */
     calendarSource?: CalendarSource | null;
+    /**
+     * Presence optionnelle (docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §1, 17/11) : relevee,
+     * mais elle ne compte pas dans Engagement, ni les formulaires de l'evenement dans
+     * « Forms on time » (`shared/attendance.ts#isAttendanceOptional`). Absent : obligatoire.
+     * Reglee par le staff (Admin > Events > Attendance) ou par data/events.json.
+     */
+    attendanceOptional?: boolean;
+    /**
+     * Poids de son classement dans le signal Hackathons d'Execution (§3.1 : le H5 compte
+     * 4 fois). Absent : 1 (`shared/scoring.ts#hackathonWeightOf`). Vient de data/events.json.
+     */
+    hackathonWeight?: number;
   };
 
 export type CalendarSource = {
@@ -341,8 +359,10 @@ export type Submission = {
   productUrl: string | null;
   /** Liens de preuve (transcripts d'appels, liste de 30 clients potentiels, creatives...). */
   proofUrls: string[];
-  /** Precisions libres de l'equipe (ex. le type de client du hackathon Agent Agency). */
+  /** Precisions libres de l'equipe (ex. le type de client du hackathon Agent Agency ; le plan du H5). */
   notes: string | null;
+  /** H5 « Snapshot » : les fonctionnalites livrees au build freeze. Absent des anciens documents. */
+  features?: string | null;
   /** Fall 2026 : le probleme en une phrase (H1), sa source (H2, H3), les apprentissages (H2), le dossier Drive des preuves. */
   painSentence: string | null;
   problemSource: ProblemSource | null;
@@ -368,12 +388,15 @@ export type Submission = {
   recordedSource: "self_reported" | "staff" | null;
 };
 
-/** Ce que tout ecrivain d'une soumission pose : la source des releves de metriques (`onSubmissionWritten`). */
+/**
+ * Ce que tout ecrivain d'une soumission pose : la source des releves de metriques (`onSubmissionWritten`).
+ * `deadline` : l'echeance du formulaire qui decide du retard (`null` : sans echeance) ; absente, `late`
+ * ne change pas (le staff, ou un formulaire qui ne decide pas du retard : `formSetsSubmissionLate`).
+ */
 export const submissionStamp = (uid: string, source: "self_reported" | "staff", now: string, deadline?: DateISOString | null) => ({
   submittedDateISOString: now,
   recordedByUid: uid,
   recordedSource: source,
-  // Un envoi par formulaire connait l'echeance : il dit s'il est en retard.
   ...(deadline !== undefined ? { late: deadline !== null && now > deadline } : {}),
 });
 
@@ -396,6 +419,7 @@ export const emptySubmission = (teamId: string): Submission => ({
   productUrl: null,
   proofUrls: [],
   notes: null,
+  features: null,
   painSentence: null,
   problemSource: null,
   learnings: null,

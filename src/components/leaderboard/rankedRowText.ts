@@ -1,6 +1,6 @@
 import { OUTSTANDING_BONUS_POINTS, tieBreakNote } from "@shared/scoringRules";
 import type { Leaderboard, LeaderboardRow } from "@shared/types";
-import { metricValue, score10 } from "@/lib/format";
+import { formatScore, metricValue } from "@/lib/format";
 
 /**
  * Le texte d'une ligne de classement, le meme partout (page Leaderboard du batch,
@@ -19,5 +19,5 @@ export function rankedRowText(board: Pick<Leaderboard, "metric" | "scoring" | "r
     };
   }
   if (board.metric) return { value: metricValue(board.metric, row.score), subtitle: board.metric.label };
-  return { value: score10(row.score), subtitle: `${row.evaluationsCount} ${row.evaluationsCount === 1 ? "review" : "reviews"}` };
+  return { value: formatScore(row.score, 10), subtitle: `${row.evaluationsCount} ${row.evaluationsCount === 1 ? "review" : "reviews"}` };
 }

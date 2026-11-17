@@ -1,5 +1,6 @@
 import dayjs from "dayjs";
 import { parisToday } from "@shared/dates";
+import type { ScoreScale } from "@shared/types";
 
 export { searchKey } from "@shared/text";
 
@@ -86,8 +87,22 @@ export const joinList = (values: readonly string[] | null | undefined, sep = ", 
 
 export { PROFILE_CATEGORY_LABELS as PROFILE_CATEGORY_LABEL } from "@shared/types";
 
-/** Score sur 10 : `7.4`, `-` sans donnee. */
-export const score10 = (v: number | null | undefined) => (v === null || v === undefined ? "-" : v.toFixed(1));
+/** Un score sur son echelle (`ScoreScale`) : entier sur 100 (« 74 », « 112 » avec une mention), une decimale sur 10. */
+export const formatScore = (v: number | null | undefined, scale: ScoreScale) =>
+  v === null || v === undefined ? "-" : scale === 100 ? `${Math.round(v)}` : v.toFixed(1);
+
+/** Le remplissage d'une barre de score, de 0 a 100 % : au-dessus de l'echelle (Outstanding), pleine. */
+export const scoreFill = (v: number | null | undefined, scale: ScoreScale) => Math.min(100, ((v ?? 0) / scale) * 100);
+
+/**
+ * D'ou vient un sous-score, en une ligne : « Hackathons (3): 74 · Peer ratings (4): 63 ».
+ * Seulement sur 100 (les signaux importes de Spring 2026 n'ont pas ces libelles) ; `undefined` sans signal.
+ */
+export const scoreSourceLine = (signals: readonly { label: string; score: number }[] | undefined, scale: ScoreScale) =>
+  scale === 100 && signals?.length ? signals.map((s) => `${s.label}: ${formatScore(s.score, scale)}`).join(" · ") : undefined;
+
+/** Un oui / non affichable : `Yes`, `No`, `null` sans reponse (champ masque). */
+export const yesNoLabel = (v: boolean | null | undefined) => (v === true ? "Yes" : v === false ? "No" : null);
 
 /** Part 0-1 -> `77%`. */
 export const percent = (v: number | null | undefined) => (v === null || v === undefined ? "-" : `${Math.round(v * 100)}%`);

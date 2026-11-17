@@ -5,16 +5,16 @@ import type { FieldWriteStatus, FormApproval, FormIdentityCheck, FormKind, FormR
 
 export const FORM_KIND_LABELS: Record<FormKind, string> = {
   onboarding: "Onboarding",
-  motivation: "Weekly motivation",
+  motivation: "Weekly update founder",
   goal: "Goal form",
-  weekly_update: "Thursday update",
+  weekly_update: "Weekly update startup",
   exercise_feedback: "Exercise feedback",
   session_feedback: "Session feedback",
   peer_feedback: "Peer rating",
   debrief: "Hackathon submission",
   jury: "Jury",
   picks: "Picks",
-  exit: "Exit form",
+  exit: "Program end",
   custom: "Custom",
 };
 

@@ -360,6 +360,11 @@ const TRACKING_BASE: Record<TrackingDocKind, (s: ResolvedSubjects, l: Loaded) =>
     founderId: s.founderId,
     pickedFounderIds: [],
   }),
+  teamLock: (s, l) => ({
+    programId: l.founder!.programId,
+    batchId: l.founder!.batchId,
+    founderId: s.founderId,
+  }),
   peerRating: (s, l) => ({
     programId: l.founder!.programId,
     batchId: l.founder!.batchId,
@@ -427,7 +432,10 @@ export type FieldWritesOptions = {
   asForm?: boolean;
   /** Champs poses a la creation d'un document de suivi, par document (le nom du jure, la cible notee...). */
   createWith?: Partial<Record<DocKind, Record<string, unknown>>>;
-  /** Echeance du formulaire qui ecrit : une soumission envoyee apres est « en retard ». */
+  /**
+   * Echeance du formulaire qui ecrit : une soumission envoyee apres est « en retard ».
+   * Absente : ce formulaire ne decide pas du retard (Plan et Snapshot du H5), `late` ne change pas.
+   */
   formDeadline?: string | null;
 };
 
@@ -562,7 +570,7 @@ export async function planFieldWrites(
         const ref = db.doc(pathByKind.get(kind)!);
         const data: Record<string, unknown> = { ...patch };
         if (DOC_KINDS[kind].timestamped) data.updatedDateISOString = now;
-        Object.assign(data, stampOf(kind, { now, uid: caller.uid, asForm: options.asForm === true, formDeadline: options.formDeadline ?? null }));
+        Object.assign(data, stampOf(kind, { now, uid: caller.uid, asForm: options.asForm === true, formDeadline: options.formDeadline }));
         if (kind === "person" && copies?.displayName) data.displayName = copies.displayName;
 
         // Documents de base : leur existence est verifiee plus haut. Sous-documents

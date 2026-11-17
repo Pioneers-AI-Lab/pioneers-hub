@@ -50,6 +50,37 @@ export type BatchSettings = {
    * peuvent partager un agenda. Absent ou `null` : les evenements se creent dans le Hub.
    */
   googleCalendarId?: string | null;
+  /**
+   * Les echeances des milestones du score (Execution, shared/scoring.ts#founderMilestones),
+   * reglees par batch (scripts/set-milestone-dates.mjs). Absent : aucune milestone due.
+   */
+  scoreMilestoneDueDates?: ScoreMilestoneDueDates | null;
+  /**
+   * Les formulaires hebdomadaires (lot 4, shared/weeklyForms.ts) : chaque jeudi a 18:45, la fonction
+   * `weeklyForms` cree le Weekly update founder et le Weekly update startup de la semaine, publies,
+   * echeance 24 h apres, a partir de `startDayString`. Absent ou `enabled: false` : rien n'est cree.
+   */
+  weeklyForms?: WeeklyFormsSettings | null;
+};
+
+/** La creation automatique des formulaires hebdomadaires d'un batch (fa26 : a partir du jeudi 26/11). */
+export type WeeklyFormsSettings = {
+  enabled: boolean;
+  /** Premier jeudi (`YYYY-MM-DD`, a Paris) ou les formulaires se creent. */
+  startDayString: DayString;
+};
+
+/**
+ * Echeance de chaque milestone (ISO complet). Une milestone sans echeance ne compte pas.
+ * fa26 : Shortlist done et Met a la fin du debrief du H4, Teamed up au kickoff du H5,
+ * Problem validated le jour du Selection Day ; Weekly goal (lot 4) chaque semaine a partir de `weeklyGoalFrom`.
+ */
+export type ScoreMilestoneDueDates = {
+  shortlistDone?: DateISOString | null;
+  met?: DateISOString | null;
+  teamedUp?: DateISOString | null;
+  problemValidated?: DateISOString | null;
+  weeklyGoalFrom?: DateISOString | null;
 };
 
 export type Batch = Timestamps &

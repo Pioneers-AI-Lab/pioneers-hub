@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { Box, Group, Stack, Text, UnstyledButton } from "@mantine/core";
 import { isWorkTeamEvent } from "@shared/events";
-import { COMMITMENT_STATUS_LABELS, FOUNDER_PILLARS, type AttendanceStatus, type FounderPillar } from "@shared/types";
+import {
+  COMMITMENT_STATUS_LABELS,
+  scaleRulesOf,
+  scoreScaleOf,
+  type AttendanceStatus,
+  type FounderPillarKey,
+} from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
 import { useEvents } from "@/context/EventsContext";
@@ -11,12 +17,13 @@ import { useFounder } from "@/context/FounderContext";
 import { useLeaderboards } from "@/context/LeaderboardsContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
-import { formatDay, percent, score10 } from "@/lib/format";
+import { formatDay, percent, scoreSourceLine } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { Field, FieldGrid } from "@/components/ui/Field";
 import { LinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 import { ScoreHeadline } from "@/components/insights/ScoreBar";
+import { rankedRowText } from "@/components/leaderboard/rankedRowText";
 import { ATTENDANCE_STYLE } from "@/components/event/eventLabels";
 import { useFounderLinks } from "./FounderLink";
 import { ChartCard } from "@/components/charts/ChartCard";
@@ -30,62 +37,79 @@ import { ScoreRadar } from "@/components/charts/ScoreRadar";
 // CohortContext) : un fondateur voit ses equipes et ses semaines, jamais son
 // score ni sa presence.
 
-const PILLAR_LABEL: Record<FounderPillar, string> = {
+const PILLAR_LABEL: Record<FounderPillarKey, string> = {
   engagement: "Engagement",
   execution: "Execution",
   likability: "Likability",
   commitment: "Commitment",
+  background: "Background",
   achievements: "Achievements",
 };
 
 /** Initiales des piliers sur le radar (comme la reference). */
-const PILLAR_SHORT: Record<FounderPillar, string> = {
+const PILLAR_SHORT: Record<FounderPillarKey, string> = {
   engagement: "E",
   execution: "Ex",
   likability: "L",
   commitment: "C",
+  background: "B",
   achievements: "A",
 };
 
 /**
  * Program Performance (fiche fondateur du dashboard) : le score global, le
- * radar des cinq piliers, et le detail de chacun (poids, valeur, signaux).
+ * radar des cinq piliers, et le detail de chacun (poids, valeur, source,
+ * signaux). Sur 100 (Hub) ou sur 10 (Spring 2026, importe) : `score.scale`.
  */
 export function FounderPerformance() {
   const { founder, signals } = useFounder();
   const { founderScores, founderPerformance } = useCohort();
   const score = founderScores.get(founder.id);
   if (!score) return null;
-  const weight = 1 / FOUNDER_PILLARS.length;
+  const scale = scoreScaleOf(score);
+  const { pillars, performanceHint } = scaleRulesOf(score);
+  const weight = 1 / pillars.length;
+  const valueOf = (p: FounderPillarKey) => score.subScores[p] ?? null;
 
   return (
     <Section title="Program performance" hint={`Data completeness ${percent(score.dataCompleteness)}.`}>
       <ChartCard>
-        <ScoreHeadline label="Overall" value={founderPerformance(founder.id)} hint="Average of the five pillars." />
-        <ScoreRadar axes={FOUNDER_PILLARS.map((p) => ({ label: PILLAR_SHORT[p], value: score.subScores[p] }))} h={210} />
+        <ScoreHeadline
+          label="Overall"
+          value={founderPerformance(founder.id)}
+          scale={scale}
+          hint={performanceHint}
+        />
+        {/* Au-dessus de l'echelle (Outstanding) : au bord du radar. */}
+        <ScoreRadar axes={pillars.map((p) => ({ label: PILLAR_SHORT[p], value: Math.min(scale, valueOf(p) ?? 0) }))} max={scale} h={210} />
         <ScoreBreakdown
-          rows={FOUNDER_PILLARS.map((p) => ({
-            key: p,
-            short: PILLAR_SHORT[p],
-            label: PILLAR_LABEL[p],
-            weight,
-            value: score.subScores[p],
-            details:
-              (signals?.signals[p] ?? []).length > 0 ? (
-                <Stack gap={2}>
-                  {signals!.signals[p]!.map((sig) => (
-                    <Group key={sig.label} justify="space-between" gap="xs" wrap="nowrap">
-                      <Text size="xs" c="dimmed" truncate>
-                        {sig.label}
-                      </Text>
-                      <Text size="xs" className="num" style={{ flexShrink: 0 }}>
-                        {sig.raw}
-                      </Text>
-                    </Group>
-                  ))}
-                </Stack>
-              ) : undefined,
-          }))}
+          scale={scale}
+          rows={pillars.map((p) => {
+            const list = signals?.signals[p] ?? [];
+            return {
+              key: p,
+              short: PILLAR_SHORT[p],
+              label: PILLAR_LABEL[p],
+              weight,
+              value: valueOf(p),
+              source: scoreSourceLine(list, scale),
+              details:
+                list.length > 0 ? (
+                  <Stack gap={2}>
+                    {list.map((sig) => (
+                      <Group key={sig.label} justify="space-between" gap="xs" wrap="nowrap">
+                        <Text size="xs" c="dimmed" truncate>
+                          {sig.label}
+                        </Text>
+                        <Text size="xs" className="num" style={{ flexShrink: 0 }}>
+                          {sig.raw}
+                        </Text>
+                      </Group>
+                    ))}
+                  </Stack>
+                ) : undefined,
+            };
+          })}
         />
       </ChartCard>
     </Section>
@@ -131,18 +155,18 @@ export function FounderTeams() {
             }
             const { eventId } = m;
             const event = eventId ? eventsById.get(eventId) : undefined;
-            const rows = eventId ? leaderboardsByEventId.get(eventId)?.rows : undefined;
-            const row = rows?.find((r) => r.targetId === m.teamId);
+            const board = eventId ? leaderboardsByEventId.get(eventId) : undefined;
+            const row = board?.rows.find((r) => r.targetId === m.teamId);
             const props = {
               title: event?.name ?? "Event",
               subtitle: [row?.name, m.role ? m.role.replace(/_/g, " ") : null, formatDay(m.startDayString, true)].filter(Boolean).join(" · "),
-              meta: row ? (
+              meta: row && board ? (
                 <Stack gap={0} align="flex-end">
                   <Text fw={600} className="num">
-                    {score10(row.score)}
+                    {rankedRowText(board, row).value}
                   </Text>
                   <Text size="xs" c={row.rank <= 3 ? "pioneers" : "dimmed"} className="num">
-                    #{row.rank} of {rows?.length}
+                    #{row.rank} of {board.rows.length}
                   </Text>
                 </Stack>
               ) : undefined,

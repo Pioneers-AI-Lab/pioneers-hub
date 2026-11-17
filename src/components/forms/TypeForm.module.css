@@ -173,6 +173,11 @@
   white-space: pre-line;
 }
 
+/* Le rappel de l'objectif de la semaine d'avant (Weekly update founder), au-dessus de la question. */
+.previousGoal {
+  margin: 0 0 24px;
+}
+
 .note {
   margin: 16px 0 0;
   color: var(--mantine-color-dark-2);

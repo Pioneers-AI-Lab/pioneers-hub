@@ -13,6 +13,10 @@ rules_version = '2';
 //   founders/{id}/private/profile    le fondateur lui-meme + staff + investors IC
 //   founders/{id}/private/internal   staff + investors IC
 //   founders/{id}/private/connections  le fondateur lui-meme + staff + investors IC (ecrit par lui seul)
+//   shortlistHistory/{founderId}_{targetId}  staff + investors IC (ecrit par le serveur seul)
+//   teamLocks/{founderId}            le fondateur lui-meme + staff + investors IC (Lock my team)
+//   founderReviews/{founderId}_{weekStart}, startupReviews/{startupId}_{weekStart}
+//                                    staff + investors IC (revue des Weekly updates, ecrite par le staff)
 //   startups/{id}                    public
 //   startups/{id}/private/profile    membres + staff + investors
 //   startups/{id}/private/internal   staff + investors IC
@@ -180,6 +184,24 @@ service cloud.firestore {
             || (after.size() < before.size() && before.toSet().hasAll(after)));
     }
 
+    // Grille Background (`private/internal.background`, miroir de shared/background.ts#backgroundProblems) :
+    // chaque critere note est un entier de 0 a 5 (absent ou `null` : pas encore note), et l'Outstanding
+    // seulement a 100 (les quatre criteres a 5). La proposition de Claude (`background.proposed`)
+    // s'ecrit par script (SDK admin), hors regles.
+    function backgroundNoteOk(v) {
+      return v == null || (v is int && v >= 0 && v <= 5);
+    }
+    function backgroundOk() {
+      let b = request.resource.data.get('background', null);
+      let s = b == null ? {} : b.get('scores', {});
+      return b == null
+        || (backgroundNoteOk(s.get('execution', null)) && backgroundNoteOk(s.get('founderSignal', null))
+            && backgroundNoteOk(s.get('pedigree', null)) && backgroundNoteOk(s.get('geography', null))
+            && (b.get('outstanding', false) != true
+                || (s.get('execution', 0) == 5 && s.get('founderSignal', 0) == 5
+                    && s.get('pedigree', 0) == 5 && s.get('geography', 0) == 5)));
+    }
+
     // ---- Comptes -----------------------------------------------------------
 
     match /users/{uid} {
@@ -320,7 +342,10 @@ service cloud.firestore {
               || isInsider()))
           || (docId == 'internal' && isInsider());
         // Shortlist et rencontres : le fondateur seul les ecrit, pas le staff (regle plus bas).
-        allow write: if docId != 'connections' && isStaff();
+        allow write: if docId != 'connections' && docId != 'internal' && isStaff();
+        // Donnees internes : le staff, grille Background valide (backgroundOk).
+        allow delete: if docId == 'internal' && isStaff();
+        allow create, update: if docId == 'internal' && isStaff() && backgroundOk();
         // « Mon profil » (FOUNDER_SELF_EDITABLE.founderDirectory et .founderProfile).
         allow update: if docId == 'directory'
           && isViewerFounder(founderData(founderId).batchId, founderId)
@@ -356,6 +381,46 @@ service cloud.firestore {
       allow read: if isInsider();
       allow write: if false;
     }
+
+    // Historique des shortlists (Likability) : chaque fondateur shortliste au moins une
+    // fois, ecrit par le serveur seul (declencheur `onConnectionsWritten`, ajout seul).
+    match /shortlistHistory/{recordId} {
+      allow read: if isInsider();
+      allow write: if false;
+    }
+
+    // Lock my team (lot 2, shared/teamLocks.ts) : le fondateur lui-meme + staff + investors IC
+    // (shared/access.ts#canReadFounderProfile). Ecrit par la callable submitFormResponse ; le staff corrige.
+    // Le fondateur d'abord : sa lecture n'a pas besoin de `users/{uid}`.
+    match /teamLocks/{founderId} {
+      allow read: if isViewerFounder(resource.data.batchId, founderId) || isInsider();
+      allow write: if isStaff();
+    }
+
+    // ==== LOT 4 (debut) : revue des Weekly updates (Admin > Reviews, shared/weeklyReviews.ts) ====
+    // Staff + investors IC (miroir de shared/access.ts#canReadWeeklyReviews), ecrites par le staff.
+    // Grille Weekly founder : des oui / non. Grille Weekly startup : Traction et Progress, des entiers
+    // de 0 a 5 (absents ou `null` : pas encore notes), l'Outstanding seulement a 100 (les deux a 5) ;
+    // miroir de founderReviewProblems / startupReviewProblems (note : `backgroundNoteOk`, meme echelle).
+    function yesNoOrNull(data, key) {
+      return data.get(key, null) == null || data.get(key, null) is bool;
+    }
+    function startupReviewOk(data) {
+      let s = data.get('scores', {});
+      return backgroundNoteOk(s.get('traction', null)) && backgroundNoteOk(s.get('progress', null))
+        && (data.get('outstanding', false) != true || (s.get('traction', 0) == 5 && s.get('progress', 0) == 5));
+    }
+    match /founderReviews/{reviewId} {
+      allow read: if isInsider();
+      allow write: if isStaff() && (request.resource == null
+        || (yesNoOrNull(request.resource.data, 'goalAmbitious') && yesNoOrNull(request.resource.data, 'goalReached')
+            && yesNoOrNull(request.resource.data, 'problemValidated')));
+    }
+    match /startupReviews/{reviewId} {
+      allow read: if isInsider();
+      allow write: if isStaff() && (request.resource == null || startupReviewOk(request.resource.data));
+    }
+    // ==== LOT 4 (fin) ====
 
     match /picks/{pickId} {
       allow read: if isStaff() || isViewerFounder(resource.data.batchId, resource.data.founderId);

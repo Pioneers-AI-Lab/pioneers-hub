@@ -94,6 +94,8 @@ export type PublicForm = {
   batchName: string;
   identityCheck: FormIdentityCheck;
   deadlineDateISOString: string | null;
+  /** Un envoi apres l'echeance rend la Submission de l'equipe en retard (0 point) : la page le dit avant (`Form.setsSubmissionLate`). */
+  setsSubmissionLate: boolean;
   /** `draft` : seul le staff le voit, pour le relire ; il ne prend pas de reponse. */
   state: "open" | "not_open_yet" | "closed" | "draft";
   questions: PublicFormQuestion[];
@@ -140,6 +142,12 @@ export type PublicForm = {
   newQuestionIds: string[];
   /** Lien de jury valide et jure choisi : les Submissions de ses cibles. `null` sinon. */
   juryBrief: JuryBrief | null;
+  /**
+   * Weekly update founder (lot 4) : l'objectif que le repondant a donne la semaine d'avant, rappele
+   * au-dessus de la question `questionId` (« What did you achieve? »). `null` sans objectif ou sans
+   * identite prouvee.
+   */
+  previousGoal: { questionId: string; goal: string } | null;
 };
 
 /** `details.reason` du refus d'un envoi lu sur une version qui ne suffit plus (question obligatoire ajoutee...). */

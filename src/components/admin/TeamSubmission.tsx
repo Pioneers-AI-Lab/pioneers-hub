@@ -27,6 +27,12 @@ export function TeamSubmission({ eventId, teamId, submission }: Props) {
         <Field label="Pain in one sentence">{submission.painSentence}</Field>
         <Field label="Problem">{submission.problemSource ? PROBLEM_SOURCE_LABELS[submission.problemSource] : null}</Field>
         <Field label="What they learned">{submission.learnings}</Field>
+        {/* Le H5 : Plan (texte et lien), puis Snapshot (produit, demo, fonctionnalites). */}
+        <Field label="Plan or team notes">{submission.notes}</Field>
+        <Field label="Plan link">{submission.slideUrl ? <ExternalLink href={submission.slideUrl} /> : null}</Field>
+        <Field label="Product">{submission.productUrl ? <ExternalLink href={submission.productUrl} /> : null}</Field>
+        <Field label="Demo">{submission.videoUrl ? <ExternalLink href={submission.videoUrl} /> : null}</Field>
+        <Field label="Features shipped">{submission.features}</Field>
         {submission.late && (
           <Stack gap={4}>
             <Text size="sm" c="orange">

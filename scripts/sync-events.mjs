@@ -15,7 +15,8 @@
 //   - les champs d'agenda : nom, description (`topic`), etiquette, modele, debut,
 //     fin, lieu, statut (un brouillon devient programme quand l'heure est connue),
 //     semaine, jalon, invites, bareme (`scoring`), et les liens `resourceUrl` / `videoCallUrl` s'ils sont
-//     dans le fichier (ils REMPLACENT alors ceux saisis par le staff) ;
+//     dans le fichier (ils REMPLACENT alors ceux saisis par le staff) ; de meme le poids du
+//     hackathon (`hackathonWeight`) et la presence optionnelle (`attendanceOptional`) ;
 //   - le matching, SAUF si l'evenement a deja des equipes (on ne casse pas un tirage) ;
 //   - les cles de `archived` (en tete du fichier) sont archivees, jamais supprimees.
 // Ses formulaires (shared/eventForms.ts : le pack du modele, plus `forms` du
@@ -24,7 +25,8 @@
 // Un formulaire de l'evenement qui n'est plus prevu et n'a aucune reponse est archive.
 //
 // `formSettings` d'un evenement du fichier : par modele de formulaire, `opens` /
-// `deadline` (heure de Paris, le jour de l'evenement) et `draft`.
+// `deadline` (heure de Paris : `HH:MM` le jour de l'evenement, `YYYY-MM-DD HH:MM` un autre
+// jour) et `draft` ; `withoutForms` retire des formulaires du pack (le H5 n'a pas de `debrief`).
 //
 // Batch relie a un agenda Google (SPECS §2, 16/11) : l'agenda fait foi. Un evenement
 // qui en vient garde ses CALENDAR_FIELDS (shared/calendarSync.ts) ; un
@@ -35,7 +37,7 @@
 import { createRequire } from "node:module";
 import { initializeApp, applicationDefault } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { FILE_LINK_FIELDS, formOptions, parisLabel, readEventsFile, toEvent } from "./lib/eventsFile.mjs";
+import { FILE_LINK_FIELDS, FILE_SCORE_FIELDS, formOptions, parisLabel, readEventsFile, toEvent } from "./lib/eventsFile.mjs";
 
 const require = createRequire(import.meta.url);
 const { eventFormDocs, eventFormsPlan } = require("../functions/lib/shared/eventForms.js");
@@ -132,6 +134,8 @@ for (const [n, e] of selected.entries()) {
     // Les liens : seulement si le fichier les donne (sinon ceux saisis par le staff restent) ; la visio
     // d'un evenement relie vient de l'agenda (`locked`).
     for (const f of FILE_LINK_FIELDS) if (f in e && !locked.has(f) && !same(current[f] ?? null, ev[f])) patch[f] = ev[f];
+    // Poids du hackathon, presence optionnelle : seulement s'ils sont dans le fichier.
+    for (const f of FILE_SCORE_FIELDS) if (f in e && !same(current[f] ?? null, ev[f])) patch[f] = ev[f];
     if (current.status === "draft" && ev.status === "scheduled") patch.status = "scheduled";
     // Un evenement d'avant le 13/11 n'a pas le champ : il deduirait un tirage de son type. On l'ecrit.
     if (current.matching === undefined || !same(current.matching, ev.matching)) {

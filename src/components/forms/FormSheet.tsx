@@ -225,8 +225,8 @@ function Sheet() {
       notifications.show({ color: "red", title: "Not saved yet", message: problem });
       return false;
     }
-    // Apres l'echeance, des valeurs de l'equipe changees : l'envoi sera en retard.
-    const isLate = deadline !== null && new Date().toISOString() > deadline;
+    // Apres l'echeance, des valeurs de l'equipe changees : l'envoi sera en retard (si ce formulaire en decide).
+    const isLate = form.setsSubmissionLate && deadline !== null && new Date().toISOString() > deadline;
     if (!onlyTarget && !lateConfirmed && isLate && changesSaved(drafts, form.prefill, team.map((q) => q.id), (key) => questionOf(key)?.type)) {
       setConfirmingLate(true);
       return false;

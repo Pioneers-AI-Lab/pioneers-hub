@@ -134,24 +134,29 @@ export function ExpandChevron({ expanded, size = 16, hidden }: { expanded: boole
   );
 }
 
-/** Ligne qui declenche une action ; `expanded` si elle deplie un contenu (chevron a droite, sauf `meta`). */
+/**
+ * Ligne qui declenche une action ; `expanded` si elle deplie un contenu (chevron a droite, sauf `meta`),
+ * `opens` si elle ouvre une fenetre ou une feuille (chevron `>` fixe).
+ */
 export function ButtonRow({
   onClick,
   disabled,
   expanded,
+  opens = false,
   meta,
   ...props
-}: RowProps & { onClick: () => void; disabled?: boolean; expanded?: boolean }) {
+}: RowProps & { onClick: () => void; disabled?: boolean; expanded?: boolean; opens?: boolean }) {
+  const chevron = expanded !== undefined ? <ExpandChevron expanded={expanded} /> : opens ? <ExpandChevron expanded={false} /> : null;
   return (
     <button type="button" className="row" onClick={onClick} disabled={disabled} aria-expanded={expanded}>
       {/* Une ligne repliable porte toujours son chevron, a droite de son `meta` s'il y en a un. */}
       <RowBody
         {...props}
         meta={
-          expanded === undefined ? meta : (
+          chevron === null ? meta : (
             <Group gap={8} wrap="nowrap">
               {meta}
-              <ExpandChevron expanded={expanded} />
+              {chevron}
             </Group>
           )
         }

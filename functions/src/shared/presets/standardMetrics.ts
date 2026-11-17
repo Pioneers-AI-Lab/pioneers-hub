@@ -106,6 +106,8 @@ export const CHECKIN_METRICS = [
   "demosDone",
   "proposalsSent",
   "closedWon",
+  // L'argent encaisse dans la semaine (Weekly update startup, §2.9 ; 1er critere du classement traction).
+  "amountPaid",
   "featuresShipped",
   "totalAmountPaid",
   "mrr",

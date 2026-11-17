@@ -12,6 +12,9 @@ export const searchKey = (value: string) =>
     .toLowerCase()
     .trim();
 
+/** Un id lisible (`fall-2026`, `accelerator`) : URL et ids deterministes. */
+export const slugify = (value: string) => searchKey(value).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
 /** Une cle stable tiree d'un libelle : « Calls made » -> `callsMade`, unique parmi `taken` (qu'elle complete). */
 export function camelKey(label: string, taken: Set<string>): string {
   const words = searchKey(label).split(/[^a-z0-9]+/).filter(Boolean);

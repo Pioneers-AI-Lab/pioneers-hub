@@ -61,21 +61,31 @@ export default function ChartsGalleryPage() {
         <Stack gap="lg">
           <ChartCard title="Score breakdown · ScoreRadar + ScoreBreakdown">
             <ScoreRadar
+              max={100}
               axes={[
-                { label: "E", value: 6 },
-                { label: "Ex", value: 10 },
-                { label: "L", value: 5.6 },
-                { label: "C", value: 10 },
-                { label: "A", value: 8.4 },
+                { label: "E", value: 60 },
+                { label: "Ex", value: 104 },
+                { label: "L", value: 56 },
+                { label: "C", value: 100 },
+                { label: "B", value: 84 },
               ]}
             />
             <ScoreBreakdown
+              scale={100}
               rows={[
-                { key: "e", short: "E", label: "Engagement", weight: 0.2, value: 6, details: <Text size="xs" c="dimmed">Attendance rate: 69%</Text> },
-                { key: "x", short: "Ex", label: "Execution", weight: 0.2, value: 10 },
-                { key: "l", short: "L", label: "Likability", weight: 0.2, value: 5.6 },
-                { key: "c", short: "C", label: "Commitment", weight: 0.2, value: 10 },
-                { key: "a", short: "A", label: "Achievements", weight: 0.2, value: 8.4 },
+                {
+                  key: "e",
+                  short: "E",
+                  label: "Engagement",
+                  weight: 0.2,
+                  value: 60,
+                  source: "Attendance (12): 69 · Forms on time (4): 50",
+                  details: <Text size="xs" c="dimmed">Attendance (12): 69% (9/12 mandatory)</Text>,
+                },
+                { key: "x", short: "Ex", label: "Execution", weight: 0.2, value: 104, source: "Hackathons (3): 112 · Peer ratings (5): 88" },
+                { key: "l", short: "L", label: "Likability", weight: 0.2, value: 56, source: "Supporters (5): 56" },
+                { key: "c", short: "C", label: "Commitment", weight: 0.2, value: 100, source: "Existing project: 100" },
+                { key: "b", short: "B", label: "Background", weight: 0.2, value: 84, source: "Background grid: 84" },
               ]}
             />
           </ChartCard>

@@ -2,7 +2,7 @@
 
 import { useMemo, type ReactNode } from "react";
 import { isInsider, isStaffOrInvestor, canReadStartupProfile, isStartupMember } from "@shared/access";
-import type { Checkin, Evaluation, KpiSeries, Startup, StartupInternal, StartupProfile, WithId } from "@shared/types";
+import type { Checkin, Evaluation, KpiSeries, ScoreSignals, Startup, StartupInternal, StartupProfile, WithId } from "@shared/types";
 import { queries, refs, type WithParent } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
 import { useDocListener, useQueryListener } from "@/hooks/useFirestoreListener";
@@ -19,7 +19,7 @@ import { paths } from "@/lib/paths";
 // ici : il depend de la startup, pas du batch.
 //   tous                       startups/{id}
 //   membres, staff, investors  private/profile, updates du jeudi (checkins), kpiSeries
-//   staff, IC                  private/internal, notes des pitchs (evaluations)
+//   staff, IC                  private/internal, notes des pitchs (evaluations), detail du score (scoreSignals)
 
 type StartupValue = {
   startup: WithId<Startup>;
@@ -31,6 +31,8 @@ type StartupValue = {
   kpis: WithId<KpiSeries> | null;
   /** Notes recues (pitchs), `parentId` = l'evenement. */
   evaluations: WithParent<Evaluation>[];
+  /** Le detail de son score (staff, IC), `null` sinon. */
+  signals: WithId<ScoreSignals> | null;
   canSeeProfile: boolean;
   isProfileLoading: boolean;
 };
@@ -59,6 +61,7 @@ export function StartupProvider({ children }: { children: ReactNode }) {
   );
   const kpis = useDocListener(startup.isLoading ? undefined : canSeeProfile ? refs.kpiSeries(startupId) : null);
   const evaluations = useQueryListener(isInsider(role) ? queries.evaluationsOfTarget(startupId) : null);
+  const signals = useDocListener(isInsider(role) ? refs.scoreSignals("startup", startupId) : null);
 
   const value = useMemo<StartupValue | null>(
     () =>
@@ -71,6 +74,7 @@ export function StartupProvider({ children }: { children: ReactNode }) {
             checkins: [...checkins.data].sort((a, b) => b.weekStartDayString.localeCompare(a.weekStartDayString)),
             kpis: kpis.data,
             evaluations: evaluations.data,
+            signals: signals.data,
             canSeeProfile,
             isProfileLoading: profile.isLoading || internal.isLoading,
           }
@@ -84,6 +88,7 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       checkins.data,
       kpis.data,
       evaluations.data,
+      signals.data,
       canSeeProfile,
       profile.isLoading,
       internal.isLoading,

@@ -1,5 +1,5 @@
 {
-  "_doc": "Evenements du batch Fall 2026 (Pioneers Accelerator), a importer plus tard dans `events` (pas encore en base). Champs alignes sur `PioneersEvent` (functions/src/shared/types/event.ts) ; les heures `startTime`/`endTime` sont en heure de Paris (UTC+1), `startDateISOString` en UTC. Modele standard (SPECS §2) : l'evenement ne porte ni grille ni metriques ; scripts/import-events.mjs cree ses formulaires (shared/eventForms.ts) : le Debrief d'un hackathon avec `metrics` (sinon celles du modele), le jury et les picks en brouillon, et les modeles de `forms` en brouillon. Champs non importes : `key`, `dayString`, `endDayString`, `startTime`, `endTime`, `dateHint`, `schedule`, `dataToCollect`, `source`. `dataToCollect.status` : ok = stocke et saisissable ; partial = stocke en texte libre ; missing_capture = la base sait stocker, pas encore d'outil de saisie ; missing_structure = pas de place dans la base. Semaine 1 : planning valide du 13/11, aligne le 16/11 sur le Google Calendar officiel (24 evenements) ; semaine 2 : Google Calendar officiel du 16/11 (14 evenements). `formSettings` : par modele de formulaire, `opens` / `deadline` (heure de Paris, jour de l'evenement) et `draft` ; `criteria`, `submissionFields`, `scoring` et `sessions` (retro) vont aux formulaires et a l'evenement (scripts/sync-events.mjs). `archived` : cles a archiver en base (jamais supprimees).",
+  "_doc": "Evenements du batch Fall 2026 (Pioneers Accelerator), a importer plus tard dans `events` (pas encore en base). Champs alignes sur `PioneersEvent` (functions/src/shared/types/event.ts) ; les heures `startTime`/`endTime` sont en heure de Paris (UTC+1), `startDateISOString` en UTC. Modele standard (SPECS §2) : l'evenement ne porte ni grille ni metriques ; scripts/import-events.mjs cree ses formulaires (shared/eventForms.ts) : le Debrief d'un hackathon avec `metrics` (sinon celles du modele), le jury et les picks en brouillon, et les modeles de `forms` en brouillon. Champs non importes : `key`, `dayString`, `endDayString`, `startTime`, `endTime`, `dateHint`, `schedule`, `dataToCollect`, `source`. `dataToCollect.status` : ok = stocke et saisissable ; partial = stocke en texte libre ; missing_capture = la base sait stocker, pas encore d'outil de saisie ; missing_structure = pas de place dans la base. Semaine 1 : planning valide du 13/11, aligne le 16/11 sur le Google Calendar officiel (24 evenements) ; semaine 2 : Google Calendar officiel du 16/11 (14 evenements). `formSettings` : par modele de formulaire, `opens` / `deadline` (heure de Paris : `HH:MM` le jour de l'evenement, `YYYY-MM-DD HH:MM` un autre jour) et `draft` ; `withoutForms` : formulaires du pack a ne pas creer (le H5 remplace la Submission par Plan, Snapshot et Final numbers) ; `criteria`, `submissionFields`, `scoring` et `sessions` (retro) vont aux formulaires et a l'evenement (scripts/sync-events.mjs). `archived` : cles a archiver en base (jamais supprimees).",
   "programId": "accelerator",
   "batchId": "fall-2026",
   "sources": [
@@ -1698,6 +1698,7 @@
       "key": "fa26-hackathon-5-zero-to-first-customer",
       "name": "Hackathon 5: Zero to first customer",
       "kind": "team_challenge",
+      "hackathonWeight": 4,
       "templateKey": "hackathon",
       "stage": null,
       "topic": "Three days to build an agent-powered company and land your first customer. Check-ins at 18:00 on Wednesday and Thursday, and builds freeze Friday at 17:00. Sales and users keep counting until Monday 9:00, and you demo Monday morning.",
@@ -1821,21 +1822,38 @@
         }
       ],
       "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11), email, brief",
+      "matching": {
+        "mode": "challenge",
+        "size": {
+          "min": 2,
+          "max": 3
+        },
+        "lockedTeamsFromStartups": true
+      },
+      "withoutForms": [
+        "debrief"
+      ],
+      "forms": [
+        "h5_plan",
+        "h5_snapshot",
+        "h5_final"
+      ],
       "formSettings": {
-        "debrief": {
-          "draft": true
+        "h5_plan": {
+          "deadline": "12:00"
+        },
+        "h5_snapshot": {
+          "deadline": "2026-11-27 17:00"
+        },
+        "h5_final": {
+          "opens": "2026-11-27 17:00",
+          "deadline": "2026-11-30 09:00"
         },
         "peer_rating": {
-          "draft": true
-        },
-        "jury": {
-          "draft": true
+          "opens": "2026-11-30 09:00",
+          "deadline": "2026-12-01 09:00"
         }
       },
-      "submissionFields": [
-        "productUrl",
-        "driveFolderUrl"
-      ],
       "criteria": [
         {
           "key": "amountPaid",

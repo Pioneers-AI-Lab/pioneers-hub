@@ -14,7 +14,7 @@ import { useMyConnections } from "@/context/MyConnectionsContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
 import { missingRequiredFields } from "@/lib/completeness";
-import { PROFILE_CATEGORY_LABEL, score10, searchKey } from "@/lib/format";
+import { PROFILE_CATEGORY_LABEL, formatScore, searchKey } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { ConnectionToggles } from "@/components/founder/ConnectionButtons";
 import { FounderGridCard } from "@/components/founder/FounderGridCard";
@@ -54,7 +54,7 @@ function FoundersDirectory() {
   const [filter, setFilter] = useUrlState<Filter>("type", "all", FILTERS);
   const { founderId: myFounderId, shortlisted, met } = useMyConnections();
   const [connectionFilter, setConnectionFilter] = useUrlState<ConnectionFilter>("connections", "all", CONNECTION_FILTERS);
-  const { canSeeScores, founderPerformance } = useCohort();
+  const { canSeeScores, founderPerformance, founderScaleOf } = useCohort();
   // Staff et investors : classement par Program Performance (comme le dashboard).
   const [sort, setSort] = useUrlState("sort", "score", SORTS);
   const byScore = canSeeScores && sort === "score";
@@ -106,7 +106,7 @@ function FoundersDirectory() {
       const score = founderPerformance(founderId);
       return (
         <Text fw={600} className="num" c={score === null ? "dimmed" : undefined}>
-          {score10(score)}
+          {formatScore(score, founderScaleOf(founderId))}
         </Text>
       );
     }

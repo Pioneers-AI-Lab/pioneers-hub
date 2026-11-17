@@ -2,7 +2,12 @@ import {
   addDoc,
   arrayRemove,
   arrayUnion,
+  doc,
   setDoc,
+  runTransaction,
+  writeBatch,
+  type Transaction,
+  type WriteBatch,
   type CollectionReference,
   type DocumentReference,
   type PartialWithFieldValue,
@@ -17,6 +22,8 @@ import type {
   UserPreferences,
   WithId,
 } from "@shared/types";
+import { RuleError, type DocWrite } from "@shared/docWrites";
+import { db } from "@/lib/firebase";
 import { refs } from "@/lib/firestore/refs";
 
 // ----------------------------
@@ -27,6 +34,41 @@ import { refs } from "@/lib/firestore/refs";
 // l'horodatage au meme endroit pour tout le monde.
 
 const nowISO = () => new Date().toISOString();
+
+/**
+ * Execute les ecritures d'un geste de l'Admin (shared/admin/*.ts) : les memes
+ * que l'API ecrit dans sa transaction. Un `create` refuse un document qui
+ * existe deja (`RuleError` `already_exists`) : le lot passe alors par une
+ * transaction qui le verifie.
+ */
+export async function commitWrites(writes: readonly DocWrite[]) {
+  if (writes.length === 0) return;
+  const creates = writes.filter((w) => w.op === "create");
+  if (creates.length === 0) {
+    const batch = writeBatch(db);
+    addWrites(batch, writes);
+    await batch.commit();
+    return;
+  }
+  await runTransaction(db, async (tx) => {
+    const existing = await Promise.all(creates.map((w) => tx.get(doc(db, w.path))));
+    const taken = existing.find((snap) => snap.exists());
+    if (taken) throw new RuleError("already_exists", `\`${taken.ref.path}\` already exists.`, taken.ref.path);
+    addWrites(tx, writes);
+  });
+}
+
+/** Ajoute des ecritures a un lot (ou une transaction) deja ouvert. */
+export function addWrites(target: WriteBatch | Transaction, writes: readonly DocWrite[]) {
+  // Memes methodes `set` / `delete` des deux cotes (le SDK les type separement).
+  const batch = target as WriteBatch;
+  for (const w of writes) {
+    const ref = doc(db, w.path);
+    if (w.op === "delete") batch.delete(ref);
+    else if (w.op === "merge") batch.set(ref, w.data, { merge: true });
+    else batch.set(ref, w.data);
+  }
+}
 
 /** Fusionne `patch` dans le document et met a jour `updatedDateISOString`. */
 export async function patchDoc<T extends Timestamps>(ref: DocumentReference<WithId<T>>, patch: Partial<T>) {

@@ -17,3 +17,5 @@ export * from "./investor";
 export * from "./system";
 export * from "./connections";
 export * from "./task";
+export * from "./teamLock";
+export * from "./review";

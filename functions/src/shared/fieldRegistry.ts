@@ -1,4 +1,5 @@
 import { docPaths } from "./collections";
+import { TEAM_LOCK_MAX_COFOUNDERS, teamLockPath } from "./teamLocks";
 import { ENTRY_SEPARATORS } from "./text";
 import {
   CHECKIN_GOALS,
@@ -17,6 +18,8 @@ import {
   COMMITMENT_STATUSES,
   EXISTING_CO_FOUNDERS,
   EXISTING_CO_FOUNDERS_LABELS,
+  MATCH_RESULT_LABELS,
+  MATCH_RESULTS,
   PROFILE_CATEGORIES,
   PROFILE_CATEGORY_LABELS,
   submissionStamp,
@@ -47,6 +50,7 @@ import type {
   StartupScoped,
   Submission,
   TargetKind,
+  TeamLock,
   Timestamps,
   Archivable,
 } from "./types";
@@ -102,6 +106,7 @@ export type DocKindMap = {
   picks: Picks;
   peerRating: PeerRating;
   evaluation: Evaluation;
+  teamLock: TeamLock;
 };
 export type DocKind = keyof DocKindMap;
 
@@ -135,7 +140,13 @@ export type SubjectOwner = TargetKind;
 type Subjects = Record<SubjectKey, string>;
 
 /** Ce que sait l'ecriture au moment de poser ses champs techniques. */
-export type WriteStamp = { now: string; uid: string; asForm: boolean; /** Echeance du formulaire qui ecrit (`null` : sans echeance). */ formDeadline?: string | null };
+export type WriteStamp = {
+  now: string;
+  uid: string;
+  asForm: boolean;
+  /** Echeance du formulaire qui ecrit et decide du retard (`null` : sans echeance ; absente : il n'en decide pas). */
+  formDeadline?: string | null;
+};
 
 /**
  * `formOnly` : document qui ne s'ecrit QUE par son formulaire (avis entre pairs,
@@ -172,6 +183,13 @@ export const DOC_KINDS = {
     subjects: ["event", "judge", "target"],
     owner: "startup",
     path: (s: Subjects) => docPaths.evaluation(s.event, s.judge, s.target),
+  },
+  // « Lock my team » (lot 2) : la reponse du fondateur, lue par lui, le staff et l'IC ;
+  // le staff en tire les startups (shared/teamLocks.ts). Sans evenement : tout le batch y repond.
+  teamLock: { lifecycle: "tracking", timestamped: true, formOnly: true,
+    subjects: ["founder"],
+    owner: "founder",
+    path: (s: Subjects) => teamLockPath(s.founder),
   },
   founder: { lifecycle: "base", timestamped: true, subjects: ["founder"], owner: "founder", path: (s: Subjects) => docPaths.founder(s.founder) },
   founderDirectory: { lifecycle: "private", timestamped: false,
@@ -214,8 +232,8 @@ export const DOC_KINDS = {
     subjects: ["event", "team"],
     owner: "startup",
     path: (s: Subjects) => docPaths.submission(s.event, s.team),
-    // La source des releves de metriques (declencheur `onSubmissionWritten`).
-    stamp: ({ now, uid, asForm, formDeadline }: WriteStamp) => submissionStamp(uid, asForm ? "self_reported" : "staff", now, asForm ? (formDeadline ?? null) : undefined),
+    // La source des releves de metriques (declencheur `onSubmissionWritten`) ; le retard, si le formulaire en decide.
+    stamp: ({ now, uid, asForm, formDeadline }: WriteStamp) => submissionStamp(uid, asForm ? "self_reported" : "staff", now, formDeadline),
   },
 } as const satisfies Record<
   DocKind,
@@ -512,7 +530,8 @@ export const DB_FIELDS = {
   }),
   "founderDirectory.degree": field("Degree", { kind: "enum", listKey: "degrees", values: null }, { mcpFillable: true }),
   "founderDirectory.fieldOfStudy": field("Field of study", text(120), { mcpFillable: true }),
-  "founderDirectory.yearsOfXP": field("Years of experience", num(0, 60), { expected: once(), mcpFillable: true }),
+  // Obligatoires depuis le 17/11 (lot 2.6) : Commitment (projet, cofondateurs) et grille Background (experience, repeat founder).
+  "founderDirectory.yearsOfXP": field("Years of experience", num(0, 60), { expected: once("required"), mcpFillable: true }),
   "founderDirectory.notableCompanies": field("Notable companies", { kind: "textList", maxItems: 20 }, {
     expected: once("required"),
     writePolicy: "merge_unique",
@@ -520,16 +539,16 @@ export const DB_FIELDS = {
   }),
   "founderDirectory.trackRecord": field("Track record", longText(), { expected: once("required") }),
   "founderDirectory.interestedInWorkingOn": field("Interested in working on", longText(), { expected: once("required") }),
-  "founderDirectory.hasExistingProject": field("Existing project", yesNo, { expected: once() }),
+  "founderDirectory.hasExistingProject": field("Existing project", yesNo, { expected: once("required") }),
   "founderDirectory.projectExplanation": field("Project explanation", longText()),
   "founderDirectory.hasExistingCoFounders": field(
     "Existing co-founders",
     { kind: "enum", listKey: null, values: EXISTING_CO_FOUNDERS, labels: EXISTING_CO_FOUNDERS_LABELS },
-    { expected: once() },
+    { expected: once("required") },
   ),
   "founderDirectory.openToJoinAnotherProject": field("Open to join another project", yesNo, { expected: once() }),
   "founderDirectory.mainStartup2025": field("Main startup in 2025", text(120)),
-  "founderDirectory.repeatFounder": field("Repeat founder", yesNo, { expected: once(), mcpFillable: true }),
+  "founderDirectory.repeatFounder": field("Repeat founder", yesNo, { expected: once("required"), mcpFillable: true }),
   "founderDirectory.lookingForCoFounder": field("Looking for a co-founder", yesNo, { expected: once() }),
   "founderDirectory.coFounderTypeWanted": field("Type of co-founder wanted", text(120)),
   "founderDirectory.coFounderSkillsWanted": field("Skills wanted in a co-founder", { kind: "enumMulti", listKey: "hardSkills", values: null }, {
@@ -562,6 +581,11 @@ export const DB_FIELDS = {
   "founderWeek.priorityForWeek": field("Priority for the week", longText()),
   "founderWeek.feelingForWeek": field("How do you feel", longText()),
   "founderWeek.anythingSpecific": field("Anything specific to mention", longText()),
+  // Weekly update founder (lot 4, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.8).
+  "founderWeek.achieved": field("Achieved this week", longText(), { expected: weekly }),
+  "founderWeek.messagesSent": field("Problem validation: messages sent this week", num()),
+  "founderWeek.conversationsDone": field("Problem validation: conversations with potential users this week", num()),
+  "founderWeek.matchResult": field("Cofounder matching: result", { kind: "enum", listKey: null, values: MATCH_RESULTS, labels: MATCH_RESULT_LABELS }),
 
   // ---- Fondateur : presence ----
   "attendance.status": field(
@@ -633,7 +657,9 @@ export const DB_FIELDS = {
   "submission.slideUrl": field("Slides", { kind: "url" }),
   "submission.productUrl": field("Product", { kind: "url" }),
   "submission.proofUrls": field("Proof links", { kind: "files", multiple: true }),
-  "submission.notes": field("Team notes", text(2000, true)),
+  // Texte long : le plan d'une page du H5 y va (formulaire Plan H5).
+  "submission.notes": field("Team notes", longText()),
+  "submission.features": field("Features shipped", longText()),
   "submission.painSentence": field("Pain in one sentence", text(300)),
   "submission.problemSource": field("Problem source", { kind: "enum", listKey: null, values: PROBLEM_SOURCES, labels: PROBLEM_SOURCE_LABELS }),
   "submission.learnings": field("What the team learned", longText()),
@@ -645,6 +671,11 @@ export const DB_FIELDS = {
 
   // ---- Choix prives (formulaire Picks ou Founder introductions) ----
   "picks.pickedFounderIds": field("Picks", { kind: "founderRefs", maxItems: 10 }),
+
+  // ---- Lock my team (formulaire du batch, sans evenement) : prive, jamais lu par l'API ----
+  "teamLock.locked": field("Do you lock a team?", yesNo),
+  "teamLock.coFounderIds": field("Your co-founders", { kind: "founderRefs", maxItems: TEAM_LOCK_MAX_COFOUNDERS }),
+  "teamLock.startupName": field("Startup name", text(80)),
 
   // ---- Notes du jury (portee « chaque equipe ») : les criteres sont la famille `evaluation.scores` ----
   "evaluation.comment": field("Jury comment", text(1000, true)),

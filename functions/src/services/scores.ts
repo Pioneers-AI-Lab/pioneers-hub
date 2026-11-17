@@ -1,38 +1,51 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, type DocumentData, type Query } from "firebase-admin/firestore";
 import { COL, docIds, docPaths, eventCollectionPaths, SUB } from "../shared/collections";
-import { eventRoster } from "../shared/attendance";
+import { absentFounderIds, isAttendanceOptional, mandatoryAttendance } from "../shared/attendance";
 import { computeBatchStats } from "../shared/batchStats";
 import { isWorkTeamEvent } from "../shared/events";
 import { countRequiredFields, listMissingFields } from "../shared/fieldRegistry";
-import { formAudience, formNeedsTeam } from "../shared/formRules";
-import { COMMITMENT_STATUS_SCORES, computeFounderScore, computeStartupScore, type FounderScoreInputs } from "../shared/scoring";
-import { countsInExecution } from "../shared/scoringRules";
+import { formAudience } from "../shared/formRules";
+import { ratedBackgroundScore } from "../shared/background";
 import {
+  computeFounderScore,
+  computeStartupScore,
+  countsInFormsOnTime,
+  founderMilestones,
+  hackathonsByFounder,
+  reciprocalMetCount,
+  supportersOf,
+  type FounderScoreInputs,
+} from "../shared/scoring";
+import { countsInExecution } from "../shared/scoringRules";
+import { SHORTLIST_HISTORY_COLLECTION } from "../shared/shortlistHistory";
+import { FOUNDER_REVIEWS_COLLECTION, problemValidatedOf, STARTUP_REVIEWS_COLLECTION, weeklyGoalScore, weeklyTractionOf } from "../shared/weeklyReviews";
+import {
+  HUB_SCORE_SCALE,
   isBatchParticipant,
   mean,
-  programPerformance,
+  readConnections,
   type Attendance,
   type Batch,
-  type CommitmentStatus,
   type Form,
   type FormCompletion,
   type Founder,
+  type FounderConnections,
   type FounderDirectory,
   type FounderInternal,
+  type FounderReview,
   type FounderScore,
   type FounderStats,
   type FounderWeek,
-  type KpiSeries,
   type Leaderboard,
   type Membership,
   type PeerRating,
   type Picks,
   type PioneersEvent,
   type ScoreSignals,
+  type ShortlistRecord,
   type Startup,
-  type StartupInternal,
-  type StartupProfile,
+  type StartupReview,
   type StartupScore,
 } from "../shared/types";
 
@@ -42,10 +55,11 @@ import {
 // Le SEUL ecrivain de `scores`, `scoreSignals`, `founderStats` et `batchStats` pour un batch
 // dont les scores viennent du Hub (`settings.scoresSource !== "imported"`) :
 // Spring 2026, recopie de l'ancien dashboard, n'est jamais touche.
-// Tout le batch d'un coup : Likability se rapporte au maximum du batch, et
-// Execution a la meilleure equipe. Trois declencheurs : chaque nuit
-// (`nightlyScores`), a la publication d'un classement (`publishEventRanking`),
-// et le bouton du staff (`recomputeBatchScores`). Formules : shared/scoring.ts.
+// Tout le batch d'un coup : Likability se rapporte au meilleur du batch, Met a sa
+// taille. Trois declencheurs : chaque nuit (`nightlyScores`), a la publication d'un
+// classement (`publishEventRanking`), et le bouton du staff (`recomputeBatchScores`).
+// Formules (sur 100, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §3) : shared/scoring.ts ;
+// ici, les entrees. Les scores ecrits portent `scale: 100`.
 
 const db = () => getFirestore();
 const docs = async <T>(query: Query<DocumentData>): Promise<(T & { id: string })[]> =>
@@ -81,7 +95,7 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
   }
   const now = new Date().toISOString();
 
-  const [allFounders, events, forms, completions, weeks, memberships, boards, startups, picks] = await Promise.all([
+  const [allFounders, events, forms, completions, weeks, memberships, boards, startups, picks, history, founderReviews, startupReviews] = await Promise.all([
     docs<Founder>(db().collection(COL.founders).where("batchId", "==", batchId)),
     docs<PioneersEvent>(db().collection(COL.events).where("batchId", "==", batchId)),
     docs<Form>(db().collection(COL.forms).where("batchId", "==", batchId)),
@@ -91,15 +105,23 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
     docs<Leaderboard>(db().collection(COL.leaderboards).where("batchId", "==", batchId)),
     docs<Startup>(db().collection(COL.startups).where("batchId", "==", batchId)),
     docs<Picks>(db().collection(COL.picks).where("batchId", "==", batchId)),
+    docs<ShortlistRecord>(db().collection(SHORTLIST_HISTORY_COLLECTION).where("batchId", "==", batchId)),
+    // La file de revue des Weekly updates (shared/weeklyReviews.ts) : milestones et Traction.
+    docs<FounderReview>(db().collection(FOUNDER_REVIEWS_COLLECTION).where("batchId", "==", batchId)),
+    docs<StartupReview>(db().collection(STARTUP_REVIEWS_COLLECTION).where("batchId", "==", batchId)),
   ]);
   const founders = allFounders.filter((f) => isBatchParticipant(f, batchId));
   const founderIds = new Set(founders.map((f) => f.id));
   // Les evenements qui comptent : publies, non archives, deja commences.
   const pastEvents = events.filter((e) => e.archivedDateISOString === null && e.status !== "draft" && e.startDateISOString <= now);
   const eventById = new Map(events.map((e) => [e.id, e]));
+  // La presence lue : evenements obligatoires (Engagement, formulaires) et ceux d'un classement qui compte (absents de l'Execution).
+  const executionBoards = boards.filter(countsInExecution);
+  const boardEventIds = new Set(executionBoards.map((b) => b.eventId));
+  const attendanceEvents = pastEvents.filter((e) => !isAttendanceOptional(e) || boardEventIds.has(e.id));
 
-  const [attendanceByEvent, peerRatings, directories, internals, startupInternals, startupProfiles, kpis] = await Promise.all([
-    Promise.all(pastEvents.map(async (e) => [e.id, await docs<Attendance>(db().collection(eventCollectionPaths.attendance(e.id)))] as const)).then(
+  const [attendanceByEvent, peerRatings, directories, internals, connections] = await Promise.all([
+    Promise.all(attendanceEvents.map(async (e) => [e.id, await docs<Attendance>(db().collection(eventCollectionPaths.attendance(e.id)))] as const)).then(
       (entries) => new Map(entries),
     ),
     // Les avis entre pairs : agreges ici, jamais lus ailleurs par le serveur (SPECS §4.8).
@@ -108,26 +130,18 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
     ).then((lists) => lists.flat()),
     byIds<FounderDirectory>(founders.map((f) => docPaths.founderDirectory(f.id))),
     byIds<FounderInternal>(founders.map((f) => docPaths.founderInternal(f.id))),
-    byIds<StartupInternal>(startups.map((s) => docPaths.startupInternal(s.id))),
-    byIds<StartupProfile>(startups.map((s) => docPaths.startupProfile(s.id))),
-    byIds<KpiSeries>(startups.map((s) => docPaths.kpiSeries(s.id))),
+    // Shortlist et « Met » : lus ici pour Likability et les milestones, jamais affiches aux autres.
+    byIds<FounderConnections>(founders.map((f) => docPaths.founderConnections(f.id))),
   ]);
   const directoryOf = new Map(founders.map((f, i) => [f.id, directories[i]]));
   const internalOf = new Map(founders.map((f, i) => [f.id, internals[i]]));
-  const startupOf = new Map(startups.map((s, i) => [s.id, { startup: s, internal: startupInternals[i], profile: startupProfiles[i], kpi: kpis[i] }]));
+  const connectionsOf = new Map(founders.map((f, i) => [f.id, readConnections(connections[i])]));
 
-  // ---- Presence : les evenements ou il etait attendu ; sans aucun marquage, tous presents.
-  const attendance = new Map(founders.map((f) => [f.id, { attended: 0, total: 0 }]));
-  for (const e of pastEvents) {
-    const roster = eventRoster(batchId, e, founders, attendanceByEvent.get(e.id) ?? []);
-    for (const row of roster.rows) {
-      const a = attendance.get(row.founder.id)!;
-      a.total += 1;
-      if (row.status !== "absent") a.attended += 1;
-    }
-  }
+  // ---- Presence : les evenements OBLIGATOIRES ou il etait attendu ; sans aucun marquage, tous presents.
+  const attendance = mandatoryAttendance(batchId, pastEvents, founders, attendanceByEvent);
 
-  // ---- Formulaires a temps : echeance passee, non anonymes, ni jury ; repondu avant l'echeance.
+  // ---- Formulaires a temps : echeance passee, non anonymes, ni jury, ni d'un evenement optionnel ;
+  // repondu avant l'echeance. Un absent n'est pas destinataire (`formAudience`).
   // Les membres des equipes publiees, par evenement ; et les equipes de travail (challenge), par evenement et equipe.
   const teamMembersOf = new Map<string, string[]>();
   const workTeams = new Map<string, string[]>();
@@ -141,12 +155,11 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
   const completedAt = new Map(completions.map((c) => [docIds.formCompletion(c.formId, c.founderId), c.firstCompletedDateISOString ?? c.completedDateISOString]));
   const formsOnTime = new Map(founders.map((f) => [f.id, { onTime: 0, expected: 0 }]));
   for (const form of forms) {
-    const deadline = form.deadlineDateISOString;
-    if (form.archivedDateISOString !== null || form.status === "draft" || !deadline || deadline > now) continue;
     const event = form.eventId ? (eventById.get(form.eventId) ?? null) : null;
+    if (!countsInFormsOnTime(form, event, now)) continue;
+    const deadline = form.deadlineDateISOString!;
     const audience = formAudience({
-      identityCheck: form.identityCheck,
-      needsTeam: formNeedsTeam(form),
+      form,
       batchId,
       founders,
       event,
@@ -163,18 +176,29 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
     }
   }
 
-  // ---- Execution : le score normalise de son equipe a chaque hackathon publie, dans l'ordre des hackathons.
-  const hackathonScores = new Map(founders.map((f) => [f.id, [] as number[]]));
-  const published = boards
-    .filter(countsInExecution)
-    .map((b) => ({ board: b, event: eventById.get(b.eventId) }))
-    .filter((x) => x.event && x.event.archivedDateISOString === null)
-    .sort((a, b) => a.event!.startDateISOString.localeCompare(b.event!.startDateISOString));
-  for (const { board } of published) {
-    for (const row of board.rows) for (const id of row.memberIds) hackathonScores.get(id)?.push(row.normalized ?? 0);
-  }
+  // ---- Execution : la note sur 100 de son equipe a chaque hackathon publie ou il etait present
+  // (un absent n'est ni classe ni compte), avec le poids de l'evenement, dans l'ordre des hackathons.
+  const hackathons = hackathonsByFounder(
+    executionBoards
+      .flatMap((board) => {
+        const event = eventById.get(board.eventId);
+        return event && event.archivedDateISOString === null
+          ? [{ rows: board.rows, event, absentIds: absentFounderIds(attendanceByEvent.get(event.id) ?? []) }]
+          : [];
+      })
+      .sort((a, b) => a.event.startDateISOString.localeCompare(b.event.startDateISOString)),
+  );
 
-  // ---- Reseau : picks, interet et « je travaille avec » (formulaires hebdomadaires), coequipiers, peer ratings.
+  // ---- Shortlists : l'historique (ajout seul) et les listes actuelles (avant le rattrapage).
+  // Qui il a shortliste un jour, parmi les autres fondateurs du batch (filtre une fois, ici).
+  const shortlisted = countMap();
+  const addShortlisted = (founderId: string, target: string) => {
+    if (founderId !== target && founderIds.has(founderId) && founderIds.has(target)) addTo(shortlisted, founderId, target);
+  };
+  for (const r of history) addShortlisted(r.founderId, r.targetFounderId);
+  for (const [id, lists] of connectionsOf) for (const target of lists.shortlistedFounderIds) addShortlisted(id, target);
+
+  // ---- Reseau (founderStats, affichage) : picks, interet et « je travaille avec », coequipiers, peer ratings.
   const interestIn = countMap(); // qui l'a choisi
   const interestOut = countMap();
   const workingIn = countMap();
@@ -186,7 +210,6 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
       addTo(interestOut, p.founderId, target);
     }
   }
-  const bestStatus = new Map<string, CommitmentStatus>();
   for (const w of weeks) {
     for (const target of w.interestedInFounderIds ?? []) {
       addTo(interestIn, target, w.founderId);
@@ -196,19 +219,23 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
       addTo(workingIn, target, w.founderId);
       addTo(workingOut, w.founderId, target);
     }
-    const status = w.commitmentStatus ?? null;
-    const best = bestStatus.get(w.founderId);
-    if (status && (!best || COMMITMENT_STATUS_SCORES[status] > COMMITMENT_STATUS_SCORES[best])) bestStatus.set(w.founderId, status);
   }
   const teammates = countMap();
   for (const members of workTeams.values()) for (const a of members) for (const b of members) if (a !== b) addTo(teammates, a, b);
   const peer = new Map<string, number[]>();
   for (const r of peerRatings) pushTo(peer, r.rateeFounderId, r.rating);
+  // Likability : qui l'a shortliste un jour, ou lui a donne 4 ou 5 (une personne compte une fois).
+  const supporters = supportersOf(founderIds, shortlisted, peerRatings);
 
-  // Interet recu : picks, interet et « je travaille avec », fondateurs distincts (SP26 : interet + working with).
-  const receivedOf = (id: string) => new Set([...(interestIn.get(id) ?? []), ...(workingIn.get(id) ?? [])]).size;
-  const batchMaxInterest = Math.max(0, ...founders.map((f) => receivedOf(f.id)));
+  const batchMaxSupporters = Math.max(0, ...founders.map((f) => supporters.get(f.id)?.size ?? 0));
   const requiredFields = countRequiredFields("founder");
+  // Fondateurs du batch dans chaque startup (Teamed up).
+  const startupFounderCount = new Map(startups.map((s) => [s.id, s.memberIds.filter((id) => founderIds.has(id)).length]));
+  const metOf = new Map([...connectionsOf].map(([id, lists]) => [id, new Set(lists.metFounderIds)]));
+  const reviewsOfFounder = new Map<string, FounderReview[]>();
+  for (const r of founderReviews) pushTo(reviewsOfFounder, r.founderId, r);
+  const reviewsOfStartup = new Map<string, StartupReview[]>();
+  for (const r of startupReviews) pushTo(reviewsOfStartup, r.startupId, r);
 
   const write = db().bulkWriter();
   const scoped = { programId: batch.programId, batchId };
@@ -216,7 +243,7 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
     db().doc(`${COL.batchStats}/${batchId}`),
     computeBatchStats(batch.programId, founders.map((f) => ({ founder: f, directory: directoryOf.get(f.id) ?? null })), now),
   );
-  const performanceOf = new Map<string, number | null>();
+  const executionOf = new Map<string, number | null>();
 
   for (const f of founders) {
     const directory = directoryOf.get(f.id) ?? null;
@@ -230,37 +257,41 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
       weeks: [],
       events: [],
     }).filter((m) => m.priority === "required" && m.weekStartDayString === null && m.eventId === null).length;
-    const s = f.startupId ? startupOf.get(f.startupId) : undefined;
     const ratings = peer.get(f.id) ?? [];
+    const reviews = reviewsOfFounder.get(f.id) ?? [];
     const inputs: FounderScoreInputs = {
+      nowISOString: now,
       attendance: attendance.get(f.id)!,
       formsOnTime: formsOnTime.get(f.id)!,
       profileCompleteness: requiredFields > 0 ? Math.max(0, (requiredFields - missingRequired) / requiredFields) : 1,
-      hackathonScores: hackathonScores.get(f.id)!,
-      interestReceived: receivedOf(f.id),
-      batchMaxInterest,
-      peerAverage: mean(ratings),
-      peerCount: ratings.length,
-      teamedUp: (s?.startup.memberIds.filter((id) => founderIds.has(id)).length ?? 0) > 1,
-      commitmentStatus: bestStatus.get(f.id) ?? null,
+      hackathons: hackathons.get(f.id) ?? [],
+      peerRatings: ratings,
+      milestones: founderMilestones(batch.settings.scoreMilestoneDueDates, {
+        shortlistedCount: shortlisted.get(f.id)?.size ?? 0,
+        reciprocalMetCount: reciprocalMetCount(f.id, metOf),
+        batchSize: founders.length,
+        startupFounderCount: f.startupId ? (startupFounderCount.get(f.startupId) ?? 0) : 0,
+        // La grille Weekly founder.
+        problemValidated: problemValidatedOf(reviews),
+        weeklyGoal: weeklyGoalScore(reviews),
+      }),
+      supporters: supporters.get(f.id)?.size ?? 0,
+      batchMaxSupporters,
+      // Lot 5 : la grille Pitch de sa startup.
+      clearIdea: null,
       hasExistingProject: directory?.hasExistingProject ?? null,
       hasExistingCoFounders: directory?.hasExistingCoFounders ?? null,
-      startup: s
-        ? { clearIdea: s.internal?.clearIdea ?? null, highPotential: s.internal?.highPotential ?? null, achievementsScore: s.internal?.achievementsScore ?? null }
-        : null,
-      eloScore: internalOf.get(f.id)?.eloScore ?? null,
+      background: internalOf.get(f.id)?.background ?? null,
     };
     const computed = computeFounderScore(inputs);
-    performanceOf.set(f.id, programPerformance(computed.subScores));
+    executionOf.set(f.id, computed.subScores.execution);
     const scoreId = docIds.score("founder", f.id);
     const score: FounderScore = {
       ...scoped,
       targetType: "founder",
       targetId: f.id,
       subScores: computed.subScores,
-      // Le score de base d'onboarding attend sa grille (SPECS §12, question 6).
-      baseline: { execution: null, founderSignal: null, pedigree: null, geography: null },
-      baselineComputedDateISOString: null,
+      scale: HUB_SCORE_SCALE,
       dataCompleteness: computed.dataCompleteness,
       computedDateISOString: now,
     };
@@ -283,33 +314,22 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
       workingWithOutgoing: wOut,
       workingWithMutual: wIn.filter((id) => wOut.includes(id)),
       uniqueTeammates: teammates.get(f.id)?.size ?? 0,
-      peerRating: { average: inputs.peerAverage, count: ratings.length },
+      peerRating: { average: mean(ratings), count: ratings.length },
       computedDateISOString: now,
     };
     write.set(db().doc(`${COL.founderStats}/${f.id}`), stats);
   }
 
-  for (const { startup, internal, profile, kpi } of startupOf.values()) {
+  for (const startup of startups) {
     const members = startup.memberIds.filter((id) => founderIds.has(id));
-    const market = profile?.marketAnalysis ?? null;
-    const series = kpi?.series ?? {};
-    const cash = series.totalAmountPaid ?? [];
-    const bestWeeklyCash = Math.max(0, ...cash.slice(1).map((p, i) => p.value - cash[i].value));
-    const hasTraction = cash.length > 0 || (series.activeUsers?.length ?? 0) > 0 || (series.conversationsDone?.length ?? 0) > 0;
     const computed = computeStartupScore({
-      market: market ? { samMid: market.sam.mid, cagrMid: market.cagr.mid, competitors: market.competitors.length } : null,
-      clearIdea: internal?.clearIdea ?? null,
-      highPotential: internal?.highPotential ?? null,
-      achievementsScore: internal?.achievementsScore ?? null,
-      founderElos: members.flatMap((id) => internalOf.get(id)?.eloScore ?? []),
-      founderPerformances: members.flatMap((id) => performanceOf.get(id) ?? []),
-      traction: hasTraction
-        ? {
-            bestWeeklyCash,
-            bestActiveUsers: Math.max(0, ...(series.activeUsers ?? []).map((p) => p.value)),
-            totalConversations: (series.conversationsDone ?? []).reduce((sum, p) => sum + p.value, 0),
-          }
-        : null,
+      founderBackgrounds: members.flatMap((id) => ratedBackgroundScore(internalOf.get(id)?.background) ?? []),
+      // Lot 5 : grille Pitch (familles Team, Speed of execution, Market).
+      pitchTeam: null,
+      founderExecutions: members.flatMap((id) => executionOf.get(id) ?? []),
+      weeklyTraction: weeklyTractionOf(reviewsOfStartup.get(startup.id) ?? []),
+      pitchSpeed: null,
+      pitchMarket: null,
     });
     const scoreId = docIds.score("startup", startup.id);
     const score: StartupScore = {
@@ -317,6 +337,7 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
       targetType: "startup",
       targetId: startup.id,
       subScores: computed.subScores,
+      scale: HUB_SCORE_SCALE,
       dataCompleteness: computed.dataCompleteness,
       computedDateISOString: now,
     };

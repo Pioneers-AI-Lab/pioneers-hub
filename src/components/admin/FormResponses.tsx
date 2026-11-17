@@ -3,7 +3,7 @@
 import { memo, useMemo, useState } from "react";
 import { Button, Group, Stack, Text } from "@mantine/core";
 import { enumOptions, getFieldDef, listKeyOf, type DbFieldKey } from "@shared/fieldRegistry";
-import { formAudience, formNeedsTeam, responseProgress, type AudienceBasis } from "@shared/formRules";
+import { formAudience, responseProgress, type AudienceBasis } from "@shared/formRules";
 import { isPerTarget, parseAnswerKey, scopeOf, type FormAnswer, type FormQuestion, type FormResponse, type ListKey, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminForm } from "@/context/AdminFormContext";
@@ -47,8 +47,7 @@ export const FormResponses = memo(function FormResponses() {
   const audience = useMemo(
     () =>
       formAudience({
-        identityCheck: form.identityCheck,
-        needsTeam: formNeedsTeam(form),
+        form,
         batchId: form.batchId,
         founders,
         event,

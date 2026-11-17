@@ -106,7 +106,18 @@ batch.set(db.doc(`batches/${BATCH_ID}`), {
     { key: "selection_day", label: "Selection Day", dayString: null },
     { key: "ic", label: "Investment Committee", dayString: "2027-02-25" },
   ],
-  settings: { leaderboardVisibility: "visible", slackChannelId: null, slackTeamId: null },
+  settings: {
+    leaderboardVisibility: "visible",
+    slackChannelId: null,
+    slackTeamId: null,
+    // Les echeances des milestones du score, celles de fa26 (scripts/set-milestone-dates.mjs).
+    scoreMilestoneDueDates: {
+      shortlistDone: "2026-11-23T15:30:00.000Z",
+      met: "2026-11-23T15:30:00.000Z",
+      teamedUp: "2026-11-25T08:30:00.000Z",
+      problemValidated: "2026-12-16T23:00:00.000Z",
+    },
+  },
 });
 
 for (const f of founders) {
@@ -210,7 +221,8 @@ batch.set(db.doc("scores/founder_ada-example"), {
   ...scoped,
   targetType: "founder",
   targetId: "ada-example",
-  subScores: { engagement: 8, execution: null, likability: 6, commitment: 7, achievements: 5 },
+  subScores: { engagement: 80, execution: null, likability: 60, commitment: 70, background: 50 },
+  scale: 100,
   dataCompleteness: 0.8,
   computedDateISOString: now,
 });
@@ -218,7 +230,7 @@ batch.set(db.doc("scoreSignals/founder_ada-example"), {
   ...scoped,
   targetType: "founder",
   targetId: "ada-example",
-  signals: { commitment: [{ label: "Commitment status", raw: "Committed", score: 10, weight: 1 }] },
+  signals: { commitment: [{ label: "Existing project", raw: "Yes", score: 100, weight: 25 }] },
   computedDateISOString: now,
 });
 batch.set(db.doc("kpiSeries/lumen"), {

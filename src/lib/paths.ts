@@ -80,6 +80,17 @@ export const paths = {
   adminTasks: () => "/admin/tasks",
   adminTaskNew: () => "/admin/tasks/new",
   adminTask: (taskId: string) => `/admin/tasks/${taskId}`,
+  // ---- Lot 2 : startups et grille Background (staff) ----
+  /** Les reponses a Lock my team et les startups proposees, a confirmer. */
+  adminStartups: () => "/admin/startups",
+  /** La grille Background des fondateurs du batch. */
+  adminBackground: () => "/admin/background",
+  adminBackgroundFounder: (founderId: string) => `/admin/background/${founderId}`,
+  /** Admin > Reviews (lot 4) : la file de revue des Weekly updates, par semaine (lundi `YYYY-MM-DD`). */
+  adminReviews: () => "/admin/reviews",
+  adminReviewsWeek: (week: string) => `/admin/reviews/${week}`,
+  adminReviewFounder: (week: string, founderId: string) => `/admin/reviews/${week}/founders/${founderId}`,
+  adminReviewStartup: (week: string, startupId: string) => `/admin/reviews/${week}/startups/${startupId}`,
   /** Brancher Claude (MCP), cles d'API et reference de l'API (staff). */
   apiDocs: () => "/api-docs",
 } as const;

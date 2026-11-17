@@ -45,6 +45,10 @@ node scripts/migrate-standard-forms.mjs <batchId> [--prod]   # modele standard :
 node scripts/migrate-education-tags.mjs <batchId|--all> [--prod]   # `founderDirectory.education` texte -> liste (separateurs `;` et ` · `, shared/text.ts#splitTextList), a blanc sans --prod
 node scripts/seed-tasks.mjs <batchId> [--prod]   # taches de depart du To do (Slack, LinkedIn, shortlist), a blanc sans --prod, n'ecrase jamais
 node scripts/migrate-metric-keys.mjs <batchId> [--prod]   # cles de metriques standard (SPECS A.5), a blanc sans --prod ; puis backfill-kpis.mjs
+node scripts/set-milestone-dates.mjs <batchId> [--prod]   # echeances des milestones du score -> `settings.scoreMilestoneDueDates` (n'ecrit que ce champ), a blanc sans --prod, rejouable
+node scripts/background-draft.mjs <batchId> [--export profils.json | --apply profils.json] [--prod]   # grille Background proposee par Claude (profils anonymes) -> `private/internal.background.proposed` seulement, jamais la note du staff ; a blanc sans --prod
+node scripts/create-weekly-forms.mjs <batchId> [--date YYYY-MM-DD] [--prod]   # meme plan que la fonction `weeklyForms`, a la main (jeudi 18:45 Paris) ; n'ecrase jamais, a blanc sans --prod
+node scripts/backfill-shortlist-history.mjs <batchId> [--prod]   # rattrapage `shortlistHistory` depuis les shortlists actuelles (ajout seul, rejouable), a blanc sans --prod
 npx firebase deploy --only storage --project prod   # regles Storage (photo-*.jpg du fondateur ou du staff, reste refuse ; lecture par URL a jeton) ; deployees le 16/11, PAS par deploy:rules
 npm run typecheck     # route types + front + functions
 npm run lint
@@ -63,7 +67,18 @@ Verifications a cote des emulateurs de dev (ports et +200 pris) : `CHECK_PORT_OF
 puis `firebase emulators:exec --config .firebase-check.json ...` ; check-rules a alors besoin de `FUNCTIONS_EMULATOR_HOST=127.0.0.1:6101`.
 Scores (SPECS §5.5) : `services/scores.ts` (formules pures `shared/scoring.ts`, bareme `shared/scoringRules.ts`) ecrit `scores`,
 `scoreSignals`, `founderStats` et `batchStats` (`shared/batchStats.ts`, accueil du batch) ; jamais pour un batch
-`settings.scoresSource: "imported"` (spring-2026). Callables : `call()` (lib/firebase.ts) retire les cles `undefined`
+`settings.scoresSource: "imported"` (spring-2026). Echelle (17/11) : un score du Hub est sur 100 (`scale: 100`,
+piliers `FOUNDER_PILLARS` dont Background, Outstanding jusqu'a 120) ; un score sans `scale` est sur 10 (Spring 2026) :
+TOUJOURS lire `scoreScaleOf` / `scaleRulesOf` (types/score.ts) et afficher par `formatScore` (lib/format.ts).
+Evenement : `attendanceOptional` (presence relevee, mais ni elle ni ses formulaires ne comptent dans Engagement ;
+Admin > Events > Attendance ou data/events.json) et `hackathonWeight` (poids dans Hackathons d'Execution, absent = 1 ; le H5 = 4).
+Likability lit `shortlistHistory/{founderId}_{targetId}` (chaque fondateur shortliste AU MOINS UNE FOIS, ajout seul par le
+declencheur `onConnectionsWritten`, rattrapage `backfill-shortlist-history.mjs`). Milestones d'Execution : dues seulement
+apres leur echeance `batch.settings.scoreMilestoneDueDates` (shortlistDone, met, teamedUp, problemValidated, weeklyGoalFrom ;
+`set-milestone-dates.mjs`) ; Weekly goal et Problem validated viennent de `founderReviews`, la Traction de la startup de
+`startupReviews`. Fonction programmee `weeklyForms` (jeudi 18:45 Paris, shared/weeklyForms.ts) : Weekly update founder et
+Weekly update startup de la semaine, publies, echeance 24 h, pour chaque batch avec `settings.weeklyForms`
+(`{ enabled, startDayString }`) ; ids deterministes. Callables : `call()` (lib/firebase.ts) retire les cles `undefined`
 (le SDK les enverrait en `null`, qu'un schema zod `.optional()` refuse).
 Un seul `next dev` par dossier (Next 16) : arreter `dev:emu` avant `dev`, et inversement. Pour
 verifier un build a cote d'un `next dev` : `NEXT_DIST_DIR=.next-emu next build` puis
@@ -148,6 +163,10 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   `eventMetrics` les relisent dans ses formulaires. Stockage type inchange (submissions, peerRatings,
   evaluations, picks). Formulaires d'un evenement crees par `shared/eventForms.ts` (import, migration) ou depuis
   sa page d'admin (modeles `debrief`, `jury`, `picks`, `founder_introductions`...).
+  H5 (17/11) : pas de `debrief` mais trois formulaires d'equipe sur la MEME Submission (`h5_plan`, `h5_snapshot`,
+  `h5_final`, data/events.json `withoutForms` / `forms`) ; seul un formulaire `setsSubmissionLate` (Final numbers,
+  Submissions H1 a H4 ; absent = oui) rend la Submission en retard (0 point). Tirage `matching.lockedTeamsFromStartups` :
+  les startups du batch (deux fondateurs presents au moins) sont des equipes verrouillees, les autres sont tires.
 - **Formulaires publics** (`/forms/[formId]`, une question par ecran : `components/forms/TypeForm` ; formulaire a
   portee : `components/forms/FormSheet`, une page) : callables `getPublicForm` (noms du batch en nom court ; avec
   `respondent`, ses cibles et, identite prouvee, ses reponses deja donnees `prefill`) et `submitFormResponse`
@@ -241,6 +260,9 @@ document ENTIER, jamais un champ) :
 | `taskCompletions/{taskId}_{founderId}` | le fondateur lui-meme + staff (sa coche, ecrite par lui seul ; decocher = `done: false`) |
 | `formCompletions/{formId}_{founderId}`, `picks` | le fondateur lui-meme + staff (« J'ai repondu » et picks, ecrits par `submitFormResponse` ; jamais pour un formulaire anonyme) |
 | `founders/{id}/private/internal`, `founderStats`, `notes`, `assessments`, `eloMatches` | staff + investors IC |
+| `shortlistHistory/{founderId}_{targetId}` | staff + investors IC (ecrit par le serveur seul, jamais lu par l'API) |
+| `teamLocks/{founderId}` | le fondateur lui-meme + staff + investors IC (reponse a Lock my team, ecrite par `submitFormResponse`, corrigee par le staff) |
+| `founderReviews/{founderId}_{lundi}`, `startupReviews/{startupId}_{lundi}` | staff + investors IC (revue des Weekly updates, ecrite par le staff ; jamais montree aux fondateurs) |
 | `startups/{id}` | public |
 | `startups/{id}/private/profile`, `kpiSeries` | membres + staff + investors |
 | `startups/{id}/private/internal` | staff + investors IC |
@@ -337,7 +359,10 @@ Regles :
 - Dans un batch : onglets en bas sur mobile (64 px, texte 15 px, jusqu'a 5 onglets en 390 px), en haut des
   48em (16 px, 48 px de haut) (`BatchShell`, `.tabbar` / `.toptabs`, `--tabbar-height`). Pas d'icones. Les onglets
   dependent du role (fondateur : To do, Me). Aucun onglet staff : TOUS les outils du staff sont dans
-  `/admin` (decision du 13/11) : Access (comptes), Founder profiles, Events, Forms, Tasks, Import founders, Batch settings.
+  `/admin` (decision du 13/11) : Access (comptes), Founder profiles, Events, Forms, Tasks, Import founders, Batch settings,
+  et (17/11) Startups (reponses a Lock my team, `teamLocks` -> startups creees en un lot, shared/teamLocks.ts),
+  Background (grille du staff dans `private/internal.background`, proposition de Claude pre-remplie), Reviews (revue
+  des Weekly updates par semaine : `founderReviews` oui / non, `startupReviews` Traction et Progress sur 5).
   Onglets : Home, Founders, Calendar (+ To do, Me). Pas de titre de page sous un onglet (16/11, place verticale) :
   nom et dates du batch dans la ligne du haut de `BatchShell` ; compteur d'une liste dans sa recherche
   (`components/ui/SearchCount.tsx`) ; « Add to calendar » en bas de Calendar ; une `Section` en tete de son

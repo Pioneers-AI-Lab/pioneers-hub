@@ -91,6 +91,7 @@ const DOC_KIND_LABELS: Record<DocKind, string> = {
   picks: "Picks",
   peerRating: "Peer rating",
   evaluation: "Jury score",
+  teamLock: "Lock my team",
 };
 
 /** Comment l'editeur nomme une famille (le type de question qui l'alimente : `FAMILY_QUESTION_TYPE`). */

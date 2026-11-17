@@ -258,8 +258,16 @@ export function TypeForm({ form }: { form: PublicForm }) {
       case "question": {
         const q = s.question;
         const { field, hint } = renderField(q, s.number);
+        // Weekly update founder : l'objectif donne la semaine d'avant, au-dessus de « What did you achieve? ».
+        const previousGoal = form.previousGoal?.questionId === q.id ? form.previousGoal.goal : null;
         return (
           <>
+            {previousGoal && (
+              <>
+                <p className={styles.eyebrow}>Your goal last week</p>
+                <p className={cx(styles.description, styles.previousGoal)}>{previousGoal}</p>
+              </>
+            )}
             <QuestionHeading number={s.number} label={q.label} required={q.required} description={q.description} />
             {field}
             {form.pendingAnswerKeys.includes(q.id) && <p className={styles.note}>{PENDING_NOTE}</p>}

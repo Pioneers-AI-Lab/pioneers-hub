@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button, Group, NumberInput, SegmentedControl, Select, Stack, Switch, Text, TextInput } from "@mantine/core";
+import { eventMetrics } from "@shared/forms";
 import { criterionQuestion, metricQuestion } from "@shared/presets/formTemplates";
 import { standardEventMetricKey } from "@shared/presets/standardMetrics";
 import { labelsOf, OUTSTANDING_BONUS_POINTS, scoringMaxTotal, variableExists } from "@shared/scoringRules";
@@ -227,7 +228,9 @@ function ItemSheet({ index, items, isSaving, onClose, onSave }: ItemSheetProps) 
   const [points, setPoints] = useState<number | null>(item ? (item.mode === "per_unit" ? (item.pointsPerUnit ?? null) : (item.maxPoints ?? null)) : null);
   const [tieBreakOnly, setTieBreakOnly] = useState(item?.tieBreakOnly === true);
 
-  const submission = forms.find((f) => f.kind === "debrief") ?? null;
+  // Le formulaire d'equipe qui porte deja les chiffres (Final numbers au H5, qui en a trois), sinon le premier.
+  const teamForms = forms.filter((f) => f.kind === "debrief");
+  const submission = teamForms.find((f) => eventMetrics([f]).length > 0) ?? teamForms[0] ?? null;
   const targetForm = source === "metric" ? submission : juryForm;
   const used = new Set(items.filter((_, i) => i !== index).map((i) => i.sourceKey));
   const known = source === "metric" ? metrics : criteria;

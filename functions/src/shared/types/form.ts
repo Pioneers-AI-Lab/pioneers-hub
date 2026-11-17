@@ -290,7 +290,24 @@ export type Form = BatchScoped &
     status: FormStatus;
     opensDateISOString: DateISOString | null;
     deadlineDateISOString: DateISOString | null;
+    /**
+     * `false` : un envoi apres son echeance ne rend pas la Submission de l'equipe « en retard »
+     * (Plan et Snapshot du H5 : seul Final numbers vaut 0 en retard ; le retard d'un formulaire
+     * compte toujours dans « Forms on time »). Absent ou `true` : il la rend en retard (H1 a H4).
+     * Copie du modele a la creation (`FormTemplate.setsSubmissionLate`).
+     */
+    setsSubmissionLate?: boolean;
   };
+
+/** Le formulaire decide du retard de la Submission qu'il ecrit (voir `Form.setsSubmissionLate`). */
+export const formSetsSubmissionLate = (form: Pick<Form, "setsSubmissionLate">): boolean => form.setsSubmissionLate !== false;
+
+/**
+ * L'echeance qu'un envoi du formulaire donne au tampon de la Submission (`submissionStamp`) :
+ * la sienne s'il decide du retard (`null` : sans echeance, jamais en retard), sinon aucune (`late` ne change pas).
+ */
+export const submissionLateDeadline = (form: Pick<Form, "setsSubmissionLate" | "deadlineDateISOString">): string | null | undefined =>
+  formSetsSubmissionLate(form) ? form.deadlineDateISOString : undefined;
 
 /** forms/{formId}/versions/{version} : copie figee a chaque publication. */
 export type FormVersion = {

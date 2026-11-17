@@ -1,5 +1,8 @@
+"use client";
+
 import type { ReactNode } from "react";
 import { Group, Stack, Text, Title } from "@mantine/core";
+import { useHelpToggle } from "./Help";
 
 /**
  * Titre de section : Eina SemiBold, 16 px, bleu clair Pioneers (`pioneers.3` ;
@@ -34,12 +37,17 @@ export function SubsectionTitle({ children, accent = false }: { children: ReactN
   );
 }
 
-/** Un bloc de page : un filet, un titre, puis le contenu. Pas de cadre. */
+/**
+ * Un bloc de page : un filet, un titre, puis le contenu. Pas de cadre.
+ * Sous le titre : `hint`, ce qui reste visible, puis `help`, l'explication, repliee
+ * derriere un (?) a droite du titre (components/ui/Help.tsx).
+ */
 export function Section({
   id,
   title,
   right,
   hint,
+  help,
   children,
 }: {
   /** Ancre (`#id`) ; le defilement s'arrete sous l'en-tete fixe de l'AppShell. */
@@ -47,17 +55,28 @@ export function Section({
   title: string;
   right?: ReactNode;
   hint?: ReactNode;
+  /** L'explication (pourquoi, comment, qui voit quoi) : repliee derriere le (?). */
+  help?: ReactNode;
   children: ReactNode;
 }) {
+  const { isOpen: isHelpOpen, toggle } = useHelpToggle(title);
   return (
     <Stack id={id} gap="xs" className="section">
       <Group justify="space-between" gap="xs" wrap="nowrap">
-        <SectionTitle>{title}</SectionTitle>
+        <Group gap={0} wrap="nowrap" style={{ minWidth: 0 }}>
+          <SectionTitle>{title}</SectionTitle>
+          {help && toggle}
+        </Group>
         {right}
       </Group>
       {hint && (
         <Text size="sm" c="dimmed">
           {hint}
+        </Text>
+      )}
+      {help && isHelpOpen && (
+        <Text size="sm" c="dimmed">
+          {help}
         </Text>
       )}
       {children}

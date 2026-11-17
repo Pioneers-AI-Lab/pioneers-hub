@@ -1,79 +1,251 @@
+import { isAttendanceOptional } from "./attendance";
+import { BACKGROUND_CRITERIA, ratedBackgroundScore } from "./background";
+import { normalizeToBest } from "./scoringRules";
 import {
-  COMMITMENT_STATUS_LABELS,
   EXISTING_CO_FOUNDERS_LABELS,
   mean,
   roundTo,
   weightedMean,
-  type CommitmentStatus,
+  type DateISOString,
   type ExistingCoFounders,
+  type FounderBackground,
   type FounderPillar,
+  type Form,
+  type LeaderboardRow,
+  type PioneersEvent,
+  type ScoreMilestoneDueDates,
   type ScoreSignal,
   type StartupSubScore,
 } from "./types";
 
 // ----------------------------
-// Les scores d'un fondateur et d'une startup (SPECS §5)
+// Les scores d'un fondateur et d'une startup, sur 100 (docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §3)
 // ----------------------------
 // Logique pure, lue par `services/scores.ts` qui rassemble les donnees du batch.
-// Les sous-scores et leurs signaux sont ceux du dashboard Spring 2026
-// (InvestorDashboard `lib/scoring.ts`, `lib/startup-scoring.ts`, seuils
-// identiques) ; seules les sources changent (decision du 13/11) :
-//   Engagement   presence 50 %, formulaires remplis a temps 30 %, completude du profil 20 % (decision du 14/11)
-//   Execution    score normalise de son equipe a chaque hackathon (meilleure = 10)
-//   Likability   interet recu (picks, interet et « je travaille avec »),
-//                moyenne des peer ratings recus, « teamed up »
-//   Commitment   statut d'engagement, idee claire, projet et cofondateurs existants
-//   Achievements note des jures (sur 6), high potential, Elo du parcours
-// Tout est sur 10. Un signal sans donnee est retire, et les autres se partagent
-// son poids ; un sous-score sans signal vaut `null`.
+// Poids en pourcentage de leur niveau (§3.1) ; « sans note, pas de poids » (§4.1) :
+// un signal ou un sous-score sans donnee est retire, et les autres se partagent son
+// poids en gardant leurs proportions. Pas de plafond : l'Outstanding mention (hackathon,
+// Background) fait passer un signal, un sous-score ou le score au-dessus de 100.
+//
+// Program Performance (fondateur), cinq sous-scores a 20 % (moyenne : `programPerformance`) :
+//   Engagement   presence aux evenements OBLIGATOIRES passes 50 %, formulaires remplis a temps 30 %,
+//                completude du profil 20 %
+//   Execution    hackathons ou il etait present (moyenne des notes de son equipe, poids de
+//                l'evenement : H5 x4), peer ratings recus ((note - 1) x 25), milestones dues : 1/3 chacun
+//   Likability   fondateurs distincts qui l'ont shortliste (historique) ou lui ont donne 4 ou 5,
+//                rapportes au meilleur du batch (= 100)
+//   Commitment   Clear idea (grille Pitch, lot 5) 50 %, projet existant 25 %, cofondateurs existants 25 %
+//   Background   la grille Background du staff (lot 2)
+// Score startup (`startupScore` : Team 40, Execution 20, Traction 20, Market 20) :
+//   Team         Background moyen de ses fondateurs 50 %, famille Team de ses pitchs 50 % (lot 5)
+//   Execution    moyenne de l'Execution de ses fondateurs
+//   Traction     grille Weekly startup 50 % (lot 4), famille Speed of execution des pitchs 50 % (lot 5)
+//   Market       famille Market des pitchs (lot 5)
 
-const clamp = (v: number, min = 0, max = 10) => Math.min(max, Math.max(min, v));
-const sig = (label: string, raw: string, score: number, weight = 1): ScoreSignal => ({ label, raw, score: roundTo(clamp(score), 1), weight });
-/** Un signal oui / non : 10 ou 0. */
-const yesNo = (label: string, value: boolean, weight = 1) => sig(label, value ? "Yes" : "No", value ? 10 : 0, weight);
+const sig = (label: string, raw: string, score: number, weight: number): ScoreSignal => ({
+  label,
+  raw,
+  score: roundTo(Math.max(0, score), 1),
+  weight,
+});
+/** Un signal oui / non : 100 ou 0. */
+const yesNo = (label: string, value: boolean, weight: number) => sig(label, value ? "Yes" : "No", value ? 100 : 0, weight);
 const meanOf = (signals: readonly ScoreSignal[]) => {
   const m = weightedMean(signals.map((s) => [s.score, s.weight] as const));
   return m === null ? null : roundTo(m, 1);
 };
 const pct = (ratio: number) => `${Math.round(ratio * 100)}%`;
+const num = (v: number) => `${roundTo(v, 1)}`;
 
-/** Elo du parcours ramene sur 10 : Elo 500 = 0, Elo 1 500 = 10 (SP26). */
-export const eloOn10 = (elo: number) => clamp(((elo - 500) / 1000) * 10);
+// ---- Conversions sur 100 (§3.3) --------------------------------------------------
 
-/** @source SP26 « Goal form » : le statut d'engagement, sur 10. */
-export const COMMITMENT_STATUS_SCORES: Record<CommitmentStatus, number> = {
-  committed: 10,
-  on_a_project: 7,
-  testing_relationships: 4,
-  what_am_i_doing_here: 1,
+/** Peer rating de 1 a 5 -> sur 100 : 1 = 0, 3 = 50, 5 = 100. */
+export const peerRatingOn100 = (rating: number) => (rating - 1) * 25;
+
+/** Un peer rating qui compte dans Likability : 4 ou 5. */
+export const LIKABILITY_MIN_PEER_RATING = 4;
+
+const CO_FOUNDER_SCORES: Record<ExistingCoFounders, number> = { in_batch: 100, outside_batch: 70, none: 0 };
+
+/** Le poids d'un hackathon dans le signal Hackathons : `hackathonWeight` de l'evenement, 1 par defaut. */
+export const hackathonWeightOf = (event: Pick<PioneersEvent, "hackathonWeight">): number =>
+  typeof event.hackathonWeight === "number" && event.hackathonWeight > 0 ? event.hackathonWeight : 1;
+
+// ---- Les entrees, a partir des documents du batch (services/scores.ts) -------------------
+
+/** Un hackathon dans le signal Hackathons d'un fondateur. */
+export type HackathonInput = { name: string; score: number; weight: number };
+
+/**
+ * Le signal Hackathons de chaque fondateur : la note sur 100 (`normalized`) de son equipe
+ * a chaque classement, avec le poids de l'evenement, dans l'ordre donne. Un absent n'est
+ * ni classe ni compte (l'absence ne penalise qu'Engagement) ; une ligne sans note, rien.
+ */
+export function hackathonsByFounder(
+  boards: readonly { rows: readonly Pick<LeaderboardRow, "memberIds" | "normalized">[]; event: Pick<PioneersEvent, "name" | "hackathonWeight">; absentIds: ReadonlySet<string> }[],
+): Map<string, HackathonInput[]> {
+  const out = new Map<string, HackathonInput[]>();
+  for (const { rows, event, absentIds } of boards) {
+    const weight = hackathonWeightOf(event);
+    // « Hackathon 5: Zero to first customer » -> « H5 » (le detail du signal).
+    const name = event.name.split(":")[0].trim().replace(/^Hackathon\s+/i, "H");
+    for (const row of rows) {
+      if (typeof row.normalized !== "number") continue;
+      for (const id of row.memberIds) {
+        if (absentIds.has(id)) continue;
+        const list = out.get(id) ?? [];
+        list.push({ name, score: row.normalized, weight });
+        out.set(id, list);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Likability : pour chaque fondateur, les fondateurs DISTINCTS du batch qui l'ont shortliste
+ * un jour (`shortlisted` : qui chacun a shortliste, historique et listes actuelles) ou lui
+ * ont donne un peer rating de 4 ou 5. Une meme personne compte une fois ; jamais soi-meme.
+ */
+export function supportersOf(
+  founderIds: ReadonlySet<string>,
+  shortlisted: ReadonlyMap<string, ReadonlySet<string>>,
+  peerRatings: readonly { raterFounderId: string; rateeFounderId: string; rating: number }[],
+): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
+  const add = (to: string, from: string) => {
+    if (from === to || !founderIds.has(from) || !founderIds.has(to)) return;
+    const set = out.get(to) ?? new Set<string>();
+    set.add(from);
+    out.set(to, set);
+  };
+  for (const [from, targets] of shortlisted) for (const to of targets) add(to, from);
+  for (const r of peerRatings) if (r.rating >= LIKABILITY_MIN_PEER_RATING) add(r.rateeFounderId, r.raterFounderId);
+  return out;
+}
+
+/**
+ * Un formulaire compte dans « Forms on time » : publie, non archive, echeance passee, et pas
+ * d'un evenement optionnel. Les destinataires (ni absents, ni jures, ni anonymes) : `formAudience`.
+ */
+export const countsInFormsOnTime = (
+  form: Pick<Form, "archivedDateISOString" | "status" | "deadlineDateISOString">,
+  event: Pick<PioneersEvent, "attendanceOptional"> | null,
+  nowISOString: DateISOString,
+): boolean =>
+  form.archivedDateISOString === null &&
+  form.status !== "draft" &&
+  !!form.deadlineDateISOString &&
+  form.deadlineDateISOString <= nowISOString &&
+  !(event && isAttendanceOptional(event));
+
+// ---- Milestones (§3.2) -------------------------------------------------------------
+
+export const MILESTONES = ["weekly_goal", "teamed_up", "problem_validated", "shortlist_done", "met"] as const;
+export type MilestoneKey = (typeof MILESTONES)[number];
+
+export const MILESTONE_LABELS: Record<MilestoneKey, string> = {
+  weekly_goal: "Weekly goal",
+  teamed_up: "Teamed up",
+  problem_validated: "Problem validated",
+  shortlist_done: "Shortlist done",
+  met: "Met",
 };
 
-const CO_FOUNDER_SCORES: Record<ExistingCoFounders, number> = { in_batch: 10, outside_batch: 7, none: 0 };
+/** « Met » reciproques d'un fondateur : ceux qu'il a marques et qui l'ont marque (milestone Met, Admin > Reviews). */
+export const reciprocalMetCount = (founderId: string, metOf: ReadonlyMap<string, ReadonlySet<string>>): number =>
+  [...(metOf.get(founderId) ?? [])].filter((id) => id !== founderId && metOf.get(id)?.has(founderId)).length;
+
+/** Shortlist done : au moins 3 fondateurs shortlistes (historique compris). */
+export const SHORTLIST_DONE_MIN = 3;
+/** Met : au moins 50 % des autres fondateurs du batch en « Met » reciproque. */
+export const MET_SHARE_MIN = 0.5;
+
+/**
+ * Le champ de `settings.scoreMilestoneDueDates` (types/batch.ts) qui porte l'echeance de
+ * chaque milestone. Weekly goal (a partir de `weeklyGoalFrom`, la semaine 3) et Problem validated
+ * viennent de la grille Weekly founder (lot 4, shared/weeklyReviews.ts) : sans revue, pas de poids.
+ */
+const DUE_DATE_FIELD: Record<MilestoneKey, keyof ScoreMilestoneDueDates> = {
+  weekly_goal: "weeklyGoalFrom",
+  teamed_up: "teamedUp",
+  problem_validated: "problemValidated",
+  shortlist_done: "shortlistDone",
+  met: "met",
+};
+
+/**
+ * Une milestone d'un fondateur : `achieved` oui / non (100 ou 0), ou une note sur 100 (Weekly goal :
+ * la moyenne des semaines notees) ; `null` = pas de donnee (pas de poids, meme due).
+ */
+export type MilestoneInput = { key: MilestoneKey; dueDateISOString: DateISOString; achieved: boolean | number | null };
+
+/** La valeur sur 100 d'une milestone renseignee. */
+export const milestoneValue = (m: Pick<MilestoneInput, "achieved">): number => (typeof m.achieved === "number" ? m.achieved : m.achieved ? 100 : 0);
+
+/** Ce que les milestones lisent d'un fondateur ; `null` = pas encore de donnee (aucune revue). */
+export type MilestoneFacts = {
+  /** Fondateurs distincts du batch qu'il a shortlistes un jour. */
+  shortlistedCount: number;
+  /** Fondateurs du batch avec qui le « Met » est reciproque. */
+  reciprocalMetCount: number;
+  /** Fondateurs du batch, lui compris. */
+  batchSize: number;
+  /** Fondateurs du batch dans sa startup, lui compris (0 sans startup). */
+  startupFounderCount: number;
+  /** Problem validated (grille Weekly founder : `weeklyReviews.ts#problemValidatedOf`). */
+  problemValidated: boolean | null;
+  /** Weekly goal sur 100 (grille Weekly founder : `weeklyReviews.ts#weeklyGoalScore`). */
+  weeklyGoal: number | null;
+};
+
+/**
+ * Les milestones du batch pour ce fondateur, avec leur echeance (`settings.scoreMilestoneDueDates`
+ * du batch). Une milestone ne compte qu'une fois due ; sans echeance, elle n'existe pas (pas de poids).
+ */
+export function founderMilestones(dueDates: ScoreMilestoneDueDates | null | undefined, facts: MilestoneFacts): MilestoneInput[] {
+  const achieved: Record<MilestoneKey, boolean | number | null> = {
+    // La grille Weekly founder : la moyenne des semaines notees, sur 100.
+    weekly_goal: facts.weeklyGoal,
+    teamed_up: facts.startupFounderCount >= 2,
+    problem_validated: facts.problemValidated,
+    shortlist_done: facts.shortlistedCount >= SHORTLIST_DONE_MIN,
+    met: facts.batchSize > 1 && facts.reciprocalMetCount >= MET_SHARE_MIN * (facts.batchSize - 1),
+  };
+  return MILESTONES.flatMap((key) => {
+    const due = dueDates?.[DUE_DATE_FIELD[key]];
+    return due ? [{ key, dueDateISOString: due, achieved: achieved[key] }] : [];
+  });
+}
+
+/** Les milestones qui comptent : dues a `nowISOString`, avec une donnee. */
+export const dueMilestones = (milestones: readonly MilestoneInput[], nowISOString: DateISOString) =>
+  milestones.filter((m) => m.dueDateISOString <= nowISOString && m.achieved !== null);
+
+// ---- Program Performance ------------------------------------------------------------
 
 /** Ce que le calcul sait d'un fondateur. */
 export type FounderScoreInputs = {
+  nowISOString: DateISOString;
+  /** Evenements OBLIGATOIRES passes ou il etait attendu, et ceux ou il etait la. */
   attendance: { attended: number; total: number };
-  /** Formulaires attendus dont l'echeance est passee, et ceux remplis avant. */
+  /** Formulaires attendus (hors evenements optionnels) dont l'echeance est passee, et ceux remplis avant. */
   formsOnTime: { onTime: number; expected: number };
   /** Part des champs obligatoires du profil remplis (0-1). */
   profileCompleteness: number;
-  /** Score normalise (0-100) de son equipe a chaque hackathon publie. */
-  hackathonScores: number[];
-  /** Fondateurs distincts qui l'ont choisi (picks, interet, « je travaille avec »), et le maximum du batch. */
-  interestReceived: number;
-  batchMaxInterest: number;
-  /** Moyenne des peer ratings recus (1-5), `null` sans avis. */
-  peerAverage: number | null;
-  peerCount: number;
-  /** Sa startup a plus d'un cofondateur. */
-  teamedUp: boolean;
-  /** Le meilleur statut d'engagement declare. */
-  commitmentStatus: CommitmentStatus | null;
+  /** La note sur 100 (120 avec l'Outstanding mention) de son equipe a chaque hackathon publie ou il etait present. */
+  hackathons: HackathonInput[];
+  /** Les peer ratings recus (1-5). */
+  peerRatings: number[];
+  milestones: MilestoneInput[];
+  /** Fondateurs distincts qui l'ont shortliste un jour ou lui ont donne 4 ou 5, et le maximum du batch. */
+  supporters: number;
+  batchMaxSupporters: number;
+  /** Clear idea de sa startup, sur 100 (grille Pitch, lot 5) : `null` sans note. */
+  clearIdea: number | null;
   hasExistingProject: boolean | null;
   hasExistingCoFounders: ExistingCoFounders | null;
-  /** Evaluation du staff et des jures sur sa startup : `null` sans startup. */
-  startup: { clearIdea: boolean | null; highPotential: boolean | null; achievementsScore: number | null } | null;
-  eloScore: number | null;
+  background: FounderBackground | null;
 };
 
 export type ComputedScore<K extends string> = {
@@ -94,85 +266,96 @@ export function computeFounderScore(i: FounderScoreInputs): ComputedScore<Founde
   const engagement: ScoreSignal[] = [];
   if (i.attendance.total > 0) {
     const rate = i.attendance.attended / i.attendance.total;
-    engagement.push(sig("Attendance rate", `${pct(rate)} (${i.attendance.attended}/${i.attendance.total})`, rate * 10, 0.5));
+    engagement.push(sig(`Attendance (${i.attendance.total})`, `${pct(rate)} (${i.attendance.attended}/${i.attendance.total} mandatory)`, rate * 100, 50));
   }
   if (i.formsOnTime.expected > 0) {
     const rate = i.formsOnTime.onTime / i.formsOnTime.expected;
-    engagement.push(sig("Forms on time", `${i.formsOnTime.onTime}/${i.formsOnTime.expected}`, rate * 10, 0.3));
+    engagement.push(sig(`Forms on time (${i.formsOnTime.expected})`, `${i.formsOnTime.onTime}/${i.formsOnTime.expected}`, rate * 100, 30));
   }
-  engagement.push(sig("Profile completeness", pct(i.profileCompleteness), i.profileCompleteness * 10, 0.2));
+  engagement.push(sig("Profile completeness", pct(i.profileCompleteness), i.profileCompleteness * 100, 20));
 
-  const execution = i.hackathonScores.map((s, n) => sig(`Hackathon ${n + 1} (team, best = 100)`, `${Math.round(s)}/100`, s / 10));
+  // Trois signaux a poids egal (33,3 %), chacun retire sans donnee.
+  const execution: ScoreSignal[] = [];
+  const hackathonMean = weightedMean(i.hackathons.map((h) => [h.score, h.weight] as const));
+  if (hackathonMean !== null) {
+    const raw = i.hackathons.map((h) => `${h.name} ${num(h.score)}${h.weight !== 1 ? ` (x${h.weight})` : ""}`).join(" · ");
+    execution.push(sig(`Hackathons (${i.hackathons.length})`, raw, hackathonMean, 1));
+  }
+  const peerAverage = mean(i.peerRatings);
+  if (peerAverage !== null) {
+    execution.push(sig(`Peer ratings (${i.peerRatings.length})`, `${peerAverage.toFixed(1)}/5 on average`, peerRatingOn100(peerAverage), 1));
+  }
+  const due = dueMilestones(i.milestones, i.nowISOString);
+  if (due.length > 0) {
+    const values = due.map(milestoneValue);
+    const reached = values.filter((v) => v >= 100).length;
+    const raw = due.map((m) => `${MILESTONE_LABELS[m.key]}: ${typeof m.achieved === "number" ? num(m.achieved) : m.achieved ? "yes" : "no"}`).join(" · ");
+    execution.push(sig(`Milestones (${reached}/${due.length})`, raw, mean(values) ?? 0, 1));
+  }
 
-  const likability: ScoreSignal[] = [
-    sig(
-      "Interest received",
-      `${i.interestReceived} (batch max ${i.batchMaxInterest})`,
-      Math.min(i.interestReceived / Math.max(i.batchMaxInterest, 1), 1) * 10,
-    ),
-  ];
-  if (i.peerAverage !== null) likability.push(sig("Peer rating received", `${i.peerAverage.toFixed(1)}/5 (${i.peerCount})`, i.peerAverage * 2));
-  if (i.teamedUp) likability.push(yesNo("Teamed up", true));
+  const likability: ScoreSignal[] = [];
+  if (i.batchMaxSupporters > 0) {
+    likability.push(
+      sig(`Supporters (${i.supporters})`, `${i.supporters} founders shortlisted or rated 4+ (batch best ${i.batchMaxSupporters})`, normalizeToBest(i.supporters, i.batchMaxSupporters), 100),
+    );
+  }
 
   const commitment: ScoreSignal[] = [];
-  if (i.commitmentStatus) {
-    commitment.push(sig("Commitment status", COMMITMENT_STATUS_LABELS[i.commitmentStatus], COMMITMENT_STATUS_SCORES[i.commitmentStatus]));
-  }
-  if (i.startup && i.startup.clearIdea !== null) commitment.push(yesNo("Clear idea", i.startup.clearIdea));
-  if (i.hasExistingProject !== null) commitment.push(yesNo("Had existing project", i.hasExistingProject, 0.5));
+  if (i.clearIdea !== null) commitment.push(sig("Clear idea", `${num(i.clearIdea)} (pitch)`, i.clearIdea, 50));
+  if (i.hasExistingProject !== null) commitment.push(yesNo("Existing project", i.hasExistingProject, 25));
   if (i.hasExistingCoFounders !== null) {
-    commitment.push(sig("Had co-founders", EXISTING_CO_FOUNDERS_LABELS[i.hasExistingCoFounders], CO_FOUNDER_SCORES[i.hasExistingCoFounders], 0.5));
+    commitment.push(sig("Existing co-founders", EXISTING_CO_FOUNDERS_LABELS[i.hasExistingCoFounders], CO_FOUNDER_SCORES[i.hasExistingCoFounders], 25));
   }
 
-  const achievements: ScoreSignal[] = [];
-  const s = i.startup;
-  if (s && s.achievementsScore !== null) achievements.push(sig("Achievements score", `${s.achievementsScore}/6`, (s.achievementsScore / 6) * 10));
-  if (s && s.highPotential !== null) achievements.push(yesNo("High potential", s.highPotential, 0.25));
-  if (i.eloScore !== null) achievements.push(sig("Background Elo", `${Math.round(i.eloScore)}`, eloOn10(i.eloScore)));
+  // La note validee du staff seulement (shared/background.ts) : une proposition de Claude ne compte pas.
+  const background: ScoreSignal[] = [];
+  const note = ratedBackgroundScore(i.background);
+  if (note !== null) {
+    const scores = i.background?.scores ?? {};
+    const raw = BACKGROUND_CRITERIA.filter((c) => typeof scores[c.key] === "number")
+      .map((c) => `${c.label} ${scores[c.key]}/5`)
+      .concat(note > 100 ? ["Outstanding"] : [])
+      .join(" · ");
+    background.push(sig("Background grid", raw, note, 100));
+  }
 
-  return finish<FounderPillar>({ engagement, execution, likability, commitment, achievements });
+  return finish<FounderPillar>({ engagement, execution, likability, commitment, background });
 }
 
-/** Ce que le calcul sait d'une startup. */
-export type StartupScoreInputs = {
-  /** Analyse de marche : SAM median (EUR), CAGR median (0,4 = 40 %), concurrents. `null` sans analyse. */
-  market: { samMid: number | null; cagrMid: number | null; competitors: number } | null;
-  clearIdea: boolean | null;
-  highPotential: boolean | null;
-  achievementsScore: number | null;
-  /** Elo et Program Performance (sur 10) de ses fondateurs du batch. */
-  founderElos: number[];
-  founderPerformances: number[];
-  /** Updates du jeudi : meilleure hausse hebdomadaire de l'encaisse, meilleurs utilisateurs actifs, total des conversations. */
-  traction: { bestWeeklyCash: number; bestActiveUsers: number; totalConversations: number } | null;
-};
+// ---- Score startup --------------------------------------------------------------------
 
-const stepScore = (value: number, steps: readonly (readonly [threshold: number, score: number])[]) => {
-  for (const [threshold, score] of steps) if (value > threshold) return score;
-  return 0;
+/** Ce que le calcul sait d'une startup (notes sur 100 ; `null` : pas encore de grille). */
+export type StartupScoreInputs = {
+  /** Note Background de chacun de ses fondateurs notes. */
+  founderBackgrounds: number[];
+  /** Famille Team de ses pitchs (lot 5). */
+  pitchTeam: number | null;
+  /** Execution (sous-score) de chacun de ses fondateurs qui en a une. */
+  founderExecutions: number[];
+  /** La moyenne des notes de ses Weekly updates, sur 100 (120 avec l'Outstanding) : `weeklyReviews.ts#weeklyTractionOf`. */
+  weeklyTraction: number | null;
+  /** Famille Speed of execution de ses pitchs (lot 5). */
+  pitchSpeed: number | null;
+  /** Famille Market de ses pitchs (lot 5). */
+  pitchMarket: number | null;
 };
 
 export function computeStartupScore(i: StartupScoreInputs): ComputedScore<StartupSubScore> {
-  const market: ScoreSignal[] = [];
-  if (i.market && i.market.samMid !== null && i.market.cagrMid !== null) {
-    const samM = i.market.samMid / 1_000_000;
-    const n = i.market.competitors;
-    market.push(sig("Market size (SAM)", `${Math.round(samM)}M`, (Math.log10(Math.max(samM, 1)) / 5) * 10, 0.35));
-    market.push(sig("Growth (CAGR)", pct(i.market.cagrMid), ((i.market.cagrMid * 100) / 40) * 10, 0.3));
-    market.push(sig("Competitors", `${n}`, n === 0 ? 2 : n <= 3 ? 6 : n <= 8 ? 9 : 7, 0.2));
-    const edge = 5 + (i.clearIdea ? 2 : 0) + (i.highPotential ? 2 : 0) + (i.achievementsScore !== null ? Math.min(i.achievementsScore / 6, 1) : 0);
-    market.push(sig("Differentiation", `${roundTo(clamp(edge), 1)}`, edge, 0.15));
-  }
-  const teamAvg = mean(i.founderElos.map(eloOn10));
-  const team = teamAvg === null ? [] : [sig("Founders' Elo", `${i.founderElos.length} founder(s)`, teamAvg)];
-  const execAvg = mean(i.founderPerformances);
-  const execution = execAvg === null ? [] : [sig("Founders' Program Performance", `${i.founderPerformances.length} founder(s)`, execAvg)];
+  const team: ScoreSignal[] = [];
+  const bg = mean(i.founderBackgrounds);
+  if (bg !== null) team.push(sig(`Founders' Background (${i.founderBackgrounds.length})`, i.founderBackgrounds.map(num).join(" · "), bg, 50));
+  if (i.pitchTeam !== null) team.push(sig("Pitch: Team", num(i.pitchTeam), i.pitchTeam, 50));
+
+  const execution: ScoreSignal[] = [];
+  const exec = mean(i.founderExecutions);
+  if (exec !== null) execution.push(sig(`Founders' Execution (${i.founderExecutions.length})`, i.founderExecutions.map(num).join(" · "), exec, 100));
+
   const traction: ScoreSignal[] = [];
-  if (i.traction) {
-    const t = i.traction;
-    traction.push(sig("Best week of cash", `${Math.round(t.bestWeeklyCash)} EUR`, stepScore(t.bestWeeklyCash, [[10000, 10], [1000, 8], [100, 6], [0, 4]]), 0.4));
-    traction.push(sig("Best active users", `${t.bestActiveUsers}`, stepScore(t.bestActiveUsers, [[200, 9], [50, 7], [10, 5], [0, 3]]), 0.35));
-    traction.push(sig("Conversations", `${t.totalConversations}`, stepScore(t.totalConversations, [[30, 9], [15, 7], [5, 5], [0, 3]]), 0.25));
-  }
+  if (i.weeklyTraction !== null) traction.push(sig("Weekly updates", num(i.weeklyTraction), i.weeklyTraction, 50));
+  if (i.pitchSpeed !== null) traction.push(sig("Pitch: Speed of execution", num(i.pitchSpeed), i.pitchSpeed, 50));
+
+  const market: ScoreSignal[] = [];
+  if (i.pitchMarket !== null) market.push(sig("Pitch: Market", num(i.pitchMarket), i.pitchMarket, 100));
+
   return finish<StartupSubScore>({ market, team, execution, traction });
 }

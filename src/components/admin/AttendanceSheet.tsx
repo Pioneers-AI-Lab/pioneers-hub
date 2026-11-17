@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, TextInput } from "@mantine/core";
-import type { AttendanceFounder, EventRoster } from "@shared/attendance";
+import { Badge, SegmentedControl, TextInput } from "@mantine/core";
+import { isAttendanceOptional, type AttendanceFounder, type EventRoster } from "@shared/attendance";
 import type { AttendanceStatus, PioneersEvent, WithId } from "@shared/types";
 import { useAuth } from "@/context/AuthContext";
 import { useEventAttendance } from "@/context/EventAttendanceContext";
 import { useAction } from "@/hooks/useAction";
 import { markAttendance } from "@/lib/attendanceAdmin";
+import { setAttendanceOptional } from "@/lib/attendanceOptional";
 import { formatDateTime, searchKey } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { ATTENDANCE_STYLE } from "@/components/event/eventLabels";
@@ -20,7 +21,9 @@ import { PageLoader } from "@/components/ui/PageLoader";
 // Admin > Events > un evenement > Attendance : qui est la (staff, sur place)
 // ----------------------------
 // Les attendus et la regle : `eventRoster` (shared/attendance.ts). Toucher un
-// fondateur le marque absent, puis en retard, puis present.
+// fondateur le marque absent, puis en retard, puis present. En tete : presence
+// obligatoire (par defaut) ou optionnelle (`attendanceOptional` : ne compte pas
+// dans Engagement, ni les formulaires de l'evenement).
 
 /** Toucher un fondateur : present -> absent -> en retard -> present. */
 const NEXT_STATUS: Record<AttendanceStatus, AttendanceStatus> = { present: "absent", absent: "late", late: "present", in_office: "present" };
@@ -55,6 +58,13 @@ export function AttendanceSheet({ event }: { event: WithId<PioneersEvent> }) {
   const needle = searchKey(search.trim());
   const shown = needle ? roster.rows.filter((r) => searchKey(r.founder.name).includes(needle)) : roster.rows;
 
+  const optional = isAttendanceOptional(event);
+  const setOptional = (value: string) => {
+    const next = value === "optional";
+    if (next === optional) return;
+    void run(() => setAttendanceOptional(event.id, next), next ? "Attendance is optional" : "Attendance is mandatory");
+  };
+
   const mark = (founderId: string, status: AttendanceStatus, name: string) => {
     if (!user) return;
     const next = NEXT_STATUS[status];
@@ -68,6 +78,27 @@ export function AttendanceSheet({ event }: { event: WithId<PioneersEvent> }) {
         title="Attendance"
         subtitle={[event.name, formatDateTime(event.startDateISOString)].join(" · ")}
       />
+
+      <Section
+        title="Counts in Engagement"
+        help={
+          optional
+            ? "Optional: attendance is taken, but neither it nor this event's forms count in the founders' Engagement score."
+            : "Mandatory: attendance and this event's forms count in the founders' Engagement score."
+        }
+      >
+        <SegmentedControl
+          fullWidth
+          maw={480}
+          value={optional ? "optional" : "mandatory"}
+          onChange={setOptional}
+          disabled={isBusy}
+          data={[
+            { value: "mandatory", label: "Mandatory" },
+            { value: "optional", label: "Optional" },
+          ]}
+        />
+      </Section>
 
       <Section
         title={attendanceSummary(roster)}

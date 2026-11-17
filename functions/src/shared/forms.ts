@@ -1,7 +1,7 @@
 import { criterionKeyOf, metricKeyOf, parseDbField, type DbFieldKey } from "./fieldRegistry";
 import { deriveAttachments, isJuryCriterion, ratingScale } from "./formRules";
 import { eventTemplateOf } from "./presets/eventTemplates";
-import { FORM_TEMPLATES, templateQuestions, type FormTemplateKey, type TemplateContext } from "./presets/formTemplates";
+import { FORM_TEMPLATES, templateQuestions, type FormTemplate, type FormTemplateKey, type TemplateContext } from "./presets/formTemplates";
 import { standardEventMetric, standardMetricOf, type StandardMetricKey } from "./presets/standardMetrics";
 import { activeQuestions, type Criterion, type EventMetric, type Form, type FormQuestion, type FormVersion, type PioneersEvent, type Timestamps } from "./types";
 
@@ -49,7 +49,7 @@ export type FormData = Omit<Form, keyof Timestamps>;
  * deduit toujours des questions finales.
  */
 export function newForm(input: NewFormInput, extra: Partial<Omit<FormData, "attachments" | "version" | "status">> = {}): FormData {
-  const template = input.templateKey ? FORM_TEMPLATES[input.templateKey] : null;
+  const template: FormTemplate | null = input.templateKey ? FORM_TEMPLATES[input.templateKey] : null;
   const questions = extra.questions ?? (template ? templateQuestions(template, templateContext(input)) : []);
   return {
     programId: input.programId,
@@ -63,6 +63,7 @@ export function newForm(input: NewFormInput, extra: Partial<Omit<FormData, "atta
     eventId: input.eventId,
     opensDateISOString: null,
     deadlineDateISOString: null,
+    ...(template?.setsSubmissionLate !== undefined ? { setsSubmissionLate: template.setsSubmissionLate } : {}),
     ...extra,
     questions,
     attachments: deriveAttachments(questions),

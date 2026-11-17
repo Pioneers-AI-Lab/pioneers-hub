@@ -25,6 +25,13 @@ export function readEventsFile(week) {
 /** Les liens d'un evenement que le fichier peut donner ; sync-events ne les ecrit que s'ils y sont. */
 export const FILE_LINK_FIELDS = ["resourceUrl", "videoCallUrl"];
 
+/**
+ * Les reglages de score d'un evenement (shared/types/event.ts) : `hackathonWeight` (le H5
+ * compte 4 fois dans Execution), `attendanceOptional` (presence qui ne compte pas). Ecrits
+ * seulement s'ils sont dans le fichier : sinon le document garde les siens (staff).
+ */
+export const FILE_SCORE_FIELDS = ["hackathonWeight", "attendanceOptional"];
+
 /** Heure de Paris -> ISO. Les dates du batch sont en hiver (UTC+1). */
 export const parisISO = (day, time) => new Date(`${day}T${time}:00+01:00`).toISOString();
 export const parisLabel = (iso) => new Date(iso).toLocaleString("sv-SE", { timeZone: "Europe/Paris" }).slice(0, 16);
@@ -62,28 +69,37 @@ export function toEvent(data, e, now) {
       scoring: e.scoring ?? null,
       // Les liens (« Resources », visio Google Meet) : FILE_LINK_FIELDS.
       ...Object.fromEntries(FILE_LINK_FIELDS.map((f) => [f, e[f] ?? null])),
+      ...Object.fromEntries(FILE_SCORE_FIELDS.filter((f) => f in e).map((f) => [f, e[f]])),
     },
   );
   return { ...event, createdDateISOString: now, updatedDateISOString: now };
 }
 
+/** Une heure de `formSettings` : `HH:MM` le jour de l'evenement, ou `YYYY-MM-DD HH:MM` un autre jour (heure de Paris). */
+const formSettingISO = (e, value) => {
+  const [day, time] = value.includes(" ") ? value.split(" ") : [e.dayString, value];
+  return parisISO(day, time);
+};
+
 /**
  * Les options de ses formulaires (shared/eventForms.ts) : le pack du modele,
- * plus `forms` ; les reglages du fichier (metriques, grille, champs de la
+ * plus `forms`, moins `withoutForms` (le H5 remplace la Submission par ses trois
+ * formulaires) ; les reglages du fichier (metriques, grille, champs de la
  * Submission, seances de la retro) et `formSettings` : par modele, `opens` /
- * `deadline` (heure de Paris, le jour de l'evenement) et `draft`.
+ * `deadline` (`formSettingISO`) et `draft`.
  */
 export function formOptions(e) {
   const formDates = {};
   for (const [templateKey, s] of Object.entries(e.formSettings ?? {})) {
     formDates[templateKey] = {
-      ...(s.opens ? { opensDateISOString: parisISO(e.dayString, s.opens) } : {}),
-      ...(s.deadline ? { deadlineDateISOString: parisISO(e.dayString, s.deadline) } : {}),
+      ...(s.opens ? { opensDateISOString: formSettingISO(e, s.opens) } : {}),
+      ...(s.deadline ? { deadlineDateISOString: formSettingISO(e, s.deadline) } : {}),
       ...(s.draft ? { draft: true } : {}),
     };
   }
+  const without = new Set(e.withoutForms ?? []);
   return {
-    forms: [...new Set([...(EVENT_TEMPLATES[e.templateKey]?.forms ?? []), ...(e.forms ?? [])])],
+    forms: [...new Set([...(EVENT_TEMPLATES[e.templateKey]?.forms ?? []), ...(e.forms ?? [])])].filter((key) => !without.has(key)),
     metrics: e.metrics ?? null,
     criteria: e.criteria ?? null,
     submissionFields: e.submissionFields ?? null,

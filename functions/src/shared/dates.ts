@@ -23,6 +23,13 @@ export function parisMonday(iso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Le lundi `YYYY-MM-DD` de `weeks` semaines plus tard (ou plus tot, `weeks` < 0). */
+export function shiftWeek(weekStartDayString: string, weeks: number): string {
+  const d = new Date(`${weekStartDayString}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 7 * weeks);
+  return d.toISOString().slice(0, 10);
+}
+
 const PARIS_HOUR = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", hour: "2-digit", hourCycle: "h23" });
 
 /** Minuit a Paris, en ISO, d'un jour `YYYY-MM-DD` (evenement « toute la journee » de Google Calendar). */

@@ -53,3 +53,34 @@ export function eventRoster<F extends AttendanceFounder>(
     isRestricted: invited !== null,
   };
 }
+
+/**
+ * Presence optionnelle (docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §1) : relevee, mais
+ * ni la presence ni les formulaires de l'evenement ne comptent dans Engagement
+ * (services/scores.ts). Les absents restent hors des formulaires et du tirage.
+ */
+export const isAttendanceOptional = (event: Pick<PioneersEvent, "attendanceOptional">): boolean => event.attendanceOptional === true;
+
+/**
+ * La presence de chaque fondateur aux evenements OBLIGATOIRES de `events` (Engagement) :
+ * ceux ou il etait attendu (`total`) et ceux ou il n'etait pas absent (`attended`). Sans
+ * aucun marquage, tous presents. Un evenement optionnel ne compte pas.
+ */
+export function mandatoryAttendance<F extends AttendanceFounder>(
+  batchId: string,
+  events: readonly (AttendanceEvent & Pick<PioneersEvent, "attendanceOptional"> & { id: string })[],
+  founders: readonly F[],
+  attendanceByEvent: ReadonlyMap<string, readonly Mark[]>,
+): Map<string, { attended: number; total: number }> {
+  const out = new Map(founders.map((f) => [f.id, { attended: 0, total: 0 }]));
+  for (const e of events) {
+    if (isAttendanceOptional(e)) continue;
+    for (const row of eventRoster(batchId, e, founders, attendanceByEvent.get(e.id) ?? []).rows) {
+      const a = out.get(row.founder.id);
+      if (!a) continue;
+      a.total += 1;
+      if (row.status !== "absent") a.attended += 1;
+    }
+  }
+  return out;
+}

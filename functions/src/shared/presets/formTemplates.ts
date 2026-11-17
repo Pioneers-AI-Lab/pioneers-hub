@@ -1,6 +1,7 @@
 import type { Criterion, EventKind, EventMetric, FormApproval, FormIdentityCheck, FormKind, FormQuestion } from "../types";
 import { getFieldDef } from "../fieldRegistry";
 import { newQuestion } from "../formRules";
+import { TEAM_LOCK_MAX_COFOUNDERS } from "../teamLocks";
 import { defaultPicksQuestion } from "./eventTemplates";
 import { CHECKIN_GOALS, CHECKIN_METRICS, withUnit, type CheckinGoalKey, type CheckinMetricKey } from "./standardMetrics";
 
@@ -77,6 +78,12 @@ export type FormTemplate = {
   needsWorkTeams?: boolean;
   /** Son ouverture et son echeance dans un evenement ; `DEFAULT_FORM_TIMING` sinon. */
   timing?: FormTiming;
+  /**
+   * Il ecrit la Submission de l'equipe : `true`, un envoi apres son echeance la rend « en retard »
+   * (elle vaut 0) ; `false`, ce retard ne compte que dans « Forms on time » (Plan et Snapshot du H5).
+   * Recopie sur le formulaire (`Form.setsSubmissionLate`, absent = `true`).
+   */
+  setsSubmissionLate?: boolean;
   questions: FormQuestion[];
   /** Questions construites depuis l'evenement (Debrief, jury, picks) ; `questions` sinon. */
   build?: (ctx: TemplateContext) => FormQuestion[];
@@ -107,6 +114,12 @@ const template = (input: Omit<FormTemplate, "approval" | "needsEvent" | "descrip
 /** Une metrique du Debrief : un nombre, pour l'equipe, dans `submission.metrics.<cle>` (une cle standard porte sa definition). */
 export const metricQuestion = (m: EventMetric): FormQuestion =>
   q(`metric_${m.key}`, { type: "number", label: withUnit(m.label, m.unit), dbField: `submission.metrics.${m.key}` });
+
+/**
+ * Les chiffres du Weekly update startup (§2.9), dans l'ordre de l'update : le pipeline de la semaine,
+ * puis les totaux a date. Sans `featuresShipped` ni les objectifs chiffres de l'ancien Thursday update.
+ */
+const WEEKLY_STARTUP_NUMBERS = CHECKIN_METRICS.filter((key) => key !== "featuresShipped");
 
 /** Un chiffre de l'update du jeudi : libelle (periode, unite) et attente du registre, definition du dictionnaire. */
 const checkinQuestion = (key: CheckinMetricKey | CheckinGoalKey): FormQuestion => {
@@ -156,6 +169,18 @@ const SUBMISSION_FIELD_QUESTIONS: Record<SubmissionFieldKey, () => FormQuestion>
   notes: () => q("notes", { type: "long_text", label: "Anything to add for the Pioneers team?", dbField: "submission.notes" }),
 };
 
+/** Ce que partagent les trois formulaires d'equipe du H5 : comme la Submission, d'equipe, depuis son compte. */
+const h5TeamForm = (input: Pick<FormTemplate, "label" | "title" | "description" | "setsSubmissionLate" | "questions" | "build">): FormTemplate =>
+  template({
+    kind: "debrief",
+    identityCheck: "account",
+    needsEvent: true,
+    needsWorkTeams: true,
+    timing: { opens: "start", deadline: "before_end" },
+    ...input,
+  });
+const H5_ANY_TEAMMATE = "Any teammate can send it; the last save counts.";
+
 export const FORM_TEMPLATES = {
   // La Submission d'un hackathon (SPECS §4.2, decision du 13/11), cle `debrief` :
   // une par equipe. Le team lead s'assure qu'elle part avant l'echeance ; tout
@@ -173,6 +198,7 @@ export const FORM_TEMPLATES = {
     needsWorkTeams: true,
     // Le travail de l'equipe se rend avant la fin du hackathon : la deadline du bareme.
     timing: { opens: "start", deadline: "before_end" },
+    setsSubmissionLate: true,
     questions: [],
     build: ({ metrics, submissionFields }) => {
       const fields = submissionFields ?? DEFAULT_SUBMISSION_FIELDS;
@@ -183,6 +209,51 @@ export const FORM_TEMPLATES = {
         ...fields.filter((f) => !LEADING_FIELDS.has(f)).map(fieldQuestion),
       ];
     },
+  }),
+
+  // Le H5 (docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.6) : trois formulaires d'equipe au lieu
+  // d'une Submission, qui ecrivent la MEME soumission (`submissions/{teamId}`) a trois moments.
+  // Comme `debrief` : une reponse par equipe, depuis son compte, tout coequipier l'envoie, le
+  // dernier envoi compte. Dates de data/events.json (`formSettings`). Seul Final numbers en
+  // retard vaut 0 (`setsSubmissionLate`) ; Plan et Snapshot en retard ne comptent que dans
+  // « Forms on time ».
+  h5_plan: h5TeamForm({
+    label: "H5 plan",
+    title: "Plan H5",
+    description: `One per team: the problem you chose, your customer and your plan. ${H5_ANY_TEAMMATE}`,
+    setsSubmissionLate: false,
+    questions: [
+      q("plan", {
+        type: "long_text",
+        label: "Problem, customer, one-page plan",
+        description: "The problem you solve, who pays for it, and how you get your first customer by Monday.",
+        dbField: "submission.notes",
+        required: true,
+      }),
+      q("planLink", { type: "link", label: "Link to your one-page plan", dbField: "submission.slideUrl" }),
+    ],
+  }),
+
+  h5_snapshot: h5TeamForm({
+    label: "H5 snapshot",
+    title: "Snapshot H5",
+    description: `One per team, at the build freeze: what is online and what you shipped. ${H5_ANY_TEAMMATE}`,
+    setsSubmissionLate: false,
+    questions: [
+      { ...SUBMISSION_FIELD_QUESTIONS.productUrl(), label: "Product URL", required: true },
+      q("demo", { type: "link", label: "2-minute demo", description: "A Loom or any video link.", dbField: "submission.videoUrl" }),
+      q("features", { type: "long_text", label: "Features shipped", dbField: "submission.features", required: true }),
+    ],
+  }),
+
+  h5_final: h5TeamForm({
+    label: "H5 final numbers",
+    title: "Final numbers H5",
+    description: `One per team: your numbers when sales stop counting. ${H5_ANY_TEAMMATE} Final numbers saved after the deadline score 0.`,
+    setsSubmissionLate: true,
+    questions: [],
+    // Les metriques de l'evenement (`submission.metrics.<cle>`), puis le dossier Drive des preuves.
+    build: ({ metrics }) => [...metrics.map(metricQuestion), SUBMISSION_FIELD_QUESTIONS.driveFolderUrl()],
   }),
 
   // L'avis sur chaque coequipier (SPECS §4.3, decision du 13/11) : un formulaire a
@@ -292,6 +363,63 @@ export const FORM_TEMPLATES = {
     ],
   }),
 
+  // ---- Lot 4 : les formulaires hebdomadaires (docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.8, §2.9) ----
+  // Rattaches au BATCH, sans evenement, depuis son compte ; crees chaque jeudi a 18:45, echeance 24 h
+  // apres (shared/weeklyForms.ts). Un formulaire par semaine : ses reponses vont dans la semaine ou il
+  // ouvre. Revus par le staff dans Admin > Reviews (shared/weeklyReviews.ts).
+
+  // Le Weekly update founder : la page rappelle l'objectif donne la semaine d'avant au-dessus de
+  // « What did you achieve? » (`getPublicForm` : `previousGoal`). Shortlist et « Met » ne se
+  // redemandent pas : le jure les voit a cote de la reponse.
+  weekly_update_founder: template({
+    label: "Weekly update founder",
+    kind: "motivation",
+    title: "Weekly update",
+    description: "5 minutes. Your week against the goal you gave last week, your goal for next week, your problem validation and your co-founder search.",
+    identityCheck: "account",
+    questions: [
+      q("achieved", { type: "long_text", label: "What did you achieve?", dbField: "founderWeek.achieved", required: true }),
+      q("goalForWeek", { type: "long_text", label: "Your goal for next week", dbField: "founderWeek.goalForWeek", required: true }),
+      q("commitmentStatus", { type: "single_choice", label: "Where are you at?", dbField: "founderWeek.commitmentStatus", required: true }),
+      q("messagesSent", { type: "number", label: "Problem validation: messages sent", description: "This week. Put 0 if none.", dbField: "founderWeek.messagesSent", required: true }),
+      q("conversationsDone", {
+        type: "number",
+        label: "Problem validation: conversations with potential users",
+        description: "This week: real conversations of 60 seconds or more. Put 0 if none.",
+        dbField: "founderWeek.conversationsDone",
+        required: true,
+      }),
+      q("learnings", { type: "long_text", label: "Problem validation: what did you learn?", dbField: "founderWeek.learnings" }),
+      q("workingWith", {
+        type: "entity_picker",
+        label: "Cofounder matching: active discussions",
+        description: "The founders you are talking with about building together.",
+        dbField: "founderWeek.workingWithFounderIds",
+        picker: { entity: "founder", maxItems: 10 },
+      }),
+      q("matchResult", { type: "single_choice", label: "Cofounder matching: result", dbField: "founderWeek.matchResult", required: true }),
+    ],
+  }),
+
+  // Le Weekly update startup (l'update du jeudi, decision du 13/11) : les chiffres de TOUTE la
+  // startup. Une reponse par startup, envoyee par n'importe quel membre (« fait » pour tous :
+  // `formNeedsStartup`) ; chaque chiffre affiche sa definition (SPECS annexe A.5).
+  weekly_update_startup: template({
+    label: "Weekly update startup",
+    kind: "weekly_update",
+    title: "Weekly update startup",
+    description: "One per startup: any co-founder sends it. Your startup's numbers, the whole team, not just you. Put 0 when nothing happened.",
+    identityCheck: "account",
+    questions: [
+      q("achievement", { type: "long_text", label: "What did you achieve this week?", dbField: "checkin.achievement", required: true }),
+      q("goals", { type: "long_text", label: "Goals for next week", dbField: "checkin.goals", required: true }),
+      ...WEEKLY_STARTUP_NUMBERS.map(checkinQuestion),
+      q("obstacle", { type: "long_text", label: "Biggest obstacle", dbField: "checkin.obstacle", required: true }),
+      q("learned", { type: "long_text", label: "What did you learn?", dbField: "checkin.learned" }),
+      q("helpNeeded", { type: "long_text", label: "How can the staff help?", dbField: "checkin.helpNeeded" }),
+    ],
+  }),
+
   // Formulaire de motivation hebdomadaire.
   motivation: template({
     retired: true,
@@ -398,6 +526,30 @@ export const FORM_TEMPLATES = {
     ],
   }),
 
+  // Lock my team (lot 2, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.10) : chacun dit s'il
+  // verrouille une equipe pour le H5, avec qui et sous quel nom. Rattache au BATCH, pas a un
+  // evenement : il s'adresse a tous les fondateurs, absents du debrief du H4 compris. Depuis
+  // son compte ; on peut y repondre « non ». Le staff en tire les startups (Admin > Startups).
+  lock_my_team: template({
+    label: "Lock my team",
+    kind: "custom",
+    title: "Lock my team",
+    description:
+      "Everyone answers, even without a team. If you lock a team, pick your co-founders: the Pioneers team creates your startup when every co-founder picks the same team. Otherwise you are drawn into a team for Hackathon 5.",
+    identityCheck: "account",
+    questions: [
+      q("locked", { type: "single_choice", label: "Do you lock a team?", dbField: "teamLock.locked", required: true }),
+      q("coFounders", {
+        type: "entity_picker",
+        label: "Your co-founders",
+        description: `If you lock a team: every co-founder in the batch, up to ${TEAM_LOCK_MAX_COFOUNDERS}.`,
+        dbField: "teamLock.coFounderIds",
+        picker: { entity: "founder", maxItems: TEAM_LOCK_MAX_COFOUNDERS },
+      }),
+      q("startupName", { type: "text", label: "Startup name", description: "If you lock a team. Optional.", dbField: "teamLock.startupName" }),
+    ],
+  }),
+
   // Inscription au Selection Day : objectifs, produit, technologie, dossier Drive.
   selection_day_registration: template({
     label: "Selection Day registration",
@@ -432,8 +584,9 @@ export const FORM_TEMPLATES = {
     ],
   }),
 
-  // 2025 « Exit form ». Les notes n'ont pas encore de champ : non rattachees.
+  // 2025 « Exit form » : remplace par Program end (decision du 17/11).
   exit: template({
+    retired: true,
     label: "Exit form",
     kind: "exit",
     title: "Exit form",
@@ -445,6 +598,21 @@ export const FORM_TEMPLATES = {
       q("tractionSatisfaction", { type: "rating", label: "How satisfied are you with your traction?", scale: { min: 1, max: 10 } }),
       q("decisionAgreement", { type: "rating", label: "How much do you agree with the final decision?", scale: { min: 1, max: 10 } }),
       q("comments", { type: "long_text", label: "Anything else to share?" }),
+    ],
+  }),
+
+  // Program end (lot 4, §2.12) : a la fin du programme, depuis son compte, trois questions sans
+  // champ en base (Feedback, analyse par Claude). « Recommend », « keep » et « change » viennent de la retro.
+  program_end: template({
+    label: "Program end",
+    kind: "exit",
+    title: "Program end",
+    description: "2 minutes, at the end of the program. Your answers help us shape the next batch.",
+    identityCheck: "account",
+    questions: [
+      q("recommend", { type: "rating", label: "Would you recommend Pioneers?", description: "0 = not at all, 10 = without hesitation.", scale: { min: 0, max: 10 }, required: true }),
+      q("keep", { type: "long_text", label: "One thing to keep", required: true }),
+      q("change", { type: "long_text", label: "One thing to change", required: true }),
     ],
   }),
 } satisfies Record<string, FormTemplate>;

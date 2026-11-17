@@ -95,11 +95,12 @@ function splitCharsOf(key: DbFieldKey): string[] | undefined {
 }
 
 /** Oui / Non / non renseigne, en un geste. */
-function YesNo({ label, value, onChange }: { label: string; value: boolean | null; onChange: (v: boolean | null) => void }) {
+function YesNo({ label, value, onChange, withAsterisk }: { label: string; value: boolean | null; onChange: (v: boolean | null) => void; withAsterisk?: boolean }) {
   return (
     <Stack gap={6}>
       <Text size="sm" fw={500}>
         {label}
+        {withAsterisk && <Text span c="var(--input-asterisk-color)"> *</Text>}
       </Text>
       <SegmentedControl
         fullWidth
@@ -299,10 +300,10 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
             allowDeselect
           />
           <TextInput label="Field of study" value={dir.fieldOfStudy ?? ""} onChange={(e) => setD("fieldOfStudy", text(e.currentTarget.value))} />
-          <NumberInput label="Years of experience" min={0} max={60} value={dir.yearsOfXP ?? ""} onChange={(v) => setD("yearsOfXP", typeof v === "number" ? v : null)} />
+          <NumberInput label="Years of experience" {...req("founderDirectory.yearsOfXP")} min={0} max={60} value={dir.yearsOfXP ?? ""} onChange={(v) => setD("yearsOfXP", typeof v === "number" ? v : null)} />
           <TagsInput label="Notable companies" {...req("founderDirectory.notableCompanies")} value={dir.notableCompanies} onChange={(v) => setD("notableCompanies", v)} placeholder="Type and press Enter" />
           <TextInput label="Main startup in 2025" value={dir.mainStartup2025 ?? ""} onChange={(e) => setD("mainStartup2025", text(e.currentTarget.value))} />
-          <YesNo label="Repeat founder: founded or co-founded a company before your current project" value={dir.repeatFounder} onChange={(v) => setD("repeatFounder", v)} />
+          <YesNo label="Repeat founder: founded or co-founded a company before your current project" {...req("founderDirectory.repeatFounder")} value={dir.repeatFounder} onChange={(v) => setD("repeatFounder", v)} />
         </Stack>
       </Section>
 
@@ -314,12 +315,13 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
           <ListPicker label="Skills wanted in a co-founder" listKey="hardSkills" value={dir.coFounderSkillsWanted} onChange={(v) => setD("coFounderSkillsWanted", v)} />
           <ListPicker label="Industries to gain experience in" listKey="industries" value={dir.industriesToExplore} onChange={(v) => setD("industriesToExplore", v)} />
           <YesNo label="Open to join another project" value={dir.openToJoinAnotherProject} onChange={(v) => setD("openToJoinAnotherProject", v)} />
-          <YesNo label="I have an existing project" value={dir.hasExistingProject} onChange={(v) => setD("hasExistingProject", v)} />
+          <YesNo label="I have an existing project" {...req("founderDirectory.hasExistingProject")} value={dir.hasExistingProject} onChange={(v) => setD("hasExistingProject", v)} />
           {dir.hasExistingProject && (
             <Textarea label="The project in a few words" autosize minRows={2} value={dir.projectExplanation ?? ""} onChange={(e) => setD("projectExplanation", text(e.currentTarget.value))} />
           )}
           <Select
             label="Existing co-founders"
+            {...req("founderDirectory.hasExistingCoFounders")}
             data={[
               { value: "in_batch", label: "In the batch" },
               { value: "outside_batch", label: "Outside the batch" },

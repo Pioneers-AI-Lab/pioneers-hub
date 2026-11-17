@@ -1,5 +1,6 @@
 import type { Archivable, BatchScoped, DateISOString, DayString, Timestamps } from "./common";
 import type { CommitmentStatus } from "./form";
+import type { BackgroundCriterion } from "../background";
 import { splitTextList } from "../text";
 
 // ----------------------------
@@ -222,6 +223,42 @@ export type FounderInternal = {
    */
   eloScore: number | null;
   eloMatchesCount: number;
+  /**
+   * La grille Background du staff (lot 2, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §3.1) :
+   * le sous-score Background et le Team de sa startup. Absent ou `null` : pas encore
+   * note, le sous-score est retire. L'Elo ne compte plus dans aucun score (17/11).
+   */
+  background?: FounderBackground | null;
+};
+
+/**
+ * Une note Background : chaque critere de 0 a 5 (points de `BACKGROUND_CRITERIA` : 40 / 25 /
+ * 20 / 15), et l'Outstanding mention du staff (+20, seulement a 100). Un critere
+ * absent est retire (`shared/background.ts#ratedBackgroundScore`) ; `scores` absent :
+ * pas encore note (seule une proposition existe).
+ */
+export type FounderBackground = {
+  scores?: Partial<Record<BackgroundCriterion, number | null>>;
+  outstanding?: boolean;
+  /**
+   * Le membre du staff qui a enregistre la note, et quand (Admin > Background). Absents
+   * tant que `scores` est vide (seule une proposition existe).
+   */
+  ratedByUid?: string | null;
+  ratedDateISOString?: DateISOString | null;
+  /**
+   * La note PROPOSEE par Claude (scripts/background-draft.mjs), jamais comptee : elle
+   * pre-remplit la grille d'Admin > Background, le staff la valide ou la corrige (`scores`).
+   */
+  proposed?: FounderBackgroundProposal | null;
+};
+
+/** Une proposition de note Background (ecrite par le script) : les quatre criteres, l'Outstanding et le raisonnement. */
+export type FounderBackgroundProposal = {
+  scores: Record<BackgroundCriterion, number>;
+  outstanding: boolean;
+  ratedDateISOString: DateISOString;
+  reasoning: string | null;
 };
 
 // ----------------------------
@@ -256,8 +293,22 @@ export type FounderWeek = BatchScoped & {
   feelingForWeek: string | null;
   /** @source SP26 Goal « Anything specific to mention » */
   anythingSpecific: string | null;
+  // ---- Weekly update founder (lot 4, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.8) : absents des semaines d'avant ----
+  /** « What did you achieve? », face a l'objectif de la semaine precedente (`goalForWeek` de la semaine d'avant). */
+  achieved?: string | null;
+  /** Problem validation : messages envoyes dans la semaine. */
+  messagesSent?: number | null;
+  /** Problem validation : conversations avec des utilisateurs potentiels dans la semaine. */
+  conversationsDone?: number | null;
+  /** Cofounder matching : ou en est-il. */
+  matchResult?: MatchResult | null;
   updatedDateISOString: DateISOString;
 };
+
+/** « Cofounder matching: result » du Weekly update founder (§2.8). */
+export const MATCH_RESULTS = ["match", "no_match", "still_looking"] as const;
+export type MatchResult = (typeof MATCH_RESULTS)[number];
+export const MATCH_RESULT_LABELS: Record<MatchResult, string> = { match: "Match", no_match: "No match", still_looking: "Still looking" };
 
 // ----------------------------
 // founderStats/{founderId}  (agregat staff + investors IC, recalcule par Cloud Functions)

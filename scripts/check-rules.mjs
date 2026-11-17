@@ -688,7 +688,8 @@ console.log("scoring: points, late submission, proof check, publication, batch s
     const stats = (await adb.doc("founderStats/chloe-demo").get()).data();
     const ada = (await adb.doc("scores/founder_ada-example").get()).data();
     if (stats?.peerRating.average !== 4 || stats.peerRating.count !== 1) throw new Error(JSON.stringify(stats?.peerRating));
-    if (ada?.subScores.execution !== 10) throw new Error(JSON.stringify(ada?.subScores));
+    // Sur 100 (17/11) : la note de son equipe, seul signal d'Execution du seed.
+    if (ada?.scale !== 100 || ada.subScores.execution !== 100) throw new Error(JSON.stringify({ scale: ada?.scale, subScores: ada?.subScores }));
     return `${r.founders} founders`;
   });
   await deleteApp(staff.app);
@@ -1044,6 +1045,58 @@ console.log("shortlist and met (founders/*/private/connections)");
   await deleteApp(pub.app);
 }
 
+// ---- Historique des shortlists : le serveur seul l'ecrit (declencheur), staff et IC le lisent
+console.log("shortlist history (shortlistHistory, server only)");
+{
+  const adb = getAdminFirestore();
+  // Ada a shortliste puis retire Dan (bloc precedent) ; Cora a shortliste Ada a sa premiere coche.
+  const removed = "shortlistHistory/ada-example_dan-placeholder";
+  const recorded = async (path, founderId, targetFounderId) =>
+    waitFor(async () => {
+      const r = (await adb.doc(path).get()).data();
+      if (r?.founderId !== founderId || r.targetFounderId !== targetFounderId || r.batchId !== "fall-2026" || !r.firstShortlistedDateISOString) {
+        throw new Error(JSON.stringify(r ?? null));
+      }
+    });
+  await expectOk("the trigger records a shortlist, kept after its removal", () => recorded(removed, "ada-example", "dan-placeholder"));
+  await expectOk("the trigger records a first shortlist (document created)", () =>
+    recorded("shortlistHistory/check-connections-owner_ada-example", "check-connections-owner", "ada-example"),
+  );
+  const fake = { programId: "accelerator", batchId: "fall-2026", founderId: "ada-example", targetFounderId: "ben-sample", firstShortlistedDateISOString: new Date().toISOString() };
+  const staff = await clientAs("staff-1");
+  await expectOk("staff reads the shortlist history", () => read(doc(staff.db, removed)));
+  await expectOk("staff lists the batch's shortlist history", () => count(query(collection(staff.db, "shortlistHistory"), where("batchId", "==", "fall-2026"))));
+  await expectDenied("staff writes a history record", () => setDoc(doc(staff.db, "shortlistHistory/ada-example_ben-sample"), fake));
+  await expectDenied("staff deletes a history record", () => deleteDoc(doc(staff.db, removed)));
+  await deleteApp(staff.app);
+  const ic = await clientAs("ic-1");
+  await expectOk("IC investor reads the shortlist history", () => read(doc(ic.db, removed)));
+  await deleteApp(ic.app);
+  const lp = await clientAs("lp-1");
+  await expectDenied("portfolio investor reads the shortlist history", () => read(doc(lp.db, removed)));
+  await deleteApp(lp.app);
+  const ada = await clientAs("ada-1");
+  await expectDenied("founder reads her own shortlist history", () => read(doc(ada.db, removed)));
+  await expectDenied("founder writes a history record", () => setDoc(doc(ada.db, "shortlistHistory/ada-example_ben-sample"), fake));
+  await deleteApp(ada.app);
+  const pub = await clientAs(null);
+  await expectDenied("public reads the shortlist history", () => read(doc(pub.db, removed)));
+  await deleteApp(pub.app);
+}
+
+// ---- Presence optionnelle : un reglage de l'evenement, ecrit par le staff (Admin > Events > Attendance)
+console.log("optional attendance (events.attendanceOptional)");
+{
+  const EVENT = "events/demo-masterclass";
+  const staff = await clientAs("staff-1");
+  await expectOk("staff makes an event's attendance optional", () => updateDoc(doc(staff.db, EVENT), { attendanceOptional: true, updatedDateISOString: new Date().toISOString() }));
+  await expectOk("staff makes it mandatory again", () => updateDoc(doc(staff.db, EVENT), { attendanceOptional: false, updatedDateISOString: new Date().toISOString() }));
+  await deleteApp(staff.app);
+  const ada = await clientAs("ada-1");
+  await expectDenied("founder makes an event's attendance optional", () => updateDoc(doc(ada.db, EVENT), { attendanceOptional: true }));
+  await deleteApp(ada.app);
+}
+
 // ---- Taches du To do : communes au batch, cochees par chaque fondateur ---------
 console.log("tasks (To do checklist)");
 {
@@ -1279,6 +1332,252 @@ console.log("google calendar sync");
   });
   await deleteApp(staff.app);
 }
+
+// ==== LOT 2 (debut) : Lock my team, Admin > Startups, grille Background ============
+// Lock my team : un formulaire du BATCH (sans evenement), depuis son compte ; la reponse va
+// dans `teamLocks/{founderId}` (le fondateur lui-meme + staff + IC). Puis le staff cree une
+// startup en un lot (shared/teamLocks.ts) ; la grille Background (`private/internal.background`)
+// s'ecrit par le staff seul, l'Outstanding seulement a 100.
+console.log("lock my team (form -> teamLocks), startups, background grid");
+{
+  const adb = getAdminFirestore();
+  const req = createRequire(import.meta.url);
+  const { FORM_TEMPLATES } = req("../functions/lib/shared/presets/formTemplates.js");
+  const { deriveAttachments } = req("../functions/lib/shared/formRules.js");
+  const { startupCreationWrites } = req("../functions/lib/shared/teamLocks.js");
+  const { backgroundRatingWrite } = req("../functions/lib/shared/background.js");
+  const template = FORM_TEMPLATES.lock_my_team;
+  const FORM = "check-lock-my-team";
+  const stamp = new Date().toISOString();
+  await adb.doc(`forms/${FORM}`).set({
+    programId: "accelerator",
+    batchId: "fall-2026",
+    createdDateISOString: stamp,
+    updatedDateISOString: stamp,
+    archivedDateISOString: null,
+    kind: template.kind,
+    title: template.title,
+    description: template.description,
+    version: 1,
+    questions: template.questions,
+    attachments: deriveAttachments(template.questions),
+    approval: "none",
+    identityCheck: template.identityCheck,
+    eventId: null,
+    status: "open",
+    opensDateISOString: stamp,
+    deadlineDateISOString: null,
+  });
+  const lock = (fns, answers, n) =>
+    httpsCallable(fns, "submitFormResponse")({ formId: FORM, version: 1, submissionId: `check-lock-my-team-${n}`, answers });
+
+  const ada = await clientAs("ada-1");
+  await expectOk("founder locks a team from her account", async () => {
+    await lock(ada.functions, { locked: "Yes", coFounders: ["chloe-demo"], startupName: "Nova" }, "0001");
+    const saved = (await adb.doc("teamLocks/ada-example").get()).data();
+    if (saved?.locked !== true || saved.coFounderIds.join() !== "chloe-demo" || saved.startupName !== "Nova" || saved.batchId !== "fall-2026") {
+      throw new Error(JSON.stringify(saved));
+    }
+  });
+  await expectOk("her answer comes back, to change it", async () => {
+    const form = await publicForm(ada.functions, FORM);
+    if (form.prefill.locked !== "Yes" || form.prefill.coFounders?.join() !== "chloe-demo") throw new Error(JSON.stringify(form.prefill));
+  });
+  await expectCallableError("founder picks herself as co-founder", "invalid-argument", () => lock(ada.functions, { locked: "Yes", coFounders: ["ada-example"] }, "0002"));
+  await expectCallableError("more than 4 co-founders", "invalid-argument", () =>
+    lock(ada.functions, { locked: "Yes", coFounders: ["ben-sample", "chloe-demo", "dan-placeholder", "gina-unclaimed", "finn-private"] }, "0003"),
+  );
+  await expectOk("founder reads her own team lock", () => read(doc(ada.db, "teamLocks/ada-example")));
+  await adb.doc("teamLocks/chloe-demo").set({ programId: "accelerator", batchId: "fall-2026", founderId: "chloe-demo", locked: true, coFounderIds: ["ada-example"], startupName: null, updatedDateISOString: stamp });
+  await expectDenied("founder reads another founder's team lock", () => read(doc(ada.db, "teamLocks/chloe-demo")));
+  await expectDenied("founder writes her team lock directly", () => updateDoc(doc(ada.db, "teamLocks/ada-example"), { coFounderIds: ["ben-sample"] }));
+  await expectDenied("founder lists the batch's team locks", () => count(query(collection(ada.db, "teamLocks"), where("batchId", "==", "fall-2026"))));
+  await expectDenied("founder creates a startup", () =>
+    setDoc(doc(ada.db, "startups/check-founder-made"), { programId: "accelerator", batchId: "fall-2026", name: "Mine", memberIds: ["ada-example"], archivedDateISOString: null }),
+  );
+  await expectDenied("founder writes her Background", () => setDoc(doc(ada.db, "founders/ada-example/private/internal"), { background: { scores: { execution: 5 } } }, { merge: true }));
+  await deleteApp(ada.app);
+
+  const pub = await clientAs(null);
+  await expectCallableError("Lock my team needs an account", "permission-denied", () => lock(pub.functions, { locked: "No" }, "0004"));
+  await expectDenied("public reads a team lock", () => read(doc(pub.db, "teamLocks/ada-example")));
+  await deleteApp(pub.app);
+
+  const ic = await clientAs("ic-1");
+  await expectOk("IC investor lists the batch's team locks", () => count(query(collection(ic.db, "teamLocks"), where("batchId", "==", "fall-2026"))));
+  await expectDenied("IC investor writes a team lock", () => updateDoc(doc(ic.db, "teamLocks/ada-example"), { locked: false }));
+  await deleteApp(ic.app);
+  const lp = await clientAs("lp-1");
+  await expectDenied("portfolio investor reads a team lock", () => read(doc(lp.db, "teamLocks/ada-example")));
+  await deleteApp(lp.app);
+
+  const staff = await clientAs("staff-1");
+  await expectOk("staff lists the batch's team locks", () => count(query(collection(staff.db, "teamLocks"), where("batchId", "==", "fall-2026"))));
+  await expectOk("staff creates the startup in one batch (startup, profiles, memberships, founders)", async () => {
+    const founders = (await adb.collection("founders").where("batchId", "==", "fall-2026").get()).docs.map((d) => ({ id: d.id, ...d.data() }));
+    const existing = (await adb.collection("startups").get()).docs.map((d) => d.id);
+    const { writes, startupIds } = startupCreationWrites({
+      programId: "accelerator",
+      batchId: "fall-2026",
+      drafts: [{ name: "Nova", memberIds: ["chloe-demo", "dan-placeholder"] }],
+      founders,
+      existingStartupIds: new Set(existing),
+      dayString: "2026-11-23",
+      nowISO: stamp,
+    });
+    const batch = writeBatch(staff.db);
+    for (const w of writes) {
+      if (w.op === "merge") batch.set(doc(staff.db, w.path), w.data, { merge: true });
+      else batch.set(doc(staff.db, w.path), w.data);
+    }
+    await batch.commit();
+    const chloe = (await adb.doc("founders/chloe-demo").get()).data();
+    const membership = (await adb.doc(`memberships/${startupIds[0]}_dan-placeholder_2026-11-23`).get()).data();
+    if (chloe?.startupId !== startupIds[0] || membership?.kind !== "startup") throw new Error(JSON.stringify({ chloe: chloe?.startupId, membership }));
+    return startupIds[0];
+  });
+  const all5 = { execution: 5, founderSignal: 5, pedigree: 5, geography: 5 };
+  const rate = (scores, outstanding) => {
+    const w = backgroundRatingWrite("ben-sample", { scores, outstanding }, "staff-1", stamp);
+    return setDoc(doc(staff.db, w.path), w.data, { merge: true });
+  };
+  await expectOk("staff rates a Background", () => rate({ ...all5, geography: 3 }, false));
+  await expectOk("staff gives the Outstanding mention at 100", () => rate(all5, true));
+  await expectDenied("staff gives the Outstanding mention below 100", () =>
+    setDoc(doc(staff.db, "founders/ben-sample/private/internal"), { background: { scores: { ...all5, pedigree: 4 }, outstanding: true } }, { merge: true }),
+  );
+  await expectDenied("staff writes a Background criterion above 5", () =>
+    setDoc(doc(staff.db, "founders/ben-sample/private/internal"), { background: { scores: { ...all5, execution: 6 } } }, { merge: true }),
+  );
+  await expectDenied("staff writes a Background criterion that is not a whole number", () =>
+    setDoc(doc(staff.db, "founders/ben-sample/private/internal"), { background: { scores: { ...all5, pedigree: 3.5 } } }, { merge: true }),
+  );
+  await expectOk("the proposal is kept when the staff rates", async () => {
+    await adb.doc("founders/ben-sample/private/internal").set({ background: { proposed: { scores: all5, outstanding: false, ratedByUid: "script:background-draft", ratedDateISOString: stamp, reasoning: null } } }, { merge: true });
+    await rate({ ...all5, execution: 4 }, false);
+    const b = (await adb.doc("founders/ben-sample/private/internal").get()).data()?.background;
+    if (b?.scores.execution !== 4 || b.outstanding !== false || !b.proposed || b.ratedByUid !== "staff-1") throw new Error(JSON.stringify(b));
+  });
+  await deleteApp(staff.app);
+  const ic2 = await clientAs("ic-1");
+  await expectOk("IC investor reads a Background", () => read(doc(ic2.db, "founders/ben-sample/private/internal")));
+  await deleteApp(ic2.app);
+  const lp2 = await clientAs("lp-1");
+  await expectDenied("portfolio investor reads a Background", () => read(doc(lp2.db, "founders/ben-sample/private/internal")));
+  await deleteApp(lp2.app);
+}
+// ==== LOT 2 (fin) =================================================================
+
+// ==== LOT 4 (debut) : Weekly updates (formulaires du jeudi), file de revue ===========
+// Les deux formulaires de la semaine (shared/weeklyForms.ts, comme la fonction `weeklyForms`),
+// depuis son compte : le founder rappelle l'objectif de la semaine d'avant (`previousGoal`) ; le
+// startup vaut pour toute la startup (« fait » pour chaque membre) et refuse un fondateur sans
+// startup. Les revues (`founderReviews`, `startupReviews`) : staff + IC en lecture, staff en ecriture,
+// notes de 0 a 5, Outstanding seulement a 100 (shared/weeklyReviews.ts).
+console.log("weekly updates (founder, startup) and their review queue");
+{
+  const adb = getAdminFirestore();
+  const req = createRequire(import.meta.url);
+  const { eventFormDocs } = req("../functions/lib/shared/eventForms.js");
+  const { weeklyFormsPlan } = req("../functions/lib/shared/weeklyForms.js");
+  const { founderReviewWrite, startupReviewWrite } = req("../functions/lib/shared/weeklyReviews.js");
+  const { parisDay, parisMonday, shiftWeek } = req("../functions/lib/shared/dates.js");
+  const must = (cond, what) => {
+    if (!cond) throw new Error(what);
+  };
+  const nowISO = new Date().toISOString();
+  const week = parisMonday(nowISO);
+  const plan = weeklyFormsPlan(
+    { id: "fall-2026", programId: "accelerator", status: "active", archivedDateISOString: null, endDayString: null, settings: { weeklyForms: { enabled: true, startDayString: parisDay(nowISO) } } },
+    nowISO,
+  );
+  for (const p of plan.plans) for (const d of eventFormDocs(p, nowISO)) await adb.doc(d.path).set(d.data);
+  const [FOUNDER_FORM, STARTUP_FORM] = plan.plans.map((p) => p.id);
+  // L'objectif donne la semaine d'avant (comme par le formulaire de la semaine d'avant).
+  await adb.doc(`founderWeeks/ada-example_${shiftWeek(week, -1)}`).set(
+    { programId: "accelerator", batchId: "fall-2026", founderId: "ada-example", weekStartDayString: shiftWeek(week, -1), goalForWeek: "Talk to 10 nurses", updatedDateISOString: nowISO },
+    { merge: true },
+  );
+  const submit = (fns, formId, answers, n) =>
+    httpsCallable(fns, "submitFormResponse")({ formId, version: 1, submissionId: `check-weekly-update-${n}`, answers });
+
+  const ada = await clientAs("ada-1");
+  await expectOk("the founder update reminds last week's goal above « What did you achieve? »", async () => {
+    const form = await publicForm(ada.functions, FOUNDER_FORM);
+    must(form.previousGoal?.goal === "Talk to 10 nurses" && form.previousGoal.questionId === "achieved", JSON.stringify(form.previousGoal));
+  });
+  await expectOk("founder sends her weekly update: it lands in her week", async () => {
+    await submit(ada.functions, FOUNDER_FORM, {
+      achieved: "Talked to 12 nurses",
+      goalForWeek: "Ship a prototype",
+      commitmentStatus: "committed",
+      messagesSent: 40,
+      conversationsDone: 12,
+      learnings: "Night shifts matter",
+      workingWith: ["ben-sample"],
+      matchResult: "still_looking",
+    }, "0001");
+    const w = (await adb.doc(`founderWeeks/ada-example_${week}`).get()).data();
+    must(w?.achieved === "Talked to 12 nurses" && w.messagesSent === 40 && w.conversationsDone === 12 && w.matchResult === "still_looking", JSON.stringify(w));
+  });
+  await expectOk("the startup update is done for every member of the startup", async () => {
+    await submit(ada.functions, STARTUP_FORM, {
+      achievement: "First pilot signed",
+      goals: "Two more pilots",
+      messagesSent: 30, callsMade: 10, conversationsDone: 8, meetingsBooked: 3, demosDone: 2, proposalsSent: 1, closedWon: 1, amountPaid: 500,
+      totalAmountPaid: 500, mrr: 0, payingCustomers: 1, totalUsers: 12, activeUsers: 5,
+      obstacle: "Procurement",
+    }, "0002");
+    const checkin = (await adb.doc(`checkins/lumen_${week}_ada-example`).get()).data();
+    must(checkin?.amountPaid === 500 && checkin.achievement === "First pilot signed", JSON.stringify(checkin));
+    const ben = (await adb.doc(`formCompletions/${STARTUP_FORM}_ben-sample`).get()).data();
+    must(ben?.founderId === "ben-sample", "no completion for her co-founder");
+  });
+  await expectDenied("founder reads her own founder review", () => read(doc(ada.db, `founderReviews/ada-example_${week}`)));
+  await expectDenied("founder writes a startup review", () =>
+    setDoc(doc(ada.db, `startupReviews/lumen_${week}`), { programId: "accelerator", batchId: "fall-2026", startupId: "lumen", weekStartDayString: week, scores: { traction: 5, progress: 5 }, outstanding: true }),
+  );
+  await expectDenied("founder lists the batch's startup reviews", () => count(query(collection(ada.db, "startupReviews"), where("batchId", "==", "fall-2026"))));
+  // Sans startup, le formulaire de la startup est refuse (la startup lui est retiree le temps du cas).
+  await adb.doc("founders/ada-example").update({ startupId: null });
+  await expectCallableError("a founder without a startup sends the startup update", "failed-precondition", () =>
+    submit(ada.functions, STARTUP_FORM, { achievement: "x", goals: "y", obstacle: "z" }, "0003"),
+  );
+  await adb.doc("founders/ada-example").update({ startupId: "lumen" });
+  await deleteApp(ada.app);
+
+  const staff = await clientAs("staff-1");
+  const scoped = { programId: "accelerator", batchId: "fall-2026", weekStartDayString: week, comment: null };
+  const put = (w) => setDoc(doc(staff.db, w.path), w.data);
+  await expectOk("staff reviews a founder update (yes / no)", () =>
+    put(founderReviewWrite({ ...scoped, founderId: "ada-example", goalAmbitious: true, goalReached: true, problemValidated: false }, "staff-1", nowISO)),
+  );
+  await expectOk("staff reviews a startup update", () => put(startupReviewWrite({ ...scoped, startupId: "lumen", scores: { traction: 4, progress: 3 }, outstanding: false }, "staff-1", nowISO)));
+  await expectOk("staff gives the Outstanding mention at 100", () => put(startupReviewWrite({ ...scoped, startupId: "lumen", scores: { traction: 5, progress: 5 }, outstanding: true }, "staff-1", nowISO)));
+  const raw = (data) => setDoc(doc(staff.db, `startupReviews/lumen_${week}`), { ...scoped, startupId: "lumen", outstanding: false, reviewedByUid: "staff-1", reviewedDateISOString: nowISO, ...data });
+  await expectDenied("staff gives the Outstanding mention below 100", () => raw({ scores: { traction: 5, progress: 4 }, outstanding: true }));
+  await expectDenied("staff writes a criterion above 5", () => raw({ scores: { traction: 6, progress: 3 } }));
+  await expectDenied("staff writes a criterion that is not a whole number", () => raw({ scores: { traction: 3.5, progress: 3 } }));
+  await expectDenied("staff writes a founder review that is not yes / no", () =>
+    setDoc(doc(staff.db, `founderReviews/ada-example_${week}`), { ...scoped, founderId: "ada-example", goalAmbitious: "yes" }),
+  );
+  await expectOk("staff lists the batch's founder reviews", () => count(query(collection(staff.db, "founderReviews"), where("batchId", "==", "fall-2026"))));
+  await deleteApp(staff.app);
+
+  const ic = await clientAs("ic-1");
+  await expectOk("IC investor reads a founder review", () => read(doc(ic.db, `founderReviews/ada-example_${week}`)));
+  await expectOk("IC investor lists the batch's startup reviews", () => count(query(collection(ic.db, "startupReviews"), where("batchId", "==", "fall-2026"))));
+  await expectDenied("IC investor writes a review", () => updateDoc(doc(ic.db, `startupReviews/lumen_${week}`), { comment: "x" }));
+  await deleteApp(ic.app);
+  const lp = await clientAs("lp-1");
+  await expectDenied("portfolio investor reads a startup review", () => read(doc(lp.db, `startupReviews/lumen_${week}`)));
+  await deleteApp(lp.app);
+  const pub = await clientAs(null);
+  await expectDenied("public reads a founder review", () => read(doc(pub.db, `founderReviews/ada-example_${week}`)));
+  await expectCallableError("the weekly update needs an account", "permission-denied", () => submit(pub.functions, FOUNDER_FORM, { achieved: "x" }, "0004"));
+  await deleteApp(pub.app);
+}
+// ==== LOT 4 (fin) =================================================================
 
 console.log(failures === 0 ? "\nall rules checks passed" : `\n${failures} rules check(s) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

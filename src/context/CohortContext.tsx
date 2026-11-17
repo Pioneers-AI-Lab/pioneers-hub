@@ -2,8 +2,8 @@
 
 import { useMemo, type ReactNode } from "react";
 import { isStaffOrInvestor } from "@shared/access";
-import type { BatchStats, FounderScore, StartupScore, WithId } from "@shared/types";
-import { programPerformance, startupScore } from "@shared/types";
+import type { BatchStats, FounderScore, ScoreScale, StartupScore, WithId } from "@shared/types";
+import { programPerformance, scoreScaleOf, startupScore } from "@shared/types";
 import { queries, refs } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
 import { useDocListener, useQueryListener } from "@/hooks/useFirestoreListener";
@@ -15,7 +15,8 @@ import { useBatch } from "@/context/BatchContext";
 // Ce que montrait le dashboard Spring 2026 : la vue d'ensemble (publique,
 // `batchStats`) et les scores (staff et investors, `scores`). Monte au layout
 // du batch : l'accueil, les listes et les fiches s'en servent.
-// Les PONDERATIONS s'appliquent ici, a la lecture (SPECS §5).
+// Les PONDERATIONS s'appliquent ici, a la lecture (SPECS §5), selon l'echelle de
+// chaque score (`scale` : 100 pour le Hub depuis le 17/11, 10 pour Spring 2026).
 
 type CohortValue = {
   stats: WithId<BatchStats> | null;
@@ -23,10 +24,13 @@ type CohortValue = {
   canSeeScores: boolean;
   founderScores: Map<string, WithId<FounderScore>>;
   startupScores: Map<string, WithId<StartupScore>>;
-  /** Program Performance d'un fondateur, sur 10 (`null` sans donnee). */
+  /** Program Performance d'un fondateur, sur l'echelle de son score (`null` sans donnee). */
   founderPerformance: (founderId: string) => number | null;
-  /** Score d'une startup sur 10 (`null` sans donnee). */
+  /** Score d'une startup, sur l'echelle de son score (`null` sans donnee). */
   startupScoreOf: (startupId: string) => number | null;
+  /** L'echelle du score d'un fondateur / d'une startup (`scale` de son document). */
+  founderScaleOf: (founderId: string) => ScoreScale;
+  startupScaleOf: (startupId: string) => ScoreScale;
   isLoading: boolean;
 };
 
@@ -47,7 +51,7 @@ export function CohortProvider({ children }: { children: ReactNode }) {
       if (s.targetType === "founder") founderScores.set(s.targetId, s);
       else {
         startupScores.set(s.targetId, s);
-        startupScoreById.set(s.targetId, startupScore(s.subScores));
+        startupScoreById.set(s.targetId, startupScore(s));
       }
     }
     return {
@@ -57,8 +61,10 @@ export function CohortProvider({ children }: { children: ReactNode }) {
       startupScores,
       founderPerformance: (id) => {
         const s = founderScores.get(id);
-        return s ? programPerformance(s.subScores) : null;
+        return s ? programPerformance(s) : null;
       },
+      founderScaleOf: (id) => scoreScaleOf(founderScores.get(id)),
+      startupScaleOf: (id) => scoreScaleOf(startupScores.get(id)),
       startupScoreOf: (id) => startupScoreById.get(id) ?? null,
       isLoading: stats.isLoading || scores.isLoading,
     };

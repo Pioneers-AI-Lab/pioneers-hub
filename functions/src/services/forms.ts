@@ -17,7 +17,7 @@ import {
   type ResolvedSubjects,
   type SubjectKey,
 } from "../shared/fieldRegistry";
-import { FORM_ANSWER_MAX, answerToFieldValue, fieldValueToAnswer, formNeedsTeam, isTeamForm, questionsAddedSince, ratingScale } from "../shared/formRules";
+import { FORM_ANSWER_MAX, answerToFieldValue, fieldValueToAnswer, formNeedsStartup, formNeedsTeam, isStartupForm, isTeamForm, questionsAddedSince, ratingScale } from "../shared/formRules";
 import {
   FORM_UPDATED,
   type CallableRequest,
@@ -29,7 +29,7 @@ import {
   type RespondentInput,
 } from "../shared/callables";
 import { juryTargetOf } from "../shared/events";
-import { activeQuestions, answerKey, isJuryForm, isPerTarget, isProvenIdentity, needsAccount, parseAnswerKey, scopeOf } from "../shared/types";
+import { activeQuestions, answerKey, formSetsSubmissionLate, isJuryForm, isPerTarget, isProvenIdentity, needsAccount, parseAnswerKey, scopeOf, submissionLateDeadline } from "../shared/types";
 import type {
   Attendance,
   Batch,
@@ -63,6 +63,7 @@ import { plain } from "./operations";
 import { parisMonday } from "../shared/dates";
 import { absentFromEventMessage, formState } from "../shared/forms";
 import { absentFounderIds } from "../shared/attendance";
+import { previousGoalOf } from "./weeklyForms";
 
 // ----------------------------
 // services - les formulaires publics (SPECS §3.5, §4.4)
@@ -461,9 +462,11 @@ export async function getPublicForm(uid: string | null, req: Partial<CallableReq
 
   // Lien de jury valide (`juryOf` l'a verifie) et jure choisi : les Submissions de SES cibles seulement.
   const targetIds = ctx.targets.each_target.map((t) => t.value);
-  const [prefill, juryBrief] = await Promise.all([
+  const [prefill, juryBrief, previousGoal] = await Promise.all([
     proven ? readPrefill(form, respondent!, ctx, nowISO).then((p) => ({ ...p, ...own.answers })) : {},
     jury && respondent && targetIds.length > 0 ? loadJuryBrief(form.eventId!, targetIds) : null,
+    // Lot 4 : le Weekly update founder rappelle l'objectif de la semaine d'avant.
+    proven && respondent!.founderId ? previousGoalOf(form, respondent!.founderId, nowISO) : null,
   ]);
 
   const lists = listsFrom(listSnaps);
@@ -489,6 +492,7 @@ export async function getPublicForm(uid: string | null, req: Partial<CallableReq
     batchName: (batchSnap.data() as Batch | undefined)?.name ?? "",
     identityCheck: form.identityCheck,
     deadlineDateISOString: form.deadlineDateISOString,
+    setsSubmissionLate: formSetsSubmissionLate(form),
     state,
     questions: publicQuestions,
     respondents: jury ? judgeChoices(jury.names) : asksFounderName ? founders : [],
@@ -506,6 +510,7 @@ export async function getPublicForm(uid: string | null, req: Partial<CallableReq
     pendingAnswerKeys: own.pendingKeys,
     newQuestionIds: respondent ? questionsAddedSince(form, completion).map((q) => q.id) : [],
     juryBrief,
+    previousGoal,
   };
 }
 
@@ -715,7 +720,14 @@ async function planWrites(
   };
 
   const values = Object.fromEntries([...byField].map(([key, e]) => [key, e.value]));
-  const plan = await planFieldWrites(tx, formCaller(actorUid), { subjects, values }, { partial: true, hold: needsApproval, asForm: true, createWith, formDeadline: form.deadlineDateISOString });
+  const plan = await planFieldWrites(tx, formCaller(actorUid), { subjects, values }, {
+    partial: true,
+    hold: needsApproval,
+    asForm: true,
+    createWith,
+    // Seul un formulaire qui decide du retard le recalcule (Final numbers du H5, Submissions H1 a H4).
+    formDeadline: submissionLateDeadline(form),
+  });
 
   const pathOf = (key: DbFieldKey) => {
     const resolved = resolveDocPath(parseDbField(key).doc, subjects);
@@ -820,13 +832,20 @@ export async function submitFormResponse(
       : asksFounder
         ? await resolveFounder(tx, form, linkedId, chosenPath ? chosenId : null, chosenPath ? snaps.get(chosenPath)! : null)
         : null;
+    // Lot 4 : un formulaire de toute la startup (Weekly update startup) se lit avec ses membres.
+    const startupId = !judge && isStartupForm(questions) ? (respondent?.founder?.startupId ?? null) : null;
     // Un absent de l'evenement n'y repond pas (shared/attendance.ts), quel que soit le formulaire.
-    const [ctx, mark] = await Promise.all([
+    const [ctx, mark, startupSnap] = await Promise.all([
       respondent ? scopeContext(tx, form, event, respondent, jury?.scored ?? null) : emptyContext(event),
       respondent?.founder && form.eventId ? tx.get(db().doc(docPaths.attendance(form.eventId, respondent.founderId!))) : null,
+      startupId ? tx.get(db().doc(docPaths.startup(startupId))) : null,
     ]);
     if (mark?.get("status") === "absent") throw new HttpsError("failed-precondition", absentFromEventMessage(event?.name ?? null));
     if (formNeedsTeam(form) && !ctx.team) throw new HttpsError("failed-precondition", "You were not in a published team at this event.");
+    // Lot 4 : un formulaire qui ecrit la startup est pour les fondateurs d'une startup.
+    if (!judge && respondent?.founder && !respondent.founder.startupId && formNeedsStartup(form)) {
+      throw new HttpsError("failed-precondition", "This form is for startups: you are not in a startup yet.");
+    }
 
     // Les questions que le repondant a vues : celles de la version lue. Une question obligatoire
     // qu'il n'a pas vue (ajoutee, ou recreee par un changement de type) : la page relit le formulaire.
@@ -851,10 +870,15 @@ export async function submitFormResponse(
     const writes = planned.flatMap((p) => p.writes);
     const unmatched = planned.flatMap((p) => p.unmatched);
 
-    // « J'ai repondu » de chaque fondateur concerne (le repondant, ou toute son equipe pour la
-    // Submission) : la date de la PREMIERE reponse se garde (Engagement), la derniere s'ajoute.
-    const completionFounderIds =
-      respondent?.founderId && !judge ? (ctx.team !== null && isTeamForm(questions) ? ctx.team.memberIds : [respondent.founderId]) : [];
+    // « J'ai repondu » de chaque fondateur concerne (le repondant, toute son equipe pour la
+    // Submission, toute sa startup pour le Weekly update startup) : la date de la PREMIERE reponse
+    // se garde (Engagement), la derniere s'ajoute.
+    const completionFounderIds = ((): string[] => {
+      if (!respondent?.founderId || judge) return [];
+      if (ctx.team !== null && isTeamForm(questions)) return ctx.team.memberIds;
+      const startupMemberIds = (startupSnap?.data() as Startup | undefined)?.memberIds ?? [];
+      return startupMemberIds.includes(respondent.founderId) ? startupMemberIds : [respondent.founderId];
+    })();
     const completionRefs = completionFounderIds.map((id) => db().doc(docPaths.formCompletion(formId, id)));
     const previousCompletions = completionRefs.length ? await tx.getAll(...completionRefs) : [];
 

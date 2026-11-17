@@ -54,6 +54,16 @@ export type TeamPoints = {
 export const OUTSTANDING_BONUS_RATIO = 0.2;
 export const OUTSTANDING_BONUS_POINTS = OUTSTANDING_BONUS_RATIO * 100;
 
+/** Au maximum (a l'arrondi pres) seulement : la mention ne rattrape pas une note plus basse. */
+export const reachesMax = (value: number, max: number): boolean => max > 0 && value >= max - 0.01;
+
+/**
+ * La valeur avec l'Outstanding mention : + 20 % du maximum, seulement au maximum (`reachesMax`).
+ * LA regle de la mention : bareme d'un hackathon et grille Background (shared/background.ts).
+ */
+export const withOutstanding = (value: number, max: number, mention: boolean): number =>
+  mention && reachesMax(value, max) ? roundTo(value + max * OUTSTANDING_BONUS_RATIO, 2) : value;
+
 /** Ramene a la meilleure equipe = 100 (0 si personne n'a de points). */
 export const normalizeToBest = (value: number, top: number): number => (top > 0 ? roundTo((value / top) * 100, 2) : 0);
 
@@ -104,10 +114,9 @@ export function scoreTeams(scoring: EventScoring, criteria: readonly Criterion[]
     return withPoints.map((t) => ({ ...t, outstanding: false, outstandingEligible: false, normalized: normalizeToBest(t.total, topTotal) }));
   }
   return withPoints.map((t, i) => {
-    // Au maximum (a l'arrondi pres) seulement : la mention ne rattrape pas une note plus basse.
-    const outstandingEligible = max > 0 && t.total >= max - 0.01;
+    const outstandingEligible = reachesMax(t.total, max);
     const outstanding = outstandingEligible && teams[i].outstanding;
-    const total = outstanding ? roundTo(t.total + max * OUTSTANDING_BONUS_RATIO, 2) : t.total;
+    const total = withOutstanding(t.total, max, outstanding);
     return { ...t, total, outstanding, outstandingEligible, normalized: max > 0 ? roundTo((total / max) * 100, 2) : 0 };
   });
 }

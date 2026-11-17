@@ -11,9 +11,9 @@ import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { FUNCTIONS_REGION, type CallableName, type CallableRequest, type CallableResponse } from "./shared/callables";
 import { API_KEY_NAME_MAX } from "./shared/api";
-import { COL, SUB } from "./shared/collections";
+import { COL, PRIVATE_DOC, SUB } from "./shared/collections";
 import { isStaffViewer } from "./shared/access";
-import type { ApiKey, Evaluation, Form, Submission } from "./shared/types";
+import type { ApiKey, Evaluation, Form, FounderConnections, Submission } from "./shared/types";
 import { mintApiKey } from "./api/caller";
 import { loadViewer } from "./api/viewer";
 import { decideRequest, describeRequest } from "./oauth/consent";
@@ -25,6 +25,9 @@ import * as kpis from "./services/kpis";
 import * as teamResults from "./services/teamResults";
 import * as scores from "./services/scores";
 import * as calendarSync from "./services/calendarSync";
+import * as shortlistHistory from "./services/shortlistHistory";
+import { createWeeklyForms } from "./services/weeklyForms";
+import { WEEKLY_FORMS_SCHEDULE } from "./shared/weeklyForms";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { cleanId } from "./services/clean";
 import { onDocumentUpdated, onDocumentWritten } from "firebase-functions/v2/firestore";
@@ -195,6 +198,13 @@ export const nightlyScores = onSchedule({ schedule: "0 2 * * *", timeZone: "Euro
   console.log("nightlyScores", JSON.stringify(done));
 });
 
+// Les formulaires hebdomadaires (lot 4, shared/weeklyForms.ts) : chaque jeudi a 18:45 (Paris), le
+// Weekly update founder et le Weekly update startup de la semaine, pour chaque batch dont
+// `settings.weeklyForms.enabled` ; echeance 24 h apres. Ids deterministes : une relance ne double rien.
+export const weeklyForms = onSchedule({ schedule: WEEKLY_FORMS_SCHEDULE, timeZone: "Europe/Paris", timeoutSeconds: 120 }, async () => {
+  console.log("weeklyForms", JSON.stringify(await createWeeklyForms()));
+});
+
 // ----------------------------
 // Agenda Google du batch (SPECS §2, decision du 16/11) : ses evenements
 // deviennent ceux du Hub, a chaque changement (notification de Google), toutes
@@ -302,6 +312,17 @@ export const onEvaluationWritten = onDocumentWritten(
 // Grille du jury et metriques : les questions des formulaires de l'evenement (echelle, poids, ajout, retrait).
 export const onFormWritten = onDocumentWritten({ document: `${COL.forms}/{formId}`, region: FIRESTORE_TRIGGER_REGION }, (event) =>
   teamResults.onFormChange((event.data?.before.data() as Form | undefined) ?? null, (event.data?.after.data() as Form | undefined) ?? null),
+);
+
+// Shortlist d'un fondateur -> historique en ajout seul (Likability ; services/shortlistHistory.ts).
+export const onConnectionsWritten = onDocumentWritten(
+  { document: `${COL.founders}/{founderId}/${SUB.private}/${PRIVATE_DOC.connections}`, region: FIRESTORE_TRIGGER_REGION },
+  (event) =>
+    shortlistHistory.onConnectionsWritten(
+      event.params.founderId,
+      (event.data?.before.data() as FounderConnections | undefined) ?? null,
+      (event.data?.after.data() as FounderConnections | undefined) ?? null,
+    ),
 );
 
 // ----------------------------

@@ -14,6 +14,8 @@ import {
 } from "firebase/firestore";
 import { COL, SUB, docIds, docPaths } from "@shared/collections";
 import { readDirectory } from "@shared/types";
+import { TEAM_LOCKS_COLLECTION, teamLockPath } from "@shared/teamLocks";
+import { FOUNDER_REVIEWS_COLLECTION, STARTUP_REVIEWS_COLLECTION } from "@shared/weeklyReviews";
 import type {
   ApiKey,
   Attendance,
@@ -42,6 +44,7 @@ import type {
   FounderDirectory,
   FounderInternal,
   FounderProfile,
+  FounderReview,
   Leaderboard,
   ListKey,
   Membership,
@@ -52,8 +55,10 @@ import type {
   Startup,
   StartupInternal,
   StartupProfile,
+  StartupReview,
   Submission,
   TaskCompletion,
+  TeamLock,
   User,
   WithId,
 } from "@shared/types";
@@ -132,6 +137,12 @@ export const refs = {
   founderProfile: (founderId: string) => docRef<FounderProfile>(docPaths.founderProfile(founderId)),
   founderInternal: (founderId: string) => docRef<FounderInternal>(docPaths.founderInternal(founderId)),
   founderConnections: (founderId: string) => docRef<FounderConnections>(docPaths.founderConnections(founderId)),
+  /** Lock my team : le fondateur lui-meme, le staff, les investors IC (regle `teamLocks`). */
+  teamLocks: () => colRef<TeamLock>(TEAM_LOCKS_COLLECTION),
+  teamLock: (founderId: string) => docRef<TeamLock>(teamLockPath(founderId)),
+  /** Revue des Weekly updates (lot 4) : staff + investors IC (regles `founderReviews`, `startupReviews`). */
+  founderReviews: () => colRef<FounderReview>(FOUNDER_REVIEWS_COLLECTION),
+  startupReviews: () => colRef<StartupReview>(STARTUP_REVIEWS_COLLECTION),
 
   startups: () => colRef<Startup>(COL.startups),
   startup: (startupId: string) => docRef<Startup>(docPaths.startup(startupId)),
@@ -442,5 +453,29 @@ export const queries = {
   taskCompletionsOfBatch: (batchId: string) => ({
     key: `taskCompletions:batch=${batchId}`,
     query: query(refs.taskCompletions(), whereField<TaskCompletion>("batchId", "==", batchId)),
+  }),
+
+  /** Les reponses a Lock my team du batch (staff et investors IC : Admin > Startups). */
+  teamLocksOfBatch: (batchId: string) => ({
+    key: `teamLocks:batch=${batchId}`,
+    query: query(refs.teamLocks(), whereField<TeamLock>("batchId", "==", batchId)),
+  }),
+
+  // ---- Admin > Reviews (lot 4) : les Weekly updates du batch et leurs revues (staff) ----
+  founderWeeksOfBatch: (batchId: string) => ({
+    key: `founderWeeks:batch=${batchId}`,
+    query: query(refs.founderWeeks(), whereField<FounderWeek>("batchId", "==", batchId)),
+  }),
+  checkinsOfBatch: (batchId: string) => ({
+    key: `checkins:batch=${batchId}`,
+    query: query(refs.checkins(), whereField<Checkin>("batchId", "==", batchId)),
+  }),
+  founderReviewsOfBatch: (batchId: string) => ({
+    key: `founderReviews:batch=${batchId}`,
+    query: query(refs.founderReviews(), whereField<FounderReview>("batchId", "==", batchId)),
+  }),
+  startupReviewsOfBatch: (batchId: string) => ({
+    key: `startupReviews:batch=${batchId}`,
+    query: query(refs.startupReviews(), whereField<StartupReview>("batchId", "==", batchId)),
   }),
 } as const;
