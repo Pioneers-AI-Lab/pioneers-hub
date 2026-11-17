@@ -16,10 +16,8 @@ import { Empty, Section } from "@/components/ui/Section";
 // equipes d'un challenge) : on cherche son nom, on trouve son groupe. Connecte,
 // son propre groupe est en tete, borde de bleu. Le leader de chaque groupe est
 // marque « (leader) », son role rappele en tete de la liste.
-// Chaque membre : avatar, nom, profil (comme l'annuaire du batch), dans la
-// limite de ce que le visiteur peut lire (PublicTeamsContext), et un lien
-// vers sa fiche. Fiche privee et visiteur sans compte : la fiche le renvoie a
-// la connexion, puis le ramene (BlockedState).
+// Chaque membre : avatar, nom, profil (comme l'annuaire du batch, fiches
+// publiques : PublicTeamsContext), et un lien vers sa fiche.
 
 type Member = { id: string; name: string; photoUrl: string | null; context: string | null };
 

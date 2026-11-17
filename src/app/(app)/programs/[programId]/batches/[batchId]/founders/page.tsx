@@ -119,7 +119,6 @@ function FoundersDirectory() {
     <>
       {role === "public" && (
         <Text size="sm" c="dimmed" mb="md">
-          Only founders who agreed to a public profile are listed.{" "}
           {isSignedIn ? (
             <>
               Your account is not linked to a profile of this batch:{" "}
@@ -132,7 +131,7 @@ function FoundersDirectory() {
               Sign in
             </Anchor>
           )}{" "}
-          to see the whole batch.
+          to see full profiles.
         </Text>
       )}
       <Stack gap="sm" mb="xs">

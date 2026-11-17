@@ -52,9 +52,9 @@ export type RespondentInput = { founderId: string } | { judgeId: string } | { na
 export type PublicRespondent = { founderId: string | null; judgeId: string | null; label: string };
 
 /**
- * Un formulaire vu SANS COMPTE (page /forms/[formId]). Les noms des fondateurs
- * ne sont pas publics (regles `founders`) : le serveur les rend en nom court
- * (`publicShortName`), juste assez pour se retrouver dans la liste.
+ * Un formulaire vu SANS COMPTE (page /forms/[formId]). Le serveur rend les noms
+ * des fondateurs en nom court (`publicShortName`), juste assez pour se
+ * retrouver dans la liste.
  */
 export type PublicForm = {
   formId: string;

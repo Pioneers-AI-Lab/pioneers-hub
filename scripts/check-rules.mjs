@@ -83,8 +83,6 @@ async function clientAs(uid) {
 }
 
 const foundersOfBatch = (db) => query(collection(db, "founders"), where("batchId", "==", "fall-2026"));
-const publicFounders = (db) =>
-  query(collection(db, "founders"), where("batchId", "==", "fall-2026"), where("publicProfileConsent", "==", true));
 const count = async (q) => (await getDocs(q)).size;
 const read = async (ref) => {
   const snap = await getDoc(ref);
@@ -99,9 +97,9 @@ console.log("public (not signed in)");
 {
   const { app, db } = await clientAs(null);
   await expectOk("read program", () => read(doc(db, "programs/accelerator")));
-  await expectOk("list consenting founders", () => count(publicFounders(db)));
-  await expectDenied("list ALL founders", () => count(foundersOfBatch(db)));
-  await expectDenied("read non-consenting founder", () => read(doc(db, "founders/eva-private")));
+  // Fiches publiques, sans consentement (decision du 17/11) ; l'annuaire reste au batch.
+  await expectOk("list ALL founders of a batch", () => count(foundersOfBatch(db)));
+  await expectOk("read any founder card", () => read(doc(db, "founders/eva-private")));
   await expectDenied("read a founder directory", () => read(doc(db, "founders/ada-example/private/directory")));
   await expectDenied("read a founder private profile", () => read(doc(db, "founders/ada-example/private/profile")));
   await expectOk("read startup", () => read(doc(db, "startups/lumen")));
@@ -114,9 +112,6 @@ console.log("public (not signed in)");
     count(query(collection(db, "forms"), where("batchId", "==", "fall-2026"), where("status", "==", "open"))),
   );
   await expectOk("list active batches", () => count(query(collection(db, "batches"), where("archivedDateISOString", "==", null))));
-  await expectDenied("list unclaimed profiles (signed out)", () =>
-    count(query(collection(db, "founders"), where("batchId", "==", "fall-2026"), where("uid", "==", null))),
-  );
   await deleteApp(app);
 }
 
@@ -126,7 +121,7 @@ console.log("founder (ada, member of lumen)");
   const { app, db } = await clientAs("ada-1");
   await expectOk("read own membership", () => read(doc(db, "batchMemberships/fall-2026_ada-1")));
   await expectOk("list ALL founders of her batch", () => count(foundersOfBatch(db)));
-  await expectOk("read non-consenting founder", () => read(doc(db, "founders/eva-private")));
+  await expectOk("read another founder card", () => read(doc(db, "founders/eva-private")));
   await expectOk("read ANOTHER founder directory (profile book)", () =>
     read(doc(db, "founders/ben-sample/private/directory")),
   );
@@ -181,6 +176,9 @@ console.log("founder (ada, member of lumen)");
   );
   await expectOk("edit her own introduction", () =>
     setDoc(doc(db, "founders/ada-example/private/directory"), { introduceYourself: "Hello" }, { merge: true }),
+  );
+  await expectOk("set her own repeat founder answer", () =>
+    setDoc(doc(db, "founders/ada-example/private/directory"), { repeatFounder: true }, { merge: true }),
   );
   await expectDenied("edit her own directory email (account key)", () =>
     setDoc(doc(db, "founders/ada-example/private/directory"), { email: "x@y.z" }, { merge: true }),
@@ -268,7 +266,7 @@ console.log("investor (portfolio access)");
 console.log("mentor (no access in v1)");
 {
   const { app, db } = await clientAs("mentor-1");
-  await expectDenied("list ALL founders", () => count(foundersOfBatch(db)));
+  await expectOk("list ALL founders (public cards)", () => count(foundersOfBatch(db)));
   await expectDenied("read founder directory", () => read(doc(db, "founders/ada-example/private/directory")));
   await expectDenied("read scores", () => read(doc(db, "scores/founder_ada-example")));
   await expectDenied("read own mentor record", () => read(doc(db, "mentors/mia-mentor")));
@@ -289,7 +287,7 @@ console.log("signed in, no profile (stranger)");
   await expectOk("create own user doc", () => setDoc(doc(db, "users/stranger-1"), { ...blank, roles: [] }));
   await expectOk("read own (missing) membership", () => read(doc(db, "batchMemberships/fall-2026_stranger-1")));
   await expectDenied("read someone else's membership", () => read(doc(db, "batchMemberships/fall-2026_ada-1")));
-  await expectDenied("list ALL founders", () => count(foundersOfBatch(db)));
+  await expectOk("list ALL founders (public cards)", () => count(foundersOfBatch(db)));
   await deleteApp(app);
 }
 
@@ -946,7 +944,6 @@ console.log("shortlist and met (founders/*/private/connections)");
     batchId: "other-batch",
     name: "Olga Otherbatch",
     uid: null,
-    publicProfileConsent: false,
     archivedDateISOString: null,
   });
   const own = "founders/ada-example/private/connections";
@@ -993,7 +990,6 @@ console.log("shortlist and met (founders/*/private/connections)");
     name: "Cora Connections",
     uid: "check-connections-1",
     personId: null,
-    publicProfileConsent: false,
     archivedDateISOString: null,
   });
   await adb.doc("batchMemberships/fall-2026_check-connections-1").set({

@@ -57,7 +57,7 @@ if (!onEmulator && !args.includes("--prod")) throw new Error("projet reel : ajou
 if (!onEmulator && !dryRun && !args.includes("--overwrite-fa26")) {
   throw new Error(
     "ATTENTION : cet import REMPLACE les documents des profils FA26 non reclames et efface l'import onboarding du 16/11, " +
-      "anythingElse, les one-liners et les scores Elo. Ne le relancer qu'avec l'accord explicite de l'utilisateur, puis ajouter --overwrite-fa26 " +
+      "anythingElse, repeatFounder, les one-liners et les scores Elo. Ne le relancer qu'avec l'accord explicite de l'utilisateur, puis ajouter --overwrite-fa26 " +
       "(ou --dry-run pour voir sans ecrire).",
   );
 }
@@ -248,7 +248,6 @@ for (const r of rows) {
     status: "enrolled",
     leftProgramReason: null,
     isExternalFounder: false,
-    publicProfileConsent: false,
     stats: null,
   }, current));
   set(`founders/${id}/private/directory`, keepFilled({

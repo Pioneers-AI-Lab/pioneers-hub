@@ -326,7 +326,6 @@ for (const f of founders) {
     status: "alumni",
     leftProgramReason: null,
     isExternalFounder: f.isExternalFounder === true,
-    publicProfileConsent: false,
     stats: null,
   });
   set(`founders/${f.id}/private/directory`, {

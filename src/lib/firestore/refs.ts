@@ -209,21 +209,10 @@ export const queries = {
     ),
   }),
 
-  /**
-   * Un visiteur public ne peut lister QUE les profils consentants : la regle
-   * Firestore refuse une requete qui pourrait renvoyer un autre document, il
-   * faut donc que la requete elle-meme porte le filtre.
-   */
-  foundersOfBatch: (batchId: string, scope: "public" | "batch") => ({
-    key: `founders:batch=${batchId}:${scope}`,
-    query:
-      scope === "public"
-        ? query(
-            refs.founders(),
-            whereField<Founder>("batchId", "==", batchId),
-            whereField<Founder>("publicProfileConsent", "==", true),
-          )
-        : query(refs.founders(), whereField<Founder>("batchId", "==", batchId)),
+  /** Les fiches du batch : publiques pour tous (regle `founders`, decision du 17/11). */
+  foundersOfBatch: (batchId: string) => ({
+    key: `founders:batch=${batchId}`,
+    query: query(refs.founders(), whereField<Founder>("batchId", "==", batchId)),
   }),
 
   startupsOfBatch: (batchId: string) => ({
@@ -252,7 +241,7 @@ export const queries = {
     query: query(refs.memberships(), whereField<BatchMembership>("uid", "==", uid)),
   }),
 
-  /** Profils non reclames d'un batch (« choisir mon profil »). La regle exige le filtre `uid == null`. */
+  /** Profils non reclames d'un batch (« choisir mon profil »). */
   unclaimedFoundersOfBatch: (batchId: string) => ({
     key: `founders:batch=${batchId}:unclaimed`,
     query: query(

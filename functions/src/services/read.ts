@@ -3,7 +3,6 @@ import { z } from "zod";
 import { COL, docPaths, eventCollectionPaths } from "../shared/collections";
 import { LIST_KEYS, readDirectory, type Batch, type ClosedList, type Founder, type Note, type PioneersEvent, type Program, type Startup } from "../shared/types";
 import {
-  canReadFounderCard,
   canReadFounderDirectory,
   canReadFounderProfile,
   canReadPerson,
@@ -203,15 +202,9 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
     .map((d) => withId<{ name?: string; archivedDateISOString?: string | null } & Record<string, unknown>>(d))
     .filter((d) => input.includeArchived || !d.archivedDateISOString)
     .filter((d) => !search || searchKey(String(d.name ?? "")).includes(search));
-  // Fondateurs : la carte n'est lue que par le batch, le staff, les investors,
-  // ou si elle est publique ou non reclamee (regle `founders`).
-  const role = object === "founders" ? roleOf(caller, input.batchId!) : null;
+  // La carte d'un fondateur est publique (regle `founders`) : seuls les evenements se filtrent.
   const canSee = object === "events" ? await eventFilterFor(caller, input.batchId!) : null;
-  const visible = role
-    ? docs.filter((d) => canReadFounderCard(role, d as unknown as Founder))
-    : canSee
-      ? docs.filter((d) => canSee(d as unknown as PioneersEvent))
-      : docs;
+  const visible = canSee ? docs.filter((d) => canSee(d as unknown as PioneersEvent)) : docs;
   if (spec.sort) visible.sort((a, b) => String(a[spec.sort!] ?? "").localeCompare(String(b[spec.sort!] ?? "")));
   return { object, items: visible.map((d) => (spec.short as (x: unknown) => unknown)(d)) };
 }
@@ -260,7 +253,6 @@ export async function getObject(caller: Caller, input: GetInput): Promise<Record
       const founderSnap = required(await db.doc(docPaths.founder(id)).get(), object, id);
       const founder = founderSnap.data() as Founder;
       const role = roleOf(caller, founder.batchId);
-      if (!canReadFounderCard(role, founder)) throw hidden();
       const insider = isInsider(role);
       // La personne : lue pour l'insider ou si c'est le compte lui-meme (`founder.uid` est son rattachement).
       const [person, directory, profile, internal, stats] = await Promise.all([

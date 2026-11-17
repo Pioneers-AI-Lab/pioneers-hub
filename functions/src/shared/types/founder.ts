@@ -5,7 +5,7 @@ import { splitTextList } from "../text";
 // ----------------------------
 // Fondateur : quatre documents, quatre publics (SPECS §6.2)
 // ----------------------------
-//   founders/{founderId}                     Founder           public (si consentement) + batch + staff + investors
+//   founders/{founderId}                     Founder           public (tous, decision du 17/11)
 //   founders/{founderId}/private/directory   FounderDirectory  fondateurs du batch + staff + investors
 //   founders/{founderId}/private/profile     FounderProfile    le fondateur lui-meme + staff + investors IC
 //   founders/{founderId}/private/internal    FounderInternal   staff + investors IC
@@ -30,8 +30,8 @@ import { splitTextList } from "../text";
 // Profile Book montrait reste visible des fondateurs du batch, y compris genre,
 // nationalite, email et WhatsApp. Seul ce qu'il ne contenait pas est masque
 // (age et date de naissance, presence, scores, avis des pairs, notes).
-// Le document racine reste minimal car il peut devenir public (pages publiques
-// avec consentement : bonus).
+// Le document racine reste minimal car il est public (decision du 17/11 : plus
+// de consentement, toutes les fiches le sont).
 //
 // `@source` donne la colonne d'origine de l'Airtable Spring 2026 (table
 // « Founders (attendance) », SPECS annexe B) : c'est le mapping de l'import CSV.
@@ -108,12 +108,6 @@ export type Founder = BatchScoped &
     leftProgramReason: LeftProgramReason | null;
     /** Cofondateur exterieur au batch (fiche « External Founder » du SP26). */
     isExternalFounder: boolean;
-    /**
-     * Le fondateur accepte d'apparaitre sur une page publique (RGPD, bonus).
-     * Sans lui, seuls les connectes du batch, le staff et les investors voient
-     * sa fiche.
-     */
-    publicProfileConsent: boolean;
     stats: FounderPublicStats | null;
   };
 
@@ -173,6 +167,8 @@ export type FounderDirectory = {
   openToJoinAnotherProject: boolean | null;
   /** @source SP26 onboarding « main startup in 2025 » */
   mainStartup2025: string | null;
+  /** A deja fonde ou cofonde une entreprise avant son projet actuel (`null` : non renseigne). Absent des documents plus anciens. */
+  repeatFounder?: boolean | null;
   /** @source FA26 onboarding : cherche un cofondateur. */
   lookingForCoFounder: boolean | null;
   /** @source FA26 onboarding : quel type de cofondateur. */

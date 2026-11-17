@@ -10,7 +10,6 @@ import {
   SegmentedControl,
   Select,
   Stack,
-  Switch,
   TagsInput,
   Text,
   TextInput,
@@ -38,8 +37,7 @@ import { Section } from "@/components/ui/Section";
 // ----------------------------
 // Seuls les champs de FOUNDER_SELF_EDITABLE (shared/access.ts) sont proposes,
 // et seuls les champs MODIFIES sont envoyes : rien n'ecrase une valeur que le
-// fondateur n'a pas touchee. Le staff ne touche pas au consentement a la page
-// publique : c'est le choix du fondateur. Le staff seul saisit l'id Slack et
+// fondateur n'a pas touchee. Le staff seul saisit l'id Slack et
 // le one-liner de la grille (section « Staff only », hors completude du
 // profil, decision du 16/11 pour le one-liner). Un champ
 // obligatoire du registre (celui qui manque dans le To do) porte l'asterisque.
@@ -155,7 +153,6 @@ export function ProfileEditor({ back }: EditorProps) {
             hardSkills: founder.hardSkills ?? [],
             industries: founder.industries ?? [],
             rolesICouldTake: founder.rolesICouldTake ?? [],
-            publicProfileConsent: founder.publicProfileConsent ?? false,
           },
           directory: {
             whatsapp: directory.whatsapp ?? null,
@@ -177,6 +174,7 @@ export function ProfileEditor({ back }: EditorProps) {
             hasExistingCoFounders: directory.hasExistingCoFounders ?? null,
             openToJoinAnotherProject: directory.openToJoinAnotherProject ?? null,
             mainStartup2025: directory.mainStartup2025 ?? null,
+            repeatFounder: directory.repeatFounder ?? null,
             lookingForCoFounder: directory.lookingForCoFounder ?? null,
             coFounderTypeWanted: directory.coFounderTypeWanted ?? null,
             coFounderSkillsWanted: directory.coFounderSkillsWanted ?? [],
@@ -304,6 +302,7 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
           <NumberInput label="Years of experience" min={0} max={60} value={dir.yearsOfXP ?? ""} onChange={(v) => setD("yearsOfXP", typeof v === "number" ? v : null)} />
           <TagsInput label="Notable companies" {...req("founderDirectory.notableCompanies")} value={dir.notableCompanies} onChange={(v) => setD("notableCompanies", v)} placeholder="Type and press Enter" />
           <TextInput label="Main startup in 2025" value={dir.mainStartup2025 ?? ""} onChange={(e) => setD("mainStartup2025", text(e.currentTarget.value))} />
+          <YesNo label="Repeat founder: founded or co-founded a company before your current project" value={dir.repeatFounder} onChange={(v) => setD("repeatFounder", v)} />
         </Stack>
       </Section>
 
@@ -362,18 +361,6 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
               error={slackInvalid ? "Starts with U (or W), like U0123ABCD." : undefined}
             />
           </Stack>
-        </Section>
-      )}
-
-      {isSelf && (
-        <Section title="Visibility">
-          <Switch
-            size="md"
-            label="Show my card on the public pages"
-            description="Name, photo, skills and startup. Your contact details always stay inside the batch."
-            checked={draft.founder.publicProfileConsent}
-            onChange={(e) => setF("publicProfileConsent", e.currentTarget.checked)}
-          />
         </Section>
       )}
 

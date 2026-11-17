@@ -82,7 +82,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const batch = batches.find((b) => b.id === preferredId) ?? defaultBatch(batches);
   const batchId = batch?.id ?? null;
 
-  const founders = useQueryListener(batchId ? queries.foundersOfBatch(batchId, "batch") : batchList.isLoading ? undefined : null);
+  const founders = useQueryListener(batchId ? queries.foundersOfBatch(batchId) : batchList.isLoading ? undefined : null);
   const events = useQueryListener(batchId ? queries.eventsOfBatch(batchId) : batchList.isLoading ? undefined : null);
   const memberships = useQueryListener(batchId ? queries.teamMembershipsOfBatch(batchId) : batchList.isLoading ? undefined : null);
   const forms = useQueryListener(batchId ? queries.formsOfBatch(batchId) : batchList.isLoading ? undefined : null);

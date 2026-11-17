@@ -145,7 +145,7 @@ export const canReadStartupProfile = (
 // regle verifie que la copie egale l'original.
 
 export const FOUNDER_SELF_EDITABLE = {
-  founder: ["hardSkills", "industries", "rolesICouldTake", "publicProfileConsent"],
+  founder: ["hardSkills", "industries", "rolesICouldTake"],
   founderDirectory: [
     "whatsapp",
     "linkedinUrl",
@@ -166,6 +166,7 @@ export const FOUNDER_SELF_EDITABLE = {
     "hasExistingCoFounders",
     "openToJoinAnotherProject",
     "mainStartup2025",
+    "repeatFounder",
     "lookingForCoFounder",
     "coFounderTypeWanted",
     "coFounderSkillsWanted",
@@ -192,14 +193,6 @@ export const FOUNDER_PHOTO_FIELDS = {
   person: ["photoUrl"],
   founder: ["photoUrl", "coverPhotoUrl"],
 } as const satisfies { person: readonly (keyof Person)[]; founder: readonly (keyof Founder)[] };
-
-/**
- * La carte d'un fondateur (`founders/{id}`) : le batch, le staff et les investors ;
- * sinon seulement si elle est publique (consentement) ou pas encore reclamee
- * (liste « choisir mon profil »). Regle `founders` read.
- */
-export const canReadFounderCard = (role: BatchRole, founder: Pick<Founder, "publicProfileConsent" | "uid">): boolean =>
-  role !== "public" || founder.publicProfileConsent === true || founder.uid === null;
 
 /** `people/{id}` : la personne elle-meme (compte rattache), le staff et les investors IC. */
 export const canReadPerson = (role: BatchRole, viewerUid: string | null, person: Pick<Person, "uid">): boolean =>
@@ -230,10 +223,9 @@ export const canEditFounderProfile = (role: BatchRole, viewerFounderId: string |
 // ----------------------------
 // Nom affiche sans compte
 // ----------------------------
-// Le nom complet d'un fondateur n'est public qu'avec `publicProfileConsent`.
 // Une page publique qui doit nommer tout le monde (repartition d'une lunch
-// roulette) affiche le prenom et l'initiale du nom : assez pour se retrouver,
-// sans exposer l'identite complete.
+// roulette, choix du nom d'un formulaire) affiche le prenom et l'initiale du
+// nom : assez pour se retrouver, sans exposer l'identite complete.
 
 /** « Ada Lovelace » -> « Ada L. » ; un nom d'un seul mot reste tel quel. */
 export function publicShortName(fullName: string): string {

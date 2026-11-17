@@ -30,9 +30,11 @@ npm run deploy:rules  # regles + index Firestore sur le projet reel (apres check
 npm run init:prod     # documents de depart du projet reel (rejouable, n'ecrase rien)
 npm run grant -- <email> staff|investor ic|investor portfolio|mentor|none   # role d'un compte, reel
 node scripts/import-sp26.mjs <bundle.json> --prod   # import du batch Spring 2026 (paquet hors depot, donnees personnelles)
-node scripts/import-fa26.mjs <lien-airtable> --prod --overwrite-fa26 [--dry-run]   # batch Fall 2026 depuis la vue partagee du Profile Book (lien hors depot) ; NE JAMAIS LANCER SANS DEMANDER A L'UTILISATEUR : remplace les documents des profils non reclames, donc efface import-fa26-onboarding, anythingElse, les one-liners et les scores Elo (le script refuse d'ecrire en prod sans --overwrite-fa26)
+node scripts/import-fa26.mjs <lien-airtable> --prod --overwrite-fa26 [--dry-run]   # batch Fall 2026 depuis la vue partagee du Profile Book (lien hors depot) ; NE JAMAIS LANCER SANS DEMANDER A L'UTILISATEUR : remplace les documents des profils non reclames, donc efface import-fa26-onboarding, anythingElse, repeatFounder, les one-liners et les scores Elo (le script refuse d'ecrire en prod sans --overwrite-fa26)
 node scripts/import-fa26-onboarding.mjs <export.csv> --skills <skills.json> [--prod]   # complete FA26 depuis l'export CSV de la vue onboarding (rattachement par nom, remplit le vide, a blanc sans --prod ; fait le 16/11)
 node scripts/set-one-liners.mjs <one-liners.json> [--overwrite] [--prod]   # ecrit `founders.trackRecordOneLiner` ({ founderId: texte }), remplit le vide sauf --overwrite, a blanc sans --prod ; textes FA26 rediges en session Claude le 16/11 (fichier hors depot)
+node scripts/set-repeat-founders.mjs <repeat-founders.json> [--overwrite] [--prod]   # ecrit `founderDirectory.repeatFounder` ({ founderId: true | false | null }), remplit le vide sauf --overwrite, a blanc sans --prod ; FA26 propose par Claude le 17/11 depuis le track record (fichier hors depot)
+node scripts/migrate-drop-public-consent.mjs [--prod]   # retire `founders.publicProfileConsent` de toutes les fiches (cartes publiques pour tous, 17/11), a blanc sans --prod
 node scripts/set-photo.mjs <founderId> <image> [--prod]   # photo d'un fondateur deposee par le staff, comme « Mon profil » (photo-*.jpg + vignette), a blanc sans --prod ; Rida Taleb le 16/11
 node scripts/import-events.mjs "Week 1" [--prod]   # evenements de data/events.json ET leurs formulaires (a blanc sans --prod, n'ecrase jamais)
 node scripts/sync-events.mjs "Week 1" [--prod] [--only cle1,cle2]   # MET A JOUR les evenements sur data/events.json (agenda, bareme, matching sans equipes), recree les formulaires sans reponse, archive `archived` ; `--only` : ces evenements seulement (semaine en cours)
@@ -229,7 +231,7 @@ document ENTIER, jamais un champ) :
 
 | Document | Qui lit |
 |---|---|
-| `founders/{id}` | public si `publicProfileConsent`, sinon fondateurs du batch + staff + investors |
+| `founders/{id}` | public (toutes les fiches, sans consentement : decision du 17/11) |
 | `founders/{id}/private/directory` | fondateurs du batch + staff + investors (champs du Profile Book) |
 | `founders/{id}/private/profile` | le fondateur lui-meme + staff + investors IC (age, date de naissance) |
 | `founders/{id}/private/connections` | le fondateur lui-meme + staff + investors IC (shortlist, met ; ecrit par lui seul, jamais par le staff ni l'API) |

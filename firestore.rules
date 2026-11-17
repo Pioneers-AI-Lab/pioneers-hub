@@ -8,7 +8,7 @@ rules_version = '2';
 //
 // Principe : Firestore autorise ou refuse un document ENTIER. La visibilite se
 // decide donc par le document ou l'on range un champ :
-//   founders/{id}                    public si consentement, sinon batch + staff + investors
+//   founders/{id}                    public (toutes les fiches, decision du 17/11)
 //   founders/{id}/private/directory  fondateurs du batch + staff + investors (Profile Book)
 //   founders/{id}/private/profile    le fondateur lui-meme + staff + investors IC
 //   founders/{id}/private/internal   staff + investors IC
@@ -289,14 +289,8 @@ service cloud.firestore {
     // ---- Fondateurs --------------------------------------------------------
 
     match /founders/{founderId} {
-      // Une requete publique DOIT filtrer sur publicProfileConsent == true.
-      allow read: if resource.data.publicProfileConsent == true
-        || isStaff()
-        || isInvestor()
-        || isBatchMember(resource.data.batchId);
-      // Profils non reclames : liste « choisir mon profil » (une requete doit
-      // filtrer `uid == null`). Nom, photo, competences : la carte minimale.
-      allow read: if signedIn() && resource.data.uid == null;
+      // La carte (nom, photo, competences) : publique, sans consentement (decision du 17/11).
+      allow read: if true;
       allow write: if isStaff();
       // Rattachement (decision du 11/11, « comme Tricount ») : un compte a l'email
       // VERIFIE reclame un profil non reclame, par email ou en le choisissant
@@ -310,7 +304,7 @@ service cloud.firestore {
         && onlyChanges(['uid', 'claimedDateISOString']);
       // « Mon profil » (FOUNDER_SELF_EDITABLE.founder).
       allow update: if isViewerFounder(resource.data.batchId, founderId)
-        && onlyChanges(['hardSkills', 'industries', 'rolesICouldTake', 'publicProfileConsent']);
+        && onlyChanges(['hardSkills', 'industries', 'rolesICouldTake']);
       // Photo deposee depuis « Mon profil » (FOUNDER_PHOTO_FIELDS) : la vignette
       // egale celle de `people` (meme lot), la grande photo est dans SON dossier Storage.
       allow update: if isViewerFounder(resource.data.batchId, founderId)
@@ -334,7 +328,7 @@ service cloud.firestore {
             'whatsapp', 'linkedinUrl', 'phone', 'gender', 'nationality', 'country', 'introduceYourself',
             'education', 'degree', 'fieldOfStudy', 'yearsOfXP', 'notableCompanies', 'trackRecord',
             'interestedInWorkingOn', 'hasExistingProject', 'projectExplanation', 'hasExistingCoFounders',
-            'openToJoinAnotherProject', 'mainStartup2025', 'lookingForCoFounder', 'coFounderTypeWanted',
+            'openToJoinAnotherProject', 'mainStartup2025', 'repeatFounder', 'lookingForCoFounder', 'coFounderTypeWanted',
             'coFounderSkillsWanted', 'industriesToExplore', 'anythingElse'])
           && copyMatches(founderData(founderId).personId, 'whatsapp')
           && copyMatches(founderData(founderId).personId, 'linkedinUrl')

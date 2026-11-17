@@ -9,7 +9,7 @@ import { mean, roundTo, type BatchStats, type Founder, type FounderDirectory } f
 
 export type BatchStatsFounder = {
   founder: Pick<Founder, "profileCategory" | "hardSkills" | "startupId">;
-  directory: Pick<FounderDirectory, "yearsOfXP" | "nationality"> | null;
+  directory: Pick<FounderDirectory, "yearsOfXP" | "nationality" | "repeatFounder"> | null;
 };
 
 /** Effectif par valeur (les valeurs vides ne comptent pas). */
@@ -22,12 +22,13 @@ function countBy(values: readonly (string | null | undefined)[]): Record<string,
 /** Les chiffres du batch, sur ses fondateurs participants. */
 export function computeBatchStats(programId: string, founders: readonly BatchStatsFounder[], nowISO: string): BatchStats {
   const xp = mean(founders.flatMap((f) => f.directory?.yearsOfXP ?? []));
+  // Part des « oui » parmi les fondateurs qui ont repondu (non renseigne : ignore).
+  const repeat = mean(founders.map((f) => f.directory?.repeatFounder).filter((v) => typeof v === "boolean").map(Number));
   return {
     programId,
     founders: founders.length,
     avgYearsOfXP: xp === null ? null : roundTo(xp, 1),
-    // Aucune donnee source (le chiffre du Spring 2026 etait code en dur).
-    repeatFounders: null,
+    repeatFounders: repeat === null ? null : roundTo(repeat, 3),
     profileDistribution: countBy(founders.map((f) => f.founder.profileCategory)),
     skillsDistribution: countBy(founders.flatMap((f) => f.founder.hardSkills)),
     // Une double nationalite est stockee « A, B » (comme a l'import du Spring 2026).

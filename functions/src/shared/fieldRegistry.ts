@@ -529,6 +529,7 @@ export const DB_FIELDS = {
   ),
   "founderDirectory.openToJoinAnotherProject": field("Open to join another project", yesNo, { expected: once() }),
   "founderDirectory.mainStartup2025": field("Main startup in 2025", text(120)),
+  "founderDirectory.repeatFounder": field("Repeat founder", yesNo, { expected: once(), mcpFillable: true }),
   "founderDirectory.lookingForCoFounder": field("Looking for a co-founder", yesNo, { expected: once() }),
   "founderDirectory.coFounderTypeWanted": field("Type of co-founder wanted", text(120)),
   "founderDirectory.coFounderSkillsWanted": field("Skills wanted in a co-founder", { kind: "enumMulti", listKey: "hardSkills", values: null }, {

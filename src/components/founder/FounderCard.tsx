@@ -160,6 +160,7 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
             <Field label="Notable companies">{tags(dir.notableCompanies)}</Field>
             <Field label="Gender">{dir.gender}</Field>
             <Field label="Main startup in 2025">{dir.mainStartup2025}</Field>
+            <Field label="Repeat founder">{yesNo(dir.repeatFounder)}</Field>
           </FieldGrid>
         </Section>
       )}

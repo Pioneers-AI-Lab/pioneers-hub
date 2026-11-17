@@ -63,13 +63,13 @@ await auth.importUsers(
 // ---- Fondateurs (fictifs) ---------------------------------------------------
 
 const founders = [
-  { id: "ada-example", name: "Ada Example", category: "technical", consent: true, uid: "ada-1", startupId: "lumen" },
-  { id: "ben-sample", name: "Ben Sample", category: "business", consent: true, uid: null, startupId: "lumen" },
-  { id: "chloe-demo", name: "Chloe Demo", category: "hybrid", consent: true, uid: null, startupId: null },
-  { id: "dan-placeholder", name: "Dan Placeholder", category: "technical", consent: true, uid: null, startupId: null },
-  { id: "eva-private", name: "Eva Private", category: "business", consent: false, uid: null, startupId: null },
-  { id: "finn-private", name: "Finn Private", category: "technical", consent: false, uid: null, startupId: null },
-  { id: "gina-unclaimed", name: "Gina Unclaimed", category: "hybrid", consent: false, uid: null, startupId: null },
+  { id: "ada-example", name: "Ada Example", category: "technical", uid: "ada-1", startupId: "lumen" },
+  { id: "ben-sample", name: "Ben Sample", category: "business", uid: null, startupId: "lumen" },
+  { id: "chloe-demo", name: "Chloe Demo", category: "hybrid", uid: null, startupId: null },
+  { id: "dan-placeholder", name: "Dan Placeholder", category: "technical", uid: null, startupId: null },
+  { id: "eva-private", name: "Eva Private", category: "business", uid: null, startupId: null },
+  { id: "finn-private", name: "Finn Private", category: "technical", uid: null, startupId: null },
+  { id: "gina-unclaimed", name: "Gina Unclaimed", category: "hybrid", uid: null, startupId: null },
 ];
 
 const batch = db.batch();
@@ -128,7 +128,6 @@ for (const f of founders) {
     status: "active",
     leftProgramReason: null,
     isExternalFounder: false,
-    publicProfileConsent: f.consent,
     stats: null,
   });
   batch.set(db.doc(`founders/${f.id}/private/directory`), {
@@ -153,6 +152,7 @@ for (const f of founders) {
     projectExplanation: null,
     hasExistingCoFounders: "none",
     openToJoinAnotherProject: true,
+    repeatFounder: false,
   });
   batch.set(db.doc(`founders/${f.id}/private/profile`), { age: null, birthDayString: null });
   batch.set(db.doc(`founders/${f.id}/private/internal`), { eloScore: 1000, eloMatchesCount: 0 });

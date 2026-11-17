@@ -82,11 +82,8 @@ export default function BatchHomePage() {
 
       <Section title="Batch overview">
         <StatGrid>
-          <StatTile
-            label={role === "public" ? "Public profiles" : "Founders"}
-            value={role === "public" ? founders.length : (stats?.founders ?? founders.length)}
-            href={paths.founders(program.id, batch.id)}
-          />
+          <StatTile label="Founders" value={stats?.founders ?? founders.length} href={paths.founders(program.id, batch.id)} />
+          {stats && <StatTile label="Nationalities" value={Object.keys(stats.nationalities).length} />}
           {SHOW_STARTUPS_TAB && <StatTile label="Startups" value={startups.length} href={paths.startups(program.id, batch.id)} />}
           {stats?.avgYearsOfXP !== null && stats?.avgYearsOfXP !== undefined && (
             <StatTile label="Avg years of XP" value={stats.avgYearsOfXP.toFixed(1)} />
@@ -134,7 +131,7 @@ export default function BatchHomePage() {
                 limit={6}
               />
             </ChartCard>
-            <ChartCard title={`Nationalities · ${Object.keys(stats.nationalities).length}`}>
+            <ChartCard title="Nationalities">
               <NationalityMap counts={stats.nationalities} />
             </ChartCard>
           </>

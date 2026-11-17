@@ -323,7 +323,6 @@ export async function applyImport(
         status: "enrolled",
         leftProgramReason: null,
         isExternalFounder: false,
-        publicProfileConsent: false,
         stats: null,
       };
       const internal: FounderInternal = { eloScore: null, eloMatchesCount: 0 };

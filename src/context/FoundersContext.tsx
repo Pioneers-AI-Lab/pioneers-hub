@@ -11,8 +11,8 @@ import { useBatch } from "@/context/BatchContext";
 // Niveau 2 (liste) : les fondateurs du batch
 // ----------------------------
 // Monte par .../batches/[batchId]/layout.tsx : l'ecouteur survit a toute
-// navigation dans le batch. La requete depend du role : un
-// visiteur public ne liste que les profils consentants (voir queries).
+// navigation dans le batch. Les fiches sont publiques : meme requete pour
+// tous les roles (decision du 17/11).
 
 type FoundersValue = {
   founders: WithId<Founder>[];
@@ -25,8 +25,8 @@ const [FoundersContextProvider, useFounders] = createStrictContext<FoundersValue
 export { useFounders };
 
 export function FoundersProvider({ children }: { children: ReactNode }) {
-  const { batch, role } = useBatch();
-  const founders = useQueryListener(queries.foundersOfBatch(batch.id, role === "public" ? "public" : "batch"));
+  const { batch } = useBatch();
+  const founders = useQueryListener(queries.foundersOfBatch(batch.id));
 
   const value = useMemo<FoundersValue>(() => {
     const list = founders.data
