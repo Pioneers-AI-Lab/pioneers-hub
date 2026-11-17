@@ -69,6 +69,8 @@ export type FormTiming = {
   deadline: "before_end" | "day_after_opening" | "day_before" | "none";
 };
 export const DEFAULT_FORM_TIMING: FormTiming = { opens: "before_end", deadline: "day_after_opening" };
+/** Les formulaires hebdomadaires : au debut de l'entree « Weekly Update Form », echeance 24 h apres. */
+const WEEKLY_TIMING: FormTiming = { opens: "start", deadline: "day_after_opening" };
 
 export type FormTemplate = {
   label: string;
@@ -83,6 +85,8 @@ export type FormTemplate = {
   needsWorkTeams?: boolean;
   /** Son ouverture et son echeance dans un evenement ; `DEFAULT_FORM_TIMING` sinon. */
   timing?: FormTiming;
+  /** Un formulaire par occurrence : son titre porte le jour de l'evenement (« Weekly update · 3 Dec »). */
+  datedTitle?: boolean;
   /**
    * Il ecrit la Submission de l'equipe : `true`, un envoi apres son echeance la rend « en retard »
    * (elle vaut 0) ; `false`, ce retard ne compte que dans « Forms on time » (Plan et Snapshot du H5).
@@ -428,8 +432,9 @@ export const FORM_TEMPLATES = {
   }),
 
   // ---- Lot 4 : les formulaires hebdomadaires (docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.8, §2.9) ----
-  // Rattaches au BATCH, sans evenement, depuis son compte ; crees chaque jeudi a 18:45, echeance 24 h
-  // apres (shared/weeklyForms.ts). Un formulaire par semaine : ses reponses vont dans la semaine ou il
+  // Le pack `weekly_update` (presets/eventTemplates.ts) de chaque entree « Weekly Update Form » de l'agenda
+  // (decision du 18/11, shared/weeklyForms.ts) : depuis son compte, ouverts a son debut, echeance 24 h
+  // apres, le jour dans le titre. Un formulaire par semaine : ses reponses vont dans la semaine ou il
   // ouvre. Revus par le staff dans Admin > Reviews (shared/weeklyReviews.ts).
 
   // Le Weekly update founder : la page rappelle l'objectif donne la semaine d'avant au-dessus de
@@ -441,6 +446,8 @@ export const FORM_TEMPLATES = {
     title: "Weekly update",
     description: "5 minutes. Your week against the goal you gave last week, your goal for next week, your problem validation and your co-founder search.",
     identityCheck: "account",
+    timing: WEEKLY_TIMING,
+    datedTitle: true,
     questions: [
       q("achieved", { type: "long_text", label: "What did you achieve?", dbField: "founderWeek.achieved", required: true }),
       q("goalForWeek", { type: "long_text", label: "Your goal for next week", dbField: "founderWeek.goalForWeek", required: true }),
@@ -474,6 +481,8 @@ export const FORM_TEMPLATES = {
     title: "Weekly update startup",
     description: "One per startup: any co-founder sends it. Your startup's numbers, the whole team, not just you. Put 0 when nothing happened.",
     identityCheck: "account",
+    timing: WEEKLY_TIMING,
+    datedTitle: true,
     questions: [
       q("achievement", { type: "long_text", label: "What did you achieve this week?", dbField: "checkin.achievement", required: true }),
       q("goals", { type: "long_text", label: "Goals for next week", dbField: "checkin.goals", required: true }),

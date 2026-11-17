@@ -7,6 +7,7 @@ import {
   formsClosedByArchive,
   formsReopenedByRestore,
   sameTime,
+  type EventForPlan,
   type EventFormPlan,
   type EventMovePlan,
   type EventTimes,
@@ -99,23 +100,30 @@ export function eventArchiveWrites<F extends WithId<Pick<Form, "status" | "updat
 
 export type EventTemplatePlan = { patch: Partial<PioneersEvent>; forms: EventFormPlan[] };
 
+/** Un evenement existant auquel s'applique un modele, et ses formulaires (archives compris). */
+export type TemplatedEvent = WithId<EventForPlan & Pick<PioneersEvent, "scoring">>;
+export type TemplatedEventForm = WithId<Pick<Form, "kind" | "archivedDateISOString">>;
+
 /**
- * Ce qu'apporte un modele a un evenement existant (venu de l'agenda Google,
- * SPECS §2) : son etiquette, son matching s'il n'en a pas (et qu'aucun groupe
- * n'est tire), et les formulaires du pack qu'il n'a pas encore, publies comme a
- * la creation (shared/eventForms.ts).
+ * LE planificateur « appliquer un modele » a un evenement existant (venu de
+ * l'agenda Google, SPECS §2) : son etiquette, son matching s'il n'en a pas (et
+ * qu'aucun groupe n'est tire), son bareme s'il n'en a pas (grille Pitch), et
+ * les formulaires du pack qu'il n'a pas encore (ni meme id, ni meme type parmi
+ * ses formulaires actifs), publies comme a la creation (shared/eventForms.ts).
+ * Admin > Events (TemplateField, lib/eventsAdmin.ts), `apply_event_template`
+ * (services/admin/events.ts), et le Weekly update de la synchro de l'agenda et
+ * de scripts/attach-weekly-forms.mjs (shared/weeklyForms.ts#weeklyFormsPlan).
  */
 export function eventTemplatePlan(
-  event: WithId<PioneersEvent>,
+  event: TemplatedEvent,
   templateKey: EventTemplateKey,
-  eventForms: readonly WithId<Pick<Form, "kind" | "archivedDateISOString">>[],
+  eventForms: readonly TemplatedEventForm[],
   hasTeams: boolean,
   now: string,
 ): EventTemplatePlan {
   const t = EVENT_TEMPLATES[templateKey];
   const patch: Partial<PioneersEvent> = { templateKey, kind: t.kind, stage: t.stage };
   if (!matchingOf(event) && !hasTeams && t.matching) patch.matching = t.matching;
-  // Le bareme du modele (grille Pitch, lot 5) s'il n'en a pas.
   if (!scoringOf(event) && t.scoring) patch.scoring = t.scoring;
   const kinds = new Set(eventForms.filter((f) => f.archivedDateISOString === null).map((f) => f.kind));
   const ids = new Set(eventForms.map((f) => f.id));

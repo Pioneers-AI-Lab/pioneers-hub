@@ -201,7 +201,8 @@ export type OAuthToken = {
 // La synchro de l'agenda Google d'un batch (shared/calendarSync.ts) : le jeton
 // des changements suivants, et le compte rendu de la derniere synchro.
 
-export type CalendarSyncCounts = { created: number; updated: number; linked: number; archived: number; formsMoved: number };
+/** `formsCreated` : formulaires du Weekly update accroches a leurs entrees (absent des comptes d'avant le 18/11). */
+export type CalendarSyncCounts = { created: number; updated: number; linked: number; archived: number; formsMoved: number; formsCreated?: number };
 
 export type CalendarSync = {
   batchId: string;

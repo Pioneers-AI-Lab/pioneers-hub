@@ -1,7 +1,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, type DocumentData, type Query } from "firebase-admin/firestore";
 import { COL, docIds, docPaths, eventCollectionPaths, SUB } from "../shared/collections";
-import { absentFounderIds, isAttendanceOptional, mandatoryAttendance } from "../shared/attendance";
+import { absentFounderIds, isAttendanceOptional, mandatoryAttendance, tracksAttendance } from "../shared/attendance";
 import { computeBatchStats } from "../shared/batchStats";
 import { isWorkTeamEvent } from "../shared/events";
 import { countRequiredFields, listMissingFields } from "../shared/fieldRegistry";
@@ -131,7 +131,8 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
     .filter((e) => isPitchRubric(juryCriteria(formsOfEvent.get(e.id) ?? [])))
     .sort((a, b) => a.startDateISOString.localeCompare(b.startDateISOString));
   const boardEventIds = new Set(executionBoards.map((b) => b.eventId));
-  const attendanceEvents = pastEvents.filter((e) => !isAttendanceOptional(e) || boardEventIds.has(e.id));
+  // Un evenement sans presence (Weekly update) n'a rien a lire.
+  const attendanceEvents = pastEvents.filter((e) => tracksAttendance(e) && (!isAttendanceOptional(e) || boardEventIds.has(e.id)));
 
   const [attendanceByEvent, peerRatings, directories, internals, connections, pitchReads] = await Promise.all([
     Promise.all(attendanceEvents.map(async (e) => [e.id, await docs<Attendance>(db().collection(eventCollectionPaths.attendance(e.id)))] as const)).then(

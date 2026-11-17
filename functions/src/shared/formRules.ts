@@ -16,7 +16,7 @@ import {
 } from "./fieldRegistry";
 import { isOffered, RETIRED_DB_FIELDS, RETIRED_FORM_KINDS, RETIRED_IDENTITY_CHECKS } from "./presets/offered";
 import { EVENT_METRIC_RENAMES, standardMetricOf, type StandardMetric } from "./presets/standardMetrics";
-import { absentFounderIds, eventRoster } from "./attendance";
+import { absentFounderIds, eventRoster, tracksAttendance } from "./attendance";
 import { matchingOf } from "./events";
 import { splitTextList } from "./text";
 import { IDENTITY_RULES, SCOPE_RULES, activeQuestions, isBatchParticipant, isJuryForm, scopeOf } from "./types";
@@ -402,7 +402,7 @@ type AudienceInput = {
   form: Pick<Form, "identityCheck" | "questions">;
   batchId: string;
   founders: (Pick<Founder, "batchId" | "status" | "archivedDateISOString" | "isExternalFounder" | "startupId"> & { id: string })[];
-  event: Pick<PioneersEvent, "kind" | "matching" | "teamSize" | "audience" | "guestFounderIds" | "startupIds"> | null;
+  event: Pick<PioneersEvent, "kind" | "templateKey" | "matching" | "teamSize" | "audience" | "guestFounderIds" | "startupIds"> | null;
   attendance: Pick<Attendance, "founderId" | "status">[];
   /** Membres des equipes publiees de l'evenement (`memberships`). */
   teamMemberIds: string[];
@@ -410,8 +410,8 @@ type AudienceInput = {
 
 /**
  * A qui s'adresse le formulaire, anonyme ou non : les participants du batch
- * (`isBatchParticipant`), et pour un formulaire rattache a un evenement, ses
- * attendus moins ses absents (`eventRoster`, shared/attendance.ts). Le Debrief :
+ * (`isBatchParticipant`), et pour un formulaire rattache a un evenement qui a une presence
+ * (`tracksAttendance`), ses attendus moins ses absents (`eventRoster`, shared/attendance.ts). Le Debrief :
  * les membres des equipes publiees. Sinon tous les presents si la presence a
  * ete relevee (un feedback de seance ne se demande pas aux absents), sinon les
  * membres des equipes publiees (hackathon), sinon les invites ou le batch.
@@ -427,7 +427,8 @@ function addressees(input: AudienceInput): { basis: AudienceBasis; founderIds: s
 
   const { event } = input;
   const members = new Set(input.teamMemberIds);
-  if (!event) return needsTeam ? among("teams", (id) => members.has(id)) : among("batch", () => true);
+  // Sans evenement, ou sans presence (Weekly update) : tout le batch, sans absent.
+  if (!event || !tracksAttendance(event)) return needsTeam ? among("teams", (id) => members.has(id)) : among("batch", () => true);
   // Le Debrief : les membres des equipes publiees, personne avant le tirage.
   const absent = absentFounderIds(input.attendance);
   if (needsTeam) return among("teams", (id) => members.has(id) && !absent.has(id));

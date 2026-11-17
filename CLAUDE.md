@@ -44,10 +44,10 @@ node scripts/migrate-standard-forms.mjs <batchId> [--prod]   # modele standard :
 node scripts/migrate-education-tags.mjs <batchId|--all> [--prod]   # `founderDirectory.education` texte -> liste (separateurs `;` et ` · `, shared/text.ts#splitTextList), a blanc sans --prod
 node scripts/seed-tasks.mjs <batchId> [--prod]   # taches de depart du To do (Slack, LinkedIn, shortlist), a blanc sans --prod, n'ecrase jamais
 node scripts/migrate-metric-keys.mjs <batchId> [--prod]   # cles de metriques standard (SPECS A.5), a blanc sans --prod ; puis backfill-kpis.mjs
-node scripts/set-milestone-dates.mjs <batchId> [--prod]   # echeances des milestones du score -> `settings.scoreMilestoneDueDates` (n'ecrit que ce champ), a blanc sans --prod, rejouable
+node scripts/set-milestone-dates.mjs <batchId> [--prod]   # echeances des milestones du score -> `settings.scoreMilestoneDueDates` (n'ecrit que ce champ ; `weeklyGoalFrom` lu dans les evenements : echeance du DEUXIEME Weekly update, `weeklyGoalFromOf`), a blanc sans --prod, rejouable (relancer si l'agenda deplace un Weekly update)
 node scripts/create-batch-form.mjs <batchId> <templateKey> --id <formId> --opens <ISO> --deadline <ISO> [--prod]   # formulaire de batch (sans evenement) depuis un modele, publie, id fixe, n'ecrase jamais ; a blanc sans --prod. Lock my team fa26 cree le 17/11 (fall-2026-lock-my-team, 23/11 16:00 -> 25/11 9:30 Paris)
 node scripts/background-draft.mjs <batchId> [--export profils.json | --apply profils.json] [--prod]   # grille Background proposee par Claude (profils anonymes) -> `private/internal.background.proposed` seulement, jamais la note du staff ; a blanc sans --prod. Remplace elo-rank.mjs (supprime au lot 6 : l'Elo est archive, `eloScore` et `eloMatches` gardes mais ni lus, ni affiches, ni rendus par l'API)
-node scripts/create-weekly-forms.mjs <batchId> [--date YYYY-MM-DD] [--prod]   # meme plan que la fonction `weeklyForms`, a la main (jeudi 18:45 Paris) ; n'ecrase jamais, a blanc sans --prod
+node scripts/attach-weekly-forms.mjs <batchId> [--enable] [--prod]   # formulaires hebdomadaires sur les entrees « Weekly Update Form » deja en base : meme plan que la synchro (shared/weeklyForms.ts#weeklyFormsPlan : template `weekly_update`, formulaires manquants), n'ecrase jamais, `--enable` pose `settings.weeklyForms = { enabled: true }` ; a blanc sans --prod, rejouable
 node scripts/backfill-shortlist-history.mjs <batchId> [--prod]   # rattrapage `shortlistHistory` depuis les shortlists actuelles (ajout seul, rejouable), a blanc sans --prod
 npx firebase deploy --only storage --project prod   # regles Storage (photo-*.jpg du fondateur ou du staff, reste refuse ; lecture par URL a jeton) ; deployees le 16/11, PAS par deploy:rules
 npm run typecheck     # route types + front + functions
@@ -76,9 +76,13 @@ Likability lit `shortlistHistory/{founderId}_{targetId}` (chaque fondateur short
 declencheur `onConnectionsWritten`, rattrapage `backfill-shortlist-history.mjs`). Milestones d'Execution : dues seulement
 apres leur echeance `batch.settings.scoreMilestoneDueDates` (shortlistDone, met, teamedUp, problemValidated, weeklyGoalFrom ;
 `set-milestone-dates.mjs`) ; Weekly goal et Problem validated viennent de `founderReviews`, la Traction de la startup de
-`startupReviews`. Fonction programmee `weeklyForms` (jeudi 18:45 Paris, shared/weeklyForms.ts) : Weekly update founder et
-Weekly update startup de la semaine, publies, echeance 24 h, pour chaque batch avec `settings.weeklyForms`
-(`{ enabled, startDayString }`) ; ids deterministes. Callables : `call()` (lib/firebase.ts) retire les cles `undefined`
+`startupReviews`. Formulaires hebdomadaires (decision du 18/11 : le Hub suit l'agenda, shared/weeklyForms.ts) : la synchro de
+l'agenda donne a chaque entree « Weekly Update Form » (nom compare par `nameKey`) le template `weekly_update`, dont le pack
+cree Weekly update founder et Weekly update startup rattaches a l'entree (`<evenement>-<modele>`), publies, ouverts a son
+debut, echeance 24 h, le jour dans le titre ; deplaces ou fermes avec elle. Interrupteur : `settings.weeklyForms.enabled`
+(`startDayString` n'est plus lu, plus de fonction programmee). Applicable a la main (Template). Sans presence
+(`withoutAttendance`, `attendance.ts#tracksAttendance`) : pour tout le batch, aucun absent, hors presence d'Engagement,
+comptes dans Forms on time. `previousGoal` = l'objectif du Weekly update founder PRECEDENT du batch. Callables : `call()` (lib/firebase.ts) retire les cles `undefined`
 (le SDK les enverrait en `null`, qu'un schema zod `.optional()` refuse).
 Grille Pitch (lot 5, `shared/pitchGrid.ts`) : neuf criteres de 0 a 5 (`evaluation.scores.<cle>`, points 25/15 | 20/20 | 6/5/4/3/2)
 en trois familles Team 40 / Speed of execution 40 / Market 20 (anciennes cles SP26 sur 5 : `legacyPitchScores`), puis
@@ -138,7 +142,7 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   ses 7 jours), toutes les 30 min en filet (`syncGoogleCalendars`, qui renouvelle aussi) ou sur « Sync now »
   (`syncBatchCalendar`). Un evenement relie porte `calendarSource` : ses `CALENDAR_FIELDS` (nom, description, dates,
   lieu, visio `videoCallUrl` = Meet ou `conferenceData`) ne s'ecrivent QUE par la synchro (regles, `lib/eventsAdmin.ts#updateEvent` les retire, `sync-events.mjs` les saute) ;
-  le reste (invites, template via TemplateField, matching, formulaires) se regle dans le Hub. Un batch relie ne cree
+  le reste (invites, template via TemplateField, matching, formulaires) se regle dans le Hub (la synchro ne pose que le template `weekly_update` des entrees « Weekly Update Form » et leurs formulaires). Un batch relie ne cree
   pas d'evenement (regle, `create_event`, `import-events.mjs` refusent). Masquer = archiver, la synchro le laisse masque ;
   supprime ou annule dans Google = archive. Jeton et derniere synchro : `calendarSyncs/{batchId}`. Prod : API Calendar activee
   (16/11), partager l'agenda (« See all event details ») avec `804975656292-compute@developer.gserviceaccount.com`. Visio

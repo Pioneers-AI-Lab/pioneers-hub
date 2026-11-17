@@ -5,7 +5,8 @@ import { GoogleAuth } from "google-auth-library";
 import { calendarIdOf, isMovedBy, planCalendarSync, syncedCalendarIdOf, type CalendarSyncPlan, type GoogleCalendarEvent } from "../shared/calendarSync";
 import { FUNCTIONS_REGION } from "../shared/callables";
 import { COL, docPaths } from "../shared/collections";
-import { formsClosedByArchive, planEventMove } from "../shared/eventForms";
+import { eventFormDocs, formsClosedByArchive, planEventMove } from "../shared/eventForms";
+import { weeklyFormsEnabled } from "../shared/weeklyForms";
 import type { Batch, CalendarChannel, CalendarSync, CalendarSyncCounts, CalendarSyncResult, Form, PioneersEvent, WithId } from "../shared/types";
 import { isEmulator } from "../api/config";
 import { secret, sha256 } from "../api/crypto";
@@ -177,21 +178,21 @@ export async function syncBatchCalendar(
   // Rien de neuf (le cas de presque toutes les synchros) : ni lecture du batch, ni ecriture.
   const isQuiet = !changes.isFull && changes.items.length === 0;
   const plan: BatchPlan = isQuiet
-    ? { creates: [], updates: [], archives: [], seen: 0, events: [] }
-    : await planBatch(batchId, batch, calendarId, changes);
-  const forms = plan.updates.length || plan.archives.length ? await docsOf<Form>(COL.forms, batchId) : [];
-  const moves = formMoves(plan, forms, now);
+    ? { creates: [], updates: [], archives: [], formCreates: [], seen: 0, events: [], forms: [] }
+    : await planBatch(batchId, batch, calendarId, changes, now);
+  const moves = formMoves(plan, now);
   const counts: CalendarSyncCounts = {
     created: plan.creates.length,
     updated: plan.updates.filter((u) => !u.isLink).length,
     linked: plan.updates.filter((u) => u.isLink).length,
     archived: plan.archives.length,
     formsMoved: moves.length,
+    formsCreated: plan.formCreates.length,
   };
 
   if (!dryRun) {
     const [, subscription] = await Promise.all([
-      writePlan(plan, moves, forms, now, batchId, calendarId, options.actorUid),
+      writePlan(plan, moves, now, batchId, calendarId, options.actorUid),
       subscribe(batchId, calendarId, state?.channel ?? null),
     ]);
     const next: CalendarSync = {
@@ -269,19 +270,25 @@ export async function handleCalendarNotification(headers: { channelId?: string; 
   return 200;
 }
 
-/** Le plan, sur les evenements du batch (archives compris : un evenement masque reste relie). */
-type BatchPlan = CalendarSyncPlan & { events: WithId<PioneersEvent>[] };
+/** Le plan, sur les evenements et les formulaires du batch (archives compris : un evenement masque reste relie). */
+type BatchPlan = CalendarSyncPlan & { events: WithId<PioneersEvent>[]; forms: WithId<Form>[] };
 
-async function planBatch(batchId: string, batch: Batch, calendarId: string, changes: Changes): Promise<BatchPlan> {
-  const events = await docsOf<PioneersEvent>(COL.events, batchId);
-  return { ...planCalendarSync({ batch: { ...batch, id: batchId }, calendarId, changes: changes.items, isFull: changes.isFull, events }), events };
+async function planBatch(batchId: string, batch: Batch, calendarId: string, changes: Changes, nowISO: string): Promise<BatchPlan> {
+  // Les formulaires : avant le plan s'il accroche ceux du Weekly update, sinon seulement si des evenements bougent ou se masquent.
+  const [events, early] = await Promise.all([
+    docsOf<PioneersEvent>(COL.events, batchId),
+    weeklyFormsEnabled(batch) ? docsOf<Form>(COL.forms, batchId) : null,
+  ]);
+  const plan = planCalendarSync({ batch: { ...batch, id: batchId }, calendarId, changes: changes.items, isFull: changes.isFull, events, forms: early ?? [], nowISO });
+  const forms = early ?? (plan.updates.length || plan.archives.length ? await docsOf<Form>(COL.forms, batchId) : []);
+  return { ...plan, events, forms };
 }
 
 /** Les deplacements de formulaires qu'entrainent les nouveaux horaires (un creneau Debrief de l'agenda suit le sien). */
-function formMoves(plan: BatchPlan, forms: WithId<Form>[], nowISO: string) {
+function formMoves(plan: BatchPlan, nowISO: string) {
   return plan.updates.filter(isMovedBy).flatMap((u) => {
     const { startDateISOString, endDateISOString } = { ...u.event, ...u.patch };
-    return planEventMove({ event: u.event, next: { startDateISOString, endDateISOString }, events: plan.events, forms, moveLinked: false, nowISO }).moves;
+    return planEventMove({ event: u.event, next: { startDateISOString, endDateISOString }, events: plan.events, forms: plan.forms, moveLinked: false, nowISO }).moves;
   });
 }
 
@@ -289,9 +296,8 @@ type Write = { path: string; data: object; merge: boolean };
 
 /** Ecrit le plan par lots de 400 ecritures (limite Firestore : 500), le premier avec sa ligne d'audit. */
 async function writePlan(
-  plan: CalendarSyncPlan,
+  plan: BatchPlan,
   moves: ReturnType<typeof formMoves>,
-  forms: WithId<Form>[],
   now: string,
   batchId: string,
   calendarId: string,
@@ -303,9 +309,11 @@ async function writePlan(
     ...plan.creates.map((c) => ({ path: docPaths.event(c.id), data: { ...c.data, createdDateISOString: now, ...stamp } satisfies PioneersEvent, merge: false })),
     ...plan.updates.map((u) => ({ path: docPaths.event(u.event.id), data: { ...u.patch, ...stamp }, merge: true })),
     ...moves.map((m) => ({ path: docPaths.form(m.form.id), data: { opensDateISOString: m.opensDateISOString, deadlineDateISOString: m.deadlineDateISOString, ...stamp }, merge: true })),
+    // Les formulaires du Weekly update (shared/weeklyForms.ts), absents de `forms` : crees, jamais par-dessus.
+    ...plan.formCreates.flatMap((p) => eventFormDocs(p, now).map((d) => ({ ...d, merge: false }))),
     // Masquer ferme ses formulaires ouverts (comme Admin > Events).
     ...plan.archives.map((e) => ({ path: docPaths.event(e.id), data: { archivedDateISOString: now, ...stamp }, merge: true })),
-    ...formsClosedByArchive(forms.filter((f) => f.eventId !== null && archivedIds.has(f.eventId))).map((f) => ({
+    ...formsClosedByArchive(plan.forms.filter((f) => f.eventId !== null && archivedIds.has(f.eventId))).map((f) => ({
       path: docPaths.form(f.id),
       data: { status: "closed", ...stamp },
       merge: true,
@@ -314,7 +322,14 @@ async function writePlan(
   if (writes.length === 0) return;
 
   const actor: AuditActor = actorUid ? actorOf(actorUid) : { uid: "system", apiKeyId: null, via: "function" };
-  const payload = { calendarId, created: plan.creates.map((c) => c.id), updated: plan.updates.map((u) => u.event.id), archived: [...archivedIds], formsMoved: moves.length };
+  const payload = {
+    calendarId,
+    created: plan.creates.map((c) => c.id),
+    updated: plan.updates.map((u) => u.event.id),
+    archived: [...archivedIds],
+    formsMoved: moves.length,
+    formsCreated: plan.formCreates.map((p) => p.id),
+  };
   for (let i = 0; i < writes.length; i += 400) {
     const b = db().batch();
     for (const w of writes.slice(i, i + 400)) b.set(db().doc(w.path), w.data, { merge: w.merge });

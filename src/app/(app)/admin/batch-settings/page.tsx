@@ -164,7 +164,7 @@ const firstNames = (names: string[]) => `${joinList(names.slice(0, 5))}${names.l
 
 /** Ce que la synchro a fait (ou ferait), en une phrase. */
 function syncLine(r: CalendarSyncResult, dryRun: boolean): string {
-  const { created, linked, updated, archived, formsMoved } = r.counts;
+  const { created, linked, updated, archived, formsMoved, formsCreated } = r.counts;
   const verb = dryRun ? "would" : "did";
   const parts = [
     created && `create ${created} (${firstNames(r.created)})`,
@@ -172,6 +172,7 @@ function syncLine(r: CalendarSyncResult, dryRun: boolean): string {
     updated && `update ${updated}`,
     archived && `hide ${archived} removed from the calendar (${firstNames(r.archived)})`,
     formsMoved && `move ${formsMoved} forms`,
+    formsCreated && `add ${formsCreated} weekly update forms`,
   ].filter(Boolean);
   const found = `${r.found} events in the batch's dates.`;
   return parts.length ? `${found} The sync ${verb} ${joinList(parts as string[])}.` : `${found} Nothing to change.`;

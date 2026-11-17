@@ -1,6 +1,7 @@
 "use client";
 
 import { Text } from "@mantine/core";
+import { tracksAttendance } from "@shared/attendance";
 import { formConcernsFounder } from "@shared/formRules";
 import { formState } from "@shared/forms";
 import { leaderIdOf } from "@shared/teamGenerator";
@@ -43,7 +44,7 @@ export default function EventPage() {
   const tool = matching ? TEAM_LABELS[matching.mode] : null;
   const mine = viewerFounderId ? (groups.find((g) => g.memberIds.includes(viewerFounderId)) ?? null) : null;
   const leaderId = mine && leaderIdOf(mine);
-  const isAbsent = myAttendance?.status === "absent";
+  const isAbsent = myAttendance?.status === "absent" && tracksAttendance(event);
   const board = leaderboardsByEventId.get(event.id);
   // Un fondateur voit les formulaires publies qui le concernent (comme To do : ni absent, ni jury) ; le staff voit tout et ouvre l'editeur.
   const founder = viewerFounderId ? foundersById.get(viewerFounderId) : undefined;

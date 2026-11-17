@@ -56,6 +56,12 @@ export type EventTemplate = {
   legacyType2025: string | null;
   /** Plus propose a la creation (decision du 17/11) : reste lu par les evenements qui le portent. */
   retired?: boolean;
+  /**
+   * Ce n'est pas une reunion (l'entree « Weekly Update Form » de l'agenda) : aucune presence,
+   * ni relevee ni comptee ; ses formulaires vont a tout le batch, sans absent
+   * (shared/attendance.ts#tracksAttendance), et comptent dans « Forms on time ».
+   */
+  withoutAttendance?: boolean;
 };
 
 const c = (key: string, label: string, max = 5, weight = 1, min = 1): Criterion => ({ key, label, min, max, weight });
@@ -201,6 +207,17 @@ export const EVENT_TEMPLATES = {
   }),
   announcement: t({ label: "Announcement", summary: "Nothing to fill in", kind: "session", durationMinutes: 30, forms: [], legacyType2025: "Announce/Organisation" }),
   social: t({ label: "Social event", summary: "Nothing to fill in", kind: "session", startTime: "19:00", durationMinutes: 180, forms: [], legacyType2025: "Socials" }),
+  // Lot 4, decision du 18/11 (le Hub suit l'agenda) : pose par la synchro sur chaque entree « Weekly Update Form »
+  // (shared/weeklyForms.ts), ou a la main. Les deux formulaires s'ouvrent a son debut, echeance 24 h apres.
+  weekly_update: t({
+    label: "Weekly update",
+    summary: "Weekly update founder and startup, open 24 h, for the whole batch",
+    kind: "session",
+    startTime: "18:00",
+    durationMinutes: 30,
+    forms: ["weekly_update_founder", "weekly_update_startup"],
+    withoutAttendance: true,
+  }),
 
   // ---- meeting ----
   office_hours: t({ label: "Pioneers office hours", summary: "A slot with a startup or a founder", kind: "meeting", legacyType2025: "Office hours Pioneers" }),

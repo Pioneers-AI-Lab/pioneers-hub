@@ -26,8 +26,6 @@ import * as teamResults from "./services/teamResults";
 import * as scores from "./services/scores";
 import * as calendarSync from "./services/calendarSync";
 import * as shortlistHistory from "./services/shortlistHistory";
-import { createWeeklyForms } from "./services/weeklyForms";
-import { WEEKLY_FORMS_SCHEDULE } from "./shared/weeklyForms";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { cleanId } from "./services/clean";
 import { onDocumentUpdated, onDocumentWritten } from "firebase-functions/v2/firestore";
@@ -198,18 +196,12 @@ export const nightlyScores = onSchedule({ schedule: "0 2 * * *", timeZone: "Euro
   console.log("nightlyScores", JSON.stringify(done));
 });
 
-// Les formulaires hebdomadaires (lot 4, shared/weeklyForms.ts) : chaque jeudi a 18:45 (Paris), le
-// Weekly update founder et le Weekly update startup de la semaine, pour chaque batch dont
-// `settings.weeklyForms.enabled` ; echeance 24 h apres. Ids deterministes : une relance ne double rien.
-export const weeklyForms = onSchedule({ schedule: WEEKLY_FORMS_SCHEDULE, timeZone: "Europe/Paris", timeoutSeconds: 120 }, async () => {
-  console.log("weeklyForms", JSON.stringify(await createWeeklyForms()));
-});
-
 // ----------------------------
 // Agenda Google du batch (SPECS §2, decision du 16/11) : ses evenements
 // deviennent ceux du Hub, a chaque changement (notification de Google), toutes
 // les 30 minutes en filet (et renouvellement des abonnements) et sur le bouton
-// du staff (Admin > Batch settings, Admin > Events).
+// du staff (Admin > Batch settings, Admin > Events). Les formulaires
+// hebdomadaires naissent sur ses entrees « Weekly Update Form » (shared/weeklyForms.ts).
 // ----------------------------
 
 export const syncBatchCalendar = onCallTyped("syncBatchCalendar", async (request) => {

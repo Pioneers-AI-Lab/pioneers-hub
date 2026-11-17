@@ -56,24 +56,21 @@ export type BatchSettings = {
    */
   scoreMilestoneDueDates?: ScoreMilestoneDueDates | null;
   /**
-   * Les formulaires hebdomadaires (lot 4, shared/weeklyForms.ts) : chaque jeudi a 18:45, la fonction
-   * `weeklyForms` cree le Weekly update founder et le Weekly update startup de la semaine, publies,
-   * echeance 24 h apres, a partir de `startDayString`. Absent ou `enabled: false` : rien n'est cree.
+   * Les formulaires hebdomadaires (lot 4, decision du 18/11, shared/weeklyForms.ts) : avec `enabled`,
+   * la synchro de l'agenda donne le template `weekly_update` a chaque entree « Weekly Update Form »
+   * et lui cree le Weekly update founder et le Weekly update startup. Absent ou `enabled: false` :
+   * rien n'est accroche (le template s'applique encore a la main).
    */
   weeklyForms?: WeeklyFormsSettings | null;
 };
 
-/** La creation automatique des formulaires hebdomadaires d'un batch (fa26 : a partir du jeudi 26/11). */
-export type WeeklyFormsSettings = {
-  enabled: boolean;
-  /** Premier jeudi (`YYYY-MM-DD`, a Paris) ou les formulaires se creent. */
-  startDayString: DayString;
-};
+/** L'accroche des formulaires hebdomadaires aux entrees de l'agenda du batch. */
+export type WeeklyFormsSettings = { enabled: boolean };
 
 /**
  * Echeance de chaque milestone (ISO complet). Une milestone sans echeance ne compte pas.
  * fa26 : Shortlist done et Met a la fin du debrief du H4, Teamed up au kickoff du H5,
- * Problem validated le jour du Selection Day ; Weekly goal (lot 4) chaque semaine a partir de `weeklyGoalFrom`.
+ * Problem validated le jour du Selection Day ; Weekly goal (lot 4) a partir de `weeklyGoalFrom`, l'echeance du deuxieme Weekly update (`weeklyGoalFromOf`).
  */
 export type ScoreMilestoneDueDates = {
   shortlistDone?: DateISOString | null;

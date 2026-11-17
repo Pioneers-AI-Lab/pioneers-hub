@@ -63,7 +63,7 @@ export type EventFormsOptions = {
 
 export type EventFormPlan = { id: string; templateKey: FormTemplateKey; form: FormData; version: FormVersion | null };
 
-type EventForPlan = Pick<
+export type EventForPlan = Pick<
   PioneersEvent,
   "programId" | "batchId" | "kind" | "templateKey" | "startDateISOString" | "endDateISOString" | "status" | "matching" | "teamSize"
 > &
@@ -139,6 +139,9 @@ export function addedFormDates(
   return eventFormDates(templateKey, event, slot && given.opensDateISOString === undefined ? { ...given, opensDateISOString: slot.startDateISOString } : given);
 }
 
+/** Le jour d'un titre date (`FormTemplate.datedTitle`) : « 3 Dec », a Paris. */
+const DAY_LABEL = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", day: "numeric", month: "short" });
+
 export function eventFormsPlan(eventId: string, event: EventForPlan, options: EventFormsOptions, nowISO: string): EventFormPlan[] {
   const legacy = options.legacy ?? {};
   const isPast = !isUpcomingEvent(event, nowISO);
@@ -163,6 +166,8 @@ export function eventFormsPlan(eventId: string, event: EventForPlan, options: Ev
     const status = given.draft && eventStatus === "open" ? "draft" : eventStatus;
     // Publie ou brouillon, il porte ses dates : publie plus tard, il s'ouvre a son heure (ou tout de suite si elle est passee).
     let extra: Parameters<typeof newForm>[1] = eventFormDates(templateKey, event, given);
+    const template = FORM_TEMPLATES[templateKey] as FormTemplate;
+    if (template.datedTitle) extra.title = `${template.title} · ${DAY_LABEL.format(new Date(event.startDateISOString))}`;
     if (templateKey === "picks" && legacy.picks) {
       // La question, le nombre de choix et la cloture de l'ancienne demande ; ouverte des maintenant.
       const { question, max, closesDateISOString } = legacy.picks;
@@ -189,6 +194,13 @@ export function eventFormsPlan(eventId: string, event: EventForPlan, options: Ev
     const { form, version } = firstPublication(draft, nowISO);
     return { id, templateKey, form: { ...form, status }, version };
   });
+}
+
+/** Les formulaires de chaque evenement (`eventId`), parmi ceux du batch. */
+export function formsByEventId<F extends Pick<Form, "eventId">>(forms: readonly F[]): Map<string, F[]> {
+  const out = new Map<string, F[]>();
+  for (const f of forms) if (f.eventId) out.set(f.eventId, [...(out.get(f.eventId) ?? []), f]);
+  return out;
 }
 
 /** Les documents a creer pour un plan : le formulaire, et sa version figee s'il est publie. */

@@ -1,78 +1,62 @@
-import { parisDay, parisMidnight } from "./dates";
-import type { EventFormPlan } from "./eventForms";
-import { endAfter } from "./events";
-import { firstPublication, newForm } from "./forms";
-import { FORM_TEMPLATES, type FormTemplateKey } from "./presets/formTemplates";
-import type { Batch, WithId } from "./types";
+import { eventTemplatePlan, type EventTemplatePlan, type TemplatedEvent, type TemplatedEventForm } from "./admin/events";
+import { eventFormDates } from "./eventForms";
+import type { EventTemplateKey } from "./presets/eventTemplates";
+import { nameKey } from "./text";
+import type { Batch, PioneersEvent } from "./types";
 
 // ----------------------------
-// Les formulaires hebdomadaires d'un batch (lot 4, decision du 17/11)
+// Les formulaires hebdomadaires d'un batch (lot 4 ; decision du 18/11 : le Hub suit l'agenda)
 // ----------------------------
-// Chaque jeudi a 18:45 (heure de Paris), le Weekly update founder et le Weekly update startup
-// de la semaine, publies, ouverts tout de suite, echeance 24 h apres (SPECS §4.4 : un formulaire
-// par occurrence, ses reponses vont dans la semaine ou il ouvre). Pour un batch dont
-// `settings.weeklyForms` est `{ enabled: true, startDayString }`, a partir de ce jour.
-// Ids deterministes (`weeklyFormId`) : une relance le meme jour ne cree rien de plus.
-// Logique pure : la fonction programmee `weeklyForms` (services/weeklyForms.ts) et
-// scripts/create-weekly-forms.mjs (creation a la main, a blanc par defaut) suivent ce plan.
+// Ils naissent sur chaque entree « Weekly Update Form » de l'agenda Google du batch (fa26 : jeudis
+// 03/12 et 10/12, 18:00) : la synchro (shared/calendarSync.ts) lui donne le template
+// `weekly_update` (presets/eventTemplates.ts), dont le pack cree le Weekly update founder et le
+// Weekly update startup, rattaches a l'entree, publies, ouverts a son debut, echeance 24 h apres
+// (`FormTiming`), ids `<evenement>-<modele>`. Deplacee ou annulee dans l'agenda, l'entree emmene
+// ses formulaires (`planEventMove`, `formsClosedByArchive`). Le staff peut aussi appliquer ce
+// template a la main a tout evenement. Le reglage du batch `settings.weeklyForms.enabled` est
+// l'interrupteur de la synchro. Sans presence (`withoutAttendance`) : ils vont a tout le batch.
+// Rattrapage des entrees deja synchronisees : scripts/attach-weekly-forms.mjs.
 
-/** Les deux formulaires de la semaine, et le modele de chacun. */
-const WEEKLY_FORM_TEMPLATES = { founder: "weekly_update_founder", startup: "weekly_update_startup" } as const satisfies Record<string, FormTemplateKey>;
-type WeeklyFormKind = keyof typeof WEEKLY_FORM_TEMPLATES;
+const WEEKLY_UPDATE_TEMPLATE = "weekly_update" as const satisfies EventTemplateKey;
 
-/** L'heure d'ouverture, a Paris. */
-const OPENING = { hour: 18, minute: 45 } as const;
-/** Le planning de la fonction programmee `weeklyForms` : chaque jeudi a l'heure d'ouverture (fuseau Europe/Paris). */
-export const WEEKLY_FORMS_SCHEDULE = `${OPENING.minute} ${OPENING.hour} * * 4`;
-/** L'echeance : 24 h apres l'ouverture. */
-const DEADLINE_MINUTES = 24 * 60;
+/** Le nom de l'entree de l'agenda, compare sans casse, accents ni espaces en trop (`nameKey`). */
+const WEEKLY_UPDATE_ENTRY_KEY = nameKey("Weekly Update Form");
 
-/** `fall-2026-weekly-founder-2026-11-26`. */
-const weeklyFormId = (batchId: string, kind: WeeklyFormKind, dayString: string) => `${batchId}-weekly-${kind}-${dayString}`;
+/** La synchro accroche les formulaires hebdomadaires aux entrees de l'agenda (`settings.weeklyForms.enabled`). */
+export const weeklyFormsEnabled = (batch: Pick<Batch, "settings">) => batch.settings.weeklyForms?.enabled === true;
 
-/** L'instant d'ouverture d'un jour donne (`--date` du script) : 18:45 a Paris. */
-export const weeklyFormsOpening = (dayString: string) => endAfter(parisMidnight(dayString), OPENING.hour * 60 + OPENING.minute);
+type WeeklyEvent = Pick<PioneersEvent, "name" | "templateKey">;
 
-const DAY_LABEL = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", day: "numeric", month: "short" });
+/** Un evenement du Weekly update : son template, ou, pas encore pose, l'entree de l'agenda de ce nom. */
+export const isWeeklyUpdateEvent = (event: WeeklyEvent) =>
+  event.templateKey === WEEKLY_UPDATE_TEMPLATE || (event.templateKey === null && nameKey(event.name) === WEEKLY_UPDATE_ENTRY_KEY);
 
-export type WeeklyFormsBatch = WithId<Pick<Batch, "programId" | "status" | "archivedDateISOString" | "endDayString" | "settings">>;
-
-export type WeeklyFormsPlan = {
-  batchId: string;
-  /** Le jour d'ouverture, a Paris. */
-  dayString: string;
-  /** Pourquoi rien ne se cree ce jour-la ; `null` : les deux formulaires sont a creer. */
-  skip: string | null;
-  plans: EventFormPlan[];
-};
-
-/** Pourquoi ce batch n'a pas ses formulaires ce jour-la, `null` s'il les a. */
-function skipReason(batch: WeeklyFormsBatch, dayString: string): string | null {
-  const settings = batch.settings.weeklyForms;
-  if (!settings?.enabled) return "weekly forms are not enabled (settings.weeklyForms)";
-  if (batch.archivedDateISOString !== null || batch.status === "completed") return "the batch is archived or completed";
-  if (dayString < settings.startDayString) return `before ${settings.startDayString}`;
-  if (batch.endDayString && dayString > batch.endDayString) return `after the batch end (${batch.endDayString})`;
-  return null;
+/**
+ * Ce que la synchro (ou le rattrapage) apporte a un evenement de l'agenda : sur une entree
+ * « Weekly Update Form » sans template, le template `weekly_update` (`patch`) ; sur un evenement de
+ * ce template, ses formulaires manquants (`forms`). Rien pour les autres, ni pour un evenement
+ * masque ; rien non plus si le batch n'a pas `settings.weeklyForms.enabled`.
+ */
+export function weeklyFormsPlan(
+  batch: Pick<Batch, "settings">,
+  event: TemplatedEvent & Pick<PioneersEvent, "name" | "archivedDateISOString">,
+  eventForms: readonly TemplatedEventForm[],
+  nowISO: string,
+): EventTemplatePlan {
+  const none = { patch: {}, forms: [] };
+  if (!weeklyFormsEnabled(batch) || event.archivedDateISOString !== null || !isWeeklyUpdateEvent(event)) return none;
+  const plan = eventTemplatePlan(event, WEEKLY_UPDATE_TEMPLATE, eventForms, false, nowISO);
+  return { patch: event.templateKey === null ? plan.patch : {}, forms: plan.forms };
 }
 
 /**
- * Les formulaires de la semaine pour ce batch, ouverts a `nowISO` : publies (version 1, ouverts),
- * echeance 24 h apres. Le titre porte le jour (« Weekly update · 26 Nov ») : une semaine se
- * retrouve dans Admin > Forms et dans le To do.
+ * La date « Weekly goal » des milestones (`scoreMilestoneDueDates.weeklyGoalFrom`) : l'echeance du
+ * Weekly update founder du DEUXIEME Weekly update du batch (le premier objectif est donne au premier,
+ * juge au suivant). `null` avec moins de deux entrees.
  */
-export function weeklyFormsPlan(batch: WeeklyFormsBatch, nowISO: string): WeeklyFormsPlan {
-  const dayString = parisDay(nowISO);
-  const skip = skipReason(batch, dayString);
-  if (skip) return { batchId: batch.id, dayString, skip, plans: [] };
-  const deadline = endAfter(nowISO, DEADLINE_MINUTES);
-  const plans = (Object.entries(WEEKLY_FORM_TEMPLATES) as [WeeklyFormKind, FormTemplateKey][]).map(([kind, templateKey]) => {
-    const draft = newForm(
-      { programId: batch.programId, batchId: batch.id, templateKey, eventId: null },
-      { title: `${FORM_TEMPLATES[templateKey].title} · ${DAY_LABEL.format(new Date(nowISO))}`, opensDateISOString: nowISO, deadlineDateISOString: deadline },
-    );
-    const { form, version } = firstPublication(draft, nowISO);
-    return { id: weeklyFormId(batch.id, kind, dayString), templateKey, form, version };
-  });
-  return { batchId: batch.id, dayString, skip: null, plans };
+export function weeklyGoalFromOf(events: readonly (WeeklyEvent & Pick<PioneersEvent, "startDateISOString" | "endDateISOString" | "archivedDateISOString">)[]): string | null {
+  const second = events
+    .filter((e) => e.archivedDateISOString === null && isWeeklyUpdateEvent(e))
+    .sort((a, b) => a.startDateISOString.localeCompare(b.startDateISOString))[1];
+  return second ? eventFormDates("weekly_update_founder", second).deadlineDateISOString : null;
 }

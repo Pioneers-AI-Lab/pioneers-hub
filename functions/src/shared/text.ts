@@ -12,6 +12,9 @@ export const searchKey = (value: string) =>
     .toLowerCase()
     .trim();
 
+/** Deux noms qui se valent : sans accents, casse ni espaces en trop (« Démo  day » = « Demo Day »). */
+export const nameKey = (name: string) => searchKey(name).replace(/\s+/g, " ");
+
 /** Un id lisible (`fall-2026`, `accelerator`) : URL et ids deterministes. */
 export const slugify = (value: string) => searchKey(value).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 

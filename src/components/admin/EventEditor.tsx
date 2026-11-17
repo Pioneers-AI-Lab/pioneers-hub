@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Box, Button, Checkbox, Group, Menu, Select, Stack, Text } from "@mantine/core";
 import { IconChevronDown } from "@tabler/icons-react";
+import { tracksAttendance } from "@shared/attendance";
 import { CALENDAR_BATCH_MESSAGE, calendarIdOf } from "@shared/calendarSync";
 import { formsClosedByArchive, formsReopenedByRestore, planEventMove, type EventTimes, type FormKept } from "@shared/eventForms";
 import { defaultMatching, newEvent, type EventData } from "@shared/events";
@@ -280,11 +281,13 @@ function Hub({ event }: { event: WithId<PioneersEvent> }) {
             </EventSettingsFields>
           </Box>
           <Stack gap="lg" maw={560} mt="lg">
-            <HelpBlock label="Attendance" help="Absent founders are left out of the draw and the event's forms.">
-              <RowList>
-                <AttendanceLinkRow eventId={event.id} />
-              </RowList>
-            </HelpBlock>
+            {tracksAttendance(event) && (
+              <HelpBlock label="Attendance" help="Absent founders are left out of the draw and the event's forms.">
+                <RowList>
+                  <AttendanceLinkRow eventId={event.id} />
+                </RowList>
+              </HelpBlock>
+            )}
             <TemplateField />
             <MatchingField />
             <EventFormsField />

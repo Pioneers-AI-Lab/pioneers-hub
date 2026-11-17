@@ -1340,6 +1340,61 @@ console.log("google calendar sync");
   await deleteApp(staff.app);
 }
 
+// ---- Agenda Google : les formulaires hebdomadaires suivent les entrees « Weekly Update Form » (18/11) ----
+// shared/weeklyForms.ts : la synchro donne le template `weekly_update` a l'entree et lui cree ses deux
+// formulaires (ouverts a son debut, echeance 24 h apres) ; deplacee, ils suivent ; supprimee, ils ferment.
+console.log("weekly update forms follow the calendar");
+{
+  const admin = getAdminFirestore();
+  const CAL = "cal-weekly@group.calendar.google.com";
+  const B = "cal-weekly";
+  const stamp = new Date().toISOString();
+  await admin.doc(`batches/${B}`).set({
+    programId: "accelerator", name: "weekly", startDayString: "2026-11-01", endDayString: null, status: "active", milestones: [],
+    settings: { leaderboardVisibility: "visible", slackChannelId: null, googleCalendarId: CAL, weeklyForms: { enabled: true } },
+    archivedDateISOString: null, createdDateISOString: stamp, updatedDateISOString: stamp,
+  });
+  // Dans deux jours et dans neuf jours, a la minute.
+  const minute = 60_000;
+  const base = Math.floor(Date.now() / minute) * minute;
+  const at = (days, minutes = 0) => new Date(base + (days * 24 * 60 + minutes) * minute).toISOString();
+  const entry = (id, start) => ({ id, summary: "Weekly Update Form", start: { dateTime: start }, end: { dateTime: new Date(Date.parse(start) + 30 * minute).toISOString() } });
+  const fake = admin.doc(`calendarFakes/${encodeURIComponent(CAL)}`);
+  await fake.set({ events: [entry("w1", at(2)), entry("w2", at(9))] });
+  const staff = await clientAs("staff-1");
+  const sync = () => httpsCallable(staff.functions, "syncBatchCalendar")({ batchId: B }).then((r) => r.data);
+  const must = (cond, what) => {
+    if (!cond) throw new Error(what);
+  };
+  const form = async (entryId, template) => (await admin.doc(`forms/${B}_gcal_${entryId}-${template}`).get()).data();
+  await expectOk("the sync gives each « Weekly Update Form » entry its two weekly forms, open at its start, due 24 h later", async () => {
+    const r = await sync();
+    must(r.counts.created === 2 && r.counts.formsCreated === 4, JSON.stringify(r.counts));
+    const event = (await admin.doc(`events/${B}_gcal_w1`).get()).data();
+    must(event?.templateKey === "weekly_update", `template ${event?.templateKey}`);
+    for (const template of ["weekly_update_founder", "weekly_update_startup"]) {
+      const f = await form("w1", template);
+      must(f?.eventId === `${B}_gcal_w1` && f.status === "open" && f.version === 1, JSON.stringify(f && { eventId: f.eventId, status: f.status, version: f.version }));
+      must(f.opensDateISOString === at(2) && f.deadlineDateISOString === at(3), `${f.opensDateISOString} -> ${f.deadlineDateISOString}`);
+    }
+    must((await admin.doc(`forms/${B}_gcal_w1-weekly_update_founder/versions/1`).get()).exists, "no published version");
+  });
+  await expectOk("a second sync adds nothing", async () => {
+    const r = await sync();
+    must(Object.values(r.counts).every((n) => n === 0), JSON.stringify(r.counts));
+  });
+  // Dans Google : la premiere entree passe une heure plus tard, la deuxieme est supprimee.
+  await fake.set({ events: [entry("w1", at(2, 60))] }, { merge: true });
+  await expectOk("moved in the calendar, the entry moves its forms; deleted, its forms close", async () => {
+    const r = await sync();
+    must(r.counts.updated === 1 && r.counts.formsMoved === 2 && r.counts.archived === 1 && r.counts.formsCreated === 0, JSON.stringify(r.counts));
+    const moved = await form("w1", "weekly_update_founder");
+    must(moved?.opensDateISOString === at(2, 60) && moved.deadlineDateISOString === at(3, 60), `${moved?.opensDateISOString} -> ${moved?.deadlineDateISOString}`);
+    must((await form("w2", "weekly_update_startup"))?.status === "closed", "the deleted entry's form is still open");
+  });
+  await deleteApp(staff.app);
+}
+
 // ==== LOT 2 (debut) : Lock my team, Admin > Startups, grille Background ============
 // Lock my team : un formulaire du BATCH (sans evenement), depuis son compte ; la reponse va
 // dans `teamLocks/{founderId}` (le fondateur lui-meme + staff + IC). Puis le staff cree une
@@ -1476,42 +1531,52 @@ console.log("lock my team (form -> teamLocks), startups, background grid");
 // ==== LOT 2 (fin) =================================================================
 
 // ==== LOT 4 (debut) : Weekly updates (formulaires du jeudi), file de revue ===========
-// Les deux formulaires de la semaine (shared/weeklyForms.ts, comme la fonction `weeklyForms`),
-// depuis son compte : le founder rappelle l'objectif de la semaine d'avant (`previousGoal`) ; le
-// startup vaut pour toute la startup (« fait » pour chaque membre) et refuse un fondateur sans
-// startup. Les revues (`founderReviews`, `startupReviews`) : staff + IC en lecture, staff en ecriture,
-// notes de 0 a 5, Outstanding seulement a 100 (shared/weeklyReviews.ts).
+// Les deux formulaires d'une entree « Weekly Update Form » (template `weekly_update`, shared/weeklyForms.ts :
+// la synchro de l'agenda les accroche, voir « google calendar sync »), depuis son compte : le founder
+// rappelle l'objectif donne au Weekly update PRECEDENT (`previousGoal`) ; le startup vaut pour toute la
+// startup (« fait » pour chaque membre) et refuse un fondateur sans startup. Sans presence : un fondateur
+// marque absent a l'entree repond quand meme. Les revues (`founderReviews`, `startupReviews`) : staff + IC
+// en lecture, staff en ecriture, notes de 0 a 5, Outstanding seulement a 100 (shared/weeklyReviews.ts).
 console.log("weekly updates (founder, startup) and their review queue");
 {
   const adb = getAdminFirestore();
   const req = createRequire(import.meta.url);
-  const { eventFormDocs } = req("../functions/lib/shared/eventForms.js");
-  const { weeklyFormsPlan } = req("../functions/lib/shared/weeklyForms.js");
+  const { eventFormDocs, eventFormsPlan } = req("../functions/lib/shared/eventForms.js");
+  const { endAfter, newEvent } = req("../functions/lib/shared/events.js");
   const { founderReviewWrite, startupReviewWrite } = req("../functions/lib/shared/weeklyReviews.js");
-  const { parisDay, parisMonday, shiftWeek } = req("../functions/lib/shared/dates.js");
+  const { parisMonday, shiftWeek } = req("../functions/lib/shared/dates.js");
   const must = (cond, what) => {
     if (!cond) throw new Error(what);
   };
   const nowISO = new Date().toISOString();
   const week = parisMonday(nowISO);
-  const plan = weeklyFormsPlan(
-    { id: "fall-2026", programId: "accelerator", status: "active", archivedDateISOString: null, endDayString: null, settings: { weeklyForms: { enabled: true, startDayString: parisDay(nowISO) } } },
-    nowISO,
-  );
-  for (const p of plan.plans) for (const d of eventFormDocs(p, nowISO)) await adb.doc(d.path).set(d.data);
-  const [FOUNDER_FORM, STARTUP_FORM] = plan.plans.map((p) => p.id);
-  // L'objectif donne la semaine d'avant (comme par le formulaire de la semaine d'avant).
+  // L'entree de cette semaine (commencee il y a une minute) et celle de la semaine d'avant, avec leurs
+  // formulaires tels que la synchro les a crees (avant leur debut).
+  const entries = [["check-weekly-previous", endAfter(nowISO, -7 * 24 * 60 - 1)], ["check-weekly", endAfter(nowISO, -1)]];
+  for (const [id, start] of entries) {
+    const event = newEvent({ programId: "accelerator", batchId: "fall-2026", templateKey: "weekly_update", name: "Weekly Update Form", startDateISOString: start, endDateISOString: null, status: "scheduled" });
+    await adb.doc(`events/${id}`).set({ ...event, createdDateISOString: nowISO, updatedDateISOString: nowISO });
+    for (const p of eventFormsPlan(id, event, {}, endAfter(start, -60))) for (const d of eventFormDocs(p, nowISO)) await adb.doc(d.path).set(d.data);
+  }
+  const [FOUNDER_FORM, STARTUP_FORM] = ["check-weekly-weekly_update_founder", "check-weekly-weekly_update_startup"];
+  // L'objectif donne au Weekly update precedent (dans sa semaine), et une absence marquee a l'entree : ignoree.
   await adb.doc(`founderWeeks/ada-example_${shiftWeek(week, -1)}`).set(
     { programId: "accelerator", batchId: "fall-2026", founderId: "ada-example", weekStartDayString: shiftWeek(week, -1), goalForWeek: "Talk to 10 nurses", updatedDateISOString: nowISO },
     { merge: true },
   );
+  await adb.doc("events/check-weekly/attendance/ada-example").set({ programId: "accelerator", batchId: "fall-2026", eventId: "check-weekly", founderId: "ada-example", status: "absent" });
   const submit = (fns, formId, answers, n) =>
     httpsCallable(fns, "submitFormResponse")({ formId, version: 1, submissionId: `check-weekly-update-${n}`, answers });
 
   const ada = await clientAs("ada-1");
-  await expectOk("the founder update reminds last week's goal above « What did you achieve? »", async () => {
+  await expectOk("the founder update reminds the previous update's goal above « What did you achieve? », absent or not", async () => {
     const form = await publicForm(ada.functions, FOUNDER_FORM);
     must(form.previousGoal?.goal === "Talk to 10 nurses" && form.previousGoal.questionId === "achieved", JSON.stringify(form.previousGoal));
+    must(form.absent === false && form.state === "open", `absent ${form.absent}, state ${form.state}`);
+  });
+  await expectOk("the first update has no previous goal", async () => {
+    const form = await publicForm(ada.functions, "check-weekly-previous-weekly_update_founder");
+    must(form.previousGoal === null, JSON.stringify(form.previousGoal));
   });
   await expectOk("founder sends her weekly update: it lands in her week", async () => {
     await submit(ada.functions, FOUNDER_FORM, {

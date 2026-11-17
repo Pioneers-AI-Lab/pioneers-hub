@@ -1,4 +1,5 @@
-import { invitedFounderIds, isBatchParticipant, type Attendance, type AttendanceStatus, type Founder, type PioneersEvent } from "./types";
+import { eventTemplateOf } from "./presets/eventTemplates";
+import { invitedFounderIds, isBatchParticipant, type Attendance, type AttendanceStatus, type Form, type Founder, type PioneersEvent } from "./types";
 
 // ----------------------------
 // Qui est attendu a un evenement, qui est absent (SPECS, fonctionnalite Presence)
@@ -62,19 +63,30 @@ export function eventRoster<F extends AttendanceFounder>(
 export const isAttendanceOptional = (event: Pick<PioneersEvent, "attendanceOptional">): boolean => event.attendanceOptional === true;
 
 /**
+ * L'evenement a une presence : pas celui d'un template sans reunion (`withoutAttendance` : le
+ * Weekly update, decision du 18/11). Sans presence, il ne compte pas dans Engagement, et ses
+ * formulaires vont a tout le batch (`formRules.ts#formAudience`) : aucun absent, meme marque.
+ */
+export const tracksAttendance = (event: Pick<PioneersEvent, "templateKey">): boolean => !eventTemplateOf(event.templateKey)?.withoutAttendance;
+
+/** Les absents comptent pour ce formulaire (refuses, ni proposes ni acceptes) : il est rattache a un evenement qui a une presence. */
+export const formHasAbsentees = (form: Pick<Form, "eventId">, event: Pick<PioneersEvent, "templateKey"> | null): boolean =>
+  form.eventId !== null && (!event || tracksAttendance(event));
+
+/**
  * La presence de chaque fondateur aux evenements OBLIGATOIRES de `events` (Engagement) :
  * ceux ou il etait attendu (`total`) et ceux ou il n'etait pas absent (`attended`). Sans
- * aucun marquage, tous presents. Un evenement optionnel ne compte pas.
+ * aucun marquage, tous presents. Un evenement optionnel ou sans presence ne compte pas.
  */
 export function mandatoryAttendance<F extends AttendanceFounder>(
   batchId: string,
-  events: readonly (AttendanceEvent & Pick<PioneersEvent, "attendanceOptional"> & { id: string })[],
+  events: readonly (AttendanceEvent & Pick<PioneersEvent, "attendanceOptional" | "templateKey"> & { id: string })[],
   founders: readonly F[],
   attendanceByEvent: ReadonlyMap<string, readonly Mark[]>,
 ): Map<string, { attended: number; total: number }> {
   const out = new Map(founders.map((f) => [f.id, { attended: 0, total: 0 }]));
   for (const e of events) {
-    if (isAttendanceOptional(e)) continue;
+    if (isAttendanceOptional(e) || !tracksAttendance(e)) continue;
     for (const row of eventRoster(batchId, e, founders, attendanceByEvent.get(e.id) ?? []).rows) {
       const a = out.get(row.founder.id);
       if (!a) continue;

@@ -167,7 +167,7 @@ export const MET_SHARE_MIN = 0.5;
 
 /**
  * Le champ de `settings.scoreMilestoneDueDates` (types/batch.ts) qui porte l'echeance de
- * chaque milestone. Weekly goal (a partir de `weeklyGoalFrom`, la semaine 3) et Problem validated
+ * chaque milestone. Weekly goal (a partir de `weeklyGoalFrom`, l'echeance du deuxieme Weekly update) et Problem validated
  * viennent de la grille Weekly founder (lot 4, shared/weeklyReviews.ts) : sans revue, pas de poids.
  */
 const DUE_DATE_FIELD: Record<MilestoneKey, keyof ScoreMilestoneDueDates> = {

@@ -62,7 +62,7 @@ import { planFieldWrites, type FieldChange } from "./fields";
 import { plain } from "./operations";
 import { parisMonday } from "../shared/dates";
 import { absentFromEventMessage, formState } from "../shared/forms";
-import { absentFounderIds } from "../shared/attendance";
+import { absentFounderIds, formHasAbsentees } from "../shared/attendance";
 import { previousGoalOf } from "./weeklyForms";
 
 // ----------------------------
@@ -397,6 +397,8 @@ export async function getPublicForm(uid: string | null, req: Partial<CallableReq
     isOwn ? db().doc(docPaths.formCompletion(formId, chosen)).get() : null,
   ]);
   const event = jury?.event ?? eventOfForm;
+  // Un evenement sans presence (Weekly update) n'a pas d'absent, meme marque.
+  const hasAbsents = formHasAbsentees(form, event);
 
   const questions = activeQuestions(form);
   const entities = [...new Set(questions.flatMap((q) => (q.type === "entity_picker" && q.picker ? [q.picker.entity] : [])))];
@@ -418,7 +420,7 @@ export async function getPublicForm(uid: string | null, req: Partial<CallableReq
     listKeys.length ? db().getAll(...listKeys.map((k) => db().doc(docPaths.list(k)))) : [],
     Promise.all(others),
     // Les absents de l'evenement ne sont ni proposes ni repondants (shared/attendance.ts).
-    needsFounders && form.eventId ? db().collection(eventCollectionPaths.attendance(form.eventId)).select("founderId", "status").get() : null,
+    needsFounders && hasAbsents ? db().collection(eventCollectionPaths.attendance(form.eventId!)).select("founderId", "status").get() : null,
   ]);
   const absentIds = absentFounderIds((absentSnap?.docs ?? []).map((d) => d.data() as Pick<Attendance, "founderId" | "status">));
 
@@ -506,7 +508,7 @@ export async function getPublicForm(uid: string | null, req: Partial<CallableReq
     canResubmit: proven && state === "open",
     // Le staff sans profil fondateur relit un formulaire « Sign in » sans pouvoir l'envoyer.
     preview: state === "draft" || (!viewerFounderId && needsAccount(form.identityCheck) && isStaffViewer(account?.viewer ?? null)),
-    absent: respondent !== null && respondent.founder !== null && markSnap?.get("status") === "absent",
+    absent: hasAbsents && respondent !== null && respondent.founder !== null && markSnap?.get("status") === "absent",
     pendingAnswerKeys: own.pendingKeys,
     newQuestionIds: respondent ? questionsAddedSince(form, completion).map((q) => q.id) : [],
     juryBrief,
@@ -609,6 +611,7 @@ const PICKED: Record<PickerEntity, { path: (form: Form, id: string) => string | 
 async function assertPickedExist(
   tx: Transaction,
   form: Form,
+  event: PioneersEvent | null,
   questions: FormQuestion[],
   answers: Map<string, FormAnswer>,
   respondent: Respondent | null,
@@ -628,7 +631,7 @@ async function assertPickedExist(
   });
   if (checks.length === 0) return;
   // Un absent de l'evenement n'est pas propose (getPublicForm) : il n'est pas accepte non plus.
-  const pickedFounders = form.eventId ? checks.filter((c) => c.q.picker!.entity === "founder") : [];
+  const pickedFounders = formHasAbsentees(form, event) ? checks.filter((c) => c.q.picker!.entity === "founder") : [];
   const all = await tx.getAll(...[...checks.map((c) => c.path), ...pickedFounders.map((c) => docPaths.attendance(form.eventId!, c.id))].map((p) => db().doc(p)));
   const snaps = all.slice(0, checks.length);
   const marks = all.slice(checks.length);
@@ -834,10 +837,10 @@ export async function submitFormResponse(
         : null;
     // Lot 4 : un formulaire de toute la startup (Weekly update startup) se lit avec ses membres.
     const startupId = !judge && isStartupForm(questions) ? (respondent?.founder?.startupId ?? null) : null;
-    // Un absent de l'evenement n'y repond pas (shared/attendance.ts), quel que soit le formulaire.
+    // Un absent de l'evenement n'y repond pas (shared/attendance.ts), quel que soit le formulaire ; sans presence (Weekly update), aucun absent.
     const [ctx, mark, startupSnap] = await Promise.all([
       respondent ? scopeContext(tx, form, event, respondent, jury?.scored ?? null) : emptyContext(event),
-      respondent?.founder && form.eventId ? tx.get(db().doc(docPaths.attendance(form.eventId, respondent.founderId!))) : null,
+      respondent?.founder && formHasAbsentees(form, event) ? tx.get(db().doc(docPaths.attendance(form.eventId!, respondent.founderId!))) : null,
       startupId ? tx.get(db().doc(docPaths.startup(startupId))) : null,
     ]);
     if (mark?.get("status") === "absent") throw new HttpsError("failed-precondition", absentFromEventMessage(event?.name ?? null));
@@ -855,7 +858,7 @@ export async function submitFormResponse(
     const questionIds = questions.map((q) => q.id).filter((id) => !seenIds || seenIds.has(id));
 
     const answers = parseAnswers(questions, req.answers, lists, ctx);
-    await assertPickedExist(tx, form, questions, answers, respondent);
+    await assertPickedExist(tx, form, event, questions, answers, respondent);
 
     const subjects = resolveSubjects(form, respondent, answers, nowISO, ctx);
     const actorUid = uid ?? (judge ? `jury:${judge.id}` : `form:${formId}`);

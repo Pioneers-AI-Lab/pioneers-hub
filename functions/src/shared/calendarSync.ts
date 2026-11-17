@@ -1,8 +1,10 @@
 import { parisDay, parisMidnight } from "./dates";
-import { sameTime } from "./eventForms";
+import type { TemplatedEventForm } from "./admin/events";
+import { formsByEventId, sameTime, type EventFormPlan } from "./eventForms";
 import { newEvent, type EventData } from "./events";
-import { searchKey } from "./text";
-import type { Batch, CalendarSource, PioneersEvent, WithId } from "./types";
+import { nameKey } from "./text";
+import { weeklyFormsPlan } from "./weeklyForms";
+import type { Batch, CalendarSource, Form, PioneersEvent, WithId } from "./types";
 
 // ----------------------------
 // L'agenda Google, source des evenements d'un batch (decision du 16/11, SPECS §2)
@@ -11,7 +13,8 @@ import type { Batch, CalendarSource, PioneersEvent, WithId } from "./types";
 // la description et la visio (`CALENDAR_FIELDS`) ; le Hub garde le reste (invites,
 // etiquette, template, matching, formulaires, jalon, liens). Seuls les
 // evenements de la periode du batch (jours de Paris) entrent : un agenda peut
-// servir a plusieurs batchs.
+// servir a plusieurs batchs. Une exception : l'entree « Weekly Update Form »
+// recoit le template `weekly_update` et ses formulaires (shared/weeklyForms.ts).
 //
 // Pur : le service (services/calendarSync.ts) lit Google et la base, ce module
 // dit quoi ecrire. Rejoue sur les memes changements, il n'ecrit rien de plus :
@@ -102,15 +105,12 @@ export const isInBatchPeriod = (startISO: string, batch: Pick<Batch, "startDaySt
 /** L'id d'un evenement cree par la synchro : deterministe, deux synchros ne le creent pas deux fois. */
 export const calendarEventDocId = (batchId: string, googleEventId: string) => `${batchId}_gcal_${googleEventId}`;
 
-/** Deux noms qui se valent : sans accents, casse ni espaces en trop (« Démo  day » = « Demo Day »). */
-const nameKey = (name: string) => searchKey(name).replace(/\s+/g, " ");
-
 // ---- Le plan ------------------------------------------------------------------------
 
 export type CalendarUpdate = {
   event: WithId<PioneersEvent>;
-  /** Les champs qui changent (et `calendarSource` pour un evenement relie). */
-  patch: Partial<CalendarFields> & { calendarSource?: CalendarSource; resourceUrl?: null };
+  /** Les champs qui changent (et `calendarSource` pour un evenement relie ; le template du Weekly update). */
+  patch: Partial<CalendarFields> & Partial<Pick<PioneersEvent, "templateKey" | "kind" | "stage">> & { calendarSource?: CalendarSource; resourceUrl?: null };
   /** Un evenement du Hub relie pour la premiere fois a son evenement Google. */
   isLink: boolean;
 };
@@ -123,6 +123,8 @@ export type CalendarSyncPlan = {
   updates: CalendarUpdate[];
   /** Annules, supprimes ou sortis de la periode : masques (archives). */
   archives: WithId<PioneersEvent>[];
+  /** Les formulaires du Weekly update qui manquent a ses entrees (`weeklyFormsPlan`). */
+  formCreates: EventFormPlan[];
   /** Evenements Google de la periode vus par cette synchro. */
   seen: number;
 };
@@ -136,22 +138,35 @@ export type CalendarSyncPlan = {
  * Relier a la connexion : un evenement du Hub non relie, non archive, de meme
  * debut et de meme nom (ou le seul de ce debut) devient le reflet de l'evenement
  * Google au lieu d'un doublon.
+ *
+ * Chaque evenement vu (cree, relie ou a jour), s'il est une entree « Weekly
+ * Update Form », recoit le template `weekly_update` et les formulaires qui lui
+ * manquent parmi `forms` (ceux du batch), dates d'apres son horaire de l'agenda.
  */
 export function planCalendarSync(input: {
-  batch: WithId<Pick<Batch, "programId" | "startDayString" | "endDayString">>;
+  batch: WithId<Pick<Batch, "programId" | "startDayString" | "endDayString" | "settings">>;
   calendarId: string;
   changes: readonly GoogleCalendarEvent[];
   isFull: boolean;
   events: readonly WithId<PioneersEvent>[];
+  forms: readonly (TemplatedEventForm & Pick<Form, "eventId">)[];
+  nowISO: string;
 }): CalendarSyncPlan {
-  const { batch, calendarId, changes, isFull } = input;
+  const { batch, calendarId, changes, isFull, nowISO } = input;
   const linked = new Map(
     input.events.flatMap((e) => (e.calendarSource?.calendarId === calendarId ? [[e.calendarSource.eventId, e] as const] : [])),
   );
   const unlinked = input.events.filter((e) => !e.calendarSource && e.archivedDateISOString === null);
-  const plan: CalendarSyncPlan = { creates: [], updates: [], archives: [], seen: 0 };
+  const plan: CalendarSyncPlan = { creates: [], updates: [], archives: [], formCreates: [], seen: 0 };
   const archive = (event: WithId<PioneersEvent>) => {
     if (event.archivedDateISOString === null) plan.archives.push(event);
+  };
+  const formsOf = formsByEventId(input.forms);
+  /** Le template du Weekly update (dans `patch`) et ses formulaires manquants, sur l'evenement tel qu'il sera. */
+  const withWeeklyForms = <P extends object>(event: WithId<PioneersEvent>, patch: P): P & Partial<PioneersEvent> => {
+    const weekly = weeklyFormsPlan(batch, { ...event, ...patch }, formsOf.get(event.id) ?? [], nowISO);
+    plan.formCreates.push(...weekly.forms);
+    return { ...patch, ...weekly.patch };
   };
 
   // Le dernier etat de chaque evenement (une page peut en repeter un).
@@ -169,7 +184,8 @@ export function planCalendarSync(input: {
     if (event) {
       const patch = syncedFields(event, fields);
       if (event.calendarSource?.htmlLink !== source.htmlLink) Object.assign(patch, { calendarSource: source });
-      if (Object.keys(patch).length) plan.updates.push({ event, patch, isLink: false });
+      const next = withWeeklyForms(event, patch);
+      if (Object.keys(next).length) plan.updates.push({ event, patch: next, isLink: false });
       continue;
     }
 
@@ -178,7 +194,7 @@ export function planCalendarSync(input: {
     const match = sameStart.find((e) => nameKey(e.name) === key) ?? (sameStart.length === 1 ? sameStart[0] : undefined);
     if (match) {
       unlinked.splice(unlinked.indexOf(match), 1);
-      plan.updates.push({ event: match, patch: { ...syncedFields(match, fields), calendarSource: source }, isLink: true });
+      plan.updates.push({ event: match, patch: withWeeklyForms(match, { ...syncedFields(match, fields), calendarSource: source }), isLink: true });
       continue;
     }
 
@@ -195,7 +211,11 @@ export function planCalendarSync(input: {
       },
       { topic: fields.topic, videoCallUrl: fields.videoCallUrl, calendarSource: source },
     );
-    plan.creates.push({ id: calendarEventDocId(batch.id, g.id), data });
+    const id = calendarEventDocId(batch.id, g.id);
+    // Un evenement neuf n'a aucun formulaire : le pack entier s'il est une entree du Weekly update.
+    const weekly = weeklyFormsPlan(batch, { ...data, id }, [], nowISO);
+    plan.formCreates.push(...weekly.forms);
+    plan.creates.push({ id, data: { ...data, ...weekly.patch } });
   }
 
   // Une synchro complete voit tout l'agenda : un evenement relie qui n'y est plus a ete supprime.
