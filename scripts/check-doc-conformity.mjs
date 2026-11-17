@@ -834,7 +834,8 @@ async function prodChecks() {
     const notOn100 = (list) => list.filter((d) => d.get("scale") !== 100).map((d) => `${d.id}:${d.get("scale") ?? "none"}`);
     const [ofArchived, ofActive] = [scores.filter((d) => archived.has(pathOf(d))), scores.filter((d) => !archived.has(pathOf(d)))];
     expect(`fa26 scores on 100, active founders and startups (${ofActive.length} docs)`, [], notOn100(ofActive));
-    expect(`fa26 scores on 100, archived targets (${ofArchived.length} docs)`, [], notOn100(ofArchived));
+    // Un score d'un fondateur archive : sur 100, ou archive lui aussi (rien n'est supprime).
+    expect(`fa26 scores on 100 or archived, archived targets (${ofArchived.length} docs)`, [], notOn100(ofArchived.filter((d) => !d.get("archivedDateISOString"))));
   }
 
   // ---- B7. L'agenda (§1) ----
