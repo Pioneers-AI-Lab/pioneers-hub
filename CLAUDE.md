@@ -46,6 +46,7 @@ node scripts/migrate-education-tags.mjs <batchId|--all> [--prod]   # `founderDir
 node scripts/seed-tasks.mjs <batchId> [--prod]   # taches de depart du To do (Slack, LinkedIn, shortlist), a blanc sans --prod, n'ecrase jamais
 node scripts/migrate-metric-keys.mjs <batchId> [--prod]   # cles de metriques standard (SPECS A.5), a blanc sans --prod ; puis backfill-kpis.mjs
 node scripts/set-milestone-dates.mjs <batchId> [--prod]   # echeances des milestones du score -> `settings.scoreMilestoneDueDates` (n'ecrit que ce champ), a blanc sans --prod, rejouable
+node scripts/create-batch-form.mjs <batchId> <templateKey> --id <formId> --opens <ISO> --deadline <ISO> [--prod]   # formulaire de batch (sans evenement) depuis un modele, publie, id fixe, n'ecrase jamais ; a blanc sans --prod. Lock my team fa26 cree le 17/11 (fall-2026-lock-my-team, 23/11 16:00 -> 25/11 9:30 Paris)
 node scripts/background-draft.mjs <batchId> [--export profils.json | --apply profils.json] [--prod]   # grille Background proposee par Claude (profils anonymes) -> `private/internal.background.proposed` seulement, jamais la note du staff ; a blanc sans --prod
 node scripts/create-weekly-forms.mjs <batchId> [--date YYYY-MM-DD] [--prod]   # meme plan que la fonction `weeklyForms`, a la main (jeudi 18:45 Paris) ; n'ecrase jamais, a blanc sans --prod
 node scripts/backfill-shortlist-history.mjs <batchId> [--prod]   # rattrapage `shortlistHistory` depuis les shortlists actuelles (ajout seul, rejouable), a blanc sans --prod

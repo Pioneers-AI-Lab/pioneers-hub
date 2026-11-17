@@ -9,7 +9,7 @@
 // sans echeance sur le batch, elle n'existe pas. Les echeances viennent de l'agenda : fa26 (17/11)
 // Shortlist done et Met a la fin du debrief du H4 (23/11 16:30 Paris), Teamed up au kickoff
 // du H5 (25/11 9:30), Problem validated le jour du Selection Day (17/12, heure pas encore dans
-// l'agenda : debut de journee). Weekly goal (`weeklyGoalFrom`) arrive avec le lot 4.
+// l'agenda : debut de journee). Weekly goal (`weeklyGoalFrom`) : a partir de la semaine 3.
 // N'ecrit QUE `settings.scoreMilestoneDueDates` (les autres reglages ne bougent pas). Rejouable.
 
 import { applicationDefault, initializeApp } from "firebase-admin/app";
@@ -22,6 +22,8 @@ const DUE_DATES = {
     met: "2026-11-23T15:30:00.000Z",
     teamedUp: "2026-11-25T08:30:00.000Z",
     problemValidated: "2026-12-16T23:00:00.000Z",
+    // Weekly goal : due a partir de la semaine 3 (objectif du 26/11 juge au weekly du 03/12, echeance 04/12 18:45 Paris).
+    weeklyGoalFrom: "2026-12-04T17:45:00.000Z",
   },
 };
 
