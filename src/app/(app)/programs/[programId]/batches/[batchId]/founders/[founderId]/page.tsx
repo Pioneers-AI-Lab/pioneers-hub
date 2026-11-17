@@ -10,10 +10,10 @@ import { setFounderArchived } from "@/lib/accounts";
 import { formatDay } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { FounderCard } from "@/components/founder/FounderCard";
-import { MeSections } from "@/components/founder/MeSections";
+import { MeTodo } from "@/components/founder/MeTodo";
 import { BackButton } from "@/components/ui/PageHeader";
 
-/** La fiche d'un fondateur. Sur la sienne (« Me »), il voit en plus To do et Coming up. */
+/** La fiche d'un fondateur. Sur la sienne (« Me »), il voit en plus To do. */
 export default function FounderPage() {
   const { program } = useProgram();
   const { batch } = useBatch();
@@ -24,7 +24,7 @@ export default function FounderPage() {
     <>
       <BackButton href={paths.founders(program.id, batch.id, query)} label="All founders" mb="md" />
       {founder.archivedDateISOString !== null && <ArchivedNotice />}
-      <FounderCard selfSections={<MeSections />} />
+      <FounderCard selfSections={<MeTodo />} />
     </>
   );
 }

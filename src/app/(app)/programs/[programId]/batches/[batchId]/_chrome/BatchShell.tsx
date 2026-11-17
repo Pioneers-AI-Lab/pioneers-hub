@@ -23,6 +23,18 @@ import { ViewAsFounderPicker, ViewAsSwitch } from "./ViewAsSwitch";
 // la place de son etiquette de role, le « View as » (ViewAsSwitch).
 // Pas de titre de page sous les onglets : l'onglet actif le dit deja. Le nom et
 // les dates du batch sont dans la ligne du haut, pour tous les onglets.
+/** Rembourrage vertical d'un lien du fil d'Ariane : avec le texte, une cible de 40 px. */
+const CRUMB_PAD = 11;
+
+/** Un lien du fil d'Ariane : en ligne (pas l'inline-flex de `tap-link`) pour que la ligne se tronque ; souligne au survol (ecran a pointeur) ou a l'appui (tactile), regle de Mantine. */
+function Crumb({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Anchor component={Link} href={href} c="dimmed" inherit underline="hover" className="tap-link" style={{ display: "inline", paddingBlock: CRUMB_PAD }}>
+      {children}
+    </Anchor>
+  );
+}
+
 export function BatchShell({ children }: { children: ReactNode }) {
   const { program } = useProgram();
   const { batch, role, viewerFounderId, canViewAs } = useBatch();
@@ -51,14 +63,23 @@ export function BatchShell({ children }: { children: ReactNode }) {
   return (
     <Box>
       <Group justify="space-between" gap="xs" mb="xs" wrap="nowrap">
-        <Anchor component={Link} href={base} c="dimmed" size="sm" underline="never" truncate className="tap-link" style={{ display: "block", lineHeight: "20px" }}>
-          {program.name} · <Text span c="white" inherit fw={500}>{batch.name}</Text>
-          <span className="num">
-            {" · "}
-            {formatPeriod(batch.startDayString, batch.endDayString)}
+        {/* Fil d'Ariane : le programme (la liste de ses batchs), puis le batch (son accueil). La
+            ligne se tronque (overflow cache) : son rembourrage garde aux liens leur cible de 40 px. */}
+        <Text size="sm" c="dimmed" truncate style={{ minWidth: 0, lineHeight: "20px", paddingBlock: CRUMB_PAD, marginBlock: -CRUMB_PAD }}>
+          <Crumb href={paths.program(program.id)}>{program.name}</Crumb>
+          {" · "}
+          <Crumb href={base}>
+            <Text span c="white" inherit fw={500}>
+              {batch.name}
+            </Text>
+            {/* Les dates, coupees sur mobile (« 30 Apr 2… »), ne s'y affichent pas : Calendar les porte. */}
+            <Box component="span" className="num" visibleFrom="sm">
+              {" · "}
+              {formatPeriod(batch.startDayString, batch.endDayString)}
+            </Box>
             {batch.status === "completed" ? " · Completed" : ""}
-          </span>
-        </Anchor>
+          </Crumb>
+        </Text>
         {/* Le staff : son « View as » ; un investor : son etiquette ; un fondateur, rien. */}
         {canViewAs && <ViewAsSwitch />}
         {!canViewAs && isInvestor(role) && (

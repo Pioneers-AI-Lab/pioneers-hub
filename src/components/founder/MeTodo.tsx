@@ -4,13 +4,12 @@ import { useBatch } from "@/context/BatchContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useTodoItems } from "@/hooks/useTodoItems";
 import { paths } from "@/lib/paths";
-import { UpcomingEvents } from "@/components/event/UpcomingEvents";
 import { ChecklistRow, FormRow } from "@/components/todo/TodoRows";
 import { LinkRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 
 // ----------------------------
-// Le haut de « Me » : ce qui m'attend
+// Le haut de « Me » : ce qui me reste a faire
 // ----------------------------
 // FounderCard le place sur SA fiche : FormsToFill est monte par
 // (mine)/layout.tsx, ou par `SelfProviders` sous /founders/{son id}.
@@ -21,7 +20,7 @@ const TODO_LIMIT = 5;
  * Resume de « To do » (seulement ce qui reste a faire : formulaires, puis
  * elements de la checklist), puis le lien vers la page complete.
  */
-function MeTodo() {
+export function MeTodo() {
   const { program } = useProgram();
   const { batch } = useBatch();
   const { forms, debriefs, checklist, isLoading } = useTodoItems();
@@ -41,15 +40,5 @@ function MeTodo() {
         <LinkRow href={paths.todo(program.id, batch.id)} title="All to do" meta={more > 0 ? `${more} more` : undefined} />
       </RowList>
     </Section>
-  );
-}
-
-/** To do, puis mes prochains evenements. */
-export function MeSections() {
-  return (
-    <>
-      <MeTodo />
-      <UpcomingEvents limit={5} />
-    </>
   );
 }

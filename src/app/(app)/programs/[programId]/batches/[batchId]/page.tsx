@@ -29,8 +29,8 @@ import { NextSession } from "@/components/event/NextSession";
 // quel qu'il soit, « See all » vers l'onglet Calendar), la vue d'ensemble du
 // batch (« Batch overview », pour tous : `batchStats` est public ; effectif,
 // experience, profils, competences, nationalites), les meilleurs fondateurs et
-// startups (staff et investors), les resultats. « Coming up » et « Add to
-// calendar » vivent sur la page Calendar ; la tuile Startups et les jalons
+// startups (staff et investors), les resultats. Les prochains evenements et
+// « Add to calendar » vivent sur la page Calendar ; la tuile Startups et les jalons
 // sont masques (lib/features.ts).
 export default function BatchHomePage() {
   const { program } = useProgram();

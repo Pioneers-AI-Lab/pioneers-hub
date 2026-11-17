@@ -17,7 +17,6 @@ import { PageLoader } from "@/components/ui/PageLoader";
 import { LinkRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 import { tagsOrNull as tags } from "@/components/ui/Tags";
-import { UpcomingEvents } from "@/components/event/UpcomingEvents";
 import { ConnectionButtons } from "./ConnectionButtons";
 import { FounderConnections } from "./FounderConnections";
 import { QuickContacts } from "./QuickContacts";
@@ -35,9 +34,8 @@ const yesNo = (v: boolean | null | undefined) => (v === true ? "Yes" : v === fal
 /**
  * La fiche d'un fondateur, section par section selon ce que le role peut lire
  * (FounderContext n'a ouvert que les documents autorises). Sert a la fiche et
- * a « Me » (sa propre fiche). `selfSections` (To do, Coming up) ne s'affiche que
- * sur SA fiche, sous les Providers qu'il lit (SelfProviders, monte par le layout).
- * Sur la fiche d'un autre, le staff voit ses prochains evenements (prives compris).
+ * a « Me » (sa propre fiche). `selfSections` (To do) ne s'affiche que sur SA
+ * fiche, sous les Providers qu'il lit (SelfProviders, monte par le layout).
  *
  * Ordre (demandes du 15/11 et du 16/11) : coordonnees et boutons Shortlist / Met en
  * haut de fiche (plus de section « Contact »), puis ce que lit qui cherche un
@@ -45,7 +43,7 @@ const yesNo = (v: boolean | null | undefined) => (v === true ? "Yes" : v === fal
  */
 export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
   const { program } = useProgram();
-  const { batch, role } = useBatch();
+  const { batch } = useBatch();
   const { founder, directory, profile, internal, canSeeDirectory, isSelf, canEdit, isDetailsLoading } = useFounder();
   // Le fondateur lui-meme ou le staff : bouton d'edition et alerte « profil incomplet ».
   const editHref = paths.founderEdit(program.id, batch.id, founder.id);
@@ -115,7 +113,7 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
         </Text>
       )}
 
-      {isSelf ? selfSections : role === "staff" && <UpcomingEvents limit={5} founder={founder} />}
+      {isSelf && selfSections}
 
       {canSeeDirectory && isDetailsLoading && <PageLoader />}
 
