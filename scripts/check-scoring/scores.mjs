@@ -296,7 +296,7 @@ check("Outstanding : un sous-score et la Program Performance depassent 100", () 
 // ---- Score startup ---------------------------------------------------------------------------
 
 check("startup : Team = Background moyen, Execution = celle de ses fondateurs, le reste sans donnee", () => {
-  const c = computeStartupScore({ founderBackgrounds: [78, 62], pitchTeam: null, founderExecutions: [64, 80], weeklyTraction: null, pitchSpeed: null, pitchMarket: null });
+  const c = computeStartupScore({ founderBackgrounds: [78, 62], founderExecutions: [64, 80], weeklyTraction: null, pitches: [] });
   assert.deepEqual(c.subScores, { market: null, team: 70, execution: 72, traction: null });
   assert.equal(c.dataCompleteness, 0.5);
   // Team 40, Execution 20 (Traction et Market retires) : (70 x 40 + 72 x 20) / 60
@@ -304,14 +304,16 @@ check("startup : Team = Background moyen, Execution = celle de ses fondateurs, l
 });
 
 check("startup : Team 50 % Background, 50 % pitch ; Traction 50 / 50 ; Team 40, les autres 20", () => {
-  const c = computeStartupScore({ founderBackgrounds: [80], pitchTeam: 60, founderExecutions: [50], weeklyTraction: 40, pitchSpeed: 80, pitchMarket: 90 });
+  // Un pitch dont les familles valent 60 / 80 / 90 (le calcul des familles : pitch.mjs).
+  const grid = { total: null, outstanding: false, families: { team: 60, speed: 80, market: 90 }, clearIdea: null };
+  const c = computeStartupScore({ founderBackgrounds: [80], founderExecutions: [50], weeklyTraction: 40, pitches: [{ name: "Pitch Day #1", grid }] });
   assert.deepEqual(c.subScores, { market: 90, team: 70, execution: 50, traction: 60 });
   // 70 x 0,4 + 50 x 0,2 + 60 x 0,2 + 90 x 0,2 = 68
   near(startupScore({ subScores: c.subScores, scale: 100 }), 68);
 });
 
 check("startup sans aucune donnee : null", () => {
-  const c = computeStartupScore({ founderBackgrounds: [], pitchTeam: null, founderExecutions: [], weeklyTraction: null, pitchSpeed: null, pitchMarket: null });
+  const c = computeStartupScore({ founderBackgrounds: [], founderExecutions: [], weeklyTraction: null, pitches: [] });
   assert.equal(startupScore({ subScores: c.subScores, scale: 100 }), null);
 });
 

@@ -464,7 +464,7 @@ export async function getPublicForm(uid: string | null, req: Partial<CallableReq
   const targetIds = ctx.targets.each_target.map((t) => t.value);
   const [prefill, juryBrief, previousGoal] = await Promise.all([
     proven ? readPrefill(form, respondent!, ctx, nowISO).then((p) => ({ ...p, ...own.answers })) : {},
-    jury && respondent && targetIds.length > 0 ? loadJuryBrief(form.eventId!, targetIds) : null,
+    jury && respondent && targetIds.length > 0 ? loadJuryBrief(form.eventId!, targetIds, jury.target) : null,
     // Lot 4 : le Weekly update founder rappelle l'objectif de la semaine d'avant.
     proven && respondent!.founderId ? previousGoalOf(form, respondent!.founderId, nowISO) : null,
   ]);

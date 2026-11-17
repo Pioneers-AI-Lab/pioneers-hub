@@ -1,7 +1,7 @@
-import { criterionKeyOf, metricKeyOf, parseDbField, type DbFieldKey } from "./fieldRegistry";
+import { criterionKeyOf, metricKeyOf, parseDbField, type DbFieldKey, type DocKind } from "./fieldRegistry";
 import { deriveAttachments, isJuryCriterion, ratingScale } from "./formRules";
 import { eventTemplateOf } from "./presets/eventTemplates";
-import { FORM_TEMPLATES, templateQuestions, type FormTemplate, type FormTemplateKey, type TemplateContext } from "./presets/formTemplates";
+import { FORM_TEMPLATES, templateDescription, templateQuestions, type FormTemplate, type FormTemplateKey, type TemplateContext } from "./presets/formTemplates";
 import { standardEventMetric, standardMetricOf, type StandardMetricKey } from "./presets/standardMetrics";
 import { activeQuestions, type Criterion, type EventMetric, type Form, type FormQuestion, type FormVersion, type PioneersEvent, type Timestamps } from "./types";
 
@@ -21,9 +21,9 @@ export type NewFormInput = {
   eventId: string | null;
   /**
    * L'evenement du formulaire : ses reglages par defaut (metriques du Debrief,
-   * grille du jury) viennent de son modele (`templateKey`).
+   * grille du jury) viennent de son modele (`templateKey`) ; son etape (`stage`), celle d'un pitch.
    */
-  event?: Pick<PioneersEvent, "kind" | "templateKey"> | null;
+  event?: (Pick<PioneersEvent, "kind" | "templateKey"> & Partial<Pick<PioneersEvent, "stage">>) | null;
   /** Remplace les reglages du modele d'evenement (import, migration) : metriques, grille, champs de la Submission, seances de la retro. */
   defaults?: Partial<Pick<TemplateContext, "metrics" | "criteria" | "submissionFields" | "sessions">>;
 };
@@ -37,6 +37,7 @@ export function templateContext(input: Pick<NewFormInput, "event" | "defaults">)
     criteria: input.defaults?.criteria ?? preset?.criteria ?? [],
     submissionFields: input.defaults?.submissionFields ?? null,
     sessions: input.defaults?.sessions ?? [],
+    stage: input.event?.stage ?? preset?.stage ?? null,
   };
 }
 
@@ -50,14 +51,15 @@ export type FormData = Omit<Form, keyof Timestamps>;
  */
 export function newForm(input: NewFormInput, extra: Partial<Omit<FormData, "attachments" | "version" | "status">> = {}): FormData {
   const template: FormTemplate | null = input.templateKey ? FORM_TEMPLATES[input.templateKey] : null;
-  const questions = extra.questions ?? (template ? templateQuestions(template, templateContext(input)) : []);
+  const ctx = templateContext(input);
+  const questions = extra.questions ?? (template ? templateQuestions(template, ctx) : []);
   return {
     programId: input.programId,
     batchId: input.batchId,
     archivedDateISOString: null,
     kind: template?.kind ?? "custom",
     title: template?.title ?? "Untitled form",
-    description: template?.description ?? null,
+    description: template ? templateDescription(template, ctx) : null,
     approval: template?.approval ?? "none",
     identityCheck: template?.identityCheck ?? "select_name",
     eventId: input.eventId,
@@ -161,13 +163,14 @@ export function eventMetrics(forms: readonly EventForm[]): EventMetric[] {
 export type FieldQuestion = FormQuestion & { dbField: DbFieldKey };
 
 /**
- * Les questions de la Submission hors metriques (champs `submission.*` : textes,
- * liens, choix), une par champ, dans l'ordre des formulaires : ce que lit le jury.
+ * Les questions de ces documents hors metriques (par defaut la Submission, champs `submission.*` :
+ * textes, liens, choix ; le Pitch deck, `startup.*` et `startupProfile.*`), une par champ, dans
+ * l'ordre des formulaires : ce que lit le jury.
  */
-export function submissionQuestions(forms: readonly EventForm[]): FieldQuestion[] {
+export function submissionQuestions(forms: readonly EventForm[], docKinds: readonly DocKind[] = ["submission"]): FieldQuestion[] {
   const out = new Map<string, FieldQuestion>();
   for (const q of liveQuestions(forms)) {
-    if (q.dbField && !out.has(q.dbField) && !metricKeyOf(q.dbField) && parseDbField(q.dbField).doc === "submission") out.set(q.dbField, q as FieldQuestion);
+    if (q.dbField && !out.has(q.dbField) && !metricKeyOf(q.dbField) && docKinds.includes(parseDbField(q.dbField).doc)) out.set(q.dbField, q as FieldQuestion);
   }
   return [...out.values()];
 }

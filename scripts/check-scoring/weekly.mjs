@@ -157,7 +157,7 @@ check("Traction de la startup : moyenne des notes des Weekly updates (Outstandin
   ]);
   assert.equal(traction, 96); // (120 + 72) / 2
   assert.equal(weeklyTractionOf([]), null);
-  const c = computeStartupScore({ founderBackgrounds: [], pitchTeam: null, founderExecutions: [], weeklyTraction: traction, pitchSpeed: null, pitchMarket: null });
+  const c = computeStartupScore({ founderBackgrounds: [], founderExecutions: [], weeklyTraction: traction, pitches: [] });
   assert.equal(c.subScores.traction, 96);
 });
 

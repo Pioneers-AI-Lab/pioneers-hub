@@ -75,6 +75,8 @@ export function newEvent(input: NewEventInput, extra: Partial<Omit<EventData, "k
     matching: input.matching !== undefined ? input.matching : (template?.matching ?? null),
     leaderboardRevealDateISOString: null,
     rankingMetricKey: null,
+    // Le bareme du modele (grille Pitch : points, Outstanding a 100), s'il en a un.
+    ...(template?.scoring ? { scoring: template.scoring } : {}),
     ...extra,
   };
 }

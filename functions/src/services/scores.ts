@@ -6,7 +6,9 @@ import { computeBatchStats } from "../shared/batchStats";
 import { isWorkTeamEvent } from "../shared/events";
 import { countRequiredFields, listMissingFields } from "../shared/fieldRegistry";
 import { formAudience } from "../shared/formRules";
+import { juryCriteria } from "../shared/forms";
 import { ratedBackgroundScore } from "../shared/background";
+import { isPitchRubric, pitchGrid, pitchJuryMeans, pitchMeans, type PitchInput } from "../shared/pitchGrid";
 import {
   computeFounderScore,
   computeStartupScore,
@@ -27,6 +29,7 @@ import {
   readConnections,
   type Attendance,
   type Batch,
+  type Evaluation,
   type Form,
   type FormCompletion,
   type Founder,
@@ -116,11 +119,21 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
   const pastEvents = events.filter((e) => e.archivedDateISOString === null && e.status !== "draft" && e.startDateISOString <= now);
   const eventById = new Map(events.map((e) => [e.id, e]));
   // La presence lue : evenements obligatoires (Engagement, formulaires) et ceux d'un classement qui compte (absents de l'Execution).
-  const executionBoards = boards.filter(countsInExecution);
+  // Un classement compte dans l'Execution des fondateurs s'il classe des equipes de travail : pas un pitch (il classe des startups).
+  const executionBoards = boards.filter((b) => {
+    const event = eventById.get(b.eventId);
+    return countsInExecution(b) && event !== undefined && isWorkTeamEvent(event);
+  });
+  // Les pitchs (lot 5) : les evenements passes, dans l'ordre, dont le jury a la grille Pitch (shared/pitchGrid.ts).
+  const formsOfEvent = new Map<string, Form[]>();
+  for (const f of forms) if (f.eventId) pushTo(formsOfEvent, f.eventId, f);
+  const pitchEvents = pastEvents
+    .filter((e) => isPitchRubric(juryCriteria(formsOfEvent.get(e.id) ?? [])))
+    .sort((a, b) => a.startDateISOString.localeCompare(b.startDateISOString));
   const boardEventIds = new Set(executionBoards.map((b) => b.eventId));
   const attendanceEvents = pastEvents.filter((e) => !isAttendanceOptional(e) || boardEventIds.has(e.id));
 
-  const [attendanceByEvent, peerRatings, directories, internals, connections] = await Promise.all([
+  const [attendanceByEvent, peerRatings, directories, internals, connections, pitchReads] = await Promise.all([
     Promise.all(attendanceEvents.map(async (e) => [e.id, await docs<Attendance>(db().collection(eventCollectionPaths.attendance(e.id)))] as const)).then(
       (entries) => new Map(entries),
     ),
@@ -132,6 +145,8 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
     byIds<FounderInternal>(founders.map((f) => docPaths.founderInternal(f.id))),
     // Shortlist et « Met » : lus ici pour Likability et les milestones, jamais affiches aux autres.
     byIds<FounderConnections>(founders.map((f) => docPaths.founderConnections(f.id))),
+    // Les notes du jury de chaque pitch.
+    Promise.all(pitchEvents.map(async (event) => ({ event, evaluations: await docs<Evaluation>(db().collection(eventCollectionPaths.evaluations(event.id))) }))),
   ]);
   const directoryOf = new Map(founders.map((f, i) => [f.id, directories[i]]));
   const internalOf = new Map(founders.map((f, i) => [f.id, internals[i]]));
@@ -236,6 +251,18 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
   for (const r of founderReviews) pushTo(reviewsOfFounder, r.founderId, r);
   const reviewsOfStartup = new Map<string, StartupReview[]>();
   for (const r of startupReviews) pushTo(reviewsOfStartup, r.startupId, r);
+  // ---- Pitchs : chaque startup notee, a chaque pitch, sur la moyenne de ses jures critere par critere
+  // (puis le score prend la moyenne de ses pitchs : `pitchMeans`), dans l'ordre des pitchs. L'Outstanding
+  // mention du staff : celle du classement de l'evenement (posee sur la Submission, comptee a 100).
+  const boardOf = new Map(boards.map((b) => [b.eventId, b]));
+  const pitchesOf = new Map<string, PitchInput[]>();
+  for (const { event, evaluations } of pitchReads) {
+    const outstandingIds = new Set(boardOf.get(event.id)?.rows.flatMap((r) => (r.outstanding ? [r.targetId] : [])) ?? []);
+    const byStartup = new Map<string, Evaluation[]>();
+    for (const e of evaluations) if (e.targetType === "startup") pushTo(byStartup, e.targetId, e);
+    for (const [startupId, evals] of byStartup) pushTo(pitchesOf, startupId, { name: event.name, grid: pitchGrid(pitchJuryMeans(evals), outstandingIds.has(startupId)) });
+  }
+  const clearIdeaOf = new Map([...pitchesOf].map(([startupId, pitches]) => [startupId, pitchMeans(pitches).clearIdea]));
 
   const write = db().bulkWriter();
   const scoped = { programId: batch.programId, batchId };
@@ -277,8 +304,8 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
       }),
       supporters: supporters.get(f.id)?.size ?? 0,
       batchMaxSupporters,
-      // Lot 5 : la grille Pitch de sa startup.
-      clearIdea: null,
+      // Clear idea de sa startup : le critere de ses pitchs, sur 100.
+      clearIdea: f.startupId ? (clearIdeaOf.get(f.startupId) ?? null) : null,
       hasExistingProject: directory?.hasExistingProject ?? null,
       hasExistingCoFounders: directory?.hasExistingCoFounders ?? null,
       background: internalOf.get(f.id)?.background ?? null,
@@ -324,12 +351,10 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
     const members = startup.memberIds.filter((id) => founderIds.has(id));
     const computed = computeStartupScore({
       founderBackgrounds: members.flatMap((id) => ratedBackgroundScore(internalOf.get(id)?.background) ?? []),
-      // Lot 5 : grille Pitch (familles Team, Speed of execution, Market).
-      pitchTeam: null,
       founderExecutions: members.flatMap((id) => executionOf.get(id) ?? []),
       weeklyTraction: weeklyTractionOf(reviewsOfStartup.get(startup.id) ?? []),
-      pitchSpeed: null,
-      pitchMarket: null,
+      // La grille Pitch : familles Team, Speed of execution, Market.
+      pitches: pitchesOf.get(startup.id) ?? [],
     });
     const scoreId = docIds.score("startup", startup.id);
     const score: StartupScore = {

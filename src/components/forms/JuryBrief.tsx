@@ -16,12 +16,14 @@ import { Empty, SubsectionTitle } from "@/components/ui/Section";
 
 export function JuryBrief({ brief, targets, targetId }: { brief: Brief; targets: PublicChoice[]; targetId: string }) {
   const submission = brief.submissions[targetId];
+  // Un pitch (lot 5) : le Pitch deck de la startup, rempli avant le pitch.
+  const isDeck = brief.source === "pitch_deck";
 
   return (
     <Stack gap="md" py="xs">
-      <SubsectionTitle>Submission</SubsectionTitle>
+      <SubsectionTitle>{isDeck ? "Pitch deck" : "Submission"}</SubsectionTitle>
       {!submission ? (
-        <Empty>No submission yet.</Empty>
+        <Empty>{isDeck ? "No pitch deck yet." : "No submission yet."}</Empty>
       ) : (
         <>
           {submission.late && (

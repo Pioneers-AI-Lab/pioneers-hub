@@ -1,6 +1,7 @@
-import type { Criterion, EventKind, EventMetric, FormApproval, FormIdentityCheck, FormKind, FormQuestion } from "../types";
+import type { Criterion, EventKind, EventMetric, FormApproval, FormIdentityCheck, FormKind, FormQuestion, PitchStage } from "../types";
 import { getFieldDef } from "../fieldRegistry";
 import { newQuestion } from "../formRules";
+import { isPitchRubric } from "../pitchGrid";
 import { TEAM_LOCK_MAX_COFOUNDERS } from "../teamLocks";
 import { defaultPicksQuestion } from "./eventTemplates";
 import { CHECKIN_GOALS, CHECKIN_METRICS, withUnit, type CheckinGoalKey, type CheckinMetricKey } from "./standardMetrics";
@@ -49,6 +50,8 @@ export type TemplateContext = {
   submissionFields?: readonly SubmissionFieldKey[] | null;
   /** Les seances que la retro fait noter. */
   sessions?: readonly RetroSession[];
+  /** L'etape de decision d'un pitch (Selection Day, Pre-IC, IC) : les questions d'apres la grille Pitch en dependent. */
+  stage?: PitchStage | null;
 };
 
 /**
@@ -60,8 +63,10 @@ export type TemplateContext = {
  * dans Engagement.
  */
 export type FormTiming = {
-  opens: "start" | "before_end";
-  deadline: "before_end" | "day_after_opening" | "none";
+  /** `two_days_before` : 48 h avant le debut (le Pitch deck, rendu avant le pitch). */
+  opens: "start" | "before_end" | "two_days_before";
+  /** `day_before` : 24 h avant le debut (la veille du pitch). */
+  deadline: "before_end" | "day_after_opening" | "day_before" | "none";
 };
 export const DEFAULT_FORM_TIMING: FormTiming = { opens: "before_end", deadline: "day_after_opening" };
 
@@ -87,6 +92,8 @@ export type FormTemplate = {
   questions: FormQuestion[];
   /** Questions construites depuis l'evenement (Debrief, jury, picks) ; `questions` sinon. */
   build?: (ctx: TemplateContext) => FormQuestion[];
+  /** La description, si elle depend de l'evenement (le jury d'un pitch) ; `description` sinon. */
+  describe?: (ctx: TemplateContext) => string | null;
   /**
    * Plus propose au staff (decision du 17/11, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §4.6) :
    * le modele reste lu par les formulaires deja crees, mais on n'en cree plus.
@@ -96,6 +103,9 @@ export type FormTemplate = {
 
 /** Un modele retire n'est plus propose : `isOfferedTemplate` (presets/offered.ts). */
 export { isOfferedTemplate } from "./offered";
+
+/** La description d'un modele pour cet evenement. */
+export const templateDescription = (template: FormTemplate, ctx: TemplateContext): string | null => template.describe?.(ctx) ?? template.description;
 
 /** Les questions d'un modele pour cet evenement. */
 export const templateQuestions = (template: FormTemplate, ctx: TemplateContext): FormQuestion[] =>
@@ -137,6 +147,32 @@ export const criterionQuestion = (c: Criterion): FormQuestion =>
     scale: { min: c.min, max: c.max },
     weight: c.weight,
   });
+
+/**
+ * Apres les criteres de la grille Pitch (lot 5, §2.11) : la note globale vient en dernier (« mediating
+ * assessments protocol »). Decision au Selection Day, au Pre-IC et a l'IC ; Would you invest? et How likely
+ * avant l'IC. Affiches, jamais comptes. Le commentaire suit (`jury`).
+ */
+const pitchVerdictQuestions = (stage: PitchStage | null): FormQuestion[] => [
+  q("overall", {
+    type: "rating",
+    label: "Overall",
+    description: "Your global score, now that every criterion is scored: 0 nothing, 3 what we expect, 5 exceptional.",
+    dbField: "evaluation.overallScore",
+  }),
+  ...(stage ? [q("decision", { type: "single_choice", label: "Decision", dbField: "evaluation.decision" })] : []),
+  ...(stage !== "ic"
+    ? [
+        q("wouldInvest", { type: "single_choice", label: "Would you invest?", dbField: "evaluation.wouldInvest" }),
+        q("betLikelihood", {
+          type: "rating",
+          label: "How likely is this the one team you'd bet on?",
+          description: "0 = not at all, 5 = this is the one.",
+          dbField: "evaluation.betLikelihood",
+        }),
+      ]
+    : []),
+];
 
 /** Les questions des champs d'equipe d'une Submission (ids stables : `product`, `proofs`, `notes` d'avant). */
 const SUBMISSION_FIELD_QUESTIONS: Record<SubmissionFieldKey, () => FormQuestion> = {
@@ -278,7 +314,8 @@ export const FORM_TEMPLATES = {
     ],
   }),
 
-  // Le jury (SPECS §4.2) : un lien partage, une note par critere pour chaque equipe.
+  // Le jury (SPECS §4.2) : un lien partage, une note par critere pour chaque equipe. Pour la grille
+  // Pitch (lot 5, shared/pitchGrid.ts), les questions d'apres la grille suivent les criteres.
   jury: template({
     label: "Jury",
     kind: "jury",
@@ -286,14 +323,41 @@ export const FORM_TEMPLATES = {
     // Echelle commune (decision du 17/11) : la grille fait 100 points, chaque critere est note de 0 a 5.
     description:
       "Read each team's submission and check the proofs in its Drive folder, then score every criterion from 0 to 5: 0 nothing (or nothing you can check), 3 what we expect, 5 exceptional. For a number, 5 is the best team. Score on your own, before any discussion. You can come back and correct your scores until the jury is locked.",
+    describe: ({ criteria }) =>
+      isPitchRubric(criteria)
+        ? "Read each startup's pitch deck, then score every criterion from 0 to 5 on your own, before any discussion: 0 nothing (or nothing you can check), 3 what we expect, 5 exceptional. Give your overall score last. You can come back and correct your scores until the jury is locked."
+        : null,
     identityCheck: "jury_link",
     needsEvent: true,
     // Les jures notent pendant l'evenement ; le verrou, c'est la fermeture du formulaire.
     timing: { opens: "start", deadline: "none" },
     questions: [],
-    build: ({ criteria }) => [
+    build: ({ criteria, stage }) => [
       ...criteria.map(criterionQuestion),
+      ...(isPitchRubric(criteria) ? pitchVerdictQuestions(stage ?? null) : []),
       q("comment", { type: "long_text", label: "Comment for the team", dbField: "evaluation.comment" }),
+    ],
+  }),
+
+  // Le Pitch deck (lot 5, §2.11) : une reponse par startup, envoyee par n'importe quel fondateur
+  // depuis son compte (« fait » pour toute la startup, comme le Weekly update startup : toutes ses
+  // questions ecrivent la startup). Il s'ouvre 48 h avant le pitch, echeance la veille ; ses
+  // reponses vont dans la fiche de la startup, que le jury lit (`loadJuryBrief`).
+  pitch_deck: template({
+    label: "Pitch deck",
+    kind: "custom",
+    title: "Pitch deck",
+    description: "One per startup: any co-founder sends it, the last save counts. Due the day before the pitch: the jury reads it before you pitch.",
+    identityCheck: "account",
+    needsEvent: true,
+    timing: { opens: "two_days_before", deadline: "day_before" },
+    questions: [
+      q("pitchDeck", { type: "link", label: "Pitch deck", description: "A link anyone with it can open (Google Slides, Pitch, PDF on Drive).", dbField: "startupProfile.pitchDeckUrl", required: true }),
+      q("oneLiner", { type: "text", label: "One-liner", dbField: "startup.ideaOneLine", required: true }),
+      q("problem", { type: "long_text", label: "Problem", dbField: "startupProfile.problem", required: true }),
+      q("icp", { type: "text", label: "Customer (ICP)", description: "Who buys, and who uses it if not the same.", dbField: "startupProfile.icp", required: true }),
+      q("solution", { type: "long_text", label: "Solution", dbField: "startupProfile.solution", required: true }),
+      q("whyNow", { type: "long_text", label: "Why now?", dbField: "startupProfile.whyNow", required: true }),
     ],
   }),
 

@@ -143,13 +143,32 @@ function answerReader(q: FieldQuestion): { field: string; read: (value: unknown)
   };
 }
 
-/** Les Submissions des cibles de ce jure (`targetIds`, au moins une) et les metriques qu'elles declarent. */
-export async function loadJuryBrief(eventId: string, targetIds: string[]): Promise<JuryBrief> {
-  const [formsSnap, submissionSnaps] = await Promise.all([
-    db().collection(COL.forms).where("eventId", "==", eventId).select("questions", "archivedDateISOString").get(),
-    db().getAll(...targetIds.map((id) => db().doc(docPaths.submission(eventId, id)))),
-  ]);
+/**
+ * Un pitch (lot 5) : le Pitch deck de chaque startup notee, lu dans sa fiche (`startup.*`,
+ * `startupProfile.*`), a la place d'une Submission. Expose a qui a le lien du jury, comme une Submission.
+ */
+async function loadPitchDecks(questions: FieldQuestion[], targetIds: string[]): Promise<Record<string, JurySubmission>> {
+  const readers = questions.map((q) => ({ doc: parseDbField(q.dbField).doc, ...answerReader(q) }));
+  const snaps = await db().getAll(...targetIds.flatMap((id) => [db().doc(docPaths.startup(id)), db().doc(docPaths.startupProfile(id))]));
+  const out: Record<string, JurySubmission> = {};
+  targetIds.forEach((id, i) => {
+    const [startup, profile] = [snaps[2 * i], snaps[2 * i + 1]];
+    const answers = readers.flatMap((r) => r.read((r.doc === "startup" ? startup : profile).get(r.field)) ?? []);
+    if (answers.length) out[id] = { driveFolderUrl: null, late: false, answers, metrics: {} };
+  });
+  return out;
+}
+
+/**
+ * Ce que le jure lit sur ses cibles (`targetIds`, au moins une) : les Submissions des equipes et les
+ * metriques qu'elles declarent ; des startups notees (un pitch) avec un Pitch deck, leurs Pitch decks.
+ */
+export async function loadJuryBrief(eventId: string, targetIds: string[], target: "team" | "startup"): Promise<JuryBrief> {
+  const formsSnap = await db().collection(COL.forms).where("eventId", "==", eventId).select("questions", "archivedDateISOString").get();
   const forms = formsSnap.docs.map((d) => d.data() as Pick<Form, "questions" | "archivedDateISOString">);
+  const deckQuestions = target === "startup" ? submissionQuestions(forms, ["startup", "startupProfile"]) : [];
+  if (deckQuestions.length > 0) return { source: "pitch_deck", metrics: [], submissions: await loadPitchDecks(deckQuestions, targetIds) };
+  const submissionSnaps = await db().getAll(...targetIds.map((id) => db().doc(docPaths.submission(eventId, id))));
   const metrics = eventMetrics(forms);
   // Le champ et le format de chaque question, une fois pour toutes les equipes.
   const readers = submissionQuestions(forms)
@@ -170,5 +189,5 @@ export async function loadJuryBrief(eventId: string, targetIds: string[]): Promi
     };
   }
   // Une metrique que personne n'a declaree ne compare rien.
-  return { metrics: metrics.filter((m) => Object.values(submissions).some((s) => m.key in s.metrics)), submissions };
+  return { source: "submission", metrics: metrics.filter((m) => Object.values(submissions).some((s) => m.key in s.metrics)), submissions };
 }

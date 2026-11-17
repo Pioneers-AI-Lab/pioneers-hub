@@ -2,8 +2,29 @@
 
 import Link from "next/link";
 import { Anchor, Group, SimpleGrid, Stack, Text } from "@mantine/core";
-import { scoreScaleOf, startupWeightingHint, STARTUP_SUBSCORES, type Checkin, type MetricKey, type StartupSubScore } from "@shared/types";
+import {
+  EVALUATION_DECISION_LABELS,
+  EVALUATION_DECISIONS,
+  roundTo,
+  scoreScaleOf,
+  startupWeightingHint,
+  STARTUP_SUBSCORES,
+  type Checkin,
+  type MetricKey,
+  type StartupSubScore,
+} from "@shared/types";
 import { criterionLabel } from "@shared/presets/eventTemplates";
+import {
+  isPitchGrid,
+  legacyPitchScores,
+  pitchCriterionShortLabel,
+  pitchGrid,
+  pitchVerdicts,
+  PITCH_CRITERIA_BY_FAMILY,
+  PITCH_FAMILIES,
+  PITCH_FAMILY_INFO,
+} from "@shared/pitchGrid";
+import { juryMeansOf } from "@shared/scoringRules";
 import { STANDARD_METRICS, withUnit, type StandardMetricKey } from "@shared/presets/standardMetrics";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
@@ -155,7 +176,84 @@ export function WeeklyUpdates() {
   );
 }
 
-/** Notes des pitchs (staff et IC) : radar de la derniere seance, puis chaque seance critere par critere. */
+type SessionEvaluation = ReturnType<typeof useStartup>["evaluations"][number];
+
+const one = (v: number) => roundTo(v, 1).toFixed(1);
+
+/** Une ligne critere : libelle, segments sur 5, moyenne des jures. */
+function CriterionLine({ label, value, hint }: { label: string; value: number | null; hint?: string }) {
+  return (
+    <Group justify="space-between" gap="xs" wrap="nowrap">
+      <Text size="sm" c="dimmed" truncate>
+        {label}
+        {hint && <Text span size="xs" c="dark.2">{` · ${hint}`}</Text>}
+      </Text>
+      <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
+        <RatingDots value={value} max={5} color="orange.5" />
+        <Text size="xs" className="num" w={22} ta="right">
+          {value === null ? "-" : one(value)}
+        </Text>
+      </Group>
+    </Group>
+  );
+}
+
+/** Ce que les jures ont repondu apres la grille Pitch : « Overall 3.8/5 · Go 2 · Would invest 2/3 · Bet 3.5/5 ». */
+function verdictLine(evals: readonly SessionEvaluation[]): string | null {
+  const v = pitchVerdicts(evals);
+  const parts = [
+    v.overall !== null ? `Overall ${one(v.overall)}/5` : null,
+    ...EVALUATION_DECISIONS.flatMap((d) => (v.decisions[d] ? [`${EVALUATION_DECISION_LABELS[d]} ${v.decisions[d]}`] : [])),
+    v.wouldInvest.answered ? `Would invest ${v.wouldInvest.yes}/${v.wouldInvest.answered}` : null,
+    v.betLikelihood !== null ? `Bet ${one(v.betLikelihood)}/5` : null,
+  ];
+  return parts.filter(Boolean).join(" · ") || null;
+}
+
+/** Une seance notee sur la grille Pitch (lot 5) : la note sur 100, puis chaque famille (points) et ses criteres. */
+function PitchGridSession({ evals, means, outstanding }: { evals: readonly SessionEvaluation[]; means: Record<string, number>; outstanding: boolean }) {
+  const grid = pitchGrid(means, outstanding);
+  const verdicts = verdictLine(evals);
+  return (
+    <Stack gap={6}>
+      {grid.total !== null && (
+        <Text size="sm" className="num">
+          {`Grid ${one(grid.total)}/100${grid.outstanding ? " · Outstanding" : ""} · ${evals.length} ${evals.length === 1 ? "juror" : "jurors"}`}
+        </Text>
+      )}
+      {PITCH_FAMILIES.map((family) => {
+        const info = PITCH_FAMILY_INFO[family];
+        const value = grid.families[family];
+        return (
+          <Stack key={family} gap={4} mt={4}>
+            <Group justify="space-between" gap="xs" wrap="nowrap">
+              <Text size="sm" fw={600}>
+                {info.label}
+              </Text>
+              <Text size="sm" className="num">
+                {value === null ? "-" : `${one((value / 100) * info.points)} / ${info.points}`}
+              </Text>
+            </Group>
+            {PITCH_CRITERIA_BY_FAMILY[family].map((c) => (
+              <CriterionLine key={c.key} label={pitchCriterionShortLabel(c)} hint={`${c.points} pts`} value={means[c.key] ?? null} />
+            ))}
+          </Stack>
+        );
+      })}
+      {verdicts && (
+        <Text size="sm" c="dimmed" className="num" mt={4}>
+          {verdicts}
+        </Text>
+      )}
+    </Stack>
+  );
+}
+
+/**
+ * Notes des pitchs (staff et IC) : radar de la derniere seance, puis chaque seance. Une seance notee sur la
+ * grille Pitch (lot 5) montre ses trois familles et ses neuf criteres ; une seance de Spring 2026, critere par
+ * critere sur 5, comme avant. Le radar compare les deux : les familles sur 5, sous les cles de Spring 2026.
+ */
 export function PitchEvaluations() {
   const { program } = useProgram();
   const { batch } = useBatch();
@@ -164,35 +262,34 @@ export function PitchEvaluations() {
   const { leaderboardsByEventId } = useLeaderboards();
   if (evaluations.length === 0) return null;
 
+  // Chaque seance : ses criteres notes (la grille vit dans le formulaire de jury, SPECS §2), sur 5, et la moyenne
+  // des jures sur chacun ; `isGrid` : la grille Pitch.
   const sessions = [...new Set(evaluations.map((e) => e.parentId))]
     .flatMap((eventId) => {
       const event = eventsById.get(eventId);
-      return event ? [{ event, evals: evaluations.filter((e) => e.parentId === eventId) }] : [];
+      if (!event) return [];
+      const evals = evaluations.filter((e) => e.parentId === eventId);
+      const keys = [...new Set(evals.flatMap((e) => Object.keys(e.scores)))];
+      return [{ event, evals, keys, means: juryMeansOf(evals, keys), isGrid: isPitchGrid(keys) }];
     })
     .sort((a, b) => b.event.startDateISOString.localeCompare(a.event.startDateISOString));
-  const avg = (evals: typeof evaluations, key: string) => {
-    const v = evals.map((e) => e.scores[key]).filter((x): x is number => typeof x === "number");
-    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
-  };
   const latest = sessions[0];
-  // La grille d'une seance : les criteres notes (la grille vit dans le formulaire de jury, SPECS §2), sur 5.
-  const gridOf = (evals: typeof evaluations) =>
-    [...new Set(evals.flatMap((e) => Object.keys(e.scores)))].map((key) => ({ key, label: criterionLabel(key), max: 5 }));
+  // Le radar compare a Spring 2026 : la grille Pitch par familles, sur 5, sous les anciennes cles.
+  const radarAxes = ({ keys, means, isGrid }: (typeof sessions)[number]) => {
+    if (!isGrid) return keys.map((key) => ({ label: criterionLabel(key).split(/[ /]/)[0], value: means[key] ?? null }));
+    const legacy = legacyPitchScores(means);
+    return PITCH_FAMILIES.map((f) => ({ label: PITCH_FAMILY_INFO[f].legacyLabel.split(" ")[0], value: legacy[PITCH_FAMILY_INFO[f].legacyKey] ?? null }));
+  };
 
   return (
-    <Section title="Pitches" hint="Jury scores out of 5, per criterion.">
+    <Section title="Pitches" hint="Jury scores out of 5, per criterion. Pitch grid out of 100: Team 40, Speed of execution 40, Market 20.">
       {latest && (
         <ChartCard title={`Latest · ${latest.event.name}`}>
-          <ScoreRadar
-            axes={gridOf(latest.evals).map((c) => ({ label: c.label.split(/[ /]/)[0], value: avg(latest.evals, c.key) }))}
-            max={5}
-            color="orange.5"
-            h={200}
-          />
+          <ScoreRadar axes={radarAxes(latest)} max={5} color="orange.5" h={200} />
         </ChartCard>
       )}
       <Stack gap="lg" mt="xs">
-        {sessions.map(({ event, evals }) => {
+        {sessions.map(({ event, evals, keys, means, isGrid }) => {
           // Classee a cette seance : le rang mene au classement complet.
           const board = leaderboardsByEventId.get(event.id);
           const row = board?.rows.find((r) => r.targetId === startup.id);
@@ -212,24 +309,15 @@ export function PitchEvaluations() {
                   {formatDay(event.startDateISOString.slice(0, 10), true)}
                 </Text>
               </Group>
-              <Stack gap={6}>
-                {gridOf(evals).map((c) => {
-                  const v = avg(evals, c.key);
-                  return (
-                    <Group key={c.key} justify="space-between" gap="xs" wrap="nowrap">
-                      <Text size="sm" c="dimmed" truncate>
-                        {c.label}
-                      </Text>
-                      <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
-                        <RatingDots value={v} max={c.max} color="orange.5" />
-                        <Text size="xs" className="num" w={22} ta="right">
-                          {v === null ? "-" : v.toFixed(1)}
-                        </Text>
-                      </Group>
-                    </Group>
-                  );
-                })}
-              </Stack>
+              {isGrid ? (
+                <PitchGridSession evals={evals} means={means} outstanding={row?.outstanding === true} />
+              ) : (
+                <Stack gap={6}>
+                  {keys.map((key) => (
+                    <CriterionLine key={key} label={criterionLabel(key)} value={means[key] ?? null} />
+                  ))}
+                </Stack>
+              )}
               {evals
                 .filter((e) => e.comment)
                 .map((e) => (

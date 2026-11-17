@@ -16,6 +16,8 @@ import {
   ATTENDANCE_STATUSES,
   COMMITMENT_STATUS_LABELS,
   COMMITMENT_STATUSES,
+  EVALUATION_DECISION_LABELS,
+  EVALUATION_DECISIONS,
   EXISTING_CO_FOUNDERS,
   EXISTING_CO_FOUNDERS_LABELS,
   MATCH_RESULT_LABELS,
@@ -679,6 +681,11 @@ export const DB_FIELDS = {
 
   // ---- Notes du jury (portee « chaque equipe ») : les criteres sont la famille `evaluation.scores` ----
   "evaluation.comment": field("Jury comment", text(1000, true)),
+  // Grille Pitch (lot 5, shared/pitchGrid.ts) : apres les criteres, affiches, jamais comptes.
+  "evaluation.overallScore": field("Overall", { kind: "rating", min: 0, max: 5 }),
+  "evaluation.decision": field("Decision", { kind: "enum", listKey: null, values: EVALUATION_DECISIONS, labels: EVALUATION_DECISION_LABELS }),
+  "evaluation.wouldInvest": field("Would you invest?", yesNo),
+  "evaluation.betLikelihood": field("How likely is this the one team you'd bet on?", { kind: "rating", min: 0, max: 5 }),
 } as const satisfies Partial<Record<DbFieldPath, FieldDef>>;
 
 /**

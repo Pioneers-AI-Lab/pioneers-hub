@@ -1,6 +1,7 @@
-import type { Criterion, EventKind, EventMatching, EventMetric, PitchStage } from "../types";
+import type { Criterion, EventKind, EventMatching, EventMetric, EventScoring, PitchStage } from "../types";
 import type { FormTemplateKey } from "./formTemplates";
 import { isOfferedTemplate } from "./offered";
+import { PITCH_FAMILY_INFO, PITCH_RUBRIC, PITCH_SCORING } from "../pitchGrid";
 import { teamSizeFor } from "../teamGenerator";
 import { standardEventMetric } from "./standardMetrics";
 
@@ -20,9 +21,11 @@ import { standardEventMetric } from "./standardMetrics";
 // peut aussi creer un evenement sans modele.
 //
 // UNE SEULE ECHELLE (brief du 11/11, SPECS §4.9) : pitch days, demos,
-// Selection Day, Pre-IC et IC reprennent la grille du Selection Day Spring
-// 2026, Team quality 40 / Speed of execution 40 / Market potential 20, notee
-// de 1 a 5. Le score d'une equipe se suit ainsi dans le temps.
+// Selection Day, Pre-IC et IC ont la grille Pitch (lot 5, shared/pitchGrid.ts) :
+// les familles du Selection Day Spring 2026 (Team 40 / Speed of execution 40 /
+// Market 20) detaillees en neuf criteres de 0 a 5 avec leurs points, et leur
+// bareme (Outstanding du staff a 100). Le score d'une startup se suit ainsi dans
+// le temps. Un pack de pitch cree aussi le formulaire Pitch deck de la startup.
 //
 // ECHELLES : seules celles marquees « documente » viennent de SPECS.md ; les
 // autres sont une hypothese a confirmer avec le staff avant le premier
@@ -45,6 +48,8 @@ export type EventTemplate = {
   stage: PitchStage | null;
   /** Grille par defaut du formulaire de jury. */
   criteria: Criterion[];
+  /** Bareme par defaut de l'evenement (grille Pitch : ses points, l'Outstanding a 100) ; absent : aucun. */
+  scoring?: EventScoring;
   /** Metriques par defaut du Debrief. */
   metrics: EventMetric[];
   /** Type de session 2025 correspondant (`session_events.Type`), pour l'import de l'historique. */
@@ -59,15 +64,12 @@ const m = (key: string, label: string, unit: string | null = null): EventMetric 
 const s = standardEventMetric;
 
 /**
- * Documente : la grille unique (SP26 « Selection Day evaluation », Notion
- * « Pioneers IC Criteria »). A l'import de 2025, `Quality of Team`,
- * `Execution Capacity / Traction` et `Market Potential` se rangent sous ces cles.
+ * La grille unique des pitchs (lot 5, shared/pitchGrid.ts) et son bareme. L'ancienne (SP26
+ * « Selection Day evaluation », Notion « Pioneers IC Criteria » : `teamQuality`,
+ * `speedOfExecution`, `marketPotential`, de 1 a 5) reste lue par les evenements qui la portent ;
+ * ses cles sont les familles de la nouvelle, sur 5 (`legacyPitchScores`).
  */
-export const PIONEERS_RUBRIC: Criterion[] = [
-  c("teamQuality", "Team quality", 5, 40),
-  c("speedOfExecution", "Speed of execution", 5, 40),
-  c("marketPotential", "Market potential", 5, 20),
-];
+const pitch = { kind: "pitch", criteria: PITCH_RUBRIC, scoring: PITCH_SCORING } as const;
 
 /** SP26 « Hackathon scorecard ». Documente : Depth of execution /5. Le reste : TODO echelle. */
 const HACKATHON_CRITERIA: Criterion[] = [
@@ -106,7 +108,8 @@ const tables = (max: number): EventMatching => ({ mode: "matching", size: teamSi
 /** Ce que chaque etiquette propose par defaut : le pack s'en ecarte au besoin. */
 const DEFAULTS: Record<EventKind, Pick<EventTemplate, "durationMinutes" | "startTime" | "matching" | "forms">> = {
   team_challenge: { durationMinutes: 150, startTime: "09:30", matching: teams(3), forms: ["debrief", "peer_rating", "jury"] },
-  pitch: { durationMinutes: 120, startTime: "14:00", matching: null, forms: ["jury"] },
+  // La startup envoie son Pitch deck avant (48 h avant, echeance la veille), le jury la note.
+  pitch: { durationMinutes: 120, startTime: "14:00", matching: null, forms: ["pitch_deck", "jury"] },
   matching: { durationMinutes: 60, startTime: "12:30", matching: tables(4), forms: [] },
   // Une seance n'a pas de formulaire : les seances se notent a la retro de fin de semaine (decision du 13/11, 17/11).
   session: { durationMinutes: 60, startTime: "10:00", matching: null, forms: [] },
@@ -171,26 +174,13 @@ export const EVENT_TEMPLATES = {
   // Une metrique par equipe, avant / apres : le staff la declare a la creation.
   traction_sprint: t({ label: "48-hour traction sprint", summary: "Teams of 3, submission, peer rating", kind: "team_challenge", durationMinutes: 2880 }),
 
-  // ---- pitch (grille unique) ----
-  pitch_day: t({ label: "Pitch day", summary: "Jury on the startups (40 / 40 / 20)", kind: "pitch", criteria: PIONEERS_RUBRIC }),
-  friday_pitch: t({
-    label: "Friday pitch",
-    summary: "Jury on the startups (40 / 40 / 20)",
-    kind: "pitch",
-    criteria: PIONEERS_RUBRIC,
-    legacyType2025: "Friday Pitches",
-  }),
-  demo_day: t({ label: "Demo day", summary: "Jury on the startups (40 / 40 / 20)", kind: "pitch", criteria: PIONEERS_RUBRIC }),
-  selection_day: t({
-    label: "Selection Day",
-    summary: "Jury on the startups, Go / No Go",
-    kind: "pitch",
-    stage: "selection_day",
-    criteria: PIONEERS_RUBRIC,
-    legacyType2025: "Selection Day",
-  }),
-  pre_ic: t({ label: "Pre-IC", summary: "Jury on the startups, Go / No Go", kind: "pitch", stage: "pre_ic", criteria: PIONEERS_RUBRIC, legacyType2025: "Pre-IC" }),
-  ic: t({ label: "Investment Committee", summary: "Jury on the startups, Go / No Go", kind: "pitch", stage: "ic", criteria: PIONEERS_RUBRIC }),
+  // ---- pitch (grille unique, lot 5) ----
+  pitch_day: t({ ...pitch, label: "Pitch day", summary: "Pitch deck, jury on the startups (40 / 40 / 20)" }),
+  friday_pitch: t({ ...pitch, label: "Friday pitch", summary: "Pitch deck, jury on the startups (40 / 40 / 20)", legacyType2025: "Friday Pitches" }),
+  demo_day: t({ ...pitch, label: "Demo day", summary: "Pitch deck, jury on the startups (40 / 40 / 20)" }),
+  selection_day: t({ ...pitch, label: "Selection Day", summary: "Pitch deck, jury on the startups, Go / No Go", stage: "selection_day", legacyType2025: "Selection Day" }),
+  pre_ic: t({ ...pitch, label: "Pre-IC", summary: "Pitch deck, jury on the startups, Go / No Go", stage: "pre_ic", legacyType2025: "Pre-IC" }),
+  ic: t({ ...pitch, label: "Investment Committee", summary: "Pitch deck, jury on the startups, Go / No Go", stage: "ic" }),
 
   // ---- matching ----
   lunch_roulette: t({ label: "Lunch roulette", summary: "Tables of 4, drawn so founders meet new people", kind: "matching", legacyType2025: "Diner/lunch" }),
@@ -234,12 +224,17 @@ export const templatesOfKind = (kind: EventKind): EventTemplateKey[] =>
 export const eventTemplateOf = (key: string | null): EventTemplate | null =>
   key && key in EVENT_TEMPLATES ? EVENT_TEMPLATES[key as EventTemplateKey] : null;
 
+/** Les libelles de l'ancienne grille des pitchs (Spring 2026), que plus aucun modele ne porte. */
+const LEGACY_PITCH_LABELS = new Map(Object.values(PITCH_FAMILY_INFO).map((f) => [f.legacyKey, f.legacyLabel]));
+
 /** Le libelle d'un critere connu des modeles (fiches, anciens evenements), sinon sa cle. */
 export function criterionLabel(key: string): string {
   for (const t of Object.values(EVENT_TEMPLATES) as EventTemplate[]) {
     const hit = t.criteria.find((c) => c.key === key);
     if (hit) return hit.label;
   }
+  const legacy = LEGACY_PITCH_LABELS.get(key);
+  if (legacy) return legacy;
   return key.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
 }
 

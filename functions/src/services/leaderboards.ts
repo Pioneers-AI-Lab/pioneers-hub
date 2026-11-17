@@ -16,7 +16,7 @@ import {
 } from "../shared/types";
 import { z } from "zod";
 import { FAMILY_KEY } from "../shared/fieldRegistry";
-import { compareTeamPoints, normalizeToBest, scoreTeams, scoringFrom, scoringProblems } from "../shared/scoringRules";
+import { compareTeamPoints, juryMeansOf, normalizeToBest, scoreTeams, scoringFrom, scoringProblems } from "../shared/scoringRules";
 import { writeUiAudit } from "./audit";
 import { cleanId, invalidArgument } from "./clean";
 import { loadEvent, scoredTargets } from "./events";
@@ -110,11 +110,7 @@ export async function recomputeLeaderboard(eventId: string): Promise<void> {
       const teams = entered.map((t) => {
         const s = submissionOf.get(t.id);
         const evals = evaluationsOf.get(t.id) ?? [];
-        const juryMeans: Record<string, number> = {};
-        for (const c of criteria) {
-          const m = mean(evals.flatMap((e) => (typeof e.scores[c.key] === "number" ? [e.scores[c.key]] : [])));
-          if (m !== null) juryMeans[c.key] = m;
-        }
+        const juryMeans = juryMeansOf(evals, criteria.map((c) => c.key));
         return { id: t.id, metrics: s?.metrics ?? {}, juryMeans, late: isLateUnwaived(s), zeroedItemKeys: s?.zeroedItemKeys ?? [], outstanding: s?.outstanding === true };
       });
       // `scoreTeams` garde l'ordre de ses entrees : chaque resultat retrouve son equipe par position.

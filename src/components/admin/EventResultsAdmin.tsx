@@ -6,14 +6,14 @@ import { Button, CopyButton, Group, Stack, Text } from "@mantine/core";
 import { FORM_TEMPLATES, isOfferedTemplate, type FormTemplate, type FormTemplateKey } from "@shared/presets/formTemplates";
 import { isWorkTeamEvent } from "@shared/events";
 import { formState } from "@shared/forms";
-import { activeQuestions, isLateUnwaived, isPickable, type Evaluation, type Form, type WithId } from "@shared/types";
+import { activeQuestions, EVALUATION_DECISION_LABELS, isLateUnwaived, isPickable, type Evaluation, type Form, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminEvent } from "@/context/AdminEventContext";
 import { useAction } from "@/hooks/useAction";
 import { useQueryListener } from "@/hooks/useFirestoreListener";
 import { call } from "@/lib/firebase";
 import { queries } from "@/lib/firestore/refs";
-import { formatDateTime, metricValue } from "@/lib/format";
+import { formatDateTime, metricValue, yesNoLabel } from "@/lib/format";
 import { createForm, setFormStatus } from "@/lib/formsAdmin";
 import { paths } from "@/lib/paths";
 import { mutualPairs } from "@/lib/picks";
@@ -149,6 +149,15 @@ function ResultsSection() {
   );
 }
 
+/** Les reponses d'un jure apres la grille Pitch (lot 5) : Overall, Decision, Would you invest?, How likely. */
+const pitchVerdictRows = (e: Evaluation): { title: string; meta: string }[] =>
+  [
+    e.overallScore != null ? { title: "Overall", meta: `${e.overallScore} / 5` } : null,
+    e.decision ? { title: "Decision", meta: EVALUATION_DECISION_LABELS[e.decision] } : null,
+    e.wouldInvest != null ? { title: "Would you invest?", meta: yesNoLabel(e.wouldInvest)! } : null,
+    e.betLikelihood != null ? { title: "Bet likelihood", meta: `${e.betLikelihood} / 5` } : null,
+  ].filter((r): r is { title: string; meta: string } => r !== null);
+
 /**
  * Le jury : son formulaire (grille), un lien partage (sans compte), les notes
  * recues, le verrou (fermer le formulaire). Une feuille papier se saisit en
@@ -156,6 +165,7 @@ function ResultsSection() {
  */
 function JurySection({ juryForm }: { juryForm: WithId<Form> }) {
   const { event, teams, juryLink, evaluations, criteria } = useAdminEvent();
+  const { startups } = useAdmin();
   const { isBusy, run } = useAction();
   const [isResetting, setResetting] = useState(false);
   const [selected, setSelected] = useState<WithId<Evaluation> | null>(null);
@@ -164,9 +174,11 @@ function JurySection({ juryForm }: { juryForm: WithId<Form> }) {
   const juryState = formState(juryForm, new Date().toISOString());
   const isOpen = juryState === "open";
   const url = juryLink ? `${window.location.origin}${paths.juryForm(juryForm.id, juryLink.secret)}` : null;
-  const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  // Les equipes du matching, ou les startups d'un pitch.
+  const teamName = new Map([...startups, ...teams].map((t) => [t.id, t.name]));
   const targetLabel = (id: string) => teamName.get(id) ?? id;
   const judgesCount = new Set(evaluations.map((e) => e.evaluatorId)).size;
+  const selectedVerdicts = selected ? pitchVerdictRows(selected) : [];
 
   const resetLink = async () => {
     if (await run(() => call("resetJuryLink")({ eventId: event.id }), juryLink ? "New link ready" : "Link ready")) setResetting(false);
@@ -268,6 +280,13 @@ function JurySection({ juryForm }: { juryForm: WithId<Form> }) {
                 <Row key={c.key} title={c.label} meta={selected.scores[c.key] === undefined ? "-" : `${selected.scores[c.key]} / ${c.max}`} />
               ))}
             </RowList>
+            {selectedVerdicts.length > 0 && (
+              <RowList>
+                {selectedVerdicts.map((r) => (
+                  <Row key={r.title} title={r.title} meta={r.meta} />
+                ))}
+              </RowList>
+            )}
             {selected.comment && <Text size="sm">{selected.comment}</Text>}
             <Text size="xs" c="dimmed">
               Last saved {formatDateTime(selected.updatedDateISOString)}

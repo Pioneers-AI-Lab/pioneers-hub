@@ -72,6 +72,8 @@ export type JurySubmission = {
  * (« 5 = la meilleure equipe »).
  */
 export type JuryBrief = {
+  /** Ce que la cible a rendu : la Submission d'une equipe, ou le Pitch deck d'une startup (lot 5). Absent des anciens clients : `submission`. */
+  source?: "submission" | "pitch_deck";
   /** Les metriques de l'evenement declarees par au moins une de ces equipes. */
   metrics: EventMetric[];
   /** Par id de cible ; absente : pas encore de Submission. */

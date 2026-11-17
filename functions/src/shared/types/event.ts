@@ -442,8 +442,10 @@ export const emptySubmission = (teamId: string): Submission => ({
  */
 export type EvaluatorKind = "judge" | "staff" | "investor" | "guest" | "mentor" | "founder";
 
-/** @source 2025 « Startup Evaluation » « Go / No Go / Maybe » */
-export type EvaluationDecision = "go" | "no_go" | "maybe";
+/** @source 2025 « Startup Evaluation » « Go / No Go / Maybe » ; question Decision de la grille Pitch (Selection Day, Pre-IC, IC). */
+export const EVALUATION_DECISIONS = ["go", "no_go", "maybe"] as const;
+export type EvaluationDecision = (typeof EVALUATION_DECISIONS)[number];
+export const EVALUATION_DECISION_LABELS: Record<EvaluationDecision, string> = { go: "Go", no_go: "No Go", maybe: "Maybe" };
 
 /** @source 2025 « Startup Evaluation » « Final Decision » (Go, No Go) */
 export type FinalDecision = "go" | "no_go";
@@ -463,19 +465,22 @@ export type Evaluation = {
   targetId: string;
   /** Critere -> note, sur l'echelle de la question du formulaire de jury (`evaluation.scores.<critere>`). */
   scores: Record<string, number>;
-  /** @source 2025 « Overall Score » (grille IC) : note globale saisie, distincte de la moyenne ponderee. */
+  /**
+   * @source 2025 « Overall Score » (grille IC) : note globale saisie, distincte de la moyenne ponderee.
+   * Grille Pitch (lot 5) : « Overall », de 0 a 5, demandee apres les criteres (`evaluation.overallScore`).
+   */
   overallScore: number | null;
   /** @source SP26 « Internal pitch feedback » : « Would you invest? » */
   wouldInvest: boolean | null;
   /**
    * @source SP26 « Internal pitch feedback » : « How likely is this the one team
-   * you'd bet on? ». Echelle a confirmer (0-10 par defaut).
+   * you'd bet on? ». Grille Pitch (lot 5) : de 0 a 5, avant l'IC.
    */
   betLikelihood: number | null;
   /** @source SP26 mentorat : « wants to continue » (dans les deux sens). */
   wantsToContinue: boolean | null;
   comment: string | null;
-  /** Recommandation de l'evaluateur (Selection Day, Pre-IC, IC). */
+  /** Recommandation de l'evaluateur (Selection Day, Pre-IC, IC : question Decision de la grille Pitch). */
   decision: EvaluationDecision | null;
   /** Decision finale, saisie une fois par startup et par etape (par le staff). */
   finalDecision: FinalDecision | null;

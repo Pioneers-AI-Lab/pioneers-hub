@@ -1579,5 +1579,80 @@ console.log("weekly updates (founder, startup) and their review queue");
 }
 // ==== LOT 4 (fin) =================================================================
 
+// ==== LOT 5 (debut) : Pitch deck et grille Pitch ======================================
+// Le pack d'un pitch (shared/presets/eventTemplates.ts) : le Pitch deck de la startup (depuis son compte,
+// « fait » pour toute la startup, ecrit dans sa fiche) et le jury sur la grille Pitch (neuf criteres, puis
+// les questions d'apres la grille), par le lien partage ; le jure lit le Pitch deck de la startup.
+console.log("pitch deck and pitch grid (lot 5)");
+{
+  const adb = getAdminFirestore();
+  const req = createRequire(import.meta.url);
+  const { newEvent } = req("../functions/lib/shared/events.js");
+  const { eventFormDocs, eventFormsPlan } = req("../functions/lib/shared/eventForms.js");
+  const { PITCH_CRITERIA } = req("../functions/lib/shared/pitchGrid.js");
+  const must = (cond, what) => {
+    if (!cond) throw new Error(what);
+  };
+  const nowISO = new Date().toISOString();
+  // Un pitch dans 30 h : le Pitch deck est ouvert (48 h avant), son echeance tombe dans 6 h ; le jury ouvre tout de suite.
+  const EVENT = "check-pitch-day";
+  const start = new Date(Date.now() + 30 * 3600_000).toISOString();
+  const event = newEvent(
+    { programId: "accelerator", batchId: "fall-2026", templateKey: "pitch_day", name: "Pitch Day #1", startDateISOString: start, status: "scheduled" },
+    { startupIds: ["lumen"] },
+  );
+  await adb.doc(`events/${EVENT}`).set({ ...event, createdDateISOString: nowISO, updatedDateISOString: nowISO });
+  for (const p of eventFormsPlan(EVENT, event, { formDates: { jury: { opensDateISOString: nowISO } } }, nowISO)) {
+    for (const d of eventFormDocs(p, nowISO)) await adb.doc(d.path).set(d.data);
+  }
+  const DECK = `${EVENT}-pitch_deck`;
+  const JURY = `${EVENT}-jury`;
+
+  const ada = await clientAs("ada-1");
+  await expectOk("a founder sends the pitch deck: it lands in the startup's card and profile, done for every member", async () => {
+    await submitForm(ada.functions, DECK, {
+      pitchDeck: "deck.example/lumen",
+      oneLiner: "Night-shift scheduling for nurses",
+      problem: "Rosters are built by hand",
+      icp: "Hospital nurse managers",
+      solution: "An agent that builds the roster",
+      whyNow: "Staff shortages",
+    });
+    const startup = (await adb.doc("startups/lumen").get()).data();
+    const profile = (await adb.doc("startups/lumen/private/profile").get()).data();
+    must(startup?.ideaOneLine === "Night-shift scheduling for nurses", JSON.stringify(startup?.ideaOneLine));
+    must(profile?.pitchDeckUrl === "https://deck.example/lumen" && profile.icp === "Hospital nurse managers" && profile.whyNow === "Staff shortages", JSON.stringify(profile));
+    const ben = (await adb.doc(`formCompletions/${DECK}_ben-sample`).get()).data();
+    must(ben?.founderId === "ben-sample", "no completion for her co-founder");
+  });
+  await deleteApp(ada.app);
+
+  const staff = await clientAs("staff-1");
+  await httpsCallable(staff.functions, "resetJuryLink")({ eventId: EVENT });
+  const key = (await getDoc(doc(staff.db, `events/${EVENT}/judges/link`))).data()?.secret;
+  await deleteApp(staff.app);
+  const pub = await clientAs(null);
+  const PAT = { name: "Pat Pitchjuror" };
+  await expectOk("the juror reads the startup's pitch deck before scoring", async () => {
+    const brief = (await publicForm(pub.functions, JURY, { key, respondent: PAT })).juryBrief;
+    must(brief?.source === "pitch_deck" && brief.submissions.lumen?.answers.some((a) => a.urls.join() === "https://deck.example/lumen"), JSON.stringify(brief));
+  });
+  await expectOk("a juror scores the nine criteria, then the questions after the grid", async () => {
+    const criteria = Object.fromEntries(PITCH_CRITERIA.map((c) => [`criterion_${c.key}@lumen`, 5]));
+    await submitForm(pub.functions, JURY, { ...criteria, "overall@lumen": 4, "wouldInvest@lumen": "Yes", "betLikelihood@lumen": 3, "comment@lumen": "Strong." }, { key, respondent: PAT });
+    const e = (await adb.collection(`events/${EVENT}/evaluations`).get()).docs[0]?.data();
+    must(e?.targetType === "startup" && e.scores.teamStrength === 5 && e.overallScore === 4 && e.wouldInvest === true && e.betLikelihood === 3, JSON.stringify(e));
+  });
+  await expectCallableError("Overall above 5", "invalid-argument", () => submitForm(pub.functions, JURY, { "overall@lumen": 6 }, { key, respondent: PAT }));
+  await expectOk("the pitch leaderboard is on 100 and offers the Outstanding mention at 100", () =>
+    waitFor(async () => {
+      const row = (await adb.doc(`leaderboards/${EVENT}`).get()).data()?.rows?.[0];
+      must(row?.targetId === "lumen" && row.normalized === 100 && row.outstandingEligible === true, JSON.stringify(row));
+    }),
+  );
+  await deleteApp(pub.app);
+}
+// ==== LOT 5 (fin) =================================================================
+
 console.log(failures === 0 ? "\nall rules checks passed" : `\n${failures} rules check(s) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

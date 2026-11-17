@@ -8,6 +8,7 @@ import {
   templateQuestions,
   type FormTemplate,
   type FormTemplateKey,
+  type FormTiming,
   type RetroSession,
   type SubmissionFieldKey,
 } from "./presets/formTemplates";
@@ -64,7 +65,8 @@ export type EventFormPlan = { id: string; templateKey: FormTemplateKey; form: Fo
 type EventForPlan = Pick<
   PioneersEvent,
   "programId" | "batchId" | "kind" | "templateKey" | "startDateISOString" | "endDateISOString" | "status" | "matching" | "teamSize"
->;
+> &
+  Partial<Pick<PioneersEvent, "stage">>;
 
 const shiftMs = (iso: string, ms: number) => new Date(Date.parse(iso) + ms).toISOString();
 const msBetween = (from: string, to: string) => Date.parse(to) - Date.parse(from);
@@ -80,6 +82,22 @@ const beforeEndOf = (e: EventTimes) => {
   return at < e.startDateISOString ? e.startDateISOString : at;
 };
 
+/** `hours` avant le debut. */
+const beforeStartOf = (e: EventTimes, hours: number) => endAfter(e.startDateISOString, -hours * 60);
+
+/** Chaque reglage de `FormTiming`, en date (le Pitch deck : 48 h avant le pitch, echeance la veille). */
+const OPENS: Record<FormTiming["opens"], (e: EventTimes) => string> = {
+  start: (e) => e.startDateISOString,
+  before_end: beforeEndOf,
+  two_days_before: (e) => beforeStartOf(e, 48),
+};
+const DEADLINES: Record<FormTiming["deadline"], (e: EventTimes, opens: string) => string | null> = {
+  before_end: beforeEndOf,
+  day_after_opening: (_e, opens) => endAfter(opens, 24 * 60),
+  day_before: (e) => beforeStartOf(e, 24),
+  none: () => null,
+};
+
 /**
  * L'ouverture et l'echeance d'un formulaire dans son evenement, selon son modele
  * (`FormTiming` ; `DEFAULT_FORM_TIMING` sans modele), sauf dates donnees. A la
@@ -87,15 +105,9 @@ const beforeEndOf = (e: EventTimes) => {
  */
 export function eventFormDates(templateKey: FormTemplateKey | null, event: EventTimes, given: EventFormDates = {}) {
   const timing = (templateKey ? (FORM_TEMPLATES[templateKey] as FormTemplate).timing : null) ?? DEFAULT_FORM_TIMING;
-  const opens = given.opensDateISOString ?? (timing.opens === "start" ? event.startDateISOString : beforeEndOf(event));
-  const deadline =
-    given.deadlineDateISOString !== undefined
-      ? given.deadlineDateISOString
-      : timing.deadline === "before_end"
-        ? beforeEndOf(event)
-        : timing.deadline === "day_after_opening"
-          ? endAfter(opens, 24 * 60)
-          : null;
+  const opens = given.opensDateISOString ?? OPENS[timing.opens](event);
+  // Une echeance donnee, meme `null` (sans echeance), passe avant celle du modele.
+  const deadline = given.deadlineDateISOString !== undefined ? given.deadlineDateISOString : DEADLINES[timing.deadline](event, opens);
   return { opensDateISOString: opens, deadlineDateISOString: deadline };
 }
 

@@ -3,7 +3,7 @@ import { eventFormDocs, eventFormsPlan, formsClosedByArchive, formsReopenedByRes
 import { isFromCalendar, withoutCalendarFields } from "@shared/calendarSync";
 import { matchingOf, type EventData } from "@shared/events";
 import { EVENT_TEMPLATES, type EventTemplateKey } from "@shared/presets/eventTemplates";
-import type { Form, PioneersEvent, WithId } from "@shared/types";
+import { scoringOf, type Form, type PioneersEvent, type WithId } from "@shared/types";
 import { db } from "@/lib/firebase";
 import { refs } from "@/lib/firestore/refs";
 import { patchDoc } from "@/lib/firestore/write";
@@ -37,13 +37,15 @@ export async function createEventPack(data: EventData): Promise<string> {
 /**
  * Ce qu'apporte un template a un evenement existant (venu de l'agenda Google,
  * SPECS §2, 16/11) : son etiquette, son matching s'il n'en a pas (et qu'aucun
- * groupe n'est tire), et les formulaires du pack qu'il n'a pas encore, publies
+ * groupe n'est tire), son bareme s'il n'en a pas, et les formulaires du pack qu'il n'a pas encore, publies
  * comme a la creation (shared/eventForms.ts). `applyEventTemplate` l'ecrit.
  */
 export function templatePlan(event: WithId<PioneersEvent>, templateKey: EventTemplateKey, eventForms: readonly WithId<Form>[], hasTeams: boolean) {
   const t = EVENT_TEMPLATES[templateKey];
   const patch: Partial<PioneersEvent> = { templateKey, kind: t.kind, stage: t.stage };
   if (!matchingOf(event) && !hasTeams && t.matching) patch.matching = t.matching;
+  // Le bareme du modele (grille Pitch) s'il n'en a pas.
+  if (!scoringOf(event) && t.scoring) patch.scoring = t.scoring;
   const now = new Date().toISOString();
   const kinds = new Set(eventForms.filter((f) => f.archivedDateISOString === null).map((f) => f.kind));
   const ids = new Set(eventForms.map((f) => f.id));

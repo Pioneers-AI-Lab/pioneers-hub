@@ -1,7 +1,7 @@
 import { docPaths } from "./collections";
 import { mergeWrite, RuleError, type DocWrite } from "./docWrites";
-import { OUTSTANDING_BONUS_POINTS, reachesMax, withOutstanding } from "./scoringRules";
-import { roundTo, weightedMean, type FounderBackground, type FounderBackgroundProposal } from "./types";
+import { OUTSTANDING_BONUS_POINTS, pointsOn100, reachesMax, withOutstanding } from "./scoringRules";
+import type { FounderBackground, FounderBackgroundProposal } from "./types";
 
 // ----------------------------
 // La grille Background (lot 2, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.13)
@@ -44,22 +44,14 @@ export type BackgroundScores = Record<BackgroundCriterion, number>;
 
 /** Une note de critere renseignee (un nombre). */
 export const isNote = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-const clampNote = (v: number) => Math.min(BACKGROUND_MAX_NOTE, Math.max(0, v));
 
 /**
  * La note sur 100, avant l'Outstanding : chaque critere rapporte note ÷ 5 × ses points.
  * Un critere absent est retire et les autres se partagent son poids (« sans note,
  * pas de poids ») ; `null` si aucun critere n'est note.
  */
-export function backgroundBase(scores: Partial<Record<BackgroundCriterion, number | null>>): number | null {
-  const mean = weightedMean(
-    BACKGROUND_CRITERIA.map((c) => {
-      const note = scores[c.key];
-      return [isNote(note) ? (clampNote(note) / BACKGROUND_MAX_NOTE) * BACKGROUND_MAX : null, c.points] as const;
-    }),
-  );
-  return mean === null ? null : roundTo(mean, 2);
-}
+export const backgroundBase = (scores: Partial<Record<BackgroundCriterion, number | null>>): number | null =>
+  pointsOn100(BACKGROUND_CRITERIA, scores, BACKGROUND_MAX_NOTE);
 
 /** L'Outstanding mention se donne seulement a une note de 100 (tous les criteres notes a 5). */
 export const canBeOutstanding = (scores: Partial<Record<BackgroundCriterion, number | null>>): boolean => {

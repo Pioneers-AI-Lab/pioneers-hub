@@ -81,6 +81,13 @@ apres leur echeance `batch.settings.scoreMilestoneDueDates` (shortlistDone, met,
 Weekly update startup de la semaine, publies, echeance 24 h, pour chaque batch avec `settings.weeklyForms`
 (`{ enabled, startDayString }`) ; ids deterministes. Callables : `call()` (lib/firebase.ts) retire les cles `undefined`
 (le SDK les enverrait en `null`, qu'un schema zod `.optional()` refuse).
+Grille Pitch (lot 5, `shared/pitchGrid.ts`) : neuf criteres de 0 a 5 (`evaluation.scores.<cle>`, points 25/15 | 20/20 | 6/5/4/3/2)
+en trois familles Team 40 / Speed of execution 40 / Market 20 (anciennes cles SP26 sur 5 : `legacyPitchScores`), puis
+`evaluation.overallScore`, `decision` (etapes), `wouldInvest` et `betLikelihood` (avant l'IC). Les modeles de pitch
+(`pitch_day`... `ic`) creent le Pitch deck (`pitch_deck`, startup, 48 h avant -> la veille) et le jury, et posent le bareme
+`PITCH_SCORING` (Outstanding du staff a 100 sur la Submission de la startup, comme un hackathon ; pas dans l'Execution).
+Score startup : familles des pitchs passes (moyenne des jures par critere, puis des pitchs), publies ou non ; Clear idea -> Commitment.
+Un pitch venu de l'agenda : Admin > Events > l'evenement, template « Pitch day » (formulaires + bareme) et ses startups (`startupIds` = cibles du jury).
 Un seul `next dev` par dossier (Next 16) : arreter `dev:emu` avant `dev`, et inversement. Pour
 verifier un build a cote d'un `next dev` : `NEXT_DIST_DIR=.next-emu next build` puis
 `NEXT_DIST_DIR=.next-emu next start` (Next ajoute alors `.next-emu` au tsconfig : ne pas le commiter).

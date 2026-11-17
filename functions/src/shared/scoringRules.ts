@@ -1,6 +1,9 @@
 import {
+  mean,
   roundTo,
+  weightedMean,
   type Criterion,
+  type Evaluation,
   type EventMetric,
   type EventScoring,
   type Leaderboard,
@@ -63,6 +66,35 @@ export const reachesMax = (value: number, max: number): boolean => max > 0 && va
  */
 export const withOutstanding = (value: number, max: number, mention: boolean): number =>
   mention && reachesMax(value, max) ? roundTo(value + max * OUTSTANDING_BONUS_RATIO, 2) : value;
+
+/**
+ * Une grille a points sur 100 : chaque critere rapporte note ÷ `maxNote` × ses points. Un critere
+ * non note est retire et les autres se partagent son poids (« sans note, pas de poids ») ; `null`
+ * sans aucune note. LA formule des grilles Background (shared/background.ts) et Pitch (shared/pitchGrid.ts).
+ */
+export function pointsOn100(
+  criteria: readonly { key: string; points: number }[],
+  notes: Readonly<Partial<Record<string, number | null>>>,
+  maxNote = 5,
+): number | null {
+  const m = weightedMean(
+    criteria.map((c) => {
+      const v = notes[c.key];
+      return [typeof v === "number" && Number.isFinite(v) ? (Math.min(maxNote, Math.max(0, v)) / maxNote) * 100 : null, c.points] as const;
+    }),
+  );
+  return m === null ? null : roundTo(m, 2);
+}
+
+/** La moyenne des jures, critere par critere (un critere que personne n'a note est absent). Leaderboard, grille Pitch. */
+export function juryMeansOf(evaluations: readonly Pick<Evaluation, "scores">[], keys: readonly string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const key of keys) {
+    const m = mean(evaluations.flatMap((e) => (typeof e.scores?.[key] === "number" ? [e.scores[key]] : [])));
+    if (m !== null) out[key] = m;
+  }
+  return out;
+}
 
 /** Ramene a la meilleure equipe = 100 (0 si personne n'a de points). */
 export const normalizeToBest = (value: number, top: number): number => (top > 0 ? roundTo((value / top) * 100, 2) : 0);

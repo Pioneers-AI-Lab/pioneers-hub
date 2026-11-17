@@ -1,5 +1,6 @@
 import { isAttendanceOptional } from "./attendance";
 import { BACKGROUND_CRITERIA, ratedBackgroundScore } from "./background";
+import { pitchMeans, PITCH_FAMILY_INFO, type PitchFamily, type PitchInput } from "./pitchGrid";
 import { normalizeToBest } from "./scoringRules";
 import {
   EXISTING_CO_FOUNDERS_LABELS,
@@ -34,13 +35,16 @@ import {
 //                l'evenement : H5 x4), peer ratings recus ((note - 1) x 25), milestones dues : 1/3 chacun
 //   Likability   fondateurs distincts qui l'ont shortliste (historique) ou lui ont donne 4 ou 5,
 //                rapportes au meilleur du batch (= 100)
-//   Commitment   Clear idea (grille Pitch, lot 5) 50 %, projet existant 25 %, cofondateurs existants 25 %
+//   Commitment   Clear idea de sa startup (critere de la grille Pitch, sur 100) 50 %, projet existant 25 %,
+//                cofondateurs existants 25 %
 //   Background   la grille Background du staff (lot 2)
 // Score startup (`startupScore` : Team 40, Execution 20, Traction 20, Market 20) :
-//   Team         Background moyen de ses fondateurs 50 %, famille Team de ses pitchs 50 % (lot 5)
+//   Team         Background moyen de ses fondateurs 50 %, famille Team de ses pitchs 50 %
 //   Execution    moyenne de l'Execution de ses fondateurs
-//   Traction     grille Weekly startup 50 % (lot 4), famille Speed of execution des pitchs 50 % (lot 5)
-//   Market       famille Market des pitchs (lot 5)
+//   Traction     grille Weekly startup 50 % (lot 4), famille Speed of execution de ses pitchs 50 %
+//   Market       famille Market de ses pitchs
+// Une famille de ses pitchs (lot 5, shared/pitchGrid.ts) : sur 100 d'apres les points de ses criteres
+// (120 avec l'Outstanding), moyenne des jures critere par critere a chaque pitch, puis moyenne des pitchs.
 
 const sig = (label: string, raw: string, score: number, weight: number): ScoreSignal => ({
   label,
@@ -241,7 +245,7 @@ export type FounderScoreInputs = {
   /** Fondateurs distincts qui l'ont shortliste un jour ou lui ont donne 4 ou 5, et le maximum du batch. */
   supporters: number;
   batchMaxSupporters: number;
-  /** Clear idea de sa startup, sur 100 (grille Pitch, lot 5) : `null` sans note. */
+  /** Clear idea de sa startup, sur 100 (grille Pitch : `pitchMeans`) : `null` sans note. */
   clearIdea: number | null;
   hasExistingProject: boolean | null;
   hasExistingCoFounders: ExistingCoFounders | null;
@@ -301,7 +305,7 @@ export function computeFounderScore(i: FounderScoreInputs): ComputedScore<Founde
   }
 
   const commitment: ScoreSignal[] = [];
-  if (i.clearIdea !== null) commitment.push(sig("Clear idea", `${num(i.clearIdea)} (pitch)`, i.clearIdea, 50));
+  if (i.clearIdea !== null) commitment.push(sig("Clear idea", `${num(i.clearIdea)} (startup's pitches)`, i.clearIdea, 50));
   if (i.hasExistingProject !== null) commitment.push(yesNo("Existing project", i.hasExistingProject, 25));
   if (i.hasExistingCoFounders !== null) {
     commitment.push(sig("Existing co-founders", EXISTING_CO_FOUNDERS_LABELS[i.hasExistingCoFounders], CO_FOUNDER_SCORES[i.hasExistingCoFounders], 25));
@@ -328,23 +332,29 @@ export function computeFounderScore(i: FounderScoreInputs): ComputedScore<Founde
 export type StartupScoreInputs = {
   /** Note Background de chacun de ses fondateurs notes. */
   founderBackgrounds: number[];
-  /** Famille Team de ses pitchs (lot 5). */
-  pitchTeam: number | null;
   /** Execution (sous-score) de chacun de ses fondateurs qui en a une. */
   founderExecutions: number[];
   /** La moyenne des notes de ses Weekly updates, sur 100 (120 avec l'Outstanding) : `weeklyReviews.ts#weeklyTractionOf`. */
   weeklyTraction: number | null;
-  /** Famille Speed of execution de ses pitchs (lot 5). */
-  pitchSpeed: number | null;
-  /** Famille Market de ses pitchs (lot 5). */
-  pitchMarket: number | null;
+  /** Ses pitchs notes (grille Pitch), dans l'ordre : les familles Team, Speed of execution et Market. */
+  pitches: readonly PitchInput[];
 };
+
+/** Le signal d'une famille de ses pitchs : la moyenne des pitchs (`means`), et la note de chacun. */
+function pitchSignal(pitches: readonly PitchInput[], means: ReturnType<typeof pitchMeans>, family: PitchFamily, weight: number): ScoreSignal[] {
+  const value = means[family];
+  if (value === null) return [];
+  const rated = pitches.filter((p) => p.grid.families[family] !== null);
+  const raw = rated.map((p) => `${p.name} ${num(p.grid.families[family]!)}`).join(" · ");
+  return [sig(`Pitches (${rated.length}): ${PITCH_FAMILY_INFO[family].label}`, raw, value, weight)];
+}
 
 export function computeStartupScore(i: StartupScoreInputs): ComputedScore<StartupSubScore> {
   const team: ScoreSignal[] = [];
   const bg = mean(i.founderBackgrounds);
   if (bg !== null) team.push(sig(`Founders' Background (${i.founderBackgrounds.length})`, i.founderBackgrounds.map(num).join(" · "), bg, 50));
-  if (i.pitchTeam !== null) team.push(sig("Pitch: Team", num(i.pitchTeam), i.pitchTeam, 50));
+  const pitch = pitchMeans(i.pitches);
+  team.push(...pitchSignal(i.pitches, pitch, "team", 50));
 
   const execution: ScoreSignal[] = [];
   const exec = mean(i.founderExecutions);
@@ -352,10 +362,9 @@ export function computeStartupScore(i: StartupScoreInputs): ComputedScore<Startu
 
   const traction: ScoreSignal[] = [];
   if (i.weeklyTraction !== null) traction.push(sig("Weekly updates", num(i.weeklyTraction), i.weeklyTraction, 50));
-  if (i.pitchSpeed !== null) traction.push(sig("Pitch: Speed of execution", num(i.pitchSpeed), i.pitchSpeed, 50));
+  traction.push(...pitchSignal(i.pitches, pitch, "speed", 50));
 
-  const market: ScoreSignal[] = [];
-  if (i.pitchMarket !== null) market.push(sig("Pitch: Market", num(i.pitchMarket), i.pitchMarket, 100));
+  const market = pitchSignal(i.pitches, pitch, "market", 100);
 
   return finish<StartupSubScore>({ market, team, execution, traction });
 }
