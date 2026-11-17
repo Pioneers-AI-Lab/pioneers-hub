@@ -1,5 +1,5 @@
 import { docPaths } from "../collections";
-import { mergeWrite, setWrite, type DocWrite } from "../docWrites";
+import { mergeWrite, RuleError, setWrite, type DocWrite } from "../docWrites";
 import { emptySubmission, submissionStamp, type Submission } from "../types";
 
 // ----------------------------
@@ -16,8 +16,8 @@ export type TeamResultsPatch = Partial<Pick<Submission, "metrics" | "productUrl"
 /** La Submission corrigee par le staff : ses valeurs, marquee `staff` (le retard d'origine reste). */
 export function teamResultsWrite(eventId: string, teamId: string, current: (Submission & { id?: string }) | null, patch: TeamResultsPatch, staffUid: string, now: string): DocWrite {
   // L'id vit dans le chemin, jamais dans le document.
-  const { id: _id, ...saved } = current ?? {};
-  void _id;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { id, ...saved } = current ?? {};
   const submission: Submission = { ...emptySubmission(teamId), ...saved, ...patch, teamId, ...submissionStamp(staffUid, "staff", now) };
   return setWrite(docPaths.submission(eventId, teamId), submission);
 }
@@ -34,5 +34,8 @@ export const lateWaivedWrite = (eventId: string, teamId: string, lateWaived: boo
  * sur la soumission, comme l'exception de retard ; une equipe notee par le jury
  * sans avoir rien envoye recoit une soumission vide (ni heure d'envoi, ni metrique).
  */
-export const outstandingWrite = (eventId: string, teamId: string, outstanding: boolean, hasSubmission: boolean): DocWrite =>
-  hasSubmission ? mergeWrite(docPaths.submission(eventId, teamId), { outstanding }) : setWrite(docPaths.submission(eventId, teamId), { ...emptySubmission(teamId), outstanding });
+export function outstandingWrite(eventId: string, teamId: string, outstanding: boolean, team: { hasSubmission: boolean; eligible: boolean }): DocWrite {
+  if (outstanding && !team.eligible) throw new RuleError("not_eligible", "The Outstanding mention goes only to a team with the grid's maximum.", "teamId");
+  const path = docPaths.submission(eventId, teamId);
+  return team.hasSubmission ? mergeWrite(path, { outstanding }) : setWrite(path, { ...emptySubmission(teamId), outstanding });
+}

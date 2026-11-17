@@ -138,3 +138,10 @@ export const eventTemplateWrites = (eventId: string, plan: EventTemplatePlan, no
   mergeWrite(docPaths.event(eventId), { ...plan.patch, updatedDateISOString: now }),
   ...plan.forms.flatMap((p) => eventFormWrites(p, now)),
 ];
+
+/**
+ * Presence optionnelle (Admin > Events > Attendance) : relevee, mais ni elle ni les
+ * formulaires de l'evenement ne comptent dans Engagement (shared/attendance.ts#isAttendanceOptional).
+ */
+export const attendanceOptionalWrite = (eventId: string, optional: boolean, now: string): DocWrite =>
+  mergeWrite(docPaths.event(eventId), { attendanceOptional: optional, updatedDateISOString: now });

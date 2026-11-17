@@ -3,7 +3,8 @@ import { z } from "zod";
 import { BACKGROUND_CRITERIA, BACKGROUND_MAX_NOTE, backgroundRatingWrite, type BackgroundScores } from "../../shared/background";
 import { COL, docPaths } from "../../shared/collections";
 import { parisToday } from "../../shared/dates";
-import { mergeWrite, RuleError } from "../../shared/docWrites";
+import { attendanceOptionalWrite } from "../../shared/admin/events";
+import { RuleError } from "../../shared/docWrites";
 import { normalizeDraft, startupCreationWrites, STARTUP_MAX_MEMBERS } from "../../shared/teamLocks";
 import { founderReviewWrite, STARTUP_REVIEW_CRITERIA, startupReviewWrite, WEEKLY_REVIEW_MAX_NOTE } from "../../shared/weeklyReviews";
 import type { Batch, Founder, PioneersEvent, Startup } from "../../shared/types";
@@ -164,7 +165,7 @@ export const setAttendanceOptional: Operation<typeof SetAttendanceOptionalInput>
     const event = await mustRead<PioneersEvent>(tx, docPaths.event(eventId), "event", "eventId");
     return writePlan(
       { event: event.name, attendanceOptional: optional },
-      [mergeWrite(docPaths.event(eventId), { attendanceOptional: optional, updatedDateISOString: new Date().toISOString() })],
+      [attendanceOptionalWrite(eventId, optional, new Date().toISOString())],
       { eventId },
       (event.attendanceOptional === true) !== optional,
     );

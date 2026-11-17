@@ -13,7 +13,6 @@ import {
   buildLeaderCounts,
   buildPairHistory,
   buildPairPreferences,
-  groupNumber,
   leaderIdOf,
   publishedDateOf,
   pairKey,
@@ -22,15 +21,27 @@ import {
 } from "@shared/teamGenerator";
 import { matchingOf } from "@shared/events";
 import { sameIds } from "@shared/kpis";
-import { readConnections, type DrawConstraints, type EventTeam, type Founder, type WithId } from "@shared/types";
+import { isPickable, readConnections, type Founder, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminEvent } from "@/context/AdminEventContext";
 import { useDocsListener } from "@/hooks/useFirestoreListener";
 import { refs } from "@/lib/firestore/refs";
 import { PROFILE_CATEGORY_LABEL, formatDateTime } from "@/lib/format";
 import { paths } from "@/lib/paths";
-import { drawGroups, toDrafts, withoutMembers, withStartupTeams, type DrawInput } from "@shared/admin/teams";
-import { publishTeams, refreshPublicNames, saveDraftTeams, teamIdFor, updatePublishedTeams, type DraftTeam } from "@/lib/teamsAdmin";
+import {
+  constraintsOf,
+  drawGroups,
+  nextTeamNumber,
+  savedPairs,
+  teamIdFor,
+  teamIdsWithResults,
+  toDrafts,
+  withoutMembers,
+  withStartupTeams,
+  type DraftTeam,
+  type DrawInput,
+} from "@shared/admin/teams";
+import { publishTeams, refreshPublicNames, saveDraftTeams, updatePublishedTeams } from "@/lib/teamsAdmin";
 import { TEAM_TOOLS, type TeamToolMode } from "@/components/admin/teamModes";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageLoader } from "@/components/ui/PageLoader";
@@ -60,12 +71,6 @@ import { Empty, Section } from "@/components/ui/Section";
 
 
 type Pair = [string, string];
-
-/** Les paires enregistrees avec le brouillon (les memes sur chaque equipe). */
-const savedPairs = (teams: WithId<EventTeam>[], key: keyof DrawConstraints): Pair[] =>
-  (teams[0]?.drawConstraints?.[key] ?? []).map((k) => k.split("|") as Pair);
-
-const pairKeys = (pairs: Pair[]) => pairs.map(([a, b]) => pairKey(a, b));
 
 /** « Alice Martin (leader) » : le nom, marque s'il mene le groupe. */
 const withLeaderMark = (name: string, isLeader: boolean) => (isLeader ? `${name} (leader)` : name);
@@ -167,7 +172,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
   const { event, teams, absentIds, matching, isDrawPublished: isPublished, submissionsByTeamId, evaluations } = useAdminEvent();
 
   // Les partis gardent leur historique mais ne sont plus proposes (SPECS §4.1).
-  const eligible = useMemo(() => founders.filter((f) => f.status !== "left"), [founders]);
+  const eligible = useMemo(() => founders.filter((f) => isPickable(f, event.batchId)), [founders, event.batchId]);
   // Le mode du matching de chaque evenement passe : equipes et tables ne comptent pas pareil.
   const modeOfEvent = useCallback((id: string) => {
     const e = eventsById.get(id);
@@ -299,7 +304,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
   const newGroup = () => {
     if (!picked) return;
     // Le numero libre suivant ; publie, le groupe recoit aussi son id (les autres gardent le leur).
-    const number = Math.max(groups.length, ...groups.map((g) => (g.id ? groupNumber(g.id) : 0)), ...teams.map((t) => groupNumber(t.id))) + 1;
+    const number = nextTeamNumber(groups, teams);
     update([
       ...withoutMembers(groups, new Set([picked])),
       { id: isPublished ? teamIdFor(event.id, number - 1) : null, name: `${tool.groupLabel} ${number}`, memberIds: [picked], leaderId: null, locked: false },
@@ -318,7 +323,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
   const toggleLock = (index: number) => update(groups.map((g, i) => (i === index ? { ...g, locked: !g.locked } : g)));
 
   // Retouche d'un tirage publie : les groupes changes (ou retires) qui ont deja des resultats.
-  const resultTeamIds = new Set([...submissionsByTeamId.keys(), ...evaluations.map((e) => e.targetId)]);
+  const resultTeamIds = teamIdsWithResults(submissionsByTeamId.keys(), evaluations);
   const changedWithResults = isPublished
     ? teams.filter((t) => resultTeamIds.has(t.id) && !groups.some((g) => g.id === t.id && sameIds(g.memberIds, t.memberIds)))
     : [];
@@ -330,7 +335,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
       const drafts = groups.map((g) => ({ ...g, memberIds: [...g.memberIds] }));
       if (isPublished) await updatePublishedTeams(event, drafts, teams, teamMemberships, nameOf, resultTeamIds);
       else if (publish) await publishTeams(event, drafts, teams, nameOf, drawnSize);
-      else await saveDraftTeams(event, drafts, teams, drawnSize, { keepApart: pairKeys(keepApart), keepTogether: pairKeys(keepTogether) });
+      else await saveDraftTeams(event, drafts, teams, drawnSize, constraintsOf(keepApart, keepTogether));
       setIsDirty(false);
       setIsConfirming(false);
       notifications.show({ message: isPublished ? `${tool.groupLabel}s updated` : publish ? `${tool.groupLabel}s published` : "Draft saved" });

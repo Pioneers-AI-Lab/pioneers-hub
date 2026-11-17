@@ -2,7 +2,7 @@ import { publicShortName } from "../access";
 import { docIds, docPaths } from "../collections";
 import { deleteWrite, mergeWrite, RuleError, setWrite, type DocWrite } from "../docWrites";
 import { matchingOf } from "../events";
-import { generateGroups, isDrawPublished, LEADER_ROLE, leaderIdOf, publishedDateOf, rolesWithLeader, teamSizeFor, type GeneratorInput } from "../teamGenerator";
+import { generateGroups, groupNumber, isDrawPublished, LEADER_ROLE, leaderIdOf, pairKey, publishedDateOf, rolesWithLeader, teamSizeFor, type GeneratorInput } from "../teamGenerator";
 import type { DrawConstraints, EventMatching, EventTeam, Membership, PioneersEvent, WithId } from "../types";
 
 // ----------------------------
@@ -219,6 +219,24 @@ export const withStartupTeams = (groups: readonly DraftTeam[], startupGroups: re
   ...startupGroups.map((g) => ({ id: null, name: g.name, memberIds: [...g.memberIds], leaderId: null, locked: true })),
   ...withoutMembers(groups, new Set(startupGroups.flatMap((g) => g.memberIds))),
 ];
+
+/** Les paires enregistrees avec le brouillon (les memes sur chaque equipe), en paires d'ids. */
+export const savedPairs = (teams: readonly Pick<EventTeam, "drawConstraints">[], key: keyof DrawConstraints): [string, string][] =>
+  (teams[0]?.drawConstraints?.[key] ?? []).map((k) => k.split("|") as [string, string]);
+
+/** Les contraintes a enregistrer avec un brouillon (`pairKey` : Firestore refuse les tableaux de tableaux). */
+export const constraintsOf = (keepApart: readonly [string, string][], keepTogether: readonly [string, string][]): DrawConstraints => ({
+  keepApart: keepApart.map(([a, b]) => pairKey(a, b)),
+  keepTogether: keepTogether.map(([a, b]) => pairKey(a, b)),
+});
+
+/** Le numero libre d'un groupe ajoute : apres les groupes affiches et les equipes enregistrees (un id publie ne se reutilise pas). */
+export const nextTeamNumber = (groups: readonly Pick<DraftTeam, "id">[], teams: readonly { id: string }[]) =>
+  Math.max(groups.length, ...groups.map((g) => (g.id ? groupNumber(g.id) : 0)), ...teams.map((t) => groupNumber(t.id))) + 1;
+
+/** Les groupes qui ont deja des resultats (Submission, note du jury) : une retouche ne peut pas les vider. */
+export const teamIdsWithResults = (submissionTeamIds: Iterable<string>, evaluations: readonly { targetId: string }[]) =>
+  new Set([...submissionTeamIds, ...evaluations.map((e) => e.targetId)]);
 
 /** Un aleatoire rejouable (mulberry32) : un meme `seed` redonne le meme tirage (apercu puis confirmation). */
 export function seededRandom(seed: number): () => number {

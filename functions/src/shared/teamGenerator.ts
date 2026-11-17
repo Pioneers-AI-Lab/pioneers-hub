@@ -158,6 +158,12 @@ export const GENERATOR_PRESETS = {
 
 export type GeneratorMode = MatchingMode;
 
+/** Le mot d'un groupe par mode (le nom enregistre d'un groupe tire : « Team 3 », « Table 2 ») : l'interface et l'API. */
+export const GROUP_WORDS: Record<GeneratorMode, { groupWord: string; groupLabel: string }> = {
+  challenge: { groupWord: "team", groupLabel: "Team" },
+  matching: { groupWord: "table", groupLabel: "Table" },
+};
+
 export const GROUP_SIZE_MIN = 2;
 export const GROUP_SIZE_MAX = 5;
 

@@ -39,6 +39,7 @@ import { badRequest, forbidden, notFound } from "../api/errors";
 import { founderIdIn, roleOf } from "../api/viewer";
 import { searchKey } from "../shared/text";
 import { describeFields } from "./fields";
+import { isDbFieldKey, parseDbField } from "../shared/fieldRegistry";
 import { listAccounts } from "./accounts";
 import { actionsFor } from "./actions";
 import { formUrl } from "../api/config";
@@ -136,7 +137,8 @@ const sortedReviews = (snap: FirebaseFirestore.QuerySnapshot) =>
 
 /** Les formulaires dont les reponses individuelles ne se lisent jamais ici, et les champs qu'ils ecrivent. */
 const PRIVATE_FORM_KINDS = new Set<string>(["peer_feedback", "picks"]);
-const isPrivateField = (dbField: string) => dbField.startsWith("peerRating.") || dbField.startsWith("picks.");
+const PRIVATE_DOCS = new Set<string>(["peerRating", "picks"]);
+const isPrivateField = (dbField: string) => isDbFieldKey(dbField) && PRIVATE_DOCS.has(parseDbField(dbField).doc);
 
 /** Un formulaire se lit par son lien (regle `forms` : public) ; un brouillon n'est montre qu'au staff. */
 const canSeeForm = (role: string, form: Pick<Form, "status">) => role === "staff" || form.status !== "draft";
@@ -295,9 +297,10 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
     if (PRIVATE_FORM_KINDS.has(form.kind)) throw forbidden("private_answers", "Peer ratings and picks are never read one by one: only their aggregates exist here.");
     // Une question qui ecrit un avis ou un pick, dans un autre formulaire : ses reponses sont retirees.
     const privateQuestions = new Set(form.questions.filter((q) => q.dbField && isPrivateField(q.dbField)).map((q) => q.id));
-    const rows = (await db.collection(COL.formResponses).where("formId", "==", input.formId).get()).docs
+    let responses: FirebaseFirestore.Query = db.collection(COL.formResponses).where("formId", "==", input.formId);
+    if (input.pendingOnly) responses = responses.where("status", "==", "pending_approval");
+    const rows = (await responses.get()).docs
       .map((d) => withId<FormResponse>(d))
-      .filter((r) => !input.pendingOnly || r.status === "pending_approval")
       .sort((a, b) => b.submittedDateISOString.localeCompare(a.submittedDateISOString));
     return {
       object,

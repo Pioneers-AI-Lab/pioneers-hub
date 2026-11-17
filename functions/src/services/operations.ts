@@ -193,7 +193,9 @@ export async function runOperation<S extends z.ZodType, R>(
           throw conflict("idempotency_conflict", "This `Idempotency-Key` was already used for a different request.");
         }
         if (record.pending) throw conflict("in_progress", "This request is still running. Retry in a moment.");
-        return { out: JSON.parse(record.result ?? "null") as RunResult<R>, effectPlan: null };
+        // Un enregistrement d'avant le JSON (objet) se rejoue tel quel.
+        const replay = typeof record.result === "string" ? JSON.parse(record.result) : record.result;
+        return { out: replay as RunResult<R>, effectPlan: null };
       }
     }
 
@@ -243,7 +245,8 @@ export async function previewPlan<S extends z.ZodType, R>(
     ownerUid: caller.uid,
     operation: op.name,
     input: JSON.stringify(input),
-    preview: JSON.stringify(plan.preview ?? null),
+    // L'empreinte stable de l'apercu : la confirmation compare la sienne a celle-ci.
+    preview: stableStringify(plan.preview),
     result: null,
     status: "previewed",
     createdDateISOString: new Date(now).toISOString(),
@@ -286,7 +289,7 @@ export async function applyPlan<R>(
     // l'apercu et la confirmation (un formulaire, un autre membre du staff),
     // on refuse plutot que d'ecrire autre chose que ce que l'humain a valide.
     // (`stableStringify` ignore les `undefined`, comme la copie stockee.)
-    if (stableStringify(JSON.parse(JSON.stringify(fresh.preview ?? null))) !== stableStringify(JSON.parse(plan.preview))) {
+    if (stableStringify(plain(fresh.preview)) !== plan.preview) {
       throw conflict("plan_stale", "The data changed since the preview. Preview again and show the new result before confirming.");
     }
 

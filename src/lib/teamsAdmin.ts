@@ -17,8 +17,6 @@ import { commitWrites } from "@/lib/firestore/write";
 // la regle que suit aussi l'API (`draw_teams`, `publish_teams`, `edit_teams`,
 // `set_matching`). Ici, seulement l'execution en lot.
 
-export { teamIdFor, type DraftTeam, type FullNameOf } from "@shared/admin/teams";
-
 const now = () => new Date().toISOString();
 
 export const replaceMatching = (event: WithId<PioneersEvent>, matching: EventMatching | null, existing: WithId<EventTeam>[]) =>

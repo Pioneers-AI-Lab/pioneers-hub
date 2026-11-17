@@ -31,9 +31,8 @@ import { isSelfEditable, isStaffViewer, isViewerFounder } from "../shared/access
 import type { Caller } from "../api/caller";
 import { ApiError, badRequest, forbidden, notFound } from "../api/errors";
 import { founderIdIn } from "../api/viewer";
-import { normalizeHttpUrl } from "../shared/text";
 import type { Operation, OperationPlan } from "./operations";
-import { dayString } from "./schemas";
+import { dayString, httpUrl } from "./schemas";
 
 // ----------------------------
 // services - ecrire des CHAMPS du registre
@@ -95,7 +94,6 @@ export type SetFieldsInput = z.output<typeof SetFieldsInput>;
 // ---- Le registre, lu une fois au chargement ---------------------------------------
 
 // « linkedin.com/in/ada » est complete en `https://...` avant validation (shared/text.ts).
-const httpUrl = z.preprocess((v) => (typeof v === "string" ? (normalizeHttpUrl(v) ?? v) : v), z.url({ protocol: /^https?$/ }));
 const notEmpty = "empty values are not written";
 
 function valueSchema(spec: ValueSpec): z.ZodType {

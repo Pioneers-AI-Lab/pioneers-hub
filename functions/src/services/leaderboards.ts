@@ -16,6 +16,7 @@ import {
 } from "../shared/types";
 import { z } from "zod";
 import { FAMILY_KEY } from "../shared/fieldRegistry";
+import { recomputeBatchScores } from "./scores";
 import { compareTeamPoints, juryMeansOf, normalizeToBest, scoreTeams, scoringFrom, scoringProblems } from "../shared/scoringRules";
 import { writeUiAudit, type AuditActor } from "./audit";
 import { cleanId, invalidArgument } from "./clean";
@@ -168,7 +169,7 @@ export async function recomputeLeaderboard(eventId: string): Promise<void> {
 /**
  * Staff : publier (ou retirer) le classement d'un evenement a bareme, une fois
  * les preuves verifiees. Le classement devient visible des fondateurs (avec la
- * visibilite du batch) ; l'appelant relance ensuite le calcul des scores.
+ * visibilite du batch), puis les scores du batch sont recalcules.
  */
 export async function publishEventRanking(actor: string | AuditActor, eventIdRaw: unknown, publishRaw: unknown): Promise<{ batchId: string }> {
   const eventId = cleanId(eventIdRaw, "eventId");
@@ -184,21 +185,33 @@ export async function publishEventRanking(actor: string | AuditActor, eventIdRaw
     return event.batchId;
   });
   await recomputeLeaderboard(eventId);
+  // L'Execution suit le classement publie (SPECS §5.5) : tous les appelants (callable, API).
+  await recomputeScoresAfter(batchId);
   return { batchId };
 }
 
+/** Un classement publie compte dans les scores du batch : ils suivent son changement (une erreur est journalisee, pas levee). */
+const recomputeScoresAfter = (batchId: string) =>
+  recomputeBatchScores(batchId).then(
+    () => undefined,
+    (e) => console.error("recomputeBatchScores after ranking", e),
+  );
+
 // `call()` (src/lib/firebase.ts) retire deja les cles `undefined` que le SDK enverrait en `null` ; le schema
 // accepte quand meme `null` (barèmes deja stockes, anciens clients) sans en faire une regle pour les autres.
-const ScoringItemSchema = z.object({
+export const ScoringItemSchema = z.object({
   label: z.string().trim().min(1).max(80),
-  mode: z.enum(["per_unit", "proportional", "criterion"]),
-  sourceKey: z.string().regex(FAMILY_KEY),
+  mode: z
+    .enum(["per_unit", "proportional", "criterion"])
+    .describe("`criterion`: a jury criterion's points (the standard); `proportional`/`per_unit`: legacy, kept only if already there."),
+  sourceKey: z.string().regex(FAMILY_KEY).describe("The jury criterion or team metric key (from the event's forms)."),
   pointsPerUnit: z.number().finite().min(0).max(1_000_000).nullish(),
   maxPoints: z.number().finite().min(0).max(1_000_000).nullish(),
   tieBreakOnly: z
     .boolean()
     .nullish()
-    .transform((v) => v === true),
+    .transform((v) => v === true)
+    .describe("A tie-break, in order, not counted in the total."),
 });
 const ScoringSchema = z.object({ items: z.array(ScoringItemSchema).max(20) });
 
@@ -207,7 +220,7 @@ const ScoringSchema = z.object({ items: z.array(ScoringItemSchema).max(20) });
  * element vise une variable des formulaires de l'evenement ; les departages
  * sont ses elements « tie-break only », dans l'ordre. Un bareme vide le retire :
  * le classement revient aux notes du jury (ou a la metrique choisie). Journalise,
- * puis recalcul du classement ; l'appelant recalcule les scores s'il est publie.
+ * puis recalcul du classement, et des scores du batch s'il est publie.
  */
 export async function setEventScoring(actor: string | AuditActor, eventIdRaw: unknown, scoringRaw: unknown): Promise<{ batchId: string; published: boolean }> {
   const eventId = cleanId(eventIdRaw, "eventId");
@@ -230,6 +243,7 @@ export async function setEventScoring(actor: string | AuditActor, eventIdRaw: un
     return { batchId: event.batchId, published: event.leaderboardRevealDateISOString !== null };
   });
   await recomputeLeaderboard(eventId);
+  if (result.published) await recomputeScoresAfter(result.batchId);
   return result;
 }
 

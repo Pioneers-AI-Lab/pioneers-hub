@@ -1,15 +1,15 @@
 import { z } from "zod";
 import { lateWaivedWrite, outstandingWrite, teamResultsWrite } from "../../shared/admin/results";
 import { COL, docPaths, eventCollectionPaths } from "../../shared/collections";
-import { normalizeHttpUrl } from "../../shared/text";
+import { FAMILY_KEY } from "../../shared/fieldRegistry";
 import type { Evaluation, EventTeam, FormResponse, Leaderboard, PioneersEvent, Submission } from "../../shared/types";
 import { badRequest, notFound } from "../../api/errors";
 import { decideFormWrite as decide } from "../forms";
 import { deleteJuryScore as deleteScore, resetJuryLink as resetLink } from "../judges";
-import { publishEventRanking, setEventRanking, setEventScoring } from "../leaderboards";
+import { publishEventRanking, ScoringItemSchema, setEventRanking, setEventScoring } from "../leaderboards";
 import type { Operation } from "../operations";
-import { recomputeBatchScores } from "../scores";
-import { changesOf, mustRead, readDoc, staffOnly, writePlan } from "./writes";
+import { httpUrl } from "../schemas";
+import { changesOf, effectPlan, mustRead, readDoc, staffOnly, writePlan } from "./writes";
 
 // ----------------------------
 // services/admin - resultats d'equipe, jury, classement, reponses en attente
@@ -17,8 +17,8 @@ import { changesOf, mustRead, readDoc, staffOnly, writePlan } from "./writes";
 // Admin > Events > un evenement (Results, Jury, Leaderboard) et Admin > Forms
 // (reponses a valider). Les resultats se calculent par shared/admin/results.ts ;
 // le jury, le bareme et la publication du classement appellent LES services des
-// callables (memes regles, audit au nom de l'appelant), puis recalculent comme
-// eux : le leaderboard suit, et les scores du batch si le classement compte.
+// callables (memes regles, audit au nom de l'appelant) ; ces services recalculent
+// le leaderboard, et les scores du batch si le classement compte.
 
 const teamTarget = { eventId: z.string().min(1), teamId: z.string().min(1).describe("The group's id (`get event`: teams).") };
 
@@ -37,9 +37,9 @@ async function teamOf(tx: FirebaseFirestore.Transaction, eventId: string, teamId
 export const SetTeamResultsInput = z
   .object({
     ...teamTarget,
-    metrics: z.record(z.string().regex(/^[a-zA-Z][a-zA-Z0-9]*$/), z.number().finite().min(0)).optional().describe("Team metrics by key (`get event`: the Debrief's `submission.metrics.<key>`). Replaces the keys given, keeps the others."),
-    productUrl: z.string().trim().min(1).max(2000).nullable().optional(),
-    proofUrls: z.array(z.string().trim().min(1).max(2000)).max(20).optional().describe("Replaces the list."),
+    metrics: z.record(z.string().regex(FAMILY_KEY), z.number().finite().min(0)).optional().describe("Team metrics by key (`get event`: the Debrief's `submission.metrics.<key>`). Replaces the keys given, keeps the others."),
+    productUrl: httpUrl.nullable().optional(),
+    proofUrls: z.array(httpUrl).max(20).optional().describe("Replaces the list."),
     notes: z.string().trim().max(5000).nullable().optional(),
   })
   .strict();
@@ -50,15 +50,10 @@ export const setTeamResults: Operation<typeof SetTeamResultsInput> = {
   allowed: staffOnly,
   async plan(tx, caller, { eventId, teamId, metrics, productUrl, proofUrls, notes }) {
     const { event, team, submission } = await teamOf(tx, eventId, teamId);
-    const url = (v: string) => {
-      const ok = normalizeHttpUrl(v);
-      if (!ok) throw badRequest("invalid_url", `\`${v}\` is not a web address.`, "proofUrls");
-      return ok;
-    };
     const patch = {
       ...(metrics ? { metrics: { ...(submission?.metrics ?? {}), ...metrics } } : {}),
-      ...(productUrl !== undefined ? { productUrl: productUrl === null ? null : url(productUrl) } : {}),
-      ...(proofUrls ? { proofUrls: proofUrls.map(url) } : {}),
+      ...(productUrl !== undefined ? { productUrl } : {}),
+      ...(proofUrls ? { proofUrls } : {}),
       ...(notes !== undefined ? { notes } : {}),
     };
     const changes = changesOf(submission ?? {}, patch);
@@ -91,12 +86,18 @@ export const setOutstanding: Operation<typeof SetOutstandingInput> = {
   input: SetOutstandingInput,
   allowed: staffOnly,
   async plan(tx, _caller, { eventId, teamId, outstanding }) {
-    const [{ event, team, submission }, leaderboard] = await Promise.all([teamOf(tx, eventId, teamId), readDoc<Leaderboard>(tx, docPaths.leaderboard(eventId))]);
-    // Comme l'ecran : la mention n'est proposee qu'a une equipe qui a le maximum de la grille.
-    if (outstanding && !leaderboard?.rows.find((r) => r.targetId === teamId)?.outstandingEligible) {
-      throw badRequest("not_eligible", `The Outstanding mention goes only to a team with the grid's maximum; ${team.name} does not have it.`, "teamId");
-    }
-    return writePlan({ event: event.name, team: team.name, outstanding }, [outstandingWrite(eventId, teamId, outstanding, submission !== undefined)], { eventId, teamId }, (submission?.outstanding === true) !== outstanding);
+    // La ligne du leaderboard ne se lit que pour donner la mention (elle seule exige le maximum de la grille).
+    const [{ event, team, submission }, leaderboard] = await Promise.all([
+      teamOf(tx, eventId, teamId),
+      outstanding ? readDoc<Leaderboard>(tx, docPaths.leaderboard(eventId)) : undefined,
+    ]);
+    const eligible = leaderboard?.rows.find((r) => r.targetId === teamId)?.outstandingEligible === true;
+    return writePlan(
+      { event: event.name, team: team.name, outstanding },
+      [outstandingWrite(eventId, teamId, outstanding, { hasSubmission: submission !== undefined, eligible })],
+      { eventId, teamId },
+      (submission?.outstanding === true) !== outstanding,
+    );
   },
 };
 
@@ -116,12 +117,11 @@ export const deleteJuryScore: Operation<typeof DeleteJuryScoreInput> = {
       readDoc<Evaluation>(tx, `${eventCollectionPaths.evaluations(eventId)}/${evaluationId}`),
     ]);
     if (!evaluation) throw notFound("evaluation_not_found", "No such jury score (already removed?).", "evaluationId");
-    return {
-      preview: { event: event.name, removes: { judge: evaluation.evaluatorName, target: evaluation.targetId, scores: evaluation.scores }, note: "Deleted for good (kept whole in the audit log); the leaderboard follows." },
-      targetPaths: [`${eventCollectionPaths.evaluations(eventId)}/${evaluationId}`],
-      effect: () => deleteScore(caller, eventId, evaluationId).then(() => ({ eventId, evaluationId })),
-      effectAudits: true,
-    };
+    return effectPlan(
+      { event: event.name, removes: { judge: evaluation.evaluatorName, target: evaluation.targetId, scores: evaluation.scores }, note: "Deleted for good (kept whole in the audit log); the leaderboard follows." },
+      [`${eventCollectionPaths.evaluations(eventId)}/${evaluationId}`],
+      () => deleteScore(caller, eventId, evaluationId).then(() => ({ eventId, evaluationId })),
+    );
   },
 };
 
@@ -133,37 +133,19 @@ export const resetJuryLink: Operation<typeof EventIdInput> = {
   allowed: staffOnly,
   async plan(tx, caller, { eventId }) {
     const event = await mustRead<PioneersEvent>(tx, docPaths.event(eventId), "event", "eventId");
-    return {
-      preview: { event: event.name, does: "replaces the shared jury link: the old one stops working at once. The new link is copied from the app (never shown here)." },
-      targetPaths: [docPaths.juryLink(eventId)],
-      effect: () => resetLink(caller, eventId).then(() => ({ eventId })),
-      effectAudits: true,
-    };
+    return effectPlan(
+      { event: event.name, does: "replaces the shared jury link: the old one stops working at once. The new link is copied from the app (never shown here)." },
+      [docPaths.juryLink(eventId)],
+      () => resetLink(caller, eventId).then(() => ({ eventId })),
+    );
   },
 };
 
 // ---- Classement ------------------------------------------------------------------------------
 
-const ScoringItem = z
-  .object({
-    label: z.string().trim().min(1).max(80),
-    mode: z.enum(["criterion", "proportional", "per_unit"]).describe("`criterion`: a jury criterion's points (the standard); `proportional`/`per_unit`: legacy, kept only if already there."),
-    sourceKey: z.string().min(1).describe("The jury criterion or team metric key (from the event's forms)."),
-    maxPoints: z.number().finite().min(0).max(1_000_000).optional(),
-    pointsPerUnit: z.number().finite().min(0).max(1_000_000).optional(),
-    tieBreakOnly: z.boolean().optional().describe("A tie-break, in order, not counted in the total."),
-  })
-  .strict();
-
 export const SetEventScoringInput = z
-  .object({ eventId: z.string().min(1), items: z.array(ScoringItem).max(20).describe("The full grid. Empty removes it (the ranking goes back to jury scores or the chosen metric).") })
+  .object({ eventId: z.string().min(1), items: z.array(ScoringItemSchema).max(20).describe("The full grid. Empty removes it (the ranking goes back to jury scores or the chosen metric).") })
   .strict();
-
-/** Un classement publie compte dans les scores du batch : apres un changement, ils suivent (comme les callables). */
-const withScores = async <T extends { batchId: string }>(done: T, recompute: boolean) => {
-  if (recompute) await recomputeBatchScores(done.batchId).catch((e) => console.error("recomputeBatchScores after ranking", e));
-  return done;
-};
 
 export const setEventScoringAction: Operation<typeof SetEventScoringInput> = {
   name: "set_event_scoring",
@@ -171,15 +153,8 @@ export const setEventScoringAction: Operation<typeof SetEventScoringInput> = {
   allowed: staffOnly,
   async plan(tx, caller, { eventId, items }) {
     const event = await mustRead<PioneersEvent>(tx, docPaths.event(eventId), "event", "eventId");
-    return {
-      preview: { event: event.name, from: event.scoring ?? null, to: items.length ? items : null },
-      targetPaths: [docPaths.event(eventId)],
-      effect: async () => {
-        const done = await setEventScoring(caller, eventId, { items });
-        return withScores(done, done.published);
-      },
-      effectAudits: true,
-    };
+    // Les scores du batch suivent dans le service si le classement est publie.
+    return effectPlan({ event: event.name, from: event.scoring ?? null, to: items.length ? items : null }, [docPaths.event(eventId)], () => setEventScoring(caller, eventId, { items }));
   },
 };
 
@@ -193,12 +168,12 @@ export const setRankingMetric: Operation<typeof SetRankingMetricInput> = {
   allowed: staffOnly,
   async plan(tx, caller, { eventId, metricKey }) {
     const event = await mustRead<PioneersEvent>(tx, docPaths.event(eventId), "event", "eventId");
-    const isSame = (event.rankingMetricKey ?? null) === metricKey;
-    return {
-      preview: { event: event.name, from: event.rankingMetricKey ?? null, to: metricKey },
-      targetPaths: [docPaths.event(eventId)],
-      ...(isSame ? {} : { effect: () => setEventRanking(caller, eventId, metricKey).then(() => ({ eventId })), effectAudits: true }),
-    };
+    return effectPlan(
+      { event: event.name, from: event.rankingMetricKey ?? null, to: metricKey },
+      [docPaths.event(eventId)],
+      () => setEventRanking(caller, eventId, metricKey).then(() => ({ eventId })),
+      (event.rankingMetricKey ?? null) !== metricKey,
+    );
   },
 };
 
@@ -213,12 +188,12 @@ export const publishRanking: Operation<typeof PublishRankingInput> = {
   async plan(tx, caller, { eventId, publish }) {
     const event = await mustRead<PioneersEvent>(tx, docPaths.event(eventId), "event", "eventId");
     if (!event.scoring) throw badRequest("no_scoring", "This event has no scoring grid: its ranking is always public.", "eventId");
-    const isSame = (event.leaderboardRevealDateISOString != null) === publish;
-    return {
-      preview: { event: event.name, publish },
-      targetPaths: [docPaths.event(eventId)],
-      ...(isSame ? {} : { effect: async () => withScores(await publishEventRanking(caller, eventId, publish), true), effectAudits: true }),
-    };
+    return effectPlan(
+      { event: event.name, publish, note: publish ? "The batch's scores are recomputed." : undefined },
+      [docPaths.event(eventId)],
+      () => publishEventRanking(caller, eventId, publish),
+      (event.leaderboardRevealDateISOString != null) !== publish,
+    );
   },
 };
 
@@ -241,11 +216,10 @@ export const decideFormWrite: Operation<typeof DecideFormWriteInput> = {
     const write = response.writes[writeIndex];
     if (!write) throw notFound("write_not_found", "This response has no such value.", "writeIndex");
     if (write.status !== "pending_approval") throw badRequest("already_decided", "This value was already decided.", "writeIndex");
-    return {
-      preview: { field: write.dbField, value: write.value, target: write.targetId ?? null, decision: approve ? "approve (written now)" : "reject" },
-      targetPaths: [`${COL.formResponses}/${responseId}`],
-      effect: () => decide(caller, { responseId, writeIndex, approve }),
-      effectAudits: true,
-    };
+    return effectPlan(
+      { field: write.dbField, value: write.value, target: write.targetId ?? null, decision: approve ? "approve (written now)" : "reject" },
+      [`${COL.formResponses}/${responseId}`],
+      () => decide(caller, { responseId, writeIndex, approve }),
+    );
   },
 };

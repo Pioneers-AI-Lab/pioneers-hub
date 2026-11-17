@@ -7,7 +7,7 @@ import { inviteAccount as invite, parseAccess, setAccountAccess as setAccess, se
 import { syncBatchCalendar } from "../calendarSync";
 import type { Operation } from "../operations";
 import { recomputeBatchScores } from "../scores";
-import { mustRead, readDoc, staffOnly } from "./writes";
+import { effectPlan, mustRead, readDoc, staffOnly } from "./writes";
 
 // ----------------------------
 // services/admin - comptes, synchro de l'agenda, recalcul des scores
@@ -61,12 +61,7 @@ export const inviteAccount: Operation<typeof InviteAccountInput> = {
       .getUserByEmail(email)
       .catch(() => null);
     if (existing) assertNotStaff(await readDoc<User>(tx, docPaths.user(existing.uid)));
-    return {
-      preview: { email, access, account: existing ? "exists: its access is replaced" : "created (they sign in with Google or set a password)" },
-      targetPaths: [COL.users],
-      effect: () => invite(caller, email, access),
-      effectAudits: true,
-    };
+    return effectPlan({ email, access, account: existing ? "exists: its access is replaced" : "created (they sign in with Google or set a password)" }, [COL.users], () => invite(caller, email, access));
   },
 };
 
@@ -83,11 +78,7 @@ export const setAccountAccess: Operation<typeof SetAccountAccessInput> = {
     assertNotStaff(user);
     const before = { roles: user?.roles ?? [], investorAccess: user?.investorAccess ?? null };
     const isSame = JSON.stringify(before) === JSON.stringify(access);
-    return {
-      preview: { account: auth.email ?? auth.uid, from: before, to: access },
-      targetPaths: [docPaths.user(auth.uid)],
-      ...(isSame ? {} : { effect: () => setAccess(caller, auth.uid, access).then(() => ({ uid: auth.uid })), effectAudits: true }),
-    };
+    return effectPlan({ account: auth.email ?? auth.uid, from: before, to: access }, [docPaths.user(auth.uid)], () => setAccess(caller, auth.uid, access).then(() => ({ uid: auth.uid })), !isSame);
   },
 };
 
@@ -103,11 +94,7 @@ export const setAccountDisabled: Operation<typeof SetAccountDisabledInput> = {
     const auth = await accountOf(input);
     assertNotStaff(await readDoc<User>(tx, docPaths.user(auth.uid)));
     const { disabled } = input;
-    return {
-      preview: { account: auth.email ?? auth.uid, disabled },
-      targetPaths: [docPaths.user(auth.uid)],
-      ...(auth.disabled === disabled ? {} : { effect: () => setDisabled(caller, auth.uid, disabled).then(() => ({ uid: auth.uid, disabled })), effectAudits: true }),
-    };
+    return effectPlan({ account: auth.email ?? auth.uid, disabled }, [docPaths.user(auth.uid)], () => setDisabled(caller, auth.uid, disabled).then(() => ({ uid: auth.uid, disabled })), auth.disabled !== disabled);
   },
 };
 
@@ -120,13 +107,12 @@ export const syncCalendar: Operation<typeof BatchIdInput> = {
   async plan(tx, caller, { batchId }) {
     const batch = await mustRead<Batch>(tx, docPaths.batch(batchId), "batch", "batchId");
     if (!batch.settings.googleCalendarId) throw badRequest("no_calendar", "This batch is not linked to a Google Calendar (`update_batch` with `googleCalendarId`).", "batchId");
-    return {
-      preview: { batch: batch.name, does: "reads the Google Calendar's changes and applies them to the batch's events (created, moved, renamed, archived)" },
-      targetPaths: [COL.events],
-      effect: () => syncBatchCalendar(batchId, { actorUid: caller }),
-      // La synchro trace ce qu'elle ecrit ; rien ne change, rien n'est trace.
-      effectAudits: true,
-    };
+    // La synchro trace ce qu'elle ecrit ; rien ne change, rien n'est trace.
+    return effectPlan(
+      { batch: batch.name, does: "reads the Google Calendar's changes and applies them to the batch's events (created, moved, renamed, archived)" },
+      [COL.events],
+      () => syncBatchCalendar(batchId, { actorUid: caller }),
+    );
   },
 };
 

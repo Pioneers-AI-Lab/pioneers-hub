@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeHttpUrl } from "../shared/text";
 
 // ----------------------------
 // services - briques de schema partagees par les operations
@@ -38,3 +39,6 @@ export const dayString = z
 // Jours a Paris : logique pure (`Intl`), dans shared/dates.ts.
 export { parisDay, parisToday } from "../shared/dates";
 
+
+/** Une adresse web ; sans protocole, `https://` est ajoute (`shared/text.ts#normalizeHttpUrl`). */
+export const httpUrl = z.preprocess((v) => (typeof v === "string" ? (normalizeHttpUrl(v) ?? v) : v), z.url({ protocol: /^https?$/ }));

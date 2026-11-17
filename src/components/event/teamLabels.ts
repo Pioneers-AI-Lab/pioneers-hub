@@ -1,4 +1,4 @@
-import type { GeneratorMode } from "@shared/teamGenerator";
+import { GROUP_WORDS, type GeneratorMode } from "@shared/teamGenerator";
 
 // Les mots des groupes d'un evenement, par mode de matching : communs a l'outil de
 // tirage du staff (TEAM_TOOLS, components/admin/teamModes.ts) et a la page
@@ -18,16 +18,14 @@ export type TeamLabels = {
 
 export const TEAM_LABELS: Record<GeneratorMode, TeamLabels> = {
   challenge: {
-    groupWord: "team",
-    groupLabel: "Team",
+    ...GROUP_WORDS.challenge,
     leaderReminder:
       "Each team has a leader, drawn at random. The leader gathers the team at the start and makes sure the challenge runs smoothly until the end.",
     leaderDuty: "gather the team at the start and make sure the challenge runs smoothly until the end",
     publicHint: "Find your teammates, introduce yourselves, and get started.",
   },
   matching: {
-    groupWord: "table",
-    groupLabel: "Table",
+    ...GROUP_WORDS.matching,
     leaderReminder:
       "Each table has a leader, drawn at random. The leader gathers the table and makes sure lunch runs smoothly, so everyone gets a chance to talk.",
     leaderDuty: "gather the table and make sure lunch runs smoothly, so everyone gets a chance to talk",

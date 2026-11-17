@@ -172,7 +172,7 @@ function Ranking() {
                       {value}
                       <ToggleButton
                         on={row.outstanding === true}
-                        onToggle={(next) => setTeamOutstanding(event.id, row.targetId, next, submissionsByTeamId.has(row.targetId))}
+                        onToggle={(next) => setTeamOutstanding(event.id, row.targetId, next, { hasSubmission: submissionsByTeamId.has(row.targetId), eligible: row.outstandingEligible === true })}
                       >
                         Outstanding +{OUTSTANDING_BONUS_POINTS}
                       </ToggleButton>

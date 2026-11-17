@@ -8,8 +8,6 @@ import { commitWrites } from "@/lib/firestore/write";
 // Ecriture staff directe (regle `submissions` : write staff). Les gestes :
 // shared/admin/results.ts, comme pour l'API.
 
-export type { TeamResultsPatch };
-
 const now = () => new Date().toISOString();
 
 export const saveTeamResults = (eventId: string, teamId: string, current: WithId<Submission> | null, patch: TeamResultsPatch, staffUid: string) =>
@@ -17,5 +15,6 @@ export const saveTeamResults = (eventId: string, teamId: string, current: WithId
 
 export const setLateWaived = (eventId: string, teamId: string, lateWaived: boolean) => commitWrites([lateWaivedWrite(eventId, teamId, lateWaived)]);
 
-export const setTeamOutstanding = (eventId: string, teamId: string, outstanding: boolean, hasSubmission: boolean) =>
-  commitWrites([outstandingWrite(eventId, teamId, outstanding, hasSubmission)]);
+/** `eligible` : la ligne du leaderboard a le maximum de la grille (`outstandingEligible`). */
+export const setTeamOutstanding = (eventId: string, teamId: string, outstanding: boolean, team: { hasSubmission: boolean; eligible: boolean }) =>
+  commitWrites([outstandingWrite(eventId, teamId, outstanding, team)]);
