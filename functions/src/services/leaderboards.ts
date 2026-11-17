@@ -217,7 +217,8 @@ export async function setEventScoring(actorUid: string, eventIdRaw: unknown, sco
   const result = await db().runTransaction(async (tx) => {
     const [event, forms] = await Promise.all([loadEvent(tx, eventId), formsOf(tx, eventId)]);
     if (scoring) {
-      const problems = scoringProblems(scoring, eventMetrics(forms), juryCriteria(forms));
+      // Les anciens elements (points par unite, proportionnels) ne se gardent que s'ils y sont deja (17/11).
+      const problems = scoringProblems(scoring, eventMetrics(forms), juryCriteria(forms), scoringOf(event));
       if (problems.length) throw new HttpsError("invalid-argument", problems[0]);
     }
     const path = docPaths.event(eventId);

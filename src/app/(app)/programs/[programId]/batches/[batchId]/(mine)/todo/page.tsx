@@ -11,11 +11,11 @@ import { Empty, Section } from "@/components/ui/Section";
 
 // « A faire » (SPECS §3.1) : la checklist (mon profil, puis les taches du
 // batch que je coche moi-meme), les formulaires qu'il me reste a remplir et
-// leur echeance, dont les picks et le Debrief des hackathons (`useTodoItems`,
+// leur echeance, dont la Submission et le Peer rating des hackathons (`useTodoItems`,
 // aussi resume en haut de « Me »), ce qui arrive cette semaine.
 export default function TodoPage() {
   const { events } = useEvents();
-  const { forms, picks, debriefs, checklist, isLoading } = useTodoItems();
+  const { forms, debriefs, checklist, isLoading } = useTodoItems();
 
   if (isLoading) return <PageLoader />;
 
@@ -25,7 +25,7 @@ export default function TodoPage() {
     return start.isAfter(now.subtract(2, "hour")) && start.isBefore(now.add(7, "day"));
   });
   const nothing =
-    checklist.every((c) => c.done) && forms.length === 0 && thisWeek.length === 0 && debriefs.every((d) => d.done) && picks.every((p) => p.done);
+    checklist.every((c) => c.done) && forms.length === 0 && thisWeek.length === 0 && debriefs.every((d) => d.done);
 
   return (
     <>
@@ -44,16 +44,6 @@ export default function TodoPage() {
           <RowList>
             {forms.map((f) => (
               <FormRow key={f.form.id} item={f} />
-            ))}
-          </RowList>
-        </Section>
-      )}
-
-      {picks.length > 0 && (
-        <Section title="Picks" hint="Private: only the Pioneers team sees your choices.">
-          <RowList>
-            {picks.map((p) => (
-              <FormRow key={p.form.id} item={p} />
             ))}
           </RowList>
         </Section>

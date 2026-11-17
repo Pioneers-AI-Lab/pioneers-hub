@@ -640,7 +640,7 @@ console.log("leaderboard ranking (callables)");
 }
 
 // ---- Bareme, publication, verification des preuves, scores du batch ---------------
-console.log("scoring: points, late submission, proof check, publication, batch scores");
+console.log("scoring: former points per unit, late submission, former proof check, publication, batch scores");
 {
   const adb = getAdminFirestore();
   const EVENT = "demo-hackathon-1";
@@ -648,15 +648,22 @@ console.log("scoring: points, late submission, proof check, publication, batch s
   const teamA = async () => (await board())?.rows.find((r) => r.targetId === "team-a");
   const staff = await clientAs("staff-1");
   const setScoring = (fns, items) => httpsCallable(fns, "setEventScoring")({ eventId: EVENT, scoring: { items } });
-  // 40 points par rendez-vous, 1 point par appel : deux metriques de la Submission.
+  // Un bareme d'avant le 17/11 (40 points par rendez-vous, 1 point par appel : deux metriques de la
+  // Submission), pose comme par l'import : retire, il se garde et se calcule encore, mais ne se cree plus.
   const items = [
     { label: "Meetings booked", mode: "per_unit", sourceKey: "meetingsBooked", pointsPerUnit: 40 },
     { label: "Calls made", mode: "per_unit", sourceKey: "callsMade", pointsPerUnit: 1 },
   ];
+  await expectCallableError("a new per-unit item is refused (retired 17/11)", "invalid-argument", () => setScoring(staff.functions, items));
   await expectCallableError("a scoring item needs a variable of the event's forms", "invalid-argument", () =>
-    setScoring(staff.functions, [{ label: "Revenue", mode: "per_unit", sourceKey: "amountPaid", pointsPerUnit: 1 }]),
+    setScoring(staff.functions, [{ label: "Revenue", mode: "criterion", sourceKey: "amountPaid", maxPoints: 20 }]),
   );
-  await expectOk("staff sets the scoring from the event page", async () => {
+  const { scoringFrom } = createRequire(import.meta.url)("../functions/lib/shared/scoringRules.js");
+  await adb.doc(`events/${EVENT}`).update({ scoring: scoringFrom(items) });
+  await expectCallableError("a former item cannot change its points", "invalid-argument", () =>
+    setScoring(staff.functions, [{ ...items[0], pointsPerUnit: 50 }, items[1]]),
+  );
+  await expectOk("staff saves a former scoring again (kept as it is)", async () => {
     await setScoring(staff.functions, items);
     const ev = (await adb.doc(`events/${EVENT}`).get()).data();
     if (ev?.scoring?.items.map((i) => i.key).join() !== "meetingsBooked,callsMade" || ev.rankingMetricKey !== null) throw new Error(JSON.stringify(ev?.scoring));
@@ -676,7 +683,7 @@ console.log("scoring: points, late submission, proof check, publication, batch s
       return `${row.total} pts`;
     });
   });
-  await expectOk("staff sets an item to 0 after a fake proof", async () => {
+  await expectOk("an item set to 0 before 17/11 (former proof check) still counts 0", async () => {
     await updateDoc(doc(staff.db, `events/${EVENT}/submissions/team-a`), { zeroedItemKeys: ["meetingsBooked"] });
     return waitFor(async () => {
       const row = await teamA();

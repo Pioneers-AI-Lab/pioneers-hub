@@ -262,8 +262,11 @@ const call = async (key, name, args) => {
   check(t.isError && /templateKey/.test(t.data), "a retired model (picks) is refused", t.data);
   t = await call(key, "pioneers_create_form", { batchId: "fall-2026", title: "x", questions: [{ type: "text", label: "Q", dbField: "founder.nope" }] });
   check(t.isError && /unknown_field/.test(t.data), "create_form refuses an unknown field", t.data);
-  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", title: "Anonymous", identityCheck: "anonymous", questions: [{ type: "long_text", label: "Intro", dbField: "founderDirectory.introduceYourself" }] });
-  check(t.isError && /invalid_form/.test(t.data), "an anonymous form cannot write to a founder field (editor rule)", t.data);
+  // Plus de formulaire anonyme ni de question Picks (17/11, §4.6) : les anciens restent lus.
+  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", title: "Anonymous", identityCheck: "anonymous", questions: [{ type: "long_text", label: "Q" }] });
+  check(t.isError && /identityCheck/.test(t.data), "an anonymous form is no longer created", t.data);
+  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", title: "x", eventId: "demo-hackathon-2", questions: [{ type: "entity_picker", label: "Q", picker: { entity: "founder", maxItems: 3 }, dbField: "picks.pickedFounderIds" }] });
+  check(t.isError && /invalid_form/.test(t.data) && /retired/.test(t.data), "a new question cannot write the retired picks", t.data);
   t = await call(key, "pioneers_create_form", {
     batchId: "fall-2026",
     title: "Masterclass feedback",
@@ -353,6 +356,7 @@ const call = async (key, name, args) => {
   check(!icTools.includes("pioneers_set_fields") && !icTools.includes("pioneers_add_note"), `IC investor catalogue is read-only: ${icTools.join(", ")}`);
   g = await rest(icKey, "/v1/founders/ada-example");
   check("internal" in g.body && "profile" in g.body && "person" in g.body, "IC investor sees internal data", Object.keys(g.body));
+  check(g.body.internal && !("eloScore" in g.body.internal), "the archived Elo is not returned (17/11)", g.body.internal);
   check((await rest(icKey, "/v1/notes?startupId=lumen")).status === 200, "IC investor reads internal notes");
 
   // Investor portfolio : annuaire et startups, ni notes ni donnees internes

@@ -2,10 +2,8 @@
 
 import { useState } from "react";
 import { Button, Group, NumberInput, SegmentedControl, Select, Stack, Switch, Text, TextInput } from "@mantine/core";
-import { eventMetrics } from "@shared/forms";
-import { criterionQuestion, metricQuestion } from "@shared/presets/formTemplates";
-import { standardEventMetricKey } from "@shared/presets/standardMetrics";
-import { labelsOf, OUTSTANDING_BONUS_POINTS, scoringMaxTotal, variableExists } from "@shared/scoringRules";
+import { criterionQuestion } from "@shared/presets/formTemplates";
+import { isLegacyScoringItem, labelsOf, OUTSTANDING_BONUS_POINTS, scoringMaxTotal, variableExists } from "@shared/scoringRules";
 import { keyFromLabel } from "@shared/text";
 import { scoringOf, type ScoringItem, type ScoringItemInput } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
@@ -24,11 +22,12 @@ import { Section, SubsectionTitle } from "@/components/ui/Section";
 // ----------------------------
 // Le leaderboard d'un evenement : son bareme, ou les notes du jury
 // ----------------------------
-// SPECS §4.2 : un bareme donne des points a des VARIABLES des formulaires de
-// l'evenement (une metrique de la Submission, un critere du jury). Tout se regle
-// ici : choisir une variable, ou en creer une (la question s'ajoute a la
-// Submission ou au formulaire de jury), dire combien de points elle vaut, et si
-// elle sert seulement a departager (dans l'ordre du bareme). Chaque enregistrement
+// SPECS §4.2 : un bareme donne des points aux criteres du jury (notes de 0 a 5,
+// grilles du 17/11). Tout se regle ici : choisir un critere, ou en creer un (la
+// question s'ajoute au formulaire de jury), dire combien de points il vaut, et
+// s'il sert seulement a departager (dans l'ordre du bareme). Les anciens elements
+// (points par unite d'une metrique, proportionnels a la meilleure equipe) restent
+// lus et comptes, mais ne se creent plus (§4.6 du document). Chaque enregistrement
 // passe par `setEventScoring` (verifie, journalise, recalcule le classement).
 // Sans bareme : les notes du jury, ou une metrique choisie. Dessous, le
 // classement calcule par le serveur, tel que le staff le verifie avant de le publier.
@@ -49,13 +48,13 @@ const toInput = ({ label, mode, sourceKey, pointsPerUnit, maxPoints, tieBreakOnl
   tieBreakOnly: tieBreakOnly === true,
 });
 
-/** Le pourquoi des points d'un element, en clair. */
+/** Le pourquoi des points d'un element, en clair (un ancien element : son ancienne regle). */
 function scoringItemRule(item: ScoringItemInput): string {
   const rule =
     item.mode === "per_unit"
-      ? `${item.pointsPerUnit ?? 1} pts each`
+      ? `Former: ${item.pointsPerUnit ?? 1} pts each`
       : item.mode === "proportional"
-        ? `best team gets ${item.maxPoints ?? 0}, others in proportion`
+        ? `Former: best team gets ${item.maxPoints ?? 0}, others in proportion`
         : `jury${item.maxPoints ? `, out of ${item.maxPoints}` : ""}`;
   return item.tieBreakOnly ? `Tie-break · ${rule}` : rule;
 }
@@ -73,7 +72,8 @@ export function LeaderboardSection() {
     run(() => call("setEventScoring")({ eventId: event.id, scoring: { items: next } }), message).then((r) => r !== undefined);
   const publish = (on: boolean) =>
     void run(() => call("publishEventRanking")({ eventId: event.id, publish: on }), on ? "Ranking published" : "Ranking unpublished");
-  const others = events.filter((e) => e.id !== event.id && scoringOf(e));
+  // Un bareme a anciens elements ne se recopie pas : ils ne se creent plus.
+  const others = events.filter((e) => e.id !== event.id && scoringOf(e)?.items.every((i) => !isLegacyScoringItem(i)));
 
   if (!scoring && metrics.length === 0 && criteria.length === 0) return null;
   const total = scoring ? scoringMaxTotal(scoring, criteria) : null;
@@ -81,7 +81,7 @@ export function LeaderboardSection() {
     ? "What ranks the teams: the jury's scores, or one number of the submission. Or give points to several variables."
     : isPublished
       ? `Published ${formatDateTime(event.leaderboardRevealDateISOString!)}: founders see the ranking. A change recomputes it.`
-      : "Founders see the ranking once you publish it, after checking the proofs. A late submission scores 0.";
+      : "Founders see the ranking once you publish it. A late submission scores 0.";
 
   return (
     <Section title={scoring ? `Leaderboard · ${total === null ? "open total" : `out of ${total}`}` : "Leaderboard"} hint={hint}>
@@ -98,7 +98,7 @@ export function LeaderboardSection() {
             />
           );
         })}
-        <ButtonRow onClick={() => setEditing("new")} title={scoring ? "Add an item" : "Score with points instead"} subtitle={scoring ? undefined : "Points per variable, tie-breaks"} />
+        <ButtonRow onClick={() => setEditing("new")} title={scoring ? "Add an item" : "Score with points instead"} subtitle={scoring ? undefined : "Points per jury criterion, tie-breaks"} />
       </RowList>
       <Group mt="sm" gap="sm">
         {scoring && (
@@ -214,164 +214,137 @@ type ItemSheetProps = {
   onSave: (items: ScoringItemInput[], message: string) => Promise<void>;
 };
 
-/** Un element du bareme : sa variable (existante ou nouvelle), ses points, departage ou non. */
-function ItemSheet({ index, items, isSaving, onClose, onSave }: ItemSheetProps) {
-  const { metrics, criteria, forms, juryForm } = useAdminEvent();
-  const { isBusy: isAdding, run } = useAction();
-  const isBusy = isSaving || isAdding;
-  const item = index === null ? null : items[index];
-  const [source, setSource] = useState<"metric" | "criterion">(item?.mode === "criterion" ? "criterion" : "metric");
-  const [variable, setVariable] = useState<string | null>(item?.sourceKey ?? null);
-  const [newLabel, setNewLabel] = useState("");
-  const [newScaleMax, setNewScaleMax] = useState<number>(20);
-  const [teamMode, setTeamMode] = useState<"per_unit" | "proportional">(item?.mode === "proportional" ? "proportional" : "per_unit");
-  const [points, setPoints] = useState<number | null>(item ? (item.mode === "per_unit" ? (item.pointsPerUnit ?? null) : (item.maxPoints ?? null)) : null);
-  const [tieBreakOnly, setTieBreakOnly] = useState(item?.tieBreakOnly === true);
-
-  // Le formulaire d'equipe qui porte deja les chiffres (Final numbers au H5, qui en a trois), sinon le premier.
-  const teamForms = forms.filter((f) => f.kind === "debrief");
-  const submission = teamForms.find((f) => eventMetrics([f]).length > 0) ?? teamForms[0] ?? null;
-  const targetForm = source === "metric" ? submission : juryForm;
-  const used = new Set(items.filter((_, i) => i !== index).map((i) => i.sourceKey));
-  const known = source === "metric" ? metrics : criteria;
-  const options = [
-    ...known.filter((v) => !used.has(v.key)).map((v) => ({ value: v.key, label: `${v.label} (${v.key})` })),
-    ...(targetForm ? [{ value: NEW, label: source === "metric" ? "New team number..." : "New jury criterion..." }] : []),
-  ];
-  const isNew = variable === NEW;
-  // La cle standard d'abord (« Cold calls » -> `callsMade`) : une variable qui existe deja se choisit dans la liste.
-  const newKey = newLabel.trim() ? (source === "metric" ? standardEventMetricKey(keyFromLabel(newLabel)) : keyFromLabel(newLabel)) : null;
-  const newKeyTaken = newKey !== null && [...metrics, ...criteria].some((v) => v.key === newKey);
-  const sourceKey = isNew ? (newKeyTaken ? null : newKey) : variable;
-  const label = isNew ? newLabel.trim() : (known.find((v) => v.key === variable)?.label ?? item?.label ?? "");
-  const scaleMax = isNew ? newScaleMax : (criteria.find((c) => c.key === variable)?.max ?? null);
-  const mode = source === "criterion" ? "criterion" : teamMode;
-  // Un critere vaut par defaut sa note telle quelle (son echelle).
-  const effectivePoints = mode === "criterion" ? (points ?? scaleMax) : points;
-
-  const draft: ScoringItemInput | null =
-    sourceKey && label && (mode === "criterion" || (effectivePoints ?? 0) > 0)
-      ? {
-          label,
-          mode,
-          sourceKey,
-          pointsPerUnit: mode === "per_unit" ? effectivePoints : null,
-          maxPoints: mode === "per_unit" ? null : effectivePoints,
-          tieBreakOnly,
-        }
-      : null;
-  const preview = !draft
-    ? null
-    : mode === "per_unit"
-      ? `A team with 3 ${label.toLowerCase()} gets ${3 * (effectivePoints ?? 0)} pts.`
-      : mode === "proportional"
-        ? `The best team gets ${effectivePoints} pts; a team with half its number gets ${(effectivePoints ?? 0) / 2}.`
-        : `A jury average of ${(scaleMax ?? 0) / 2} out of ${scaleMax} gives ${(effectivePoints ?? 0) / 2} pts.`;
-
-  const list = items.map(toInput);
-  const submit = async () => {
-    if (!draft) return;
-    // Une nouvelle variable : sa question s'ajoute d'abord au formulaire (nouvelle version s'il est publie).
-    if (isNew && targetForm) {
-      const question =
-        source === "metric"
-          ? metricQuestion({ key: draft.sourceKey, label, unit: null })
-          : criterionQuestion({ key: draft.sourceKey, label, min: 0, max: newScaleMax, weight: 1 });
-      const added = await run(() => appendQuestion(targetForm, question), `${label} added to the ${source === "metric" ? "submission" : "jury form"}`);
-      if (added === undefined) return;
-    }
-    const next = index === null ? [...list, draft] : list.map((x, i) => (i === index ? draft : x));
-    await onSave(next, index === null ? "Item added" : "Item saved");
-  };
-  const move = (delta: -1 | 1) => {
-    if (index === null) return;
-    const next = [...list];
-    const [moved] = next.splice(index, 1);
-    next.splice(index + delta, 0, moved);
-    void onSave(next, "Order saved");
-  };
-
+/**
+ * Un element du bareme : un critere du jury (existant ou nouveau), ses points, departage ou non.
+ * Un ancien element (points par unite, proportionnel : retires le 17/11) se lit, se deplace ou se
+ * retire, mais ne se modifie plus (`setEventScoring` le refuserait).
+ */
+function ItemSheet(props: ItemSheetProps) {
+  const item = props.index === null ? null : props.items[props.index];
   return (
-    <ResponsiveDialog opened onClose={onClose} title={item ? item.label : "New item"}>
+    <ResponsiveDialog opened onClose={props.onClose} title={item ? item.label : "New item"}>
       <Stack gap="md">
-        <SegmentedControl
-          fullWidth
-          data={[
-            { value: "metric", label: "Team number" },
-            { value: "criterion", label: "Jury score" },
-          ]}
-          value={source}
-          onChange={(v) => {
-            setSource(v as "metric" | "criterion");
-            setVariable(null);
-            setPoints(null);
-          }}
-        />
-        <Select
-          label="Variable"
-          placeholder={targetForm ? "Choose" : undefined}
-          description={targetForm ? undefined : `Create the event's ${source === "metric" ? "submission" : "jury form"} first (Forms above).`}
-          data={options}
-          value={variable}
-          onChange={setVariable}
-          allowDeselect={false}
-        />
-        {isNew && (
-          <Group grow align="flex-start">
-            <TextInput
-              label={source === "metric" ? "Question" : "Criterion"}
-              description={newKey && !newKeyTaken ? `Key: ${newKey}` : undefined}
-              error={newKeyTaken ? `\`${newKey}\` already exists: choose it in the list.` : undefined}
-              value={newLabel}
-              onChange={(e) => setNewLabel(e.currentTarget.value)}
-            />
-            {source === "criterion" && <NumberInput label="Scored out of" min={1} max={100} value={newScaleMax} onChange={(v) => setNewScaleMax(typeof v === "number" ? v : 20)} />}
-          </Group>
-        )}
-        {source === "metric" && (
-          <SegmentedControl
-            fullWidth
-            data={[
-              { value: "per_unit", label: "Per unit" },
-              { value: "proportional", label: "Best team gets" },
-            ]}
-            value={teamMode}
-            onChange={(v) => setTeamMode(v as "per_unit" | "proportional")}
-          />
-        )}
-        <NumberInput
-          label={mode === "per_unit" ? "Points per unit" : mode === "proportional" ? "Points of the best team" : "Points"}
-          description={mode === "criterion" ? "Empty: the jury's score as it is." : undefined}
-          min={0}
-          value={points ?? ""}
-          onChange={(v) => setPoints(typeof v === "number" ? v : null)}
-        />
-        <Switch label="Tie-break only" description="It does not count in the total; it separates equal totals, in the order of the list." checked={tieBreakOnly} onChange={(e) => setTieBreakOnly(e.currentTarget.checked)} />
-        {preview && (
+        {item && isLegacyScoringItem(item) ? (
           <Text size="sm" c="dimmed">
-            {preview}
+            {scoringItemRule(item)}. From before the jury grids (17/11): it still counts as it is. Move it or remove it; a new item scores a jury criterion.
           </Text>
+        ) : (
+          <CriterionItemForm {...props} />
         )}
-        <Button size="md" fullWidth loading={isBusy} disabled={!draft} onClick={() => void submit()}>
-          Save
-        </Button>
-        {index !== null && (
-          <Group justify="space-between">
-            <Group gap="xs">
-              <Button variant="default" disabled={isBusy || index === 0} onClick={() => move(-1)}>
-                Move up
-              </Button>
-              <Button variant="default" disabled={isBusy || index === items.length - 1} onClick={() => move(1)}>
-                Move down
-              </Button>
-            </Group>
-            <Button variant="subtle" color="red" disabled={isBusy} onClick={() => void onSave(list.filter((_, i) => i !== index), "Item removed")}>
-              Remove
-            </Button>
-          </Group>
-        )}
+        {props.index !== null && <ItemOrderActions {...props} index={props.index} />}
       </Stack>
     </ResponsiveDialog>
   );
 }
 
+/** Le critere, ses points, departage ou non : un nouveau critere s'ajoute d'abord au formulaire de jury. */
+function CriterionItemForm({ index, items, isSaving, onSave }: ItemSheetProps) {
+  const { metrics, criteria, juryForm } = useAdminEvent();
+  const { isBusy: isAdding, run } = useAction();
+  const isBusy = isSaving || isAdding;
+  const item = index === null ? null : items[index];
+  const [variable, setVariable] = useState<string | null>(item?.sourceKey ?? null);
+  const [newLabel, setNewLabel] = useState("");
+  // Les grilles du 17/11 : chaque critere note de 0 a 5.
+  const [newScaleMax, setNewScaleMax] = useState<number>(5);
+  const [points, setPoints] = useState<number | null>(item?.maxPoints ?? null);
+  const [tieBreakOnly, setTieBreakOnly] = useState(item?.tieBreakOnly === true);
+
+  const used = new Set(items.filter((_, i) => i !== index).map((i) => i.sourceKey));
+  const options = [
+    ...criteria.filter((c) => !used.has(c.key)).map((c) => ({ value: c.key, label: `${c.label} (${c.key})` })),
+    ...(juryForm ? [{ value: NEW, label: "New jury criterion..." }] : []),
+  ];
+  const isNew = variable === NEW;
+  const newKey = newLabel.trim() ? keyFromLabel(newLabel) : null;
+  const newKeyTaken = newKey !== null && [...metrics, ...criteria].some((v) => v.key === newKey);
+  const sourceKey = isNew ? (newKeyTaken ? null : newKey) : variable;
+  const label = isNew ? newLabel.trim() : (criteria.find((c) => c.key === variable)?.label ?? item?.label ?? "");
+  const scaleMax = isNew ? newScaleMax : (criteria.find((c) => c.key === variable)?.max ?? null);
+  // Un critere vaut par defaut sa note telle quelle (son echelle).
+  const effectivePoints = points ?? scaleMax;
+
+  const draft: ScoringItemInput | null =
+    sourceKey && label ? { label, mode: "criterion", sourceKey, pointsPerUnit: null, maxPoints: effectivePoints, tieBreakOnly } : null;
+
+  const submit = async () => {
+    if (!draft) return;
+    // Un nouveau critere : sa question s'ajoute d'abord au formulaire de jury (nouvelle version s'il est publie).
+    if (isNew && juryForm) {
+      const question = criterionQuestion({ key: draft.sourceKey, label, min: 0, max: newScaleMax, weight: 1 });
+      const added = await run(() => appendQuestion(juryForm, question), `${label} added to the jury form`);
+      if (added === undefined) return;
+    }
+    const list = items.map(toInput);
+    const next = index === null ? [...list, draft] : list.map((x, i) => (i === index ? draft : x));
+    await onSave(next, index === null ? "Item added" : "Item saved");
+  };
+
+  return (
+    <>
+      <Select
+        label="Jury criterion"
+        placeholder={juryForm ? "Choose" : undefined}
+        description={juryForm ? undefined : "Create the event's jury form first (Forms above)."}
+        data={options}
+        value={variable}
+        onChange={setVariable}
+        allowDeselect={false}
+      />
+      {isNew && (
+        <Group grow align="flex-start">
+          <TextInput
+            label="Criterion"
+            description={newKey && !newKeyTaken ? `Key: ${newKey}` : undefined}
+            error={newKeyTaken ? `\`${newKey}\` already exists: choose it in the list.` : undefined}
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.currentTarget.value)}
+          />
+          <NumberInput label="Scored out of" min={1} max={100} value={newScaleMax} onChange={(v) => setNewScaleMax(typeof v === "number" ? v : 5)} />
+        </Group>
+      )}
+      <NumberInput
+        label="Points"
+        description="Empty: the jury's score as it is."
+        min={0}
+        value={points ?? ""}
+        onChange={(v) => setPoints(typeof v === "number" ? v : null)}
+      />
+      <Switch label="Tie-break only" description="It does not count in the total; it separates equal totals, in the order of the list." checked={tieBreakOnly} onChange={(e) => setTieBreakOnly(e.currentTarget.checked)} />
+      {draft && (
+        <Text size="sm" c="dimmed">
+          A jury average of {(scaleMax ?? 0) / 2} out of {scaleMax} gives {(effectivePoints ?? 0) / 2} pts.
+        </Text>
+      )}
+      <Button size="md" fullWidth loading={isBusy} disabled={!draft} onClick={() => void submit()}>
+        Save
+      </Button>
+    </>
+  );
+}
+
+/** Deplacer ou retirer un element enregistre (ancien element compris). */
+function ItemOrderActions({ index, items, isSaving, onSave }: ItemSheetProps & { index: number }) {
+  const list = items.map(toInput);
+  const move = (delta: -1 | 1) => {
+    const next = [...list];
+    const [moved] = next.splice(index, 1);
+    next.splice(index + delta, 0, moved);
+    void onSave(next, "Order saved");
+  };
+  return (
+    <Group justify="space-between">
+      <Group gap="xs">
+        <Button variant="default" disabled={isSaving || index === 0} onClick={() => move(-1)}>
+          Move up
+        </Button>
+        <Button variant="default" disabled={isSaving || index === items.length - 1} onClick={() => move(1)}>
+          Move down
+        </Button>
+      </Group>
+      <Button variant="subtle" color="red" disabled={isSaving} onClick={() => void onSave(list.filter((_, i) => i !== index), "Item removed")}>
+        Remove
+      </Button>
+    </Group>
+  );
+}

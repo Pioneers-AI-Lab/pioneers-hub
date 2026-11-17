@@ -23,7 +23,10 @@ export const FORM_STATUS_LABELS: Record<FormStatus, string> = { draft: "Draft", 
 /** L'etat du lien d'un formulaire (`formState`) : son statut, ou « Scheduled » avant son ouverture. */
 export const FORM_STATE_LABELS: Record<ReturnType<typeof formState>, string> = { ...FORM_STATUS_LABELS, not_open_yet: "Scheduled" };
 
-/** `email_code` (ancien nom d'`account`) n'est plus propose : il se lit comme `account`. */
+/**
+ * `email_code` (ancien nom d'`account`) n'est plus propose : il se lit comme `account`. `anonymous` ne se
+ * propose plus qu'au formulaire qui l'a deja (`RETIRED_IDENTITY_CHECKS`, FormEditor).
+ */
 export const IDENTITY_OPTIONS: { value: FormIdentityCheck; label: string }[] = [
   { value: "select_name", label: "Pick name" },
   { value: "account", label: "Sign in" },
@@ -33,10 +36,10 @@ export const IDENTITY_OPTIONS: { value: FormIdentityCheck; label: string }[] = [
 
 export const IDENTITY_HINTS: Record<FormIdentityCheck, string> = {
   select_name: "The respondent picks their name from the batch list (never typed).",
-  account: "The respondent signs in with their Pioneers account. They find their answers again and can change them while the form is open. For the submission, the peer rating and picks.",
+  account: "The respondent signs in with their Pioneers account. They find their answers again and can change them while the form is open. For every founder form.",
   email_code: "The respondent signs in with their Pioneers account (former email-code setting).",
   jury_link: "One shared link with a secret, no account: each judge picks or types their name, then scores every team. For a jury.",
-  anonymous: "No identity: answers are tied to the batch and the event only.",
+  anonymous: "No identity: answers are tied to the batch and the event only. No longer offered: founders answer from their account.",
 };
 
 /** Comment se remplit une question, selon sa portee (editeur, reponses). */

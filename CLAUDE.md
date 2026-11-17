@@ -40,14 +40,13 @@ node scripts/import-events.mjs "Week 1" [--prod]   # evenements de data/events.j
 node scripts/sync-events.mjs "Week 1" [--prod] [--only cle1,cle2] [--forms jury,debrief]   # MET A JOUR les evenements sur data/events.json (agenda, bareme, matching sans equipes), recree les formulaires sans reponse, archive `archived` ; `--only` : ces evenements seulement (semaine en cours) ; `--forms` : seulement les formulaires de ces modeles (id `<evenement>-<modele>`)
 node scripts/audit-fa26.mjs [batchId] [--from YYYY-MM-DD] > inventaire.json   # inventaire en LECTURE SEULE de la prod : evenements a venir, formulaires (questions, identite, dates, reponses), tirages, baremes ; pour comparer a docs/FONCTIONNALITES-SEMAINE-1-FUSION.md
 npm run check:scoring # regles de calcul pures (grille du jury sur 100, Outstanding, tirage par shortlist / met) : chaque suite de scripts/check-scoring/, cas ecrits a la main (harnais scripts/lib/check.mjs)
-node scripts/elo-rank.mjs <batchId> [--prod] [--rounds 8]   # Elo des profils par Claude (claude-opus-5-5, ANTHROPIC_API_KEY ; a blanc sans --prod : aucun appel)
 node scripts/migrate-standard-forms.mjs <batchId> [--prod]   # modele standard : anciens metrics/criteria/picks -> formulaires (a blanc sans --prod)
 node scripts/migrate-education-tags.mjs <batchId|--all> [--prod]   # `founderDirectory.education` texte -> liste (separateurs `;` et ` · `, shared/text.ts#splitTextList), a blanc sans --prod
 node scripts/seed-tasks.mjs <batchId> [--prod]   # taches de depart du To do (Slack, LinkedIn, shortlist), a blanc sans --prod, n'ecrase jamais
 node scripts/migrate-metric-keys.mjs <batchId> [--prod]   # cles de metriques standard (SPECS A.5), a blanc sans --prod ; puis backfill-kpis.mjs
 node scripts/set-milestone-dates.mjs <batchId> [--prod]   # echeances des milestones du score -> `settings.scoreMilestoneDueDates` (n'ecrit que ce champ), a blanc sans --prod, rejouable
 node scripts/create-batch-form.mjs <batchId> <templateKey> --id <formId> --opens <ISO> --deadline <ISO> [--prod]   # formulaire de batch (sans evenement) depuis un modele, publie, id fixe, n'ecrase jamais ; a blanc sans --prod. Lock my team fa26 cree le 17/11 (fall-2026-lock-my-team, 23/11 16:00 -> 25/11 9:30 Paris)
-node scripts/background-draft.mjs <batchId> [--export profils.json | --apply profils.json] [--prod]   # grille Background proposee par Claude (profils anonymes) -> `private/internal.background.proposed` seulement, jamais la note du staff ; a blanc sans --prod
+node scripts/background-draft.mjs <batchId> [--export profils.json | --apply profils.json] [--prod]   # grille Background proposee par Claude (profils anonymes) -> `private/internal.background.proposed` seulement, jamais la note du staff ; a blanc sans --prod. Remplace elo-rank.mjs (supprime au lot 6 : l'Elo est archive, `eloScore` et `eloMatches` gardes mais ni lus, ni affiches, ni rendus par l'API)
 node scripts/create-weekly-forms.mjs <batchId> [--date YYYY-MM-DD] [--prod]   # meme plan que la fonction `weeklyForms`, a la main (jeudi 18:45 Paris) ; n'ecrase jamais, a blanc sans --prod
 node scripts/backfill-shortlist-history.mjs <batchId> [--prod]   # rattrapage `shortlistHistory` depuis les shortlists actuelles (ajout seul, rejouable), a blanc sans --prod
 npx firebase deploy --only storage --project prod   # regles Storage (photo-*.jpg du fondateur ou du staff, reste refuse ; lecture par URL a jeton) ; deployees le 16/11, PAS par deploy:rules
@@ -154,7 +153,7 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   (`eventFormsPlan` : publies si l'evenement est programme, brouillons sinon) par Admin > Events > New (blank |
   template, reglages facon agenda, « Create » / fleche « Create as draft », `lib/eventsAdmin.ts#createEventPack`),
   `create_event` et l'import. Staff : `/admin/events/{id}` = la page hub (reglages, presence, matching, formulaires,
-  classement, resultats, jury, picks), `/admin/events/{id}/matching` (TeamGenerator), `/admin/events/{id}/teams/{teamId}`
+  classement, resultats, jury, picks archives), `/admin/events/{id}/matching` (TeamGenerator), `/admin/events/{id}/teams/{teamId}`
   (resultats). Un tirage PUBLIE se retouche (echanger, deplacer, leader, retardataire) avec confirmation ; ids d'equipe
   stables, `memberships` suivent, pas de retirage ni de depublication. Deplacer un evenement propose de deplacer ses
   formulaires (`shared/eventForms.ts#planEventMove`, regles de creation) et le Debrief accole ; l'archiver ferme ses
@@ -166,11 +165,24 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
 - **Modele standard** (SPECS §2, decision du 12/11) : un evenement = une entree d'agenda + un tirage de groupes
   (`teams`) + des FORMULAIRES. Toute saisie passe par un formulaire rattache a l'evenement : le Debrief d'un
   hackathon (metriques = questions `submission.metrics.<cle>`, avis = `peerRating.*`), le jury
-  (`evaluation.scores.<cle>`, poids sur la question), les picks (`picks.pickedFounderIds`). L'evenement ne porte
+  (`evaluation.scores.<cle>`, poids sur la question). L'evenement ne porte
   ni `metrics` ni `criteria` ni `picks` (seulement `rankingMetricKey`) ; `shared/forms.ts#juryCriteria` /
   `eventMetrics` les relisent dans ses formulaires. Stockage type inchange (submissions, peerRatings,
   evaluations, picks). Formulaires d'un evenement crees par `shared/eventForms.ts` (import, migration) ou depuis
-  sa page d'admin (modeles `debrief`, `jury`, `picks`, `founder_introductions`...).
+  sa page d'admin (modeles `debrief`, `peer_rating`, `jury`, `week_retro`, `pitch_deck`...).
+- **Retire le 17/11, archive** (lot 6, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §4.6 ; rien n'est efface) :
+  `shared/presets/offered.ts` dit ce qui ne se cree plus et reste lu (`isOffered(retire, valeur, valeur enregistree)`).
+  Modeles `retired` (Picks, Founder introductions, Exit form...) ; type de formulaire `picks`, identite `anonymous`
+  et champ `picks.pickedFounderIds` : proposes seulement au formulaire / a la question qui les a deja, LA regle
+  `formRules.ts#retiredFormProblems(form, stored)` (editeur, `saveForm`, `create_form` avec `stored = null` ;
+  `create_form` n'accepte plus `anonymous`). Anciens formulaires anonymes et Picks toujours lus. Les picks deja
+  donnes : section « Picks (archived) » de la page d'admin de l'evenement (`AdminContext.eventIdsWithPicks`, aucun
+  ecouteur sans eux) et reseau de `founderStats` ; plus de section Picks dans le To do. Bareme : seulement des
+  criteres du jury avec leurs points ; un element `per_unit` / `proportional` (`isLegacyScoringItem`) se garde tel
+  quel, se calcule, se deplace ou se retire, jamais ne s'ajoute ni ne change (`scoringProblems(..., stored)`,
+  `newLegacyItemProblems`, `setEventScoring`) ; « Copy scoring from » ne propose pas un bareme qui en a.
+  `zeroedItemKeys` (ancienne verification des preuves) : lu, plus pose. Elo : `readFounderInternal` (types/founder.ts)
+  le retire de ce que rend l'API.
   H5 (17/11) : pas de `debrief` mais trois formulaires d'equipe sur la MEME Submission (`h5_plan`, `h5_snapshot`,
   `h5_final`, data/events.json `withoutForms` / `forms`) ; seul un formulaire `setsSubmissionLate` (Final numbers,
   Submissions H1 a H4 ; absent = oui) rend la Submission en retard (0 point). Tirage `matching.lockedTeamsFromStartups` :
@@ -182,7 +194,7 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   groupees par cible). Portee d'une question (`scope`) : `self`, `team` (equipe publiee du repondant, une reponse
   commune), `each_teammate`, `each_target` (equipes notees sauf la sienne) ; reponse par cible sous
   `question@cible`, cibles calculees par le serveur. Identites : `select_name`, `account` (connexion obligatoire,
-  `email_code` = ancien nom), `jury_link`, `anonymous`. `formResponses` : staff seulement.
+  `email_code` = ancien nom), `jury_link`, `anonymous` (retire le 17/11 : plus propose, toujours lu). `formResponses` : staff seulement.
 - **Jury** : le formulaire de jury de l'evenement (identite `jury_link`), par UN lien partage
   `/forms/{formId}#secret`, sans compte (decision du 12/11) ; secret en clair dans `events/{id}/judges/link` (staff
   seulement, recopiable ; `resetJuryLink` le remplace). Le jure choisit son nom (invites, noms deja venus noter,
@@ -235,7 +247,7 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
 - `shared/callables.ts` : contrat nom -> `{ req, res }` de chaque callable.
 - `shared/presets/eventTemplates.ts` : modeles d'evenements = packs (etiquette, duree, heure, matching, formulaires ;
   grille et metriques PAR DEFAUT de ses formulaires). Le type d'un evenement est une ETIQUETTE (`team_challenge`,
-  `pitch`, `matching`, `session`, `meeting`) : rien ne se decide sur lui (voir « Evenement = point d'entree »). `shared/presets/formTemplates.ts` : modeles de formulaires (Debrief, Jury, Picks
+  `pitch`, `matching`, `session`, `meeting`) : rien ne se decide sur lui (voir « Evenement = point d'entree »). `shared/presets/formTemplates.ts` : modeles de formulaires (Submission, Jury
   construits depuis l'evenement, `build`). `shared/eventForms.ts` : les formulaires d'un evenement (import, migration).
 - `shared/events.ts` : LA construction d'un document `events` (`newEvent` : Admin > Events, outils de tirage,
   scripts/import-events.mjs) et ce que voient les fondateurs (`isPublishedEvent`). Admin > Events
@@ -267,7 +279,7 @@ document ENTIER, jamais un champ) :
 | `batchTasks/{id}` | fondateurs du batch + staff + investors (taches du To do, ecrites par le staff, archivees) |
 | `taskCompletions/{taskId}_{founderId}` | le fondateur lui-meme + staff (sa coche, ecrite par lui seul ; decocher = `done: false`) |
 | `formCompletions/{formId}_{founderId}`, `picks` | le fondateur lui-meme + staff (« J'ai repondu » et picks, ecrits par `submitFormResponse` ; jamais pour un formulaire anonyme) |
-| `founders/{id}/private/internal`, `founderStats`, `notes`, `assessments`, `eloMatches` | staff + investors IC |
+| `founders/{id}/private/internal`, `founderStats`, `notes`, `assessments`, `eloMatches` (archive) | staff + investors IC |
 | `shortlistHistory/{founderId}_{targetId}` | staff + investors IC (ecrit par le serveur seul, jamais lu par l'API) |
 | `teamLocks/{founderId}` | le fondateur lui-meme + staff + investors IC (reponse a Lock my team, ecrite par `submitFormResponse`, corrigee par le staff) |
 | `founderReviews/{founderId}_{lundi}`, `startupReviews/{startupId}_{lundi}` | staff + investors IC (revue des Weekly updates, ecrite par le staff ; jamais montree aux fondateurs) |
@@ -312,7 +324,7 @@ remplace `role` / `viewerFounderId` et SEUL lui lit le store ; sous un batch, li
 | Annuaire (grille) | `.../founders/layout.tsx` | `FounderDirectoriesContext` (grille par defaut, liste au choix ; `private/directory` de chaque fondateur a la premiere visite de Founders : la page appelle `ensureOpen`) | `FounderDirectory` |
 | Startup | `.../startups/[startupId]/layout.tsx` | `StartupContext` | `Startup`, `StartupProfile`, `StartupInternal` |
 | Batch (suite) | idem batch | `EventsContext`, `ListsContext`, `CohortContext` (batchStats + scores), `LeaderboardsContext` | `PioneersEvent`, `ClosedList`, `BatchStats`, `Score`, `Leaderboard` |
-| Moi | `.../(mine)/layout.tsx` (groupe de `me/` et `todo/`) | `MeGate` -> `FounderContext` (id du rattachement) + `FormsToFillContext` (formulaires qui me restent : audience `formConcernsFounder`, `formCompletions`, anonymes retenus par le navigateur ; Debrief et picks remplis restent modifiables tant qu'ils sont ouverts)  (via `TodoProviders`) ; `TasksContext` (layout du batch) ; `hooks/useTodoItems` les range (checklist : profil calcule puis taches ; picks, hackathons, formulaires : page To do, resume en haut de SA fiche). « Me » = sa fiche `/founders/{son id}` (`founders/[founderId]/layout.tsx` monte les memes Providers via `SelfProviders` quand c'est la sienne) ; `/me` et `/me/edit` ne font que rediriger | |
+| Moi | `.../(mine)/layout.tsx` (groupe de `me/` et `todo/`) | `MeGate` -> `FounderContext` (id du rattachement) + `FormsToFillContext` (formulaires qui me restent : audience `formConcernsFounder`, `formCompletions`, anciens anonymes retenus par le navigateur ; un formulaire rempli depuis son compte reste modifiable tant qu'il est ouvert)  (via `TodoProviders`) ; `TasksContext` (layout du batch) ; `hooks/useTodoItems` les range (checklist : profil calcule puis taches ; hackathons, formulaires : page To do, resume en haut de SA fiche). « Me » = sa fiche `/founders/{son id}` (`founders/[founderId]/layout.tsx` monte les memes Providers via `SelfProviders` quand c'est la sienne) ; `/me` et `/me/edit` ne font que rediriger | |
 | Admin | `app/(app)/admin/layout.tsx` | `AdminContext` (garde : role `staff` ; batch de travail choisi par `BatchPicker`, retenu sur le compte ; demandes de rattachement en attente, tous batchs) ; Admin > Tasks : `AdminTasksContext`, `lib/tasksAdmin.ts`, attendus = `isBatchParticipant` | `Batch`, `Founder`, `PioneersEvent`, `Form`, `ClaimRequest` |
 | Rattachement | `app/(app)/claim/layout.tsx` | `ClaimContext` | `Founder`, `ClaimRequest` |
 

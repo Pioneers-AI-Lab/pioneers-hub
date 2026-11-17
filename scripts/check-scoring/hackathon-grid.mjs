@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { check } from "../lib/check.mjs";
 
 const require = createRequire(import.meta.url);
-const { scoreTeams, compareTeamPoints, scoringMaxTotal, scoringFrom } = require("../../functions/lib/shared/scoringRules.js");
+const { scoreTeams, compareTeamPoints, scoringMaxTotal, scoringFrom, newLegacyItemProblems } = require("../../functions/lib/shared/scoringRules.js");
 
 
 const crit = (key, points) => ({ key, label: key, min: 0, max: 5, weight: points ?? 1 });
@@ -91,4 +91,14 @@ check("ancien bareme par unite : ramene a la meilleure equipe", () => {
   assert.equal(b.normalized, 50);
   assert.equal(a.outstanding, false);
   assert.equal(a.outstandingEligible, false); // pas de bouton : le serveur ignorerait la mention
+});
+
+// Retires le 17/11 (§4.6) : un ancien element se garde tel quel, ne s'ajoute ni ne change.
+check("ancien element : garde tel quel, jamais ajoute ni modifie", () => {
+  assert.deepEqual(newLegacyItemProblems(legacy, legacy), []);
+  assert.equal(newLegacyItemProblems(legacy, null).length, 1);
+  const changed = scoringFrom([{ label: "Meetings", mode: "per_unit", sourceKey: "meetingsBooked", pointsPerUnit: 50 }]);
+  assert.equal(newLegacyItemProblems(changed, legacy).length, 1);
+  const criterion = scoringFrom([{ label: "Pain", mode: "criterion", sourceKey: "pain", maxPoints: 20 }]);
+  assert.deepEqual(newLegacyItemProblems(criterion, null), []);
 });

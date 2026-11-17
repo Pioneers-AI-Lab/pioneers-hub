@@ -240,9 +240,10 @@ export type CalendarSource = {
 
 /**
  * Un element du bareme :
- *   - `per_unit` : `pointsPerUnit` points par unite d'une metrique de la Submission ;
- *   - `proportional` : la meilleure equipe a `maxPoints` sur cette metrique, les autres en proportion ;
- *   - `criterion` : la moyenne des jures sur un critere, ramenee a `maxPoints` (sinon la note telle quelle).
+ *   - `criterion` : la moyenne des jures sur un critere, ramenee a `maxPoints` (sinon la note telle quelle) ;
+ *   - ARCHIVES (17/11, `isLegacyScoringItem`) : lus et comptes dans les baremes qui les ont, plus crees :
+ *     `per_unit` (`pointsPerUnit` points par unite d'une metrique de la Submission) et `proportional`
+ *     (la meilleure equipe a `maxPoints` sur cette metrique, les autres en proportion).
  * `tieBreakOnly` : il departage sans compter dans le total.
  */
 export type ScoringItem = {

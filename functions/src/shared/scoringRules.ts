@@ -190,9 +190,10 @@ export function tieBreakNote(scoring: EventScoring, row: Pick<LeaderboardRow, "t
 // ----------------------------
 // Le reglage d'un bareme (Admin > Events > Leaderboard, `setEventScoring`)
 // ----------------------------
-// Un element = une variable des formulaires de l'evenement : une metrique de la
-// Submission (`per_unit`, `proportional`) ou un critere du jury (`criterion`). La
-// cle d'un element est celle de sa variable (une variable compte une fois).
+// Un element = une variable des formulaires de l'evenement : un critere du jury
+// (`criterion`), ou, dans un bareme d'avant le 17/11, une metrique de la Submission
+// (`per_unit`, `proportional`). La cle d'un element est celle de sa variable (une
+// variable compte une fois).
 
 /** Le maximum du total, `null` s'il est ouvert (un element par unite n'a pas de plafond). */
 export function scoringMaxTotal(scoring: EventScoring, criteria: readonly Criterion[]): number | null {
@@ -231,17 +232,34 @@ export function scoringFrom(inputs: readonly ScoringItemInput[]): EventScoring |
 export const variableExists = (item: Pick<ScoringItem, "mode" | "sourceKey">, metrics: readonly EventMetric[], criteria: readonly Criterion[]) =>
   (item.mode === "criterion" ? criteria : metrics).some((v) => v.key === item.sourceKey);
 
-/** Ce qui empeche d'enregistrer ce bareme, en clair (vide : valide). */
-export function scoringProblems(scoring: EventScoring, metrics: readonly EventMetric[], criteria: readonly Criterion[]): string[] {
-  const problems: string[] = [];
+/**
+ * Un element d'avant le 17/11 (points par unite, proportionnel a la meilleure equipe) : retire,
+ * il se garde tel quel dans son bareme (et s'y calcule), mais ne se cree plus (§4.6 du document).
+ */
+export const isLegacyScoringItem = (item: Pick<ScoringItem, "mode">): boolean => item.mode !== "criterion";
+
+/**
+ * Les elements anciens du bareme propose qui ne sont pas deja, a l'identique, dans le bareme
+ * stocke (`stored`) : un ancien element se garde, se deplace ou se retire, jamais ne s'ajoute
+ * ni ne change. Vide : rien a refuser.
+ */
+export function newLegacyItemProblems(next: EventScoring, stored: EventScoring | null): string[] {
+  const same = (a: ScoringItem, b: ScoringItem) =>
+    a.key === b.key && a.mode === b.mode && (a.pointsPerUnit ?? null) === (b.pointsPerUnit ?? null) && (a.maxPoints ?? null) === (b.maxPoints ?? null);
+  return next.items
+    .filter((item) => isLegacyScoringItem(item) && !stored?.items.some((old) => same(old, item)))
+    .map((item) => `${item.label || item.sourceKey}: points per unit and "best team gets" are retired. Score a jury criterion with points.`);
+}
+
+/** Ce qui empeche d'enregistrer ce bareme a la place de `stored` (le bareme actuel), en clair (vide : valide). */
+export function scoringProblems(scoring: EventScoring, metrics: readonly EventMetric[], criteria: readonly Criterion[], stored: EventScoring | null): string[] {
+  const problems = newLegacyItemProblems(scoring, stored);
   const keys = new Set<string>();
   for (const item of scoring.items) {
     const name = item.label || item.sourceKey;
     if (keys.has(item.key)) problems.push(`${name}: this variable is already in the scoring.`);
     keys.add(item.key);
     if (!variableExists(item, metrics, criteria)) problems.push(`${name}: no question of the event's ${item.mode === "criterion" ? "jury form" : "submission"} writes \`${item.sourceKey}\`.`);
-    if (item.mode === "per_unit" && !(Number(item.pointsPerUnit) > 0)) problems.push(`${name}: points per unit must be above 0.`);
-    if (item.mode === "proportional" && !(Number(item.maxPoints) > 0)) problems.push(`${name}: the best team's points must be above 0.`);
     if (item.mode === "criterion" && item.maxPoints != null && !(item.maxPoints > 0)) problems.push(`${name}: the points must be above 0.`);
   }
   if (scoring.items.length > 0 && scoring.items.every((i) => i.tieBreakOnly)) problems.push("At least one item must count in the total.");

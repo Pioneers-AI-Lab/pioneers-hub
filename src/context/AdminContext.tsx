@@ -51,6 +51,8 @@ type AdminValue = {
   teamMemberships: WithId<Membership>[];
   /** Non archives, du plus recent au plus ancien. */
   forms: WithId<Form>[];
+  /** Les evenements dont un formulaire (archive compris) a demande des picks : les seuls a en avoir (archives, 17/11). */
+  eventIdsWithPicks: ReadonlySet<string>;
   isLoading: boolean;
 };
 
@@ -123,6 +125,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       forms: forms.data
         .filter((f) => f.archivedDateISOString === null)
         .sort((a, b) => b.createdDateISOString.localeCompare(a.createdDateISOString)),
+      eventIdsWithPicks: new Set(
+        forms.data.flatMap((f) => (f.eventId && f.questions.some((q) => q.dbField === "picks.pickedFounderIds") ? [f.eventId] : [])),
+      ),
       isLoading: founders.isLoading || events.isLoading || memberships.isLoading || forms.isLoading,
     };
   }, [batch, batches, programs.data, selectBatch, founders.data, founders.isLoading, startups.data, events.data, events.isLoading, memberships.data, memberships.isLoading, forms.data, forms.isLoading]);

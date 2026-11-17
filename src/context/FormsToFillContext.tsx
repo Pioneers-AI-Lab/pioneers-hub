@@ -27,18 +27,15 @@ import { useFounder } from "@/context/FounderContext";
 // Un formulaire par occurrence (decision du 12/11) : l'update de la semaine
 // prochaine est un autre formulaire, il reapparait donc chaque semaine.
 //
-// Le Debrief d'un hackathon et les picks (SPECS §2, modele standard) sont des
+// La Submission d'un hackathon et son Peer rating (SPECS §2, modele standard) sont des
 // formulaires comme les autres. Un formulaire a identite prouvee (connexion)
 // deja rempli reste dans la liste tant qu'il est ouvert (`done`) : le fondateur
 // y retrouve ses reponses et les corrige (choix des cofondateurs, resultats).
 // Une question ajoutee depuis sa reponse (`questionsAddedSince`) est signalee ;
 // obligatoire, elle rend le formulaire de nouveau « a faire ».
 
-/**
- * `closed` : des picks clos que le fondateur a donnes : il y relit ses choix.
- * `newQuestions` : questions ajoutees depuis sa reponse.
- */
-export type FormToFill = { form: WithId<Form>; done: boolean; closed: boolean; eventName: string | null; newQuestions: number };
+/** `newQuestions` : questions ajoutees depuis sa reponse. */
+export type FormToFill = { form: WithId<Form>; done: boolean; eventName: string | null; newQuestions: number };
 
 type FormsToFillValue = {
   /** A remplir (puis les remplis encore modifiables), echeance la plus proche d'abord, sans echeance a la fin. */
@@ -54,7 +51,6 @@ export function FormsToFillProvider({ children }: { children: ReactNode }) {
   const { allEventsById, isLoading: isEventsLoading } = useEvents();
   const { founder, teamMemberships, attendance } = useFounder();
   const forms = useQueryListener(queries.openFormsOfBatch(batch.id));
-  const closedPicks = useQueryListener(queries.closedPicksOfBatch(batch.id));
   const completions = useQueryListener(queries.myFormCompletions(batch.id, founder.id));
   const anonymousDone = useAnonymousFormsDone(founder.id);
 
@@ -72,19 +68,14 @@ export function FormsToFillProvider({ children }: { children: ReactNode }) {
       const event = f.eventId ? (allEventsById.get(f.eventId) ?? null) : null;
       const isTeamMember = f.eventId !== null && teamEventIds.has(f.eventId);
       if (!formConcernsFounder(f, founder, event, isTeamMember, f.eventId ? attendanceByEventId.get(f.eventId) : undefined)) return [];
-      return [{ form: f, done: isDone, closed: false, eventName: event?.name ?? null, newQuestions: added.length }];
+      return [{ form: f, done: isDone, eventName: event?.name ?? null, newQuestions: added.length }];
     });
-    // Des picks clos restent lisibles par qui les a donnes (son choix de cofondateurs).
-    for (const f of closedPicks.data) {
-      if (f.archivedDateISOString !== null || !completionOf.has(f.id)) continue;
-      items.push({ form: f, done: true, closed: true, eventName: f.eventId ? (allEventsById.get(f.eventId)?.name ?? null) : null, newQuestions: 0 });
-    }
     const due = (i: FormToFill) => i.form.deadlineDateISOString ?? "9";
     return {
-      items: items.sort((a, b) => Number(a.done) - Number(b.done) || Number(a.closed) - Number(b.closed) || due(a).localeCompare(due(b))),
+      items: items.sort((a, b) => Number(a.done) - Number(b.done) || due(a).localeCompare(due(b))),
       isLoading: forms.isLoading || completions.isLoading || isEventsLoading,
     };
-  }, [forms.data, forms.isLoading, closedPicks.data, completions.data, completions.isLoading, allEventsById, isEventsLoading, anonymousDone, teamMemberships, attendance, founder]);
+  }, [forms.data, forms.isLoading, completions.data, completions.isLoading, allEventsById, isEventsLoading, anonymousDone, teamMemberships, attendance, founder]);
 
   return <FormsToFillContextProvider value={value}>{children}</FormsToFillContextProvider>;
 }

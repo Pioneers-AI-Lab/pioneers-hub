@@ -55,7 +55,7 @@ type AdminEventValue = {
   juryLink: WithId<JuryLink> | null;
   /** Notes de l'evenement, par jure puis par cible (vide si la mecanique n'a pas de jury). */
   evaluations: WithId<Evaluation>[];
-  /** Les formulaires de l'evenement, non archives (Debrief, jury, picks, feedback). */
+  /** Les formulaires de l'evenement, non archives (Submission, Peer rating, jury, retro, Pitch deck). */
   forms: WithId<Form>[];
   /** Les metriques de son Debrief et la grille de son formulaire de jury. */
   metrics: EventMetric[];

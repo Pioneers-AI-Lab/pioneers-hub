@@ -217,19 +217,27 @@ export type FounderProfile = {
 /** Donnees internes : staff et investors IC. */
 export type FounderInternal = {
   /**
-   * @source SP26 « Elo Score ». Classement Elo du parcours (SPECS §5.1) : un
-   * modele classe les profils par groupes de 5, mis a jour par la methode Elo
-   * (depart 1 000). Le detail de chaque classement est dans `eloMatches`.
+   * ARCHIVE (17/11) : ni lu par un score, ni affiche, ni rendu par l'API ; la grille Background le
+   * remplace. @source SP26 « Elo Score ». Classement Elo du parcours : un modele classait les profils
+   * par groupes de 5, mis a jour par la methode Elo (depart 1 000) ; le detail est dans `eloMatches`
+   * (archive aussi). Le Hub ne l'ecrit plus (l'import SP26, le seed et import-fa26.mjs, jamais relance, le posent encore).
    */
-  eloScore: number | null;
-  eloMatchesCount: number;
+  eloScore?: number | null;
+  eloMatchesCount?: number;
   /**
    * La grille Background du staff (lot 2, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §3.1) :
    * le sous-score Background et le Team de sa startup. Absent ou `null` : pas encore
-   * note, le sous-score est retire. L'Elo ne compte plus dans aucun score (17/11).
+   * note, le sous-score est retire.
    */
   background?: FounderBackground | null;
 };
+
+/** Les champs archives de `private/internal` (l'Elo, 17/11) : gardes en base, jamais rendus. */
+const ARCHIVED_INTERNAL_KEYS: ReadonlySet<string> = new Set(["eloScore", "eloMatchesCount"]);
+
+/** Un `private/internal` tel qu'on le rend (API) : sans l'Elo archive. */
+export const readFounderInternal = <T extends object>(doc: T): T =>
+  Object.fromEntries(Object.entries(doc).filter(([key]) => !ARCHIVED_INTERNAL_KEYS.has(key))) as T;
 
 /**
  * Une note Background : chaque critere de 0 a 5 (points de `BACKGROUND_CRITERIA` : 40 / 25 /

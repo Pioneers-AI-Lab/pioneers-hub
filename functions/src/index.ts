@@ -156,9 +156,9 @@ export const setAccountDisabled = onCallTyped("setAccountDisabled", async (reque
 });
 
 // ----------------------------
-// Leaderboard et jury (staff). Les resultats d'equipe (Debrief), les avis entre
-// pairs, les notes du jury et les picks se saisissent par les formulaires de
-// l'evenement (SPECS §2) : `submitFormResponse`.
+// Leaderboard et jury (staff). Les resultats d'equipe (Submission), les avis entre
+// pairs et les notes du jury se saisissent par les formulaires de l'evenement
+// (SPECS §2) : `submitFormResponse`.
 // ----------------------------
 
 export const setEventRanking = onCallTyped("setEventRanking", async (request) => {
@@ -177,7 +177,7 @@ export const setEventScoring = onCallTyped("setEventScoring", async (request) =>
 export const publishEventRanking = onCallTyped("publishEventRanking", async (request) => {
   const actorUid = await assertStaff(request.auth?.uid);
   const { batchId } = await leaderboards.publishEventRanking(actorUid, request.data?.eventId, request.data?.publish);
-  // Execution et le classement cumule suivent le classement publie (SPECS §5.5).
+  // L'Execution suit le classement publie (SPECS §5.5).
   await scores.recomputeBatchScores(batchId).catch((e) => console.error("recomputeBatchScores after publish", e));
   return { ok: true as const };
 });

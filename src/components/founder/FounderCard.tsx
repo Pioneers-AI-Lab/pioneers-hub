@@ -213,9 +213,6 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
       {internal && (
         <Section title="Internal" hint="Pioneers team and investment committee only.">
           <FieldGrid>
-            <Field label="Elo score">
-              {internal.eloScore !== null ? <span className="num">{Math.round(internal.eloScore)}</span> : null}
-            </Field>
             <Field label="Account">{founder.uid ? `Linked ${formatDay(founder.claimedDateISOString?.slice(0, 10))}` : "Not linked"}</Field>
           </FieldGrid>
         </Section>

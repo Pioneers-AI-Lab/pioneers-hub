@@ -1,7 +1,7 @@
 import { getFirestore, type DocumentSnapshot } from "firebase-admin/firestore";
 import { z } from "zod";
 import { COL, docPaths, eventCollectionPaths } from "../shared/collections";
-import { LIST_KEYS, readDirectory, type Batch, type ClosedList, type Founder, type Note, type PioneersEvent, type Program, type Startup } from "../shared/types";
+import { LIST_KEYS, readDirectory, readFounderInternal, type Batch, type ClosedList, type Founder, type Note, type PioneersEvent, type Program, type Startup } from "../shared/types";
 import {
   canReadFounderDirectory,
   canReadFounderProfile,
@@ -263,7 +263,7 @@ export async function getObject(caller: Caller, input: GetInput): Promise<Record
         readIf(insider, `${COL.founderStats}/${id}`),
       ]);
       const personVisible = person && canReadPerson(role, caller.uid, person as { uid: string | null });
-      return { object, ...withId(founderSnap), person: personVisible ? person : undefined, directory: directory && readDirectory(directory), profile, internal, stats };
+      return { object, ...withId(founderSnap), person: personVisible ? person : undefined, directory: directory && readDirectory(directory), profile, internal: internal && readFounderInternal(internal), stats };
     }
 
     case "startup": {

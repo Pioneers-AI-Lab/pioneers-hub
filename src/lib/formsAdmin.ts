@@ -1,5 +1,5 @@
 import { writeBatch } from "firebase/firestore";
-import { deriveAttachments, formProblems, versionedSnapshot } from "@shared/formRules";
+import { deriveAttachments, formProblems, retiredFormProblems, versionedSnapshot } from "@shared/formRules";
 import { addedFormDates, type EventTimes } from "@shared/eventForms";
 import { formVersion, newForm, type NewFormInput } from "@shared/forms";
 import type { Form, FormQuestion, WithId } from "@shared/types";
@@ -72,7 +72,7 @@ export async function createForm(
 export async function saveForm(form: WithId<Form>, draft: FormDraft, options: { publish: boolean }): Promise<number> {
   const attachments = deriveAttachments(draft.questions, draft.attachments ?? form.attachments);
   const next = { ...form, ...draft, attachments };
-  const problems = formProblems(next);
+  const problems = [...retiredFormProblems(next, form), ...formProblems(next)];
   if (problems.length > 0) throw new Error(problems[0]);
 
   const isFirstPublication = options.publish && form.version === 0;

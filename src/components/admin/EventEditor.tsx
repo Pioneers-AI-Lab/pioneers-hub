@@ -54,7 +54,7 @@ import { HelpBlock } from "@/components/ui/useHelp";
 // une ligne qui ouvre sa fenetre : le tirage, qui regle la taille et publie ; le
 // type ; le retrait, jusqu'a la publication), formulaires (« Add a form » ->
 // vierge ou un modele -> son editeur). Ensuite ce qui fait son resultat : classement, resultats, jury,
-// picks (EventResultsAdmin), et l'archive.
+// picks archives (EventResultsAdmin), et l'archive.
 //
 // Agenda Google (SPECS §2, 16/11) : un batch relie ne cree pas d'evenement ici
 // (« New » renvoie a l'agenda). Un evenement venu de l'agenda a ses champs

@@ -159,11 +159,11 @@ export const startupScore = (score: Pick<StartupScore, "subScores" | "scale">): 
   );
 
 // ----------------------------
-// eloMatches/{matchId}  (staff + investors IC)
+// eloMatches/{matchId}  (staff + investors IC) : ARCHIVE depuis le 17/11
 // ----------------------------
-// Un classement par le modele d'un groupe de 5 profils (SPECS §5.1). Le
-// raisonnement est CONSERVE (il alimente la fiche) ; noms et emails ne sont
-// pas envoyes au modele.
+// Un classement par le modele d'un groupe de 5 profils (classements du 14/11, script retire : la
+// grille Background remplace l'Elo, scripts/background-draft.mjs). Garde, plus ecrit ni affiche ;
+// noms et emails n'etaient pas envoyes au modele.
 
 export type EloMatch = BatchScoped & {
   /** Du premier au dernier. */

@@ -7,7 +7,7 @@
 // node scripts/background-draft.mjs fall-2026 --apply profiles.json --prod   ecrit les propositions (projet REEL)
 // FIRESTORE_EMULATOR_HOST=127.0.0.1:8180 node scripts/background-draft.mjs ...   emulateurs (--prod y ecrit)
 //
-// Comme elo-rank.mjs, sans cle API : `--export` ecrit un fichier sans nom ni email (ids
+// Remplace elo-rank.mjs (retire le 17/11 avec l'Elo). Sans cle API : `--export` ecrit un fichier sans nom ni email (ids
 // anonymes P1, P2..., nom retire des textes) ; Claude le note dans une session et
 // complete `results` : { "P1": { "execution": 0-5, "founderSignal": 0-5, "pedigree": 0-5,
 // "geography": 0-5, "outstanding": false, "reasoning": "..." }, ... }. `--apply` relit

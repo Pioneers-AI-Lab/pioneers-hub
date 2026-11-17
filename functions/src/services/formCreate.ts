@@ -4,10 +4,11 @@ import { COL, docPaths, SUB } from "../shared/collections";
 import { isStaffViewer } from "../shared/access";
 import { isDbFieldKey, type DbFieldKey } from "../shared/fieldRegistry";
 import { addedFormDates } from "../shared/eventForms";
-import { formProblems, newQuestion } from "../shared/formRules";
+import { formProblems, newQuestion, retiredFormProblems } from "../shared/formRules";
 import { firstPublication, newForm } from "../shared/forms";
 import { FORM_TEMPLATES, type FormTemplateKey, isOfferedTemplate } from "../shared/presets/formTemplates";
-import { FORM_APPROVALS, FORM_FIELD_TYPES, FORM_IDENTITY_CHECKS, PICKER_ENTITIES, QUESTION_SCOPES, type Batch, type Form, type PioneersEvent } from "../shared/types";
+import { isOffered, RETIRED_IDENTITY_CHECKS } from "../shared/presets/offered";
+import { FORM_APPROVALS, FORM_FIELD_TYPES, FORM_IDENTITY_CHECKS, PICKER_ENTITIES, QUESTION_SCOPES, type Batch, type Form, type FormIdentityCheck, type PioneersEvent } from "../shared/types";
 import { FRONTEND_BASE_URL } from "../api/config";
 import { badRequest, notFound } from "../api/errors";
 import type { Operation } from "./operations";
@@ -29,6 +30,8 @@ const TEMPLATE_KEYS = (Object.keys(FORM_TEMPLATES) as FormTemplateKey[]).filter(
   FormTemplateKey,
   ...FormTemplateKey[],
 ];
+/** Les identites encore proposees : plus d'`anonymous` (decision du 17/11). */
+const IDENTITY_CHECKS = FORM_IDENTITY_CHECKS.filter((c) => isOffered(RETIRED_IDENTITY_CHECKS, c)) as [FormIdentityCheck, ...FormIdentityCheck[]];
 
 export const QuestionInput = z
   .object({
@@ -61,8 +64,8 @@ export const CreateFormInput = z
     title: z.string().trim().min(1).max(200).optional().describe("Default: the model's title."),
     description: z.string().trim().min(1).max(2000).optional(),
     questions: z.array(QuestionInput).min(1).max(40).optional().describe("Replace the model's questions, or the questions of a form without model."),
-    eventId: z.string().min(1).optional().describe("Event the form is about (session or exercise feedback, debrief, jury, picks)."),
-    identityCheck: z.enum(FORM_IDENTITY_CHECKS).optional().describe("How a respondent says who they are. Default: the model's, or select_name."),
+    eventId: z.string().min(1).optional().describe("Event the form is about (submission, peer rating, jury, retro, pitch deck)."),
+    identityCheck: z.enum(IDENTITY_CHECKS).optional().describe("How a respondent says who they are: `account` for every founder form, `jury_link` for a jury. Default: the model's, or select_name."),
     approval: z.enum(FORM_APPROVALS).optional().describe("Staff validation of answers before they are written. Default: the model's, or none."),
     publish: z.boolean().optional().describe("true: open it now (or at `opensDateISOString`). Default: a draft, to review in Admin > Forms."),
     opensDateISOString: isoDateTime.optional(),
@@ -126,7 +129,8 @@ export const createForm: Operation<typeof CreateFormInput, Created> = {
         ...dates,
       },
     );
-    const problem = formProblems(form)[0];
+    // Rien de retire le 17/11 (type Picks, anonyme, champ des picks) : un nouveau formulaire n'a rien a garder.
+    const problem = [...retiredFormProblems(form, null), ...formProblems(form)][0];
     if (problem) throw badRequest("invalid_form", problem, "questions");
     const publish = input.publish === true;
 

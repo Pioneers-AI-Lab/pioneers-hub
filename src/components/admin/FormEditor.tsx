@@ -28,10 +28,12 @@ import {
   formProblems,
   isJuryCriterion,
   questionProblems,
+  retiredFormProblems,
   versionedSnapshot,
 } from "@shared/formRules";
 import { formState } from "@shared/forms";
 import { EVENT_TEMPLATES } from "@shared/presets/eventTemplates";
+import { isOffered, RETIRED_DB_FIELDS, RETIRED_FORM_KINDS, RETIRED_IDENTITY_CHECKS } from "@shared/presets/offered";
 import { EVENT_METRIC_RENAMES, STANDARD_METRICS, standardEventMetricKey } from "@shared/presets/standardMetrics";
 import { keyFromLabel } from "@shared/text";
 import { IDENTITY_RULES, activeQuestions, needsAccount, scopeOf, type Form, type FormApproval, type FormFieldType, type FormIdentityCheck, type FormKind, type FormQuestion, type PickerEntity, type QuestionScope, type WithId } from "@shared/types";
@@ -252,7 +254,7 @@ function Editor({ form }: { form: WithId<Form> }) {
 
   const attachments = deriveAttachments(toSave.questions, form.attachments);
   const next = { ...form, ...toSave, attachments };
-  const problems = formProblems(next);
+  const problems = [...retiredFormProblems(next, form), ...formProblems(next)];
   const willBumpVersion = isPublished && versionedSnapshot(next) !== versionedSnapshot(form);
   const saveLabel = willBumpVersion ? `Publish changes as version ${form.version + 1}` : "Save";
   const active = draft.questions.map((q, index) => ({ q, index })).filter(({ q }) => !q.archived);
@@ -439,11 +441,14 @@ function Editor({ form }: { form: WithId<Form> }) {
             allowDeselect={false}
             value={draft.kind}
             onChange={(v) => v && set("kind", v as FormKind)}
-            data={Object.entries(FORM_KIND_LABELS).map(([value, label]) => ({ value, label }))}
+            // Un type retire (Picks, 17/11) ne se propose plus ; un formulaire qui l'a deja le garde.
+            data={(Object.entries(FORM_KIND_LABELS) as [FormKind, string][])
+              .filter(([value]) => isOffered(RETIRED_FORM_KINDS, value, form.kind))
+              .map(([value, label]) => ({ value, label }))}
           />
           <Select
             label="Event"
-            description="Submission, peer rating, jury, picks, retro or feedback: the answers are tied to this event, its teams and its teams scored."
+            description="Submission, peer rating, jury, retro or pitch deck: the answers are tied to this event, its teams and its teams scored."
             clearable
             searchable
             value={draft.eventId}
@@ -458,7 +463,8 @@ function Editor({ form }: { form: WithId<Form> }) {
           fullWidth
           value={draft.identityCheck === "email_code" ? "account" : draft.identityCheck}
           onChange={(v) => set("identityCheck", v as FormIdentityCheck)}
-          data={IDENTITY_OPTIONS}
+          // Plus d'anonyme (17/11) : un ancien formulaire anonyme le garde, et le montre.
+          data={IDENTITY_OPTIONS.filter((o) => isOffered(RETIRED_IDENTITY_CHECKS, o.value, form.identityCheck))}
         />
       </Section>
 
@@ -684,6 +690,8 @@ function QuestionModal({
   const fieldData = useMemo(() => {
     const groups = new Map<string, { value: string; label: string }[]>();
     for (const key of compatibleDbFields(q.type)) {
+      // Un champ retire (les picks, 17/11) reste a la question qui l'ecrivait deja, sans se proposer aux autres.
+      if (!isOffered(RETIRED_DB_FIELDS, key, original?.dbField)) continue;
       const group = DOC_KIND_LABELS[parseDbField(key).doc];
       const def = getFieldDef(key);
       const items = groups.get(group) ?? [];
@@ -702,7 +710,7 @@ function QuestionModal({
       groups.set(choice.group, items);
     }
     return [...groups.entries()].map(([group, items]) => ({ group, items }));
-  }, [q.type, q.dbField, q.label, known]);
+  }, [q.type, q.dbField, q.label, known, original?.dbField]);
 
   const chooseField = (value: string | null) => {
     const family = (Object.keys(FAMILY_CHOICES) as FieldFamily[]).find((f) => value === NEW_KEY(f));

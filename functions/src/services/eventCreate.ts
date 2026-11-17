@@ -33,7 +33,7 @@ export const CreateEventInput = z
     templateKey: z
       .enum(TEMPLATE_KEYS)
       .optional()
-      .describe("Event model, a pack: the event (label, duration), its matching (teams or tables) and its forms (debrief, jury, picks, feedback), created together. Omit for a blank event."),
+      .describe("Event model, a pack: the event (label, duration), its matching (teams or tables) and its forms (submission, peer rating, jury, retro, pitch deck), created together. Omit for a blank event."),
     kind: z.enum(EVENT_KINDS).optional().describe("Label of a blank event (an office hour is a `meeting`). Default `session`."),
     name: z.string().trim().min(1).max(120),
     startDateISOString: isoDateTime,

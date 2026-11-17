@@ -14,6 +14,7 @@ import {
   type SubjectKey,
   type ValueSpec,
 } from "./fieldRegistry";
+import { isOffered, RETIRED_DB_FIELDS, RETIRED_FORM_KINDS, RETIRED_IDENTITY_CHECKS } from "./presets/offered";
 import { EVENT_METRIC_RENAMES, standardMetricOf, type StandardMetric } from "./presets/standardMetrics";
 import { absentFounderIds, eventRoster } from "./attendance";
 import { matchingOf } from "./events";
@@ -285,6 +286,25 @@ export function formProblems(
 }
 
 const isAnonymous = (identity: FormIdentityCheck) => identity === "anonymous";
+
+type RetirableForm = Pick<Form, "kind" | "identityCheck" | "questions">;
+
+/**
+ * Ce qui est retire le 17/11 (presets/offered.ts) et que ce formulaire prendrait : type Picks, identite
+ * anonyme, question qui ecrit les picks. Un formulaire qui l'avait deja (`stored`, `null` a la creation)
+ * le garde : il reste lu. Editeur (`saveForm`) et `create_form`.
+ */
+export function retiredFormProblems(form: RetirableForm, stored: RetirableForm | null): string[] {
+  const problems: string[] = [];
+  if (!isOffered(RETIRED_FORM_KINDS, form.kind, stored?.kind)) problems.push("Picks forms are retired: the Shortlist and Lock my team replace them.");
+  if (!isOffered(RETIRED_IDENTITY_CHECKS, form.identityCheck, stored?.identityCheck)) problems.push("Anonymous forms are retired: founders answer from their account.");
+  const storedField = new Map(stored?.questions.map((q) => [q.id, q.dbField]));
+  activeQuestions(form).forEach((q, i) => {
+    if (q.dbField && !isOffered(RETIRED_DB_FIELDS, q.dbField, storedField.get(q.id)))
+      problems.push(`Question ${i + 1}: \`${q.dbField}\` is retired (the Shortlist and Lock my team replace the picks).`);
+  });
+  return problems;
+}
 
 /**
  * Une question qui alimente un indicateur (courbes, scores) ne se supprime ni

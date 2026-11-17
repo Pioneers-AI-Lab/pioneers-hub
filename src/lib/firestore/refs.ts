@@ -408,17 +408,6 @@ export const queries = {
     query: query(refs.eventAttendance(eventId)),
   }),
 
-  /** Les picks clos du batch : le fondateur y relit ses choix (« To do »). */
-  closedPicksOfBatch: (batchId: string) => ({
-    key: `forms:batch=${batchId}:picks:closed`,
-    query: query(
-      refs.forms(),
-      whereField<Form>("batchId", "==", batchId),
-      whereField<Form>("kind", "==", "picks"),
-      whereField<Form>("status", "==", "closed"),
-    ),
-  }),
-
   openFormsOfBatch: (batchId: string) => ({
     key: `forms:batch=${batchId}:open`,
     query: query(

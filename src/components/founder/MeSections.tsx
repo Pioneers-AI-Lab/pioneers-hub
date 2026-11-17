@@ -24,10 +24,10 @@ const TODO_LIMIT = 5;
 function MeTodo() {
   const { program } = useProgram();
   const { batch } = useBatch();
-  const { forms, picks, debriefs, checklist, isLoading } = useTodoItems();
+  const { forms, debriefs, checklist, isLoading } = useTodoItems();
 
   const rows = [
-    ...[...picks, ...debriefs, ...forms].filter((i) => !i.done).map((i) => <FormRow key={i.form.id} item={i} />),
+    ...[...debriefs, ...forms].filter((i) => !i.done).map((i) => <FormRow key={i.form.id} item={i} />),
     ...checklist.filter((c) => !c.done).map((c) => <ChecklistRow key={c.id} item={c} />),
   ];
   if (isLoading) return null;

@@ -6,7 +6,7 @@ import { Button, CopyButton, Group, Stack, Text } from "@mantine/core";
 import { FORM_TEMPLATES, isOfferedTemplate, type FormTemplate, type FormTemplateKey } from "@shared/presets/formTemplates";
 import { isWorkTeamEvent } from "@shared/events";
 import { formState } from "@shared/forms";
-import { activeQuestions, EVALUATION_DECISION_LABELS, isLateUnwaived, isPickable, type Evaluation, type Form, type WithId } from "@shared/types";
+import { EVALUATION_DECISION_LABELS, isLateUnwaived, isPickable, type Evaluation, type Form, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminEvent } from "@/context/AdminEventContext";
 import { useAction } from "@/hooks/useAction";
@@ -29,7 +29,7 @@ import { HelpBlock } from "@/components/ui/useHelp";
 // ----------------------------
 // Monte par la page de l'evenement (EventEditor). Chaque bloc suit ce qui est
 // attache (SPECS §2) : toute saisie est un FORMULAIRE de l'evenement (Debrief,
-// jury, picks, feedback), ajoute depuis un modele (`EventFormsField` : la liste,
+// jury, retro, pitch deck), ajoute depuis un modele (`EventFormsField` : la liste,
 // puis « Add a form » -> le modele -> son editeur, qui ramene ici) ; le Debrief
 // et les avis entre pairs demandent un matching.
 // Les metriques sont les questions du Debrief, la grille celles du jury.
@@ -48,7 +48,7 @@ const EVENT_FORM_TEMPLATES: Partial<Record<FormTemplateKey, string>> = {
   week_retro: "Energy, a score per session, more or less of what",
 };
 
-/** Ce qui fait le resultat de l'evenement : classement, resultats, jury, picks. */
+/** Ce qui fait le resultat de l'evenement : classement, resultats, jury, et les picks d'avant le 17/11. */
 export function EventResultsAdmin() {
   const { matching, metrics, juryForm } = useAdminEvent();
   return (
@@ -302,25 +302,23 @@ function JurySection({ juryForm }: { juryForm: WithId<Form> }) {
 }
 
 /**
- * Les choix prives de l'evenement (questions « picks » de ses formulaires) :
- * les mutual picks (hackathon de 3 jours), le « qui t'a marque » d'un speed
- * dating. Le staff voit les choix reciproques, a apparier en premier. Ouvrir
- * ou clore les choix, c'est ouvrir ou fermer leur formulaire.
+ * Les choix prives de l'evenement, ARCHIVES : les picks sont retires le 17/11 (la Shortlist et Lock my
+ * team les remplacent, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §4.6), et leurs formulaires archives.
+ * Rien n'est efface : le staff relit ici ceux deja donnes (Founder introductions), et les choix reciproques.
  */
 function PicksSection() {
-  const { event, forms } = useAdminEvent();
-  const { batch, founders, foundersById } = useAdmin();
-  // Les choix ne s'ecrivent que par un formulaire « picks » : sans lui, rien a lire.
-  const hasPicksForm = forms.some((f) => activeQuestions(f).some((q) => q.dbField === "picks.pickedFounderIds"));
-  const picks = useQueryListener(hasPicksForm ? queries.picksOfEvent(event.id) : null);
-  if (!hasPicksForm) return null;
+  const { event } = useAdminEvent();
+  const { batch, founders, foundersById, eventIdsWithPicks } = useAdmin();
+  // Des picks n'ont pu s'ecrire que par un formulaire qui les demandait : sans lui, rien a lire.
+  const picks = useQueryListener(eventIdsWithPicks.has(event.id) ? queries.picksOfEvent(event.id) : null);
+  if (picks.data.length === 0) return null;
 
   const mutual = mutualPairs(picks.data);
   const nameOf = (id: string) => foundersById.get(id)?.name ?? id;
   const pickable = founders.filter((f) => isPickable(f, batch.id)).length;
 
   return (
-    <Section title="Picks" hint="Private choices, ranked, from the picks question of this event's forms. Only the staff sees them.">
+    <Section title="Picks (archived)" hint="Private choices given before the Shortlist replaced the picks (17/11). Only the staff sees them.">
       <Text size="sm" c="dimmed">
         {picks.data.length} of {pickable} founders picked · {mutual.length} mutual {mutual.length === 1 ? "pair" : "pairs"}
       </Text>

@@ -325,7 +325,7 @@ export async function applyImport(
         isExternalFounder: false,
         stats: null,
       };
-      const internal: FounderInternal = { eloScore: null, eloMatchesCount: 0 };
+      const internal: FounderInternal = { background: null };
       writes.set(refs.founder(founderId), { ...founder, id: founderId });
       writes.set(refs.founderDirectory(founderId), {
         ...emptyDirectory(email),
