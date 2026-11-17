@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Select, Stack } from "@mantine/core";
 import { templateContext } from "@shared/forms";
-import { FORM_TEMPLATES, isOfferedTemplate, templateQuestions, type FormTemplateKey } from "@shared/presets/formTemplates";
+import { FORM_TEMPLATES, OFFERED_FORM_TEMPLATE_KEYS, templateQuestions, type FormTemplateKey } from "@shared/presets/formTemplates";
 import { useAdmin } from "@/context/AdminContext";
 import { useAction } from "@/hooks/useAction";
 import { formatDateTime } from "@/lib/format";
@@ -24,7 +24,7 @@ export default function NewFormPage() {
   const router = useRouter();
   const { batch, events, eventsById } = useAdmin();
   const { isBusy, run } = useAction();
-  const [templateKey, setTemplateKey] = useState<string>("weekly_update");
+  const [templateKey, setTemplateKey] = useState<string>("lock_my_team");
   const [eventId, setEventId] = useState<string | null>(null);
   const template = templateKey === BLANK ? null : FORM_TEMPLATES[templateKey as FormTemplateKey];
   // Le Debrief, le jury et les picks construisent leurs questions depuis l'evenement (metriques et grille de son modele).
@@ -65,9 +65,9 @@ export default function NewFormPage() {
             value={templateKey}
             onChange={(v) => v && setTemplateKey(v)}
             data={[
-              ...(Object.entries(FORM_TEMPLATES) as [FormTemplateKey, (typeof FORM_TEMPLATES)[FormTemplateKey]][]).filter(([, t]) => isOfferedTemplate(t)).map(([key, t]) => ({
+              ...OFFERED_FORM_TEMPLATE_KEYS.map((key) => ({
                 value: key,
-                label: `${t.label} · ${t.build && !(key === templateKey && event) ? "questions from its event" : countOf(key)}`,
+                label: `${FORM_TEMPLATES[key].label} · ${FORM_TEMPLATES[key].build && !(key === templateKey && event) ? "questions from its event" : countOf(key)}`,
               })),
               { value: BLANK, label: "Blank form" },
             ]}

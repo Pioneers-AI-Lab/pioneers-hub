@@ -61,7 +61,7 @@ export function newForm(input: NewFormInput, extra: Partial<Omit<FormData, "atta
     title: template?.title ?? "Untitled form",
     description: template ? templateDescription(template, ctx) : null,
     approval: template?.approval ?? "none",
-    identityCheck: template?.identityCheck ?? "select_name",
+    identityCheck: template?.identityCheck ?? "account",
     eventId: input.eventId,
     opensDateISOString: null,
     deadlineDateISOString: null,

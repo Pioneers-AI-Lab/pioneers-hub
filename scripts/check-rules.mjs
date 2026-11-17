@@ -1077,7 +1077,7 @@ console.log("shortlist history (shortlistHistory, server only)");
   await expectDenied("staff deletes a history record", () => deleteDoc(doc(staff.db, removed)));
   await deleteApp(staff.app);
   const ic = await clientAs("ic-1");
-  await expectOk("IC investor reads the shortlist history", () => read(doc(ic.db, removed)));
+  await expectDenied("IC investor reads the shortlist history (staff only, SPECS §6.2)", () => read(doc(ic.db, removed)));
   await deleteApp(ic.app);
   const lp = await clientAs("lp-1");
   await expectDenied("portfolio investor reads the shortlist history", () => read(doc(lp.db, removed)));
@@ -1397,7 +1397,7 @@ console.log("weekly update forms follow the calendar");
 
 // ==== LOT 2 (debut) : Lock my team, Admin > Startups, grille Background ============
 // Lock my team : un formulaire du BATCH (sans evenement), depuis son compte ; la reponse va
-// dans `teamLocks/{founderId}` (le fondateur lui-meme + staff + IC). Puis le staff cree une
+// dans `teamLocks/{founderId}` (le fondateur lui-meme + staff, SPECS §6.2). Puis le staff cree une
 // startup en un lot (shared/teamLocks.ts) ; la grille Background (`private/internal.background`)
 // s'ecrit par le staff seul, l'Outstanding seulement a 100.
 console.log("lock my team (form -> teamLocks), startups, background grid");
@@ -1466,7 +1466,8 @@ console.log("lock my team (form -> teamLocks), startups, background grid");
   await deleteApp(pub.app);
 
   const ic = await clientAs("ic-1");
-  await expectOk("IC investor lists the batch's team locks", () => count(query(collection(ic.db, "teamLocks"), where("batchId", "==", "fall-2026"))));
+  await expectDenied("IC investor reads a team lock (self + staff, SPECS §6.2)", () => read(doc(ic.db, "teamLocks/ada-example")));
+  await expectDenied("IC investor lists the batch's team locks", () => count(query(collection(ic.db, "teamLocks"), where("batchId", "==", "fall-2026"))));
   await expectDenied("IC investor writes a team lock", () => updateDoc(doc(ic.db, "teamLocks/ada-example"), { locked: false }));
   await deleteApp(ic.app);
   const lp = await clientAs("lp-1");
@@ -1535,8 +1536,8 @@ console.log("lock my team (form -> teamLocks), startups, background grid");
 // la synchro de l'agenda les accroche, voir « google calendar sync »), depuis son compte : le founder
 // rappelle l'objectif donne au Weekly update PRECEDENT (`previousGoal`) ; le startup vaut pour toute la
 // startup (« fait » pour chaque membre) et refuse un fondateur sans startup. Sans presence : un fondateur
-// marque absent a l'entree repond quand meme. Les revues (`founderReviews`, `startupReviews`) : staff + IC
-// en lecture, staff en ecriture, notes de 0 a 5, Outstanding seulement a 100 (shared/weeklyReviews.ts).
+// marque absent a l'entree repond quand meme. Les revues (`founderReviews`, `startupReviews`) : staff seul
+// (lecture et ecriture, SPECS §6.2), notes de 0 a 5, Outstanding seulement a 100 (shared/weeklyReviews.ts).
 console.log("weekly updates (founder, startup) and their review queue");
 {
   const adb = getAdminFirestore();
@@ -1637,8 +1638,8 @@ console.log("weekly updates (founder, startup) and their review queue");
   await deleteApp(staff.app);
 
   const ic = await clientAs("ic-1");
-  await expectOk("IC investor reads a founder review", () => read(doc(ic.db, `founderReviews/ada-example_${week}`)));
-  await expectOk("IC investor lists the batch's startup reviews", () => count(query(collection(ic.db, "startupReviews"), where("batchId", "==", "fall-2026"))));
+  await expectDenied("IC investor reads a founder review (staff only, SPECS §6.2)", () => read(doc(ic.db, `founderReviews/ada-example_${week}`)));
+  await expectDenied("IC investor lists the batch's startup reviews", () => count(query(collection(ic.db, "startupReviews"), where("batchId", "==", "fall-2026"))));
   await expectDenied("IC investor writes a review", () => updateDoc(doc(ic.db, `startupReviews/lumen_${week}`), { comment: "x" }));
   await deleteApp(ic.app);
   const lp = await clientAs("lp-1");

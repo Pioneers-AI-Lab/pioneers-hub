@@ -13,7 +13,7 @@ import { COL, docPaths, eventCollectionPaths } from "../../shared/collections";
 import { isArchivedAs } from "../../shared/docWrites";
 import { planEventMove } from "../../shared/eventForms";
 import { founderGuest, guestCopiesOf, mentorGuest } from "../../shared/events";
-import { EVENT_TEMPLATES, type EventTemplateKey } from "../../shared/presets/eventTemplates";
+import { EVENT_TEMPLATES, OFFERED_EVENT_TEMPLATE_KEYS } from "../../shared/presets/eventTemplates";
 import type { EventGuest, Founder, Form, Mentor, Person, PioneersEvent } from "../../shared/types";
 import { badRequest, notFound } from "../../api/errors";
 import type { Operation } from "../operations";
@@ -28,7 +28,6 @@ import { changesOf, mustRead, readWhere, staffOnly, writePlan } from "./writes";
 // d'agenda (`CALENDAR_FIELDS`) : ils se changent dans Google, et l'API le dit
 // au lieu de les ignorer.
 
-const TEMPLATE_KEYS = Object.keys(EVENT_TEMPLATES) as [EventTemplateKey, ...EventTemplateKey[]];
 const ids = z.array(z.string().min(1)).max(60);
 const url = z.url().max(2000).nullable();
 
@@ -160,7 +159,7 @@ export const archiveEvent: Operation<typeof ArchiveEventInput> = {
 export const ApplyEventTemplateInput = z
   .object({
     eventId: z.string().min(1),
-    templateKey: z.enum(TEMPLATE_KEYS).describe("The model (a pack): its label, its matching if the event has none, and the forms it does not have yet."),
+    templateKey: z.enum(OFFERED_EVENT_TEMPLATE_KEYS).describe("The model (a pack): its label, its matching and its scoring if the event has none, and the forms it does not have yet. Retired models are refused."),
   })
   .strict();
 

@@ -153,7 +153,8 @@ const TOOLS: Tool[] = [
     title: "Create event",
     description:
       "Creates an event in a batch: blank (an office hour: kind `meeting`), or from a model, a pack that also creates its " +
-      "matching and forms (a hackathon: teams, debrief, jury, feedback), with the startups and mentors concerned. `scheduled` shows it to founders and publishes its forms.",
+      "matching, scoring and forms (a hackathon: teams, submission, peer rating, jury; a pitch: pitch deck, jury), with the startups and mentors concerned. " +
+      "Retired models are refused. `scheduled` shows it to founders and publishes its forms.",
   }),
   {
     name: "pioneers_run",
@@ -197,7 +198,7 @@ const TOOLS: Tool[] = [
     name: "pioneers_create_form",
     title: "Create form",
     description:
-      "Creates a form from a model (weekly update, session feedback...) or from your questions. A question can write its " +
+      "Creates a form from a model (Lock my team, week retro, program end...) or from your questions. A question can write its " +
       "answer to a database field (list `fields`). Created as a draft to review in Admin > Forms, or published at once " +
       "with `publish: true` (the result gives the link to share).",
   }),

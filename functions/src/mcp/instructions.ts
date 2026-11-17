@@ -29,5 +29,5 @@ export const INSTRUCTIONS = [
   "# Already true",
   "- Nothing is deleted: objects are archived, and can be restored.",
   "- Every write is logged with the user's name.",
-  "- Individual peer ratings and mutual picks are private: only aggregates exist here.",
+  "- Peer ratings, shortlists, \"met\" marks and jury scores are private: they reach scores, never one by one.",
 ].join("\n");

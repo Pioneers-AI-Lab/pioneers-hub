@@ -36,8 +36,8 @@ const yesNo = (v: boolean | null | undefined) => (v === true ? "Yes" : v === fal
  * a « Me » (sa propre fiche). `selfSections` (To do) ne s'affiche que sur SA
  * fiche, sous les Providers qu'il lit (SelfProviders, monte par le layout).
  *
- * Ordre (demandes du 15/11 et du 16/11) : coordonnees et boutons Shortlist / Met en
- * haut de fiche (plus de section « Contact »), puis ce que lit qui cherche un
+ * Ordre (demandes du 15/11, 16/11 et 17/11) : coordonnees et one-liner, filet, boutons
+ * Shortlist / Met (plus de section « Contact »), puis ce que lit qui cherche un
  * cofondateur, puis le parcours dans le programme ; les listes Shortlist / Met en bas.
  */
 export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
@@ -102,14 +102,14 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
       {/* Contacts rapides : ce que l'annuaire du batch connait (fondateurs du batch, staff, investors). */}
       {dir && <QuickContacts directory={dir} slackTeamId={batch.settings.slackTeamId ?? null} />}
 
-      {/* Shortlist / Met : un fondateur du batch, sur la fiche d'un autre. */}
-      <ConnectionButtons founderId={founder.id} />
-
       {founder.trackRecordOneLiner && (
         <Text mt="md" c="dark.1">
           {founder.trackRecordOneLiner}
         </Text>
       )}
+
+      {/* Shortlist / Met sous un filet : un fondateur du batch, sur la fiche d'un autre. */}
+      <ConnectionButtons founderId={founder.id} />
 
       {isSelf && selfSections}
 

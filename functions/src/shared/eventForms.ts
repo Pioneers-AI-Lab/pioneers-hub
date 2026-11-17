@@ -142,6 +142,9 @@ export function addedFormDates(
 /** Le jour d'un titre date (`FormTemplate.datedTitle`) : « 3 Dec », a Paris. */
 const DAY_LABEL = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", day: "numeric", month: "short" });
 
+/** L'id d'un formulaire du pack d'un evenement : `<evenement>-<modele>` (deterministe, une relance ne le recree pas). */
+export const eventFormId = (eventId: string, templateKey: FormTemplateKey) => `${eventId}-${templateKey}`;
+
 export function eventFormsPlan(eventId: string, event: EventForPlan, options: EventFormsOptions, nowISO: string): EventFormPlan[] {
   const legacy = options.legacy ?? {};
   const isPast = !isUpcomingEvent(event, nowISO);
@@ -189,7 +192,7 @@ export function eventFormsPlan(eventId: string, event: EventForPlan, options: Ev
       },
       extra,
     );
-    const id = `${eventId}-${templateKey}`;
+    const id = eventFormId(eventId, templateKey);
     if (status === "draft") return { id, templateKey, form: draft, version: null };
     const { form, version } = firstPublication(draft, nowISO);
     return { id, templateKey, form: { ...form, status }, version };
@@ -199,7 +202,12 @@ export function eventFormsPlan(eventId: string, event: EventForPlan, options: Ev
 /** Les formulaires de chaque evenement (`eventId`), parmi ceux du batch. */
 export function formsByEventId<F extends Pick<Form, "eventId">>(forms: readonly F[]): Map<string, F[]> {
   const out = new Map<string, F[]>();
-  for (const f of forms) if (f.eventId) out.set(f.eventId, [...(out.get(f.eventId) ?? []), f]);
+  for (const f of forms) {
+    if (!f.eventId) continue;
+    const list = out.get(f.eventId);
+    if (list) list.push(f);
+    else out.set(f.eventId, [f]);
+  }
   return out;
 }
 

@@ -137,10 +137,10 @@ export const refs = {
   founderProfile: (founderId: string) => docRef<FounderProfile>(docPaths.founderProfile(founderId)),
   founderInternal: (founderId: string) => docRef<FounderInternal>(docPaths.founderInternal(founderId)),
   founderConnections: (founderId: string) => docRef<FounderConnections>(docPaths.founderConnections(founderId)),
-  /** Lock my team : le fondateur lui-meme, le staff, les investors IC (regle `teamLocks`). */
+  /** Lock my team : le fondateur lui-meme et le staff (regle `teamLocks`). */
   teamLocks: () => colRef<TeamLock>(TEAM_LOCKS_COLLECTION),
   teamLock: (founderId: string) => docRef<TeamLock>(teamLockPath(founderId)),
-  /** Revue des Weekly updates (lot 4) : staff + investors IC (regles `founderReviews`, `startupReviews`). */
+  /** Revue des Weekly updates (lot 4) : staff seul (regles `founderReviews`, `startupReviews`). */
   founderReviews: () => colRef<FounderReview>(FOUNDER_REVIEWS_COLLECTION),
   startupReviews: () => colRef<StartupReview>(STARTUP_REVIEWS_COLLECTION),
 

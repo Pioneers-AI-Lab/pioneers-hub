@@ -124,10 +124,12 @@ const nextWeek = (iso: string | null) => (iso ? new Date(Date.parse(iso) + WEEK_
  * formulaire par occurrence : celui d'une semaine (`attachments.week`) donne
  * celui de la semaine suivante, dates decalees de 7 jours ; les autres (un
  * feedback d'evenement) repartent sans dates, a fixer pour leur occurrence.
+ * Une copie est un NOUVEAU formulaire : ce qui est retire le 17/11 (type Picks, identite anonyme ou
+ * nom choisi, champ des picks) ne s'y recopie pas (`retiredFormProblems`, refus `invalid_form`).
  */
 export function duplicatedForm(form: Form): FormData {
   const isWeekly = form.attachments.week !== undefined;
-  return {
+  const copy: FormData = {
     programId: form.programId,
     batchId: form.batchId,
     archivedDateISOString: null,
@@ -146,6 +148,9 @@ export function duplicatedForm(form: Form): FormData {
     opensDateISOString: isWeekly ? nextWeek(form.opensDateISOString) : null,
     deadlineDateISOString: isWeekly ? nextWeek(form.deadlineDateISOString) : null,
   };
+  const problem = retiredFormProblems(copy, null)[0];
+  if (problem) throw new RuleError("invalid_form", `This form cannot be copied. ${problem}`, "formId");
+  return copy;
 }
 
 /**

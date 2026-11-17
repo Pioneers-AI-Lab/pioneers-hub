@@ -8,7 +8,7 @@ import type { Batch, PioneersEvent } from "./types";
 // Les formulaires hebdomadaires d'un batch (lot 4 ; decision du 18/11 : le Hub suit l'agenda)
 // ----------------------------
 // Ils naissent sur chaque entree « Weekly Update Form » de l'agenda Google du batch (fa26 : jeudis
-// 03/12 et 10/12, 18:00) : la synchro (shared/calendarSync.ts) lui donne le template
+// 03/12 et 10/12, 19:00) : la synchro (shared/calendarSync.ts) lui donne le template
 // `weekly_update` (presets/eventTemplates.ts), dont le pack cree le Weekly update founder et le
 // Weekly update startup, rattaches a l'entree, publies, ouverts a son debut, echeance 24 h apres
 // (`FormTiming`), ids `<evenement>-<modele>`. Deplacee ou annulee dans l'agenda, l'entree emmene

@@ -5,7 +5,7 @@ import { COL, docPaths } from "../shared/collections";
 import { isStaffViewer } from "../shared/access";
 import { eventFormDocs, eventFormsPlan } from "../shared/eventForms";
 import { mentorGuest, newEvent } from "../shared/events";
-import { EVENT_TEMPLATES, type EventTemplateKey } from "../shared/presets/eventTemplates";
+import { EVENT_TEMPLATES, OFFERED_EVENT_TEMPLATE_KEYS } from "../shared/presets/eventTemplates";
 import { EVENT_KINDS, type Batch, type Mentor, type Person, type PioneersEvent, type Startup } from "../shared/types";
 import { badRequest, notFound } from "../api/errors";
 import type { Operation } from "./operations";
@@ -25,15 +25,13 @@ import { isoDateTime } from "./schemas";
 // Staff seulement (regle `events` : write staff). Un evenement cree en
 // brouillon (`draft`) n'est pas montre aux fondateurs ; `scheduled` l'est.
 
-const TEMPLATE_KEYS = Object.keys(EVENT_TEMPLATES) as [EventTemplateKey, ...EventTemplateKey[]];
-
 export const CreateEventInput = z
   .object({
     batchId: z.string().min(1),
     templateKey: z
-      .enum(TEMPLATE_KEYS)
+      .enum(OFFERED_EVENT_TEMPLATE_KEYS)
       .optional()
-      .describe("Event model, a pack: the event (label, duration), its matching (teams or tables) and its forms (submission, peer rating, jury, retro, pitch deck), created together. Omit for a blank event."),
+      .describe("Event model, a pack: the event (label, duration), its matching (teams or tables), its scoring and its forms (submission, peer rating, jury, pitch deck, weekly updates), created together. Retired models are refused. Omit for a blank event."),
     kind: z.enum(EVENT_KINDS).optional().describe("Label of a blank event (an office hour is a `meeting`). Default `session`."),
     name: z.string().trim().min(1).max(120),
     startDateISOString: isoDateTime,

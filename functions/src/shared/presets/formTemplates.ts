@@ -4,6 +4,7 @@ import { newQuestion } from "../formRules";
 import { isPitchRubric } from "../pitchGrid";
 import { TEAM_LOCK_MAX_COFOUNDERS } from "../teamLocks";
 import { defaultPicksQuestion } from "./eventTemplates";
+import { isOfferedTemplate } from "./offered";
 import { CHECKIN_GOALS, CHECKIN_METRICS, withUnit, type CheckinGoalKey, type CheckinMetricKey } from "./standardMetrics";
 
 // ----------------------------
@@ -106,7 +107,7 @@ export type FormTemplate = {
 };
 
 /** Un modele retire n'est plus propose : `isOfferedTemplate` (presets/offered.ts). */
-export { isOfferedTemplate } from "./offered";
+export { isOfferedTemplate };
 
 /** La description d'un modele pour cet evenement. */
 export const templateDescription = (template: FormTemplate, ctx: TemplateContext): string | null => template.describe?.(ctx) ?? template.description;
@@ -359,7 +360,7 @@ export const FORM_TEMPLATES = {
       q("pitchDeck", { type: "link", label: "Pitch deck", description: "A link anyone with it can open (Google Slides, Pitch, PDF on Drive).", dbField: "startupProfile.pitchDeckUrl", required: true }),
       q("oneLiner", { type: "text", label: "One-liner", dbField: "startup.ideaOneLine", required: true }),
       q("problem", { type: "long_text", label: "Problem", dbField: "startupProfile.problem", required: true }),
-      q("icp", { type: "text", label: "Customer (ICP)", description: "Who buys, and who uses it if not the same.", dbField: "startupProfile.icp", required: true }),
+      q("icp", { type: "long_text", label: "Customer (ICP)", description: "Who buys, and who uses it if not the same.", dbField: "startupProfile.icp", required: true }),
       q("solution", { type: "long_text", label: "Solution", dbField: "startupProfile.solution", required: true }),
       q("whyNow", { type: "long_text", label: "Why now?", dbField: "startupProfile.whyNow", required: true }),
     ],
@@ -411,10 +412,10 @@ export const FORM_TEMPLATES = {
   }),
 
   // SP26 « Weekly wrap-up » + « goals for next week », passe aux cles standard
-  // le 13/11 (presets/standardMetrics.ts) : le pipeline de la semaine, puis les
-  // totaux a date. Chaque update porte la startup et le fondateur qui l'a
-  // remplie (rattachement automatique) ; ses chiffres sont ceux de la startup.
+  // le 13/11 (presets/standardMetrics.ts). Retire le 17/11 : le Weekly update startup le remplace
+  // (et le Weekly update founder), crees sur chaque entree « Weekly Update Form » de l'agenda.
   weekly_update: template({
+    retired: true,
     label: "Thursday update",
     kind: "weekly_update",
     title: "Thursday update",
@@ -623,12 +624,14 @@ export const FORM_TEMPLATES = {
     ],
   }),
 
-  // Inscription au Selection Day : objectifs, produit, technologie, dossier Drive.
+  // Inscription au Selection Day : objectifs, produit, technologie, dossier Drive. Retiree le 17/11 :
+  // absente du document, le Pitch deck de chaque pitch (Selection Day compris) la remplace.
   selection_day_registration: template({
+    retired: true,
     label: "Selection Day registration",
     kind: "custom",
     title: "Selection Day registration",
-    identityCheck: "select_name",
+    identityCheck: "account",
     approval: "conflicts_only",
     questions: [
       q("startupName", { type: "text", label: "Startup name", dbField: "startup.name", required: true }),
@@ -642,12 +645,13 @@ export const FORM_TEMPLATES = {
 
   // Inscription au Pre-IC (SP26 « Pre-IC registration »). Pilotes payants et
   // pipeline ne s'y demandent plus : ils viennent de l'update du jeudi (closedWon,
-  // payingCustomers, meetingsBooked...).
+  // payingCustomers, meetingsBooked...). Retiree le 17/11, comme celle du Selection Day : le Pitch deck.
   pre_ic_registration: template({
+    retired: true,
     label: "Pre-IC registration",
     kind: "custom",
     title: "Pre-IC registration",
-    identityCheck: "select_name",
+    identityCheck: "account",
     approval: "conflicts_only",
     questions: [
       q("goals", { type: "long_text", label: "Your milestones until the IC", dbField: "startupProfile.plannedMilestones" }),
@@ -691,3 +695,9 @@ export const FORM_TEMPLATES = {
 } satisfies Record<string, FormTemplate>;
 
 export type FormTemplateKey = keyof typeof FORM_TEMPLATES;
+
+/** Les modeles encore proposes (ni retires, `isOfferedTemplate`), dans l'ordre du catalogue : Admin > Forms > New, `create_form` (enum). */
+export const OFFERED_FORM_TEMPLATE_KEYS = (Object.keys(FORM_TEMPLATES) as FormTemplateKey[]).filter((key) => isOfferedTemplate(FORM_TEMPLATES[key])) as [
+  FormTemplateKey,
+  ...FormTemplateKey[],
+];

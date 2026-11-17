@@ -2,6 +2,7 @@ import { CALENDAR_FIELDS, isFromCalendar, withoutCalendarFields } from "../calen
 import { docPaths } from "../collections";
 import { archiveWrite, mergeWrite, type DocWrite } from "../docWrites";
 import {
+  eventFormId,
   eventFormsPlan,
   eventFormWrites,
   formsClosedByArchive,
@@ -14,6 +15,7 @@ import {
 } from "../eventForms";
 import { matchingOf } from "../events";
 import { EVENT_TEMPLATES, type EventTemplateKey } from "../presets/eventTemplates";
+import { FORM_TEMPLATES } from "../presets/formTemplates";
 import { scoringOf, type Form, type PioneersEvent, type WithId } from "../types";
 
 // ----------------------------
@@ -125,10 +127,11 @@ export function eventTemplatePlan(
   const patch: Partial<PioneersEvent> = { templateKey, kind: t.kind, stage: t.stage };
   if (!matchingOf(event) && !hasTeams && t.matching) patch.matching = t.matching;
   if (!scoringOf(event) && t.scoring) patch.scoring = t.scoring;
+  // Seulement les formulaires du pack qui manquent (ni meme id, ni meme type actif) : rien a construire pour le reste.
   const kinds = new Set(eventForms.filter((f) => f.archivedDateISOString === null).map((f) => f.kind));
   const ids = new Set(eventForms.map((f) => f.id));
-  const forms = eventFormsPlan(event.id, { ...event, ...patch }, {}, now).filter((p) => !ids.has(p.id) && !kinds.has(p.form.kind));
-  return { patch, forms };
+  const missing = t.forms.filter((key) => !ids.has(eventFormId(event.id, key)) && !kinds.has(FORM_TEMPLATES[key].kind));
+  return { patch, forms: missing.length ? eventFormsPlan(event.id, { ...event, ...patch }, { forms: missing }, now) : [] };
 }
 
 export const eventTemplateWrites = (eventId: string, plan: EventTemplatePlan, now: string): DocWrite[] => [

@@ -8,8 +8,9 @@
 //
 // Regles (les memes que instructions.ts, reprises de Trippple) :
 //   - AUCUN CHIFFRE qui pourrit : ni effectifs, ni poids, ni seuils, ni dates
-//     de decision, ni formules de score (en cours de refonte : on decrit les
-//     principes et le flux, pas le calcul) ;
+//     de decision. Les formules de score sont decidees (document du 17/11,
+//     SPECS §5) : on decrit leurs entrees, leur flux et leur echelle, pas les
+//     poids (l'agent ne refait pas le calcul) ;
 //   - pas de redite des descriptions d'outils ni de instructions.ts : des
 //     relations et des regles qu'aucun outil ne dit ;
 //   - noms de champs et de collections exacts (shared/types, fieldRegistry.ts) ;
@@ -37,7 +38,7 @@ export const GUIDE_TOPICS = {
 ## Roles in a batch, widest first
 staff > investor IC > investor portfolio > founder > public. Mentors have no access yet.
 - Staff: everything, plus the admin tools.
-- Investor IC: reads what staff reads, except individual peer ratings, picks, API keys and the jury link; enters evaluations; no admin tools.
+- Investor IC: reads what staff reads, except individual peer ratings, raw form responses, Lock my team answers (\`teamLocks\`), the weekly update reviews (\`founderReviews\`, \`startupReviews\`), the shortlist history (\`shortlistHistory\`), founders' task ticks, the old picks, API keys, the audit log and the jury link; enters evaluations; no admin tools.
 - Investor portfolio: directory, startups, KPIs and scores; no notes, appraisals or personal data.
 - Founder: their batch's directory, their own private documents, their startup's private data when a member, their forms and tasks.
 - Public (no account): founder and startup cards, events, forms, batch stats, and leaderboards when the batch allows it (\`settings.leaderboardVisibility\`).
@@ -48,7 +49,8 @@ Firestore allows or denies a WHOLE document, never a field, so each entity is sp
 - \`startups/{id}\`: public card. \`private/profile\`: members, staff, investors. \`private/internal\`: staff assessment (staff, IC).
 - \`checkins\` (weekly updates), \`kpiSeries\`, \`metricSnapshots\`: members, staff, investors. \`founderWeeks\`: the founder, staff, IC. \`founderStats\`, \`notes\`: staff, IC.
 - \`scores\`: staff and investors. \`scoreSignals\` (detail, with staff appraisals): staff, IC.
-- \`formResponses\`, \`events/*/peerRatings\`, \`events/*/judges\`, \`auditLogs\`, \`apiKeys\`: staff only.
+- \`teamLocks/{founderId}\` (Lock my team): the founder and staff.
+- \`formResponses\`, \`events/*/peerRatings\`, \`founderReviews\` and \`startupReviews\` (weekly update reviews), \`shortlistHistory\`, \`events/*/judges\`, \`auditLogs\`, \`apiKeys\`: staff only.
 
 Writing a field therefore decides who reads it: never move a private value (age, peer feedback, an internal note, a score) into a more public place such as an event description, a startup card or a founder card.
 
@@ -68,19 +70,23 @@ Objects are archived (\`archivedDateISOString\`) and can be restored. An archive
 - **Forms** attached by \`eventId\` carry every input of the event (see \`forms\`):
   - Submission / Debrief (\`debrief\`): one shared answer per team, in \`events/{id}/submissions/{teamId}\`: team metrics \`submission.metrics.<key>\`, texts, Drive folder. Sent after the deadline, it is marked \`late\`.
   - Peer rating (\`peer_feedback\`): one private answer per teammate (\`peerRating.*\`).
-  - Jury (\`jury\`): one answer per scored team, or per startup of the event when there is no matching: \`evaluation.scores.<key>\`. Each criterion's scale and weight are on its question. Closing the jury form locks the scores.
-  - Others: feedback, registration. Picks forms are retired: none is created any more, old ones are still read.
+  - Jury (\`jury\`): one answer per scored team, or per startup of the event when there is no matching: \`evaluation.scores.<key>\`. Each criterion is scored 0 to 5 and its points are on its question. Closing the jury form locks the scores.
+  - Hackathon 5 has three team forms (plan, snapshot, final numbers) feeding ONE submission per team; only a late final numbers form makes it late (0 point).
+  - Pitch deck (\`pitch_deck\`): one answer per startup before each pitch (deck, one-liner, problem, customer, solution, why now), any co-founder sends it.
+  - Weekly update founder and weekly update startup: created on each agenda entry "Weekly Update Form" (see \`forms\`).
+  - Week retro (attached to the retro), and Program end and Lock my team (batch forms, no event).
+  - Picks forms are retired: none is created any more, old ones are still read.
 - **Stable keys**: a metric or criterion keeps its key from one event and batch to the next, and a pipeline or traction notion has one standard key shared with the weekly update (\`checkin.<key>\`). Reuse existing keys; never coin a synonym.
-- **Leaderboard** (\`leaderboards/{eventId}\`): exists once the event has a scoring (\`scoring\`: items reading a team metric or a jury criterion) or jury scores; the server recomputes it on every submission, evaluation, or change to a form's grid or metrics. Peer ratings never enter it. It counts in founder scores once its ranking is published (Admin for now).
+- **Leaderboard** (\`leaderboards/{eventId}\`): exists once the event has a scoring (\`scoring\`: jury criteria with their points, the grid making 100; a tie-break criterion is worth 0 point; the outstanding mention, given by staff only at 100, adds a bonus; old per-unit or proportional items are read-only, kept as they are on past events) or jury scores; the server recomputes it on every submission, evaluation, or change to a form's grid or metrics. Peer ratings never enter it. It counts in founder scores once its ranking is published (Admin for now).
 
 ## Attendance
 \`events/{id}/attendance/{founderId}\`: \`present\`, \`late\`, \`in_office\`, \`absent\`. Everyone expected is present by default: the first mark on an event records every expected founder as present, then staff mark the absentees. Expected = the batch's participants, or only the invited ones for a \`guests\` event. An absent founder leaves the audience of every form of the event (refused even by direct link) and its draws, and cannot be picked. A hackathon's Peer rating follows attendance at the hackathon itself, not at its debrief slot.
 
 ## Templates are packs
-A template (\`templateKey\`) creates the event, its matching and its forms together, copying their questions: changing a template never changes an existing event. Forms are published if the event is created scheduled, drafts otherwise. \`apply_event_template\` applies a pack to an existing event, calendar ones included.
+A template (\`templateKey\`) creates the event, its matching, its scoring and its forms together, copying their questions: changing a template never changes an existing event. Forms are published if the event is created scheduled, drafts otherwise. \`apply_event_template\` applies a pack to an existing event, calendar ones included: its matching and scoring only if the event has none, and only the forms it does not have yet. Retired templates are refused; events created from them keep working. A hackathon template's grid is a default for staff to adjust per hackathon; a customer day or traction sprint has no draw (the team is the startup) and no form yet.
 
 ## Batches linked to Google Calendar
-A batch with \`settings.googleCalendarId\` gets its events FROM that calendar, one way, and creates none in the Hub. On a linked event (\`calendarSource\` set), name, start, end, location, description and video link belong to the calendar: change them in Google Calendar, then the automatic sync or \`sync_calendar\` brings them in. The Hub keeps the rest: guests, audience, startups, template, matching, forms, milestone, links. An event deleted or cancelled in Google is archived; archiving (hiding) one in the Hub sticks across syncs.
+A batch with \`settings.googleCalendarId\` gets its events FROM that calendar, one way, and creates none in the Hub. On a linked event (\`calendarSource\` set), name, start, end, location, description and video link belong to the calendar: change them in Google Calendar, then the automatic sync or \`sync_calendar\` brings them in. The Hub keeps the rest: guests, audience, startups, template, matching, forms, milestone, links. An event deleted or cancelled in Google is archived; archiving (hiding) one in the Hub sticks across syncs. One exception to "the Hub keeps the rest": each entry named "Weekly Update Form" gets the weekly update template and its two forms from the sync (see \`forms\`).
 
 ## Moving and archiving
 A new start or end, set in the Hub or coming from the calendar, moves the event's forms: each date keeps its place relative to the start or the end; a closed form or one past its deadline keeps its dates; no new form version. It can also move the attached Debrief slot (the event starting when the hackathon ends, where its Peer rating opens), unless that slot comes from the calendar. Archiving an event closes its open forms (they leave founders' To do); restoring it reopens those the archiving closed.`,
@@ -93,7 +99,8 @@ A new start or end, set in the Hub or coming from the calendar, moves the event'
 - Questions, \`attachments\` and \`approval\` are the frozen parts: changing them on a published form publishes a new version. Title, description, dates and status create no version. Each response keeps the version it answered.
 - Before \`opensDateISOString\`, a published form is not open yet. After \`deadlineDateISOString\` it stays open until staff close it: answers still arrive, but late.
 - Nothing is erased: removing a question archives it, and changing a question's type creates a new question. A question that feeds an indicator (charts, scores) is not to be removed or moved to another field once published. A new question puts the form back in the To do of those who already answered; a required one reopens it for them.
-- One form per occurrence: next week's update is its own form, usually a duplicate of the previous one. There are no recurring forms.
+- One form per occurrence; there are no recurring forms. Weekly updates are created automatically: on each agenda entry "Weekly Update Form" of a batch linked to Google Calendar (with weekly forms switched on in Admin > Batch settings), the sync applies the weekly update template, whose pack creates the weekly update founder and the weekly update startup attached to that entry: published, open at the entry's start, due a day later, for the whole batch (no attendance on that entry). They move or close with the entry. Never duplicate them by hand.
+- Founder forms are always answered from the account. Lock my team (\`lock_my_team\`, a batch form) writes \`teamLock.locked\`, \`teamLock.coFounderIds\` and \`teamLock.startupName\` into \`teamLocks/{founderId}\`; answering "no" is allowed.
 
 ## Questions
 - Types: \`text\`, \`long_text\`, \`number\`, \`rating\`, \`single_choice\`, \`multiple_choice\`, \`entity_picker\` (a founder, startup, event, team or mentor chosen from a list, never a typed name), \`link\`, \`file\`.
@@ -102,16 +109,15 @@ A new start or end, set in the Hub or coming from the calendar, moves the event'
 - The form attaches itself to what its fields need (\`attachments\`): the respondent, their startup, the form's event, the respondent's team, the form's week. A weekly form's answers land in the week the form OPENS, even when answered late.
 
 ## Identity (\`identityCheck\`)
-- \`select_name\`: the respondent picks their name in the batch list. Nothing proves it: keep it for forms that write nothing sensitive about anyone.
-- \`account\`: sign-in required; the respondent sees and edits their answers while the form is open.
-- \`jury_link\`: one shared secret link, no account; each judge picks or types a name; nobody scores their own team.
-- \`anonymous\` (retired): no longer offered for a new form; old anonymous forms are still read. No identity; cannot write founder or startup fields.
+- \`account\`: every founder form (the default). Sign-in required; the answer attaches itself to the founder, or to their startup; the respondent sees and edits their answers while the form is open.
+- \`jury_link\`: a jury. One shared secret link, no account; each judge picks or types a name; nobody scores their own team.
+- Retired, no longer offered for a new form or a copy (old forms keep them and are still read): \`select_name\` (the respondent picked their name in a list; nothing proved it) and \`anonymous\` (no identity; cannot write founder or startup fields). \`duplicate_form\` refuses to copy a form that has a retired identity, kind or field.
 
 ## Approval (\`approval\`)
 \`none\`, \`all\`, or \`conflicts_only\` (only values replacing an existing value wait). Waiting values are held, not written, until staff validate them (in Admin for now). Some sensitive fields always wait, whatever the form says.
 
 ## Audience and completion
-Who must answer is computed, not stored: the batch's participants; for an event form, the event's expected founders minus absentees; for a team form, members of published teams. \`formCompletions/{formId}_{founderId}\` records that a founder answered, with the first and the last answer: the first counts for timeliness, the last is the information. Never for an anonymous form.
+Who must answer is computed, not stored: the batch's participants; for an event form, the event's expected founders minus absentees (an entry without attendance, such as "Weekly Update Form", has no absentees); for a team form, members of published teams. \`formCompletions/{formId}_{founderId}\` records that a founder answered, with the first and the last answer: the first counts for timeliness, the last is the information. Never for an anonymous form.
 
 ## Responses
 \`formResponses\` hold the raw answers, the log of each field write (\`applied\`, \`pending_approval\`, \`rejected\`, \`unchanged\`, \`invalid\`) and the answers that matched no field. Staff only; reading them here comes later.
@@ -127,7 +133,10 @@ Scores are computed by the server from facts and judgements already in the datab
 
 ## Flow
 inputs -> signals -> sub-scores -> a final score (Program Performance for a founder, a startup score for a startup).
-- **Inputs**: attendance (\`events/*/attendance\`), timeliness of forms (\`formCompletions\`: the first answer against the deadline), profile completeness (required profile fields), weekly updates (\`checkins\`, \`founderWeeks\`), team results (submissions, jury \`evaluations\`, an event's leaderboard once its ranking is published), peer-rating aggregates, the founder's profile and onboarding answers, staff assessments (\`private/internal\`), pitch evaluations.
+- **Inputs of a founder** (Program Performance): attendance at past mandatory events, forms answered before their deadline (first answer; never a jury grid, a never-published draft, an optional event or one the founder missed) and profile completeness (Engagement); the hackathon grids of the hackathons they attended, the peer ratings they received, and their milestones already due (Execution); the founders who shortlisted them or gave them a peer rating of 4 or 5 (Likability, from \`shortlistHistory\`); the Clear idea criterion of their startup's pitches, their existing project and existing co-founders from onboarding (Commitment); the Background grid, scored once by staff (Background).
+- **Milestones**: weekly goal and problem validated (the weekly update reviews, \`founderReviews\`), teamed up (a startup created by staff from Lock my team with at least one co-founder), shortlist done, and a mutual "met". Each counts only once due (\`settings.scoreMilestoneDueDates\`).
+- **Inputs of a startup**: its founders' Background and the Team family of its pitches (Team); its founders' Execution (Execution); the reviews of its weekly updates (\`startupReviews\`) and the Speed of execution family of its pitches (Traction); the Market family of its pitches (Market). The pitch grid is the jury grid of every pitch, in three families.
+- **Not inputs**: picks (retired), a founder's own answers to free forms (they are stored or shown, never scored directly), Claude's Background proposal until staff validate it.
 - **Outputs**: \`scores/{targetType}_{targetId}\` (sub-scores; weights apply only at display), \`scoreSignals\` (the detail behind each sub-score), \`founderStats\` (aggregates, peer ratings included), \`batchStats\` (the public batch overview).
 - A signal or sub-score with no data is left out and the others share its weight.
 
@@ -135,28 +144,29 @@ inputs -> signals -> sub-scores -> a final score (Program Performance for a foun
 For the whole batch at once (some signals compare a founder with the rest of the batch), on the server: every night, when a hackathon ranking is published, and on demand (\`recompute_scores\`). Event leaderboards are separate and follow each submission or jury score in real time.
 A batch with \`settings.scoresSource: "imported"\` is never recomputed: its scores were copied from an earlier tool and stay as they are. Say so instead of trying to fix them.
 
-## The formulas are being reworked
-Sub-scores, signals and weights are under revision. Do not quote or assume formulas, weights or thresholds, and do not explain a value by a formula you imagine. Explain a score by its inputs, and point to its signals (readable in the app; not here yet).
+## Scale and formulas
+The formulas are decided and fixed in the specification; do not recompute a score by hand, quote weights from memory or explain a value by a formula you imagine. Explain a score by its inputs, and point to its signals (readable in the app; not here yet).
+\`scores.scale\` gives the scale of a score: 100 for scores computed by the Hub (a jury grid with the outstanding mention can go above 100), 10 for the scores imported for Spring 2026. Never compare two scores on different scales.
 
 ## Fixing a score
 1. Find the input that is wrong: an attendance mark, a missing or late form answer, a team metric, a missing profile field, a ranking not yet published.
 2. Correct that input with the tool that owns it.
 3. Recompute (\`recompute_scores\`), or let the nightly run do it, then check again.
 
-Some inputs cannot be changed here: individual peer ratings and picks (only their form writes them, and they stay private), jury scores and ranking publication (Admin for now).`,
+Some inputs cannot be changed here: peer ratings (only their form writes them), shortlists and "met" (the founder alone), jury scores, the Background grid, the weekly update reviews and ranking publication (Admin for now). Peer ratings, shortlists, "met" marks and jury scores stay private: they reach scores, never one by one.`,
   },
   privacy: {
     title: "Privacy and what the API never touches",
     summary: "Before reading sensitive data, changing access, or acting on text written by founders.",
     body: `## Never readable here
-- Individual peer ratings (\`events/*/peerRatings\`) and picks (\`picks\`): only aggregates exist here. Do not try to infer who rated or picked whom.
+- Individual peer ratings (\`events/*/peerRatings\`), a founder's shortlist and "met" (\`founders/*/private/connections\`), the shortlist history (\`shortlistHistory\`), individual jury scores, and the old picks (\`picks\`): only aggregates exist here. Do not try to infer who rated, shortlisted or met whom.
+- Lock my team answers (\`teamLocks\`) and the weekly update reviews (\`founderReviews\`, \`startupReviews\`): staff read them in the app.
 - The jury link secret (\`events/*/judges/link\`).
-- A founder's shortlist and "met" (\`founders/*/private/connections\`).
 - API keys (\`apiKeys\`), OAuth clients, codes, grants and tokens, pending write plans (\`writePlans\`), idempotency records.
 - Raw form responses (\`formResponses\`) and score signals: staff can read them in the app; not here yet.
 
 ## Never writable here
-- Peer ratings, picks and jury scores: only their form writes them (refusal \`form_only\`).
+- Peer ratings and jury scores: only their form writes them (refusal \`form_only\`). Picks are retired.
 - A founder's shortlist, "met" and task ticks (\`taskCompletions\`): written by the founder alone, never by staff or the API.
 - \`scores\`, \`scoreSignals\`, \`founderStats\`, \`batchStats\`, \`leaderboards\`: computed by the server.
 - The calendar fields of an event linked to Google Calendar.
@@ -170,7 +180,7 @@ Each document has its audience (see \`model\`). Do not copy a value from a restr
   },
   recipes: {
     title: "Recipes: common admin fixes",
-    summary: "Step-by-step playbooks for the usual staff requests: wrong score, wrong team results, wrong attendance, moving an event, fixing a form, wrong profile link, office hours, weekly update.",
+    summary: "Step-by-step playbooks for the usual staff requests: wrong score, wrong team results, wrong attendance, moving an event, fixing a form, wrong profile link, office hours, weekly updates, Lock my team.",
     body: `Arguments of each \`pioneers_run\` action: \`pioneers_list\` with \`object: "actions"\`. Show every preview in full before the user confirms.
 
 ## A score looks wrong
@@ -216,11 +226,17 @@ Each document has its audience (see \`model\`). Do not copy a value from a restr
 3. For a private slot, the audience must be \`guests\` (the guests and the startup's members): check the preview, and set it with \`update_event\` if needed.
 4. Notes from the meeting: \`pioneers_add_note\` on the startup.
 
-## Set up next week's weekly update form
-1. \`pioneers_list\` forms of the batch: find last week's weekly update form(s).
-2. \`duplicate_form\`: the copy is a draft; a weekly form's copy normally keeps its title and moves its dates one week later. Check them in the preview and adjust with \`update_form\`.
-3. \`set_form_status\` to \`open\` publishes it; it opens at its opening date. Its answers land in the week it opens.
-4. With nothing to copy, \`pioneers_create_form\` from the weekly update template.`,
+## Weekly updates are missing or at the wrong time
+1. They are created automatically on each agenda entry "Weekly Update Form" (see \`forms\`): never create or duplicate them by hand.
+2. \`pioneers_get\` the batch: it needs \`settings.googleCalendarId\`, and weekly forms switched on (Admin > Batch settings).
+3. A missing week: the user adds the entry "Weekly Update Form" in Google Calendar, then \`sync_calendar\`. A wrong time: the user moves the entry in the calendar; its forms follow.
+4. An entry already synced without its forms: \`apply_event_template\` with the weekly update template on that event adds the missing ones.
+
+## Lock my team and startups
+1. Lock my team is a batch form (\`lock_my_team\`): every founder answers, with or without a team. Answers are in \`teamLocks\`, readable by staff in the app, not here.
+2. Staff create the startups from the answers in Admin > Startups, when the co-founders picked the same team. Creating a startup from the MCP is described here but not coded yet: say so, and point the user to Admin > Startups.
+3. A startup created with at least one co-founder gives its founders the teamed-up milestone; founders who answered "no" stay without a startup and are drawn into teams for Hackathon 5.
+`,
   },
 } as const satisfies Record<string, { title: string; summary: string; body: string }>;
 

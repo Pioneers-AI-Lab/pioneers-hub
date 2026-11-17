@@ -1,4 +1,4 @@
-import type { FormIdentityCheck, FormKind } from "../types";
+import { FORM_IDENTITY_CHECKS, type FormIdentityCheck, type FormKind } from "../types";
 
 // ----------------------------
 // Ce qui est encore propose au staff (decision du 17/11, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §4.6)
@@ -20,5 +20,12 @@ export const RETIRED_FORM_KINDS: ReadonlySet<FormKind> = new Set<FormKind>(["pic
 /** Les choix prives d'un evenement (`picks.pickedFounderIds`) : plus aucune nouvelle question ne les ecrit. */
 export const RETIRED_DB_FIELDS: ReadonlySet<string> = new Set(["picks.pickedFounderIds"]);
 
-/** `anonymous` : tout formulaire de fondateur se remplit depuis son compte ; `email_code` : ancien nom d'`account`. */
-export const RETIRED_IDENTITY_CHECKS: ReadonlySet<FormIdentityCheck> = new Set<FormIdentityCheck>(["anonymous", "email_code"]);
+/**
+ * Tout formulaire de fondateur se remplit depuis son compte (document du 17/11 : `account`) : plus
+ * d'`anonymous` ni de `select_name` (nom choisi dans la liste, rien ne le prouve) ; `email_code` :
+ * ancien nom d'`account`. Restent `account` et `jury_link` (le jury, sans compte).
+ */
+export const RETIRED_IDENTITY_CHECKS: ReadonlySet<FormIdentityCheck> = new Set<FormIdentityCheck>(["anonymous", "select_name", "email_code"]);
+
+/** Les identites encore proposees a un nouveau formulaire : `account` et `jury_link` (`create_form`, `update_form`). */
+export const OFFERED_IDENTITY_CHECKS = FORM_IDENTITY_CHECKS.filter((c) => isOffered(RETIRED_IDENTITY_CHECKS, c)) as [FormIdentityCheck, ...FormIdentityCheck[]];

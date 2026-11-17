@@ -236,7 +236,7 @@ const PITCH_DECK = [
   Q("link", "startupProfile.pitchDeckUrl", "Pitch deck"),
   Q("text", "startup.ideaOneLine", "One-liner"),
   Q("long_text", "startupProfile.problem", "Problem"),
-  Q("text", "startupProfile.icp", "Customer (ICP)"),
+  Q("long_text", "startupProfile.icp", "Customer (ICP)"),
   Q("long_text", "startupProfile.solution", "Solution"),
   Q("long_text", "startupProfile.whyNow", "Why now?"),
 ];
@@ -279,11 +279,16 @@ const REQUIRED_PROFILE_FIELDS = [
   "founderProfile.enrolmentConfirmed",
 ];
 const NEW_REQUIRED_PROFILE_FIELDS = ["founderDirectory.hasExistingProject", "founderDirectory.hasExistingCoFounders", "founderDirectory.yearsOfXP", "founderDirectory.repeatFounder"];
-/** §3.2 : les echeances des milestones de fa26 (heure de Paris). */
+/** §1 : les entrees « Weekly Update Form » de l'agenda (jeudis, 19:00 Paris) ; leurs formulaires s'ouvrent a leur debut, 24 h. */
+const WEEKLY_ENTRY_TIME = "19:00";
+/** §3.2 : les echeances des milestones de fa26 (heure de Paris). Weekly goal : 2e entree (10/12 19:00) + 24 h. */
 const MILESTONE_DUES = {
   teamedUp: P("2026-11-25", "09:30"),
-  weeklyGoalFrom: P("2026-12-11", "18:00"),
+  weeklyGoalFrom: P("2026-12-11", WEEKLY_ENTRY_TIME),
 };
+/** §2.0 : l'echeance d'une Submission, 15 min avant la fin du hackathon, sauf H2 : 15:55 (valide avec le staff). */
+const SUBMISSION_DEADLINE_EXCEPTIONS = { 2: P("2026-11-19", "15:55") };
+const submissionDeadline = (n, e) => SUBMISSION_DEADLINE_EXCEPTIONS[n] ?? plusMinutes(e.endDateISOString, -15);
 
 // ============================================================================================
 // A. Le code
@@ -406,8 +411,9 @@ function codeChecks() {
   if (!weeklyPack) pending("weekly forms: open at the agenda entry, due 24 h after (§2.0)", "no weekly event pack yet");
   else
     behaves("weekly forms: open at the agenda entry, due 24 h after (§2.0)", () => {
-      const entry = { startDateISOString: P("2026-12-03", "18:00"), endDateISOString: P("2026-12-03", "18:30") };
-      const expected = [entry.startDateISOString, P("2026-12-04", "18:00")];
+      const start = P("2026-12-03", WEEKLY_ENTRY_TIME);
+      const entry = { startDateISOString: start, endDateISOString: plusMinutes(start, 30) };
+      const expected = [entry.startDateISOString, P("2026-12-04", WEEKLY_ENTRY_TIME)];
       return [[expected, expected], WEEKLY_KEYS.map((k) => span(m.forms.eventFormDates(k, entry)))];
     });
 
@@ -415,7 +421,7 @@ function codeChecks() {
   heading("A4 events.json form dates");
   for (const n of [1, 2, 3, 4]) {
     const e = fileEvent(HACKATHON_KEYS[n]);
-    expect(`H${n} Submission: start -> 15 min before the end`, [at(e.startDateISOString), at(plusMinutes(e.endDateISOString, -15))], datesOf("debrief", e));
+    expect(`H${n} Submission: start -> ${SUBMISSION_DEADLINE_EXCEPTIONS[n] ? "15:55 (exception)" : "15 min before the end"}`, [at(e.startDateISOString), at(submissionDeadline(n, e))], datesOf("debrief", e));
     const debrief = debriefAfter(events, e);
     if (!debrief) report("FAIL", `H${n} Peer rating`, "no debrief right after the hackathon in events.json");
     else expect(`H${n} Peer rating: debrief start -> 24 h after`, [at(debrief.startDateISOString), at(plusHours(debrief.startDateISOString, 24))], datesOf("peer_rating", e));
@@ -589,10 +595,10 @@ function codeChecks() {
     ];
     return [50, founder({ milestones: ms }).subScores.execution];
   });
-  if (typeof m.weeklyForms.weeklyGoalFromOf !== "function") pending("Weekly goal due = deadline of the 2nd Weekly Update Form (11/12 18:00)", "weeklyGoalFromOf not in functions/lib yet");
+  if (typeof m.weeklyForms.weeklyGoalFromOf !== "function") pending("Weekly goal due = deadline of the 2nd Weekly Update Form (11/12 19:00)", "weeklyGoalFromOf not in functions/lib yet");
   else
-    behaves("Weekly goal due = deadline of the 2nd Weekly Update Form (11/12 18:00)", () => {
-      const entry = (day) => ({ name: "Weekly Update Form", templateKey: null, archivedDateISOString: null, startDateISOString: P(day, "18:00"), endDateISOString: P(day, "18:30") });
+    behaves("Weekly goal due = deadline of the 2nd Weekly Update Form (11/12 19:00)", () => {
+      const entry = (day) => ({ name: "Weekly Update Form", templateKey: null, archivedDateISOString: null, startDateISOString: P(day, WEEKLY_ENTRY_TIME), endDateISOString: plusMinutes(P(day, WEEKLY_ENTRY_TIME), 30) });
       return [MILESTONE_DUES.weeklyGoalFrom, m.weeklyForms.weeklyGoalFromOf([entry("2026-12-10"), entry("2026-12-03")])];
     });
 
@@ -613,7 +619,11 @@ function codeChecks() {
   const strictlyOrdered = (ws) => ws.every((w, i) => i === 0 || ws[i - 1] > w) && ws.at(-1) > 0;
   const ch = ["challengeRepeatWeight", "noTechPenalty", "mutualShortlistBonus", "oneWayShortlistBonus", "matchingRepeatWeight"];
   expect("hackathon draw order: repeat pair > tech > mutual shortlist > one-way > lunch pair", true, strictlyOrdered(ch.map((k) => challenge.rules[k])));
-  expect("hackathon draw: no rule outside §4.2 (no 'team without business' rule)", 0, challenge.rules.noBusinessPenalty);
+  expect(
+    "hackathon draw rule 5: lunch pairs AND teams without a business profile, below rule 4",
+    [true, true],
+    [challenge.rules.noBusinessPenalty > 0, challenge.rules.noBusinessPenalty < challenge.rules.oneWayShortlistBonus],
+  );
   const mt = ["matchingRepeatWeight", "reciprocalMetWeight", "challengeRepeatWeight"];
   expect("lunch draw order: repeat table pair > reciprocal Met > hackathon teammates", true, strictlyOrdered(mt.map((k) => matching.rules[k])));
   expect("lunch draw: no other rule", [0, 0, 0, 0], ["noTechPenalty", "noBusinessPenalty", "mutualShortlistBonus", "oneWayShortlistBonus"].map((k) => matching.rules[k]));
@@ -695,11 +705,13 @@ async function prodChecks() {
     expect(`${label} day (§1)`, HACKATHON_DAYS[n], parisDayOf(e.startDateISOString));
     expect(`${label} points (scoring)`, gridScoring(GRIDS[n]), scoringView(m.types.scoringOf(e)));
     expect(`${label} weight in Execution`, n === 5 ? 4 : 1, weightOf(e));
-    expect(`${label} draw: teams of 2 to 3${n === 5 ? ", Lock my team startups kept" : ""}`, { mode: "challenge", size: { min: 2, max: 3 }, ...(n === 5 ? { lockedTeamsFromStartups: true } : {}) }, m.events.matchingOf(e));
+    // Doc §1 : H1 tire en equipes de 3 a 4 par le staff (17/11, 9 equipes) ; les autres en 2 a 3.
+    const size = n === 1 ? { min: 3, max: 4 } : { min: 2, max: 3 };
+    expect(`${label} draw: teams of ${size.min} to ${size.max}${n === 5 ? ", Lock my team startups kept" : ""}`, { mode: "challenge", size, ...(n === 5 ? { lockedTeamsFromStartups: true } : {}) }, m.events.matchingOf(e));
     expect(`${label} active forms`, n === 5 ? H5_FORM_KEYS : HACKATHON_FORMS, formsOfEvent(e).map(templateOf).sort());
     checkForm(label, e, "jury", { identity: "jury_link", opens: e.startDateISOString, deadline: null, questions: juryQuestions(GRIDS[n]) });
     if (n < 5) {
-      checkForm(label, e, "debrief", { identity: "account", opens: e.startDateISOString, deadline: plusMinutes(e.endDateISOString, -15), questions: SUBMISSIONS[n] });
+      checkForm(label, e, "debrief", { identity: "account", opens: e.startDateISOString, deadline: submissionDeadline(n, e), questions: SUBMISSIONS[n] });
       const debrief = debriefAfter(events, e);
       if (!debrief) report("FAIL", `${label}: debrief right after the hackathon`, "present vs absent");
       else checkForm(label, e, "peer_rating", { identity: "account", opens: debrief.startDateISOString, deadline: plusHours(debrief.startDateISOString, 24), questions: PEER_RATING });
@@ -736,7 +748,7 @@ async function prodChecks() {
   expect("Weekly Update Form entries: Thursdays 03/12 and 10/12 (§1)", ["2026-12-03", "2026-12-10"], weeklyEntries.map((e) => parisDayOf(e.startDateISOString)).slice(0, 2));
   for (const e of weeklyEntries) {
     const day = parisDayOf(e.startDateISOString);
-    expect(`Weekly Update Form ${day}: at 18:00 Paris (§1)`, `${day} 18:00`, at(e.startDateISOString));
+    expect(`Weekly Update Form ${day}: at ${WEEKLY_ENTRY_TIME} Paris (§1)`, `${day} ${WEEKLY_ENTRY_TIME}`, at(e.startDateISOString));
     if (!formsOfEvent(e).some((f) => WEEKLY_KEYS.includes(templateOf(f)))) {
       pending(`Weekly Update Form ${day}: weekly founder + startup forms`, "not attached to the agenda entry yet");
       pending(`Weekly Update Form ${day}: not a meeting (no attendance)`, "pack not applied yet");
@@ -751,7 +763,8 @@ async function prodChecks() {
   const weeklyForms = activeForms.filter(isWeeklyForm);
   expect("no Weekly update on 26/11 (§4.7)", [], weeklyForms.filter((f) => parisDayOf(f.opensDateISOString) === "2026-11-26").map((f) => f.id));
   expect("no weekly form outside an agenda entry", [], weeklyForms.filter((f) => !f.eventId).map((f) => f.id));
-  expect("batch settings: weekly forms enabled", true, batch.settings?.weeklyForms?.enabled === true);
+  if (batch.settings?.weeklyForms?.enabled !== true) pending("batch settings: weekly forms enabled", "off until the forms are attached (attach-weekly-forms.mjs --enable)");
+  else report("OK", "batch settings: weekly forms enabled");
 
   // ---- B4. Pitchs (§2.11, §4.7) ----
   heading("B4 pitches");
@@ -806,7 +819,7 @@ async function prodChecks() {
   }
   expect("teamedUp due at the H5 kickoff (25/11 9:30)", at(MILESTONE_DUES.teamedUp), at(dues.teamedUp));
   expect("problemValidated due on Selection Day (17/12)", "2026-12-17", parisDayOf(dues.problemValidated));
-  expect("weeklyGoalFrom due 11/12 18:00 (§3.2)", at(MILESTONE_DUES.weeklyGoalFrom), at(dues.weeklyGoalFrom));
+  expect(`weeklyGoalFrom due 11/12 ${WEEKLY_ENTRY_TIME} (§3.2)`, at(MILESTONE_DUES.weeklyGoalFrom), at(dues.weeklyGoalFrom));
   if (typeof m.weeklyForms.weeklyGoalFromOf === "function") {
     expect("weeklyGoalFrom = deadline of the 2nd Weekly Update Form of the agenda", at(m.weeklyForms.weeklyGoalFromOf(events)), at(dues.weeklyGoalFrom));
   }

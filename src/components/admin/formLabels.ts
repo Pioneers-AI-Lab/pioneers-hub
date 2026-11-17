@@ -24,8 +24,9 @@ export const FORM_STATUS_LABELS: Record<FormStatus, string> = { draft: "Draft", 
 export const FORM_STATE_LABELS: Record<ReturnType<typeof formState>, string> = { ...FORM_STATUS_LABELS, not_open_yet: "Scheduled" };
 
 /**
- * `email_code` (ancien nom d'`account`) n'est plus propose : il se lit comme `account`. `anonymous` ne se
- * propose plus qu'au formulaire qui l'a deja (`RETIRED_IDENTITY_CHECKS`, FormEditor).
+ * `email_code` (ancien nom d'`account`) n'est plus propose : il se lit comme `account`. `anonymous` et
+ * `select_name` ne se proposent plus qu'au formulaire qui les a deja (`RETIRED_IDENTITY_CHECKS`, FormEditor) :
+ * tout formulaire de fondateur se remplit depuis son compte.
  */
 export const IDENTITY_OPTIONS: { value: FormIdentityCheck; label: string }[] = [
   { value: "select_name", label: "Pick name" },
@@ -35,7 +36,7 @@ export const IDENTITY_OPTIONS: { value: FormIdentityCheck; label: string }[] = [
 ];
 
 export const IDENTITY_HINTS: Record<FormIdentityCheck, string> = {
-  select_name: "The respondent picks their name from the batch list (never typed).",
+  select_name: "The respondent picks their name from the batch list (never typed). No longer offered: founders answer from their account.",
   account: "The respondent signs in with their Pioneers account. They find their answers again and can change them while the form is open. For every founder form.",
   email_code: "The respondent signs in with their Pioneers account (former email-code setting).",
   jury_link: "One shared link with a secret, no account: each judge picks or types their name, then scores every team. For a jury.",

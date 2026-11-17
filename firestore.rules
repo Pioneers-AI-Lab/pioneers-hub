@@ -13,10 +13,10 @@ rules_version = '2';
 //   founders/{id}/private/profile    le fondateur lui-meme + staff + investors IC
 //   founders/{id}/private/internal   staff + investors IC
 //   founders/{id}/private/connections  le fondateur lui-meme + staff + investors IC (ecrit par lui seul)
-//   shortlistHistory/{founderId}_{targetId}  staff + investors IC (ecrit par le serveur seul)
-//   teamLocks/{founderId}            le fondateur lui-meme + staff + investors IC (Lock my team)
+//   shortlistHistory/{founderId}_{targetId}  staff (ecrit par le serveur seul)
+//   teamLocks/{founderId}            le fondateur lui-meme + staff (Lock my team)
 //   founderReviews/{founderId}_{weekStart}, startupReviews/{startupId}_{weekStart}
-//                                    staff + investors IC (revue des Weekly updates, ecrite par le staff)
+//                                    staff (revue des Weekly updates, ecrite par le staff)
 //   startups/{id}                    public
 //   startups/{id}/private/profile    membres + staff + investors
 //   startups/{id}/private/internal   staff + investors IC
@@ -384,21 +384,22 @@ service cloud.firestore {
 
     // Historique des shortlists (Likability) : chaque fondateur shortliste au moins une
     // fois, ecrit par le serveur seul (declencheur `onConnectionsWritten`, ajout seul).
+    // Staff seul (SPECS §6.2, shared/access.ts#canReadWeeklyReviews).
     match /shortlistHistory/{recordId} {
-      allow read: if isInsider();
+      allow read: if isStaff();
       allow write: if false;
     }
 
-    // Lock my team (lot 2, shared/teamLocks.ts) : le fondateur lui-meme + staff + investors IC
-    // (shared/access.ts#canReadFounderProfile). Ecrit par la callable submitFormResponse ; le staff corrige.
+    // Lock my team (lot 2, shared/teamLocks.ts) : le fondateur lui-meme + staff (SPECS §6.2,
+    // shared/access.ts#canReadTeamLock). Ecrit par la callable submitFormResponse ; le staff corrige.
     // Le fondateur d'abord : sa lecture n'a pas besoin de `users/{uid}`.
     match /teamLocks/{founderId} {
-      allow read: if isViewerFounder(resource.data.batchId, founderId) || isInsider();
+      allow read: if isViewerFounder(resource.data.batchId, founderId) || isStaff();
       allow write: if isStaff();
     }
 
     // ==== LOT 4 (debut) : revue des Weekly updates (Admin > Reviews, shared/weeklyReviews.ts) ====
-    // Staff + investors IC (miroir de shared/access.ts#canReadWeeklyReviews), ecrites par le staff.
+    // Staff seul (SPECS §6.2, miroir de shared/access.ts#canReadWeeklyReviews), ecrites par le staff.
     // Grille Weekly founder : des oui / non. Grille Weekly startup : Traction et Progress, des entiers
     // de 0 a 5 (absents ou `null` : pas encore notes), l'Outstanding seulement a 100 (les deux a 5) ;
     // miroir de founderReviewProblems / startupReviewProblems (note : `backgroundNoteOk`, meme echelle).
@@ -411,13 +412,13 @@ service cloud.firestore {
         && (data.get('outstanding', false) != true || (s.get('traction', 0) == 5 && s.get('progress', 0) == 5));
     }
     match /founderReviews/{reviewId} {
-      allow read: if isInsider();
+      allow read: if isStaff();
       allow write: if isStaff() && (request.resource == null
         || (yesNoOrNull(request.resource.data, 'goalAmbitious') && yesNoOrNull(request.resource.data, 'goalReached')
             && yesNoOrNull(request.resource.data, 'problemValidated')));
     }
     match /startupReviews/{reviewId} {
-      allow read: if isInsider();
+      allow read: if isStaff();
       allow write: if isStaff() && (request.resource == null || startupReviewOk(request.resource.data));
     }
     // ==== LOT 4 (fin) ====

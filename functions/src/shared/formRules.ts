@@ -291,13 +291,14 @@ type RetirableForm = Pick<Form, "kind" | "identityCheck" | "questions">;
 
 /**
  * Ce qui est retire le 17/11 (presets/offered.ts) et que ce formulaire prendrait : type Picks, identite
- * anonyme, question qui ecrit les picks. Un formulaire qui l'avait deja (`stored`, `null` a la creation)
- * le garde : il reste lu. Editeur (`saveForm`) et `create_form`.
+ * anonyme ou nom choisi, question qui ecrit les picks. Un formulaire qui l'avait deja (`stored`, `null` a
+ * la creation et pour une copie) le garde : il reste lu. Editeur (`saveForm`), `create_form`, la copie
+ * (`duplicatedForm`).
  */
 export function retiredFormProblems(form: RetirableForm, stored: RetirableForm | null): string[] {
   const problems: string[] = [];
   if (!isOffered(RETIRED_FORM_KINDS, form.kind, stored?.kind)) problems.push("Picks forms are retired: the Shortlist and Lock my team replace them.");
-  if (!isOffered(RETIRED_IDENTITY_CHECKS, form.identityCheck, stored?.identityCheck)) problems.push("Anonymous forms are retired: founders answer from their account.");
+  if (!isOffered(RETIRED_IDENTITY_CHECKS, form.identityCheck, stored?.identityCheck)) problems.push("Anonymous and pick-name forms are retired: founders answer from their account (`account`).");
   const storedField = new Map(stored?.questions.map((q) => [q.id, q.dbField]));
   activeQuestions(form).forEach((q, i) => {
     if (q.dbField && !isOffered(RETIRED_DB_FIELDS, q.dbField, storedField.get(q.id)))

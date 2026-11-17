@@ -20,7 +20,7 @@ import { applicationDefault, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
 const require = createRequire(import.meta.url);
-const { COL } = require("../functions/lib/shared/collections.js");
+const { COL, docPaths } = require("../functions/lib/shared/collections.js");
 const { eventFormDocs, formsByEventId } = require("../functions/lib/shared/eventForms.js");
 const { isWeeklyUpdateEvent, weeklyFormsEnabled, weeklyFormsPlan } = require("../functions/lib/shared/weeklyForms.js");
 
@@ -38,7 +38,7 @@ initializeApp(onEmulator ? { projectId: PROJECT_ID } : { projectId: PROJECT_ID, 
 const db = getFirestore();
 console.log(`${PROJECT_ID} · ${batchId} · ${write ? "ECRITURE" : "a blanc"}\n`);
 
-const batchRef = db.doc(`${COL.batches}/${batchId}`);
+const batchRef = db.doc(docPaths.batch(batchId));
 const batchSnap = await batchRef.get();
 if (!batchSnap.exists) {
   console.error(`batch introuvable : ${batchId}`);
@@ -83,7 +83,7 @@ for (const event of entries) {
   created += forms.length;
   if (!write) continue;
   const b = db.batch();
-  if (hasPatch) b.update(db.doc(`${COL.events}/${event.id}`), { ...patch, updatedDateISOString: now });
+  if (hasPatch) b.update(db.doc(docPaths.event(event.id)), { ...patch, updatedDateISOString: now });
   for (const p of forms) for (const d of eventFormDocs(p, now)) b.create(db.doc(d.path), d.data);
   await b.commit();
 }

@@ -2,10 +2,11 @@ import { z } from "zod";
 import { draftOf, duplicatedForm, formArchiveWrite, formStatusWrites, questionsFromEdits, saveFormPlan, type FormDraft, type QuestionEdit } from "../../shared/admin/forms";
 import { COL, docPaths } from "../../shared/collections";
 import { createWrite, isArchivedAs } from "../../shared/docWrites";
-import { FORM_APPROVALS, FORM_IDENTITY_CHECKS, type Form, type PioneersEvent } from "../../shared/types";
+import { FORM_APPROVALS, type Form, type PioneersEvent } from "../../shared/types";
 import { formUrl } from "../../api/config";
 import { badRequest } from "../../api/errors";
 import type { Operation } from "../operations";
+import { OFFERED_IDENTITY_CHECKS } from "../../shared/presets/offered";
 import { QuestionInput } from "../formCreate";
 import { isoDateTime } from "../schemas";
 import { changesOf, mustRead, newDocId, readDoc, stamped, staffOnly, writePlan } from "./writes";
@@ -36,7 +37,7 @@ export const UpdateFormInput = z
         "The FULL ordered list. An item with `id` keeps that question and changes only the fields given; without `id`, a new question (needs `type` and `label`). A question left out is removed (archived once the form is published, so past answers keep their question).",
       ),
     eventId: z.string().min(1).nullable().optional(),
-    identityCheck: z.enum(FORM_IDENTITY_CHECKS).optional(),
+    identityCheck: z.enum(OFFERED_IDENTITY_CHECKS).optional().describe("`account` for every founder form, `jury_link` for a jury. A form already anonymous or pick-name keeps it by leaving this out."),
     approval: z.enum(FORM_APPROVALS).optional(),
     opensDateISOString: isoDateTime.nullable().optional(),
     deadlineDateISOString: isoDateTime.nullable().optional(),

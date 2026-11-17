@@ -176,10 +176,14 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   sa page d'admin (modeles `debrief`, `peer_rating`, `jury`, `week_retro`, `pitch_deck`...).
 - **Retire le 17/11, archive** (lot 6, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §4.6 ; rien n'est efface) :
   `shared/presets/offered.ts` dit ce qui ne se cree plus et reste lu (`isOffered(retire, valeur, valeur enregistree)`).
-  Modeles `retired` (Picks, Founder introductions, Exit form...) ; type de formulaire `picks`, identite `anonymous`
+  Modeles `retired` (Picks, Founder introductions, Exit form, Thursday update `weekly_update`, inscriptions Selection
+  Day / Pre-IC remplacees par le Pitch deck...) ; modeles d'evenement retires (`edge_drill`, `customer_discovery`,
+  `vibethon`, `founder_introductions`) : `OFFERED_EVENT_TEMPLATE_KEYS` (Admin > Events, enums de `create_event` et
+  `apply_event_template`). Type de formulaire `picks`, identites `anonymous` et `select_name` (defaut `account`)
   et champ `picks.pickedFounderIds` : proposes seulement au formulaire / a la question qui les a deja, LA regle
-  `formRules.ts#retiredFormProblems(form, stored)` (editeur, `saveForm`, `create_form` avec `stored = null` ;
-  `create_form` n'accepte plus `anonymous`). Anciens formulaires anonymes et Picks toujours lus. Les picks deja
+  `formRules.ts#retiredFormProblems(form, stored)` (editeur, `saveForm`, `create_form` et `duplicatedForm` avec
+  `stored = null` ; `create_form` / `update_form` n'acceptent plus `anonymous` ni `select_name`). Grille par defaut du
+  pack `hackathon` : Result 70 + Quality of the work 30 (a ajuster) ; `customer_day` / `traction_sprint` sans tirage ni formulaire. Anciens formulaires anonymes et Picks toujours lus. Les picks deja
   donnes : section « Picks (archived) » de la page d'admin de l'evenement (`AdminContext.eventIdsWithPicks`, aucun
   ecouteur sans eux) et reseau de `founderStats` ; plus de section Picks dans le To do. Bareme : seulement des
   criteres du jury avec leurs points ; un element `per_unit` / `proportional` (`isLegacyScoringItem`) se garde tel
@@ -197,8 +201,9 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   (`services/forms.ts`, id de reponse deterministe par envoi, ecritures via `planFieldWrites` en mode partiel,
   groupees par cible). Portee d'une question (`scope`) : `self`, `team` (equipe publiee du repondant, une reponse
   commune), `each_teammate`, `each_target` (equipes notees sauf la sienne) ; reponse par cible sous
-  `question@cible`, cibles calculees par le serveur. Identites : `select_name`, `account` (connexion obligatoire,
-  `email_code` = ancien nom), `jury_link`, `anonymous` (retire le 17/11 : plus propose, toujours lu). `formResponses` : staff seulement.
+  `question@cible`, cibles calculees par le serveur. Identites : `account` (connexion obligatoire, defaut,
+  `email_code` = ancien nom), `jury_link` ; `select_name` et `anonymous` retires le 17/11 (`RETIRED_IDENTITY_CHECKS` :
+  ni proposes, ni recopies par `duplicate_form` / Copy, toujours lus). `formResponses` : staff seulement.
 - **Jury** : le formulaire de jury de l'evenement (identite `jury_link`), par UN lien partage
   `/forms/{formId}#secret`, sans compte (decision du 12/11) ; secret en clair dans `events/{id}/judges/link` (staff
   seulement, recopiable ; `resetJuryLink` le remplace). Le jure choisit son nom (invites, noms deja venus noter,
@@ -298,9 +303,9 @@ document ENTIER, jamais un champ) :
 | `taskCompletions/{taskId}_{founderId}` | le fondateur lui-meme + staff (sa coche, ecrite par lui seul ; decocher = `done: false`) |
 | `formCompletions/{formId}_{founderId}`, `picks` | le fondateur lui-meme + staff (« J'ai repondu » et picks, ecrits par `submitFormResponse` ; jamais pour un formulaire anonyme) |
 | `founders/{id}/private/internal`, `founderStats`, `notes`, `assessments`, `eloMatches` (archive) | staff + investors IC |
-| `shortlistHistory/{founderId}_{targetId}` | staff + investors IC (ecrit par le serveur seul, jamais lu par l'API) |
-| `teamLocks/{founderId}` | le fondateur lui-meme + staff + investors IC (reponse a Lock my team, ecrite par `submitFormResponse`, corrigee par le staff) |
-| `founderReviews/{founderId}_{lundi}`, `startupReviews/{startupId}_{lundi}` | staff + investors IC (revue des Weekly updates, ecrite par le staff ; jamais montree aux fondateurs) |
+| `shortlistHistory/{founderId}_{targetId}` | staff (SPECS §6.2 ; ecrit par le serveur seul, jamais lu par l'API) |
+| `teamLocks/{founderId}` | le fondateur lui-meme + staff (SPECS §6.2 ; reponse a Lock my team, ecrite par `submitFormResponse`, corrigee par le staff ; jamais lue par l'API) |
+| `founderReviews/{founderId}_{lundi}`, `startupReviews/{startupId}_{lundi}` | staff (SPECS §6.2 ; revue des Weekly updates, ecrite par le staff ; jamais montree aux fondateurs ni lue par l'API) |
 | `startups/{id}` | public |
 | `startups/{id}/private/profile`, `kpiSeries` | membres + staff + investors |
 | `startups/{id}/private/internal` | staff + investors IC |

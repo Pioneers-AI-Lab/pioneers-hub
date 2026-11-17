@@ -5,7 +5,7 @@ import { JUDGE_LIMITS, type JuryAnswer, type JuryBrief, type JurySubmission, typ
 import { publicShortName } from "../shared/access";
 import { enumOptions, getFieldDef, isEmptyValue, parseDbField } from "../shared/fieldRegistry";
 import { eventMetrics, submissionQuestions, type FieldQuestion } from "../shared/forms";
-import { normalizeHttpUrl, searchKey } from "../shared/text";
+import { nameKey, normalizeHttpUrl } from "../shared/text";
 import { hasSubmitted, isLateUnwaived } from "../shared/types";
 import type { Evaluation, Form, Founder, JuryLink, PioneersEvent, Submission } from "../shared/types";
 import { sha256 } from "../api/crypto";
@@ -29,10 +29,9 @@ import type { ScoredTarget } from "./events";
 const db = () => getFirestore();
 
 /** Un nom compare sans casse, accents ni espaces en trop. */
-const normalizeName = (name: string) => searchKey(name).replace(/\s+/g, " ");
 
 const founderJudgeId = (founderId: string) => `founder-${founderId}`;
-const namedJudgeId = (name: string) => `jury-${sha256(normalizeName(name)).slice(0, 20)}`;
+const namedJudgeId = (name: string) => `jury-${sha256(nameKey(name)).slice(0, 20)}`;
 
 export type JudgeOption = { id: string; name: string; hint: string | null; founderId: string | null };
 
@@ -69,7 +68,7 @@ export async function loadJury(eventId: string, event: PioneersEvent, targets: S
   const options = new Map(founderOptions.map(({ o }) => [o.id, o]));
   const named = new Map<string, JudgeOption>();
   const addNamed = (id: string, name: string) => {
-    const key = normalizeName(name);
+    const key = nameKey(name);
     if (!options.has(id) && !named.has(key)) named.set(key, { id, name, hint: null, founderId: null });
   };
   for (const e of evaluations) if (e.evaluatorKind === "judge") addNamed(e.evaluatorId, e.evaluatorName);
@@ -79,7 +78,7 @@ export async function loadJury(eventId: string, event: PioneersEvent, targets: S
   // Un nom saisi retrouve son option : nom affiche, ou nom complet d'un fondateur.
   const byName = new Map<string, Set<JudgeOption>>();
   const index = (name: string, o: JudgeOption) => {
-    const key = normalizeName(name);
+    const key = nameKey(name);
     byName.set(key, (byName.get(key) ?? new Set<JudgeOption>()).add(o));
   };
   for (const o of options.values()) index(o.name, o);
@@ -104,7 +103,7 @@ export function resolveJudge(identity: RespondentInput | null | undefined, jury:
   if (!("name" in identity)) return null;
   const name = cleanText(identity.name, JUDGE_LIMITS.name, "name");
   if (!name) return null;
-  const hits = jury.byName.get(normalizeName(name));
+  const hits = jury.byName.get(nameKey(name));
   return hits?.size === 1 ? [...hits][0] : { id: namedJudgeId(name), name, hint: null, founderId: null };
 }
 

@@ -163,7 +163,7 @@ export function planCalendarSync(input: {
   };
   const formsOf = formsByEventId(input.forms);
   /** Le template du Weekly update (dans `patch`) et ses formulaires manquants, sur l'evenement tel qu'il sera. */
-  const withWeeklyForms = <P extends object>(event: WithId<PioneersEvent>, patch: P): P & Partial<PioneersEvent> => {
+  const withWeeklyForms = <P extends object>(event: Parameters<typeof weeklyFormsPlan>[1], patch: P): P & Partial<PioneersEvent> => {
     const weekly = weeklyFormsPlan(batch, { ...event, ...patch }, formsOf.get(event.id) ?? [], nowISO);
     plan.formCreates.push(...weekly.forms);
     return { ...patch, ...weekly.patch };
@@ -213,9 +213,7 @@ export function planCalendarSync(input: {
     );
     const id = calendarEventDocId(batch.id, g.id);
     // Un evenement neuf n'a aucun formulaire : le pack entier s'il est une entree du Weekly update.
-    const weekly = weeklyFormsPlan(batch, { ...data, id }, [], nowISO);
-    plan.formCreates.push(...weekly.forms);
-    plan.creates.push({ id, data: { ...data, ...weekly.patch } });
+    plan.creates.push({ id, data: { ...data, ...withWeeklyForms({ ...data, id }, {}) } });
   }
 
   // Une synchro complete voit tout l'agenda : un evenement relie qui n'y est plus a ete supprime.

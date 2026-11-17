@@ -6,9 +6,9 @@ import { questionsFromEdits, type QuestionEdit } from "../shared/admin/forms";
 import { addedFormDates } from "../shared/eventForms";
 import { formProblems, retiredFormProblems } from "../shared/formRules";
 import { firstPublication, newForm } from "../shared/forms";
-import { FORM_TEMPLATES, type FormTemplateKey, isOfferedTemplate } from "../shared/presets/formTemplates";
-import { isOffered, RETIRED_IDENTITY_CHECKS } from "../shared/presets/offered";
-import { FORM_APPROVALS, FORM_FIELD_TYPES, FORM_IDENTITY_CHECKS, PICKER_ENTITIES, QUESTION_SCOPES, type Batch, type Form, type FormIdentityCheck, type PioneersEvent } from "../shared/types";
+import { FORM_TEMPLATES, OFFERED_FORM_TEMPLATE_KEYS } from "../shared/presets/formTemplates";
+import { OFFERED_IDENTITY_CHECKS } from "../shared/presets/offered";
+import { FORM_APPROVALS, FORM_FIELD_TYPES, PICKER_ENTITIES, QUESTION_SCOPES, type Batch, type Form, type PioneersEvent } from "../shared/types";
 import { formUrl } from "../api/config";
 import { badRequest, notFound } from "../api/errors";
 import type { Operation } from "./operations";
@@ -25,13 +25,8 @@ import { isoDateTime } from "./schemas";
 //
 // Staff seulement (regle `forms` : write staff).
 
-// Les modeles encore proposes (decision du 17/11) : un modele retire ne se cree plus, ni par l'API ni par le MCP.
-const TEMPLATE_KEYS = (Object.keys(FORM_TEMPLATES) as FormTemplateKey[]).filter((key) => isOfferedTemplate(FORM_TEMPLATES[key])) as [
-  FormTemplateKey,
-  ...FormTemplateKey[],
-];
-/** Les identites encore proposees : plus d'`anonymous` (decision du 17/11). */
-const IDENTITY_CHECKS = FORM_IDENTITY_CHECKS.filter((c) => isOffered(RETIRED_IDENTITY_CHECKS, c)) as [FormIdentityCheck, ...FormIdentityCheck[]];
+// Les modeles et identites encore proposes (decision du 17/11, presets/offered.ts) : un modele ou une identite
+// retire ne se cree plus, ni par l'API ni par le MCP.
 
 export const QuestionInput = z
   .object({
@@ -60,12 +55,12 @@ export const QuestionInput = z
 export const CreateFormInput = z
   .object({
     batchId: z.string().min(1),
-    templateKey: z.enum(TEMPLATE_KEYS).optional().describe("Form model: copies its questions. Omit to give `questions`."),
+    templateKey: z.enum(OFFERED_FORM_TEMPLATE_KEYS).optional().describe("Form model: copies its questions. Omit to give `questions`."),
     title: z.string().trim().min(1).max(200).optional().describe("Default: the model's title."),
     description: z.string().trim().min(1).max(2000).optional(),
     questions: z.array(QuestionInput).min(1).max(40).optional().describe("Replace the model's questions, or the questions of a form without model."),
     eventId: z.string().min(1).optional().describe("Event the form is about (submission, peer rating, jury, retro, pitch deck)."),
-    identityCheck: z.enum(IDENTITY_CHECKS).optional().describe("How a respondent says who they are: `account` for every founder form, `jury_link` for a jury. Default: the model's, or select_name."),
+    identityCheck: z.enum(OFFERED_IDENTITY_CHECKS).optional().describe("How a respondent says who they are: `account` for every founder form, `jury_link` for a jury. Default: the model's, or `account`."),
     approval: z.enum(FORM_APPROVALS).optional().describe("Staff validation of answers before they are written. Default: the model's, or none."),
     publish: z.boolean().optional().describe("true: open it now (or at `opensDateISOString`). Default: a draft, to review in Admin > Forms."),
     opensDateISOString: isoDateTime.optional(),

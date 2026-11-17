@@ -333,6 +333,12 @@ button.row {
   padding-top: 0;
   border-top: 0;
 }
+/* Fiche d'un fondateur : sous les boutons Shortlist / Met (eux-memes sous un filet),
+   la section suivante n'a pas de filet (demande du 17/11). */
+.connection-buttons + .section {
+  padding-top: 0;
+  border-top: 0;
+}
 
 /* Barre d'enregistrement collee au bas de l'ecran (au-dessus des onglets sur mobile). */
 .savebar {

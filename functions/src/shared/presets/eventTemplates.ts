@@ -2,6 +2,7 @@ import type { Criterion, EventKind, EventMatching, EventMetric, EventScoring, Pi
 import type { FormTemplateKey } from "./formTemplates";
 import { isOfferedTemplate } from "./offered";
 import { PITCH_FAMILY_INFO, PITCH_RUBRIC, PITCH_SCORING } from "../pitchGrid";
+import { scoringFrom } from "../scoringRules";
 import { teamSizeFor } from "../teamGenerator";
 import { standardEventMetric } from "./standardMetrics";
 
@@ -27,9 +28,9 @@ import { standardEventMetric } from "./standardMetrics";
 // bareme (Outstanding du staff a 100). Le score d'une startup se suit ainsi dans
 // le temps. Un pack de pitch cree aussi le formulaire Pitch deck de la startup.
 //
-// ECHELLES : seules celles marquees « documente » viennent de SPECS.md ; les
-// autres sont une hypothese a confirmer avec le staff avant le premier
-// exercice (TODO).
+// GRILLES DE JURY (regle du 17/11) : chaque critere de 0 a 5 vaut des points,
+// et les points d'une grille font 100 ; un departage vaut 0 point. Les packs
+// retires gardent leurs anciennes grilles (lues par les evenements de Spring 2026).
 
 export type EventTemplate = {
   label: string;
@@ -77,18 +78,19 @@ const s = standardEventMetric;
  */
 const pitch = { kind: "pitch", criteria: PITCH_RUBRIC, scoring: PITCH_SCORING } as const;
 
-/** SP26 « Hackathon scorecard ». Documente : Depth of execution /5. Le reste : TODO echelle. */
-const HACKATHON_CRITERIA: Criterion[] = [
-  c("clarityOfProblem", "Clarity of problem"),
-  c("strengthOfEvidence", "Strength of evidence"),
-  c("depthOfExecution", "Depth of execution"),
-  c("strategicPrioritization", "Strategic prioritization"),
-  c("teamCoherence", "Team coherence"),
-  c("actualValidation", "Actual validation"),
-  // TODO : « Factor quality » et « Final Score » (/2 500) sont un multiplicateur
-  // et un total dans le SP26 ; leur formule exacte est a relire avant de les
-  // modeliser comme criteres.
-];
+/**
+ * La grille par defaut d'un hackathon (regle du 17/11, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2) :
+ * des criteres de 0 a 5 dont les points font 100, l'Outstanding mention seulement a 100 (bareme).
+ * Un DEFAUT MINIMAL que le staff ajuste a chaque hackathon (Admin > Events > Leaderboard : criteres,
+ * points, departages ; « Copy scoring from… ») : le critere principal est le chiffre que publie le
+ * calendrier (5 = la meilleure equipe), puis la qualite du travail.
+ */
+const HACKATHON_GRID = [
+  { key: "result", label: "Result (5 = the best team)", points: 70 },
+  { key: "workQuality", label: "Quality of the work", points: 30 },
+] as const;
+const HACKATHON_CRITERIA: Criterion[] = HACKATHON_GRID.map((g) => c(g.key, g.label, 5, g.points, 0));
+const HACKATHON_SCORING = scoringFrom(HACKATHON_GRID.map((g) => ({ label: g.label, mode: "criterion" as const, sourceKey: g.key, maxPoints: g.points })))!;
 
 /**
  * SP26 « Hackathon scorecard » (counts), en cles standard (standardMetrics.ts) :
@@ -134,33 +136,33 @@ export const EVENT_TEMPLATES = {
   // ---- team_challenge ----
   hackathon: t({
     label: "Hackathon",
-    summary: "Teams of 3, submission, peer rating, jury",
+    summary: "Teams of 3, submission, peer rating, jury (default grid to adjust)",
     kind: "team_challenge",
     criteria: HACKATHON_CRITERIA,
+    scoring: HACKATHON_SCORING,
     metrics: HACKATHON_METRICS,
     legacyType2025: "Group exercise",
   }),
+  // Packs Spring 2026 absents du document du 17/11 : retires, lus par les evenements qui les portent.
   edge_drill: t({
     label: "Edge drill",
     summary: "Teams of 3, submission, peer rating, jury",
     kind: "team_challenge",
-    // Documente : total /15 (« Total Star Review »), soit 3 criteres /5.
     criteria: [c("edgeArticulation", "Edge articulation"), c("execution", "Execution"), c("collaboration", "Collaboration")],
+    retired: true,
   }),
   customer_discovery: t({
     label: "Customer discovery challenge",
     summary: "Teams of 3, submission with outreach numbers, peer rating, jury",
     kind: "team_challenge",
-    // Documente : score /5. Echelle de chaque critere : TODO.
     criteria: [c("proofLevel", "Proof level"), c("insights", "Insights"), c("traction", "Traction"), c("execution", "Execution")],
-    // SP26 « Discovery challenge evaluation » : score pondere 1, 3 et 10 points.
     metrics: [s("messagesSent"), s("callsMade"), s("conversationsDone")],
+    retired: true,
   }),
   vibethon: t({
     label: "Vibethon",
     summary: "Teams of 3, submission, peer rating, jury",
     kind: "team_challenge",
-    // Documente : score /5.
     criteria: [
       c("problemDefinition", "Problem definition"),
       c("solution", "Solution"),
@@ -168,17 +170,27 @@ export const EVENT_TEMPLATES = {
       c("presentation", "Presentation"),
       c("execution", "Execution"),
     ],
+    retired: true,
   }),
   workshop: t({ label: "Workshop or group exercise", summary: "Teams of 3, submission, peer rating", kind: "team_challenge", legacyType2025: "Group exercise" }),
+  // Customer Day et 48-hour traction sprint (document §1, §4.7) : l'equipe est la startup, aucun
+  // tirage ; formulaires et grille restent a definir (le staff les ajoute a l'evenement).
   customer_day: t({
     label: "Customer day",
-    summary: "Teams of 3, submission with conversations, peer rating",
+    summary: "The team is the startup: no draw; forms and jury to define",
     kind: "team_challenge",
     durationMinutes: 480,
-    metrics: [s("conversationsDone")],
+    matching: null,
+    forms: [],
   }),
-  // Une metrique par equipe, avant / apres : le staff la declare a la creation.
-  traction_sprint: t({ label: "48-hour traction sprint", summary: "Teams of 3, submission, peer rating", kind: "team_challenge", durationMinutes: 2880 }),
+  traction_sprint: t({
+    label: "48-hour traction sprint",
+    summary: "The team is the startup: no draw; forms and jury to define",
+    kind: "team_challenge",
+    durationMinutes: 2880,
+    matching: null,
+    forms: [],
+  }),
 
   // ---- pitch (grille unique, lot 5) ----
   pitch_day: t({ ...pitch, label: "Pitch day", summary: "Pitch deck, jury on the startups (40 / 40 / 20)" }),
@@ -213,7 +225,7 @@ export const EVENT_TEMPLATES = {
     label: "Weekly update",
     summary: "Weekly update founder and startup, open 24 h, for the whole batch",
     kind: "session",
-    startTime: "18:00",
+    startTime: "19:00",
     durationMinutes: 30,
     forms: ["weekly_update_founder", "weekly_update_startup"],
     withoutAttendance: true,
@@ -233,9 +245,17 @@ export const EVENT_TEMPLATES = {
 
 export type EventTemplateKey = keyof typeof EVENT_TEMPLATES;
 
-/** Les modeles d'une etiquette, dans l'ordre du catalogue. */
-export const templatesOfKind = (kind: EventKind): EventTemplateKey[] =>
-  (Object.keys(EVENT_TEMPLATES) as EventTemplateKey[]).filter((key) => EVENT_TEMPLATES[key].kind === kind && isOfferedTemplate(EVENT_TEMPLATES[key]));
+/**
+ * Les modeles encore proposes (ni retires, `isOfferedTemplate`), dans l'ordre du catalogue :
+ * Admin > Events (New, Template), `create_event` et `apply_event_template` (enum : un modele retire est refuse).
+ */
+export const OFFERED_EVENT_TEMPLATE_KEYS = (Object.keys(EVENT_TEMPLATES) as EventTemplateKey[]).filter((key) => isOfferedTemplate(EVENT_TEMPLATES[key])) as [
+  EventTemplateKey,
+  ...EventTemplateKey[],
+];
+
+/** Les modeles proposes d'une etiquette, dans l'ordre du catalogue. */
+export const templatesOfKind = (kind: EventKind): EventTemplateKey[] => OFFERED_EVENT_TEMPLATE_KEYS.filter((key) => EVENT_TEMPLATES[key].kind === kind);
 
 /** Le modele d'une cle (`PioneersEvent.templateKey`), `null` si inconnue ou absente. */
 export const eventTemplateOf = (key: string | null): EventTemplate | null =>

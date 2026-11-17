@@ -240,6 +240,23 @@ const call = async (key, name, args) => {
   );
   t = await call(key, "pioneers_create_event", { batchId: "fall-2026", templateKey: "pitch_day", name: "Pitch day 1", startDateISOString: "2026-11-27T14:00:00+01:00", status: "draft" });
   check(!t.isError && t.data.preview.event.scoringCriteria?.length > 0, "a model copies its scoring grid", t.data);
+  // La grille Pitch (17/11) : neuf criteres de 0 a 5 dont les points font 100, sur le bareme et sur le jury.
+  t = await call(key, "pioneers_create_event", { planId: t.data.planId });
+  {
+    const pitchId = t.data?.result?.eventId;
+    const pitchEvent = pitchId ? (await getFirestore().doc(`events/${pitchId}`).get()).data() : null;
+    const jury = pitchId ? (await getFirestore().doc(`forms/${pitchId}-jury`).get()).data() : null;
+    const criteria = (jury?.questions ?? []).filter((q) => q.id.startsWith("criterion_"));
+    const points = (pitchEvent?.scoring?.items ?? []).map((i) => i.maxPoints ?? 0);
+    check(
+      points.length === 9 && points.reduce((a, b) => a + b, 0) === 100 && criteria.length === 9 && criteria.reduce((a, q) => a + q.weight, 0) === 100 && criteria.every((q) => q.scale?.min === 0 && q.scale?.max === 5),
+      "the Pitch pack: 9 criteria from 0 to 5, points summing to 100 (scoring and jury)",
+      { points, criteria: criteria.map((q) => [q.id, q.weight, q.scale]) },
+    );
+  }
+  // Un modele d'evenement retire (decision du 17/11) ne se cree plus et ne s'applique plus.
+  t = await call(key, "pioneers_create_event", { batchId: "fall-2026", templateKey: "vibethon", name: "Retired", startDateISOString: "2026-11-30T09:30:00+01:00" });
+  check(t.isError && /templateKey/.test(t.data), "create_event refuses a retired event model (vibethon)", t.data);
   // Un template est un pack : l'evenement, son matching et ses formulaires, nes comme lui.
   t = await call(key, "pioneers_create_event", { batchId: "fall-2026", templateKey: "hackathon", name: "Pack check", startDateISOString: "2026-11-30T09:30:00+01:00" });
   check(!t.isError && t.data.preview.event.matching === "teams of 3" && t.data.preview.event.forms.some((f) => /Submission \(open\)/.test(f)) && t.data.preview.event.forms.some((f) => /Peer rating \(open\)/.test(f)), "a hackathon pack previews its teams and forms", t.data);
@@ -298,7 +315,14 @@ const call = async (key, name, args) => {
     "a peer rating previews its rating, for each teammate",
     t.data,
   );
+  // L'ancien « Thursday update » est retire (le Weekly update startup le remplace, sur l'agenda).
   t = await call(key, "pioneers_create_form", { batchId: "fall-2026", templateKey: "weekly_update" });
+  check(t.isError && /templateKey/.test(t.data), "the retired Thursday update model is refused", t.data);
+  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", title: "Pick name", identityCheck: "select_name", questions: [{ type: "long_text", label: "Q" }] });
+  check(t.isError && /identityCheck/.test(t.data), "a pick-name form is no longer created", t.data);
+  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", title: "Default identity", questions: [{ type: "long_text", label: "Q" }] });
+  check(!t.isError && t.data.preview.form.identityCheck === "account", "a form without model is answered from the account by default", t.data);
+  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", templateKey: "lock_my_team" });
   t = await call(key, "pioneers_create_form", { planId: t.data.planId });
   const draft = (await getFirestore().doc(`forms/${t.data.result?.formId}`).get()).data();
   check(draft?.status === "draft" && draft?.version === 0 && draft?.questions?.length > 0, "a model form is created as a draft by default", draft);
@@ -319,6 +343,8 @@ const call = async (key, name, args) => {
   check(!t.isError && /matching/.test(t.data.body), "guide returns a topic", t.data);
   t = await call(key, "pioneers_run", { action: "update_event", args: { eventId, nope: 1 } });
   check(t.isError && /nope|invalid_request/.test(t.data), "an action refuses an unknown argument", t.data);
+  t = await call(key, "pioneers_run", { action: "apply_event_template", args: { eventId, templateKey: "edge_drill" } });
+  check(t.isError && /templateKey/.test(t.data), "apply_event_template refuses a retired event model (edge_drill)", t.data);
 
   // Evenement : regler, deplacer avec ses formulaires, archiver / restaurer
   let a = await run("update_event", { eventId, location: "Room 2", audience: "guests" });
@@ -365,6 +391,16 @@ const call = async (key, name, args) => {
   const copyId = a.applied?.data?.result?.formId;
   const copy = copyId ? (await db.doc(`forms/${copyId}`).get()).data() : null;
   check(copy?.status === "draft" && copy.version === 0, "duplicate_form makes a draft copy", copy);
+  // Une copie est un nouveau formulaire : rien de ce qui est retire le 17/11 (Picks, anonyme, nom choisi) ne s'y recopie.
+  {
+    const base = (await db.doc("forms/demo-weekly-form").get()).data();
+    await db.doc("forms/check-anonymous-form").set({ ...base, title: "Old anonymous", identityCheck: "anonymous" });
+    await db.doc("forms/check-picks-form").set({ ...base, title: "Old picks", kind: "picks", identityCheck: "account" });
+    for (const [formId, label] of [["demo-weekly-form", "pick-name"], ["check-anonymous-form", "anonymous"], ["check-picks-form", "picks"]]) {
+      a = await run("duplicate_form", { formId });
+      check(a.preview.isError && /invalid_form/.test(a.preview.data) && /retired/.test(a.preview.data), `duplicate_form refuses to copy a ${label} form`, a.preview.data);
+    }
+  }
   a = await run("archive_form", { formId: copyId, archived: true });
   check((await db.doc(`forms/${copyId}`).get()).get("archivedDateISOString"), "archive_form archives", a);
   t = await call(key, "pioneers_list", { object: "forms", batchId: "fall-2026", eventId: pack.id });
@@ -373,6 +409,22 @@ const call = async (key, name, args) => {
   check(!t.isError && t.data.questions?.length >= 3 && t.data.url, "get form returns its questions and link", t.data);
   t = await call(key, "pioneers_get", { object: "event", id: pack.id });
   check(!t.isError && t.data.forms?.length === packForms.size, "get event returns its forms", t.data?.forms);
+  // Lock my team, la revue des Weekly updates et l'historique des shortlists : staff dans l'app, jamais par l'API (SPECS §6.2).
+  {
+    const scoped = { programId: "accelerator", batchId: "fall-2026" };
+    await Promise.all([
+      db.doc(`teamLocks/${founder.id}`).set({ ...scoped, founderId: founder.id, locked: true, coFounderIds: [], startupName: "Secret lock", updatedDateISOString: new Date().toISOString() }),
+      db.doc(`founderReviews/${founder.id}_2026-11-30`).set({ ...scoped, founderId: founder.id, weekStartDayString: "2026-11-30", goalAmbitious: true, goalReached: null, problemValidated: null }),
+      db.doc(`shortlistHistory/${founder.id}_x`).set({ ...scoped, founderId: founder.id, targetFounderId: "x", firstShortlistedDateISOString: new Date().toISOString() }),
+    ]);
+    t = await call(key, "pioneers_get", { object: "founder", id: founder.id });
+    const text = JSON.stringify(t.data);
+    check(!t.isError && !/teamLock|Secret lock|founderReview|startupReview|goalAmbitious|shortlistHistory|firstShortlisted/.test(text), "get founder returns no team lock, weekly review or shortlist history", text.slice(0, 300));
+    for (const object of ["teamLocks", "founderReviews", "startupReviews", "shortlistHistory"]) {
+      t = await call(key, "pioneers_list", { object, batchId: "fall-2026" });
+      check(t.isError, `list refuses \`${object}\``, t.data);
+    }
+  }
 
   // Taches du To do
   a = await run("create_task", { batchId: "fall-2026", title: "Book your office hour", linkUrl: "calendly.com/pioneers" });
