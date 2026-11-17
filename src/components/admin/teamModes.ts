@@ -14,12 +14,13 @@ export const TEAM_TOOLS: Record<TeamToolMode, TeamLabels & { title: string; summ
     title: "Teams",
     summary: "Work teams: a leader, at least one technical profile each",
     rulesHint:
-      "Rules, strictest first: never the same pair twice in a challenge; at least one technical profile per team (hybrid counts); avoid pairs who already met at a lunch roulette.",
+      "Rules, strictest first: never the same pair twice in a challenge (unless kept together); at least one technical profile per team (hybrid counts); bring together founders who shortlisted each other; then one-way shortlists; avoid pairs who already met at a lunch roulette.",
   },
   matching: {
     ...TEAM_LABELS.matching,
     title: "Tables",
     summary: "Tables to meet new people",
-    rulesHint: "Rules, strictest first: never the same pair twice at a lunch roulette; then avoid pairs who already teamed up in a challenge.",
+    rulesHint:
+      "Rules, strictest first: never the same pair twice at a lunch roulette; avoid pairs who both marked each other as met; then avoid pairs who already teamed up in a challenge.",
   },
 };

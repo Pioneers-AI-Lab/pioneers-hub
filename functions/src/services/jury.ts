@@ -1,10 +1,13 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { COL, docPaths, eventCollectionPaths } from "../shared/collections";
-import { JUDGE_LIMITS, type PublicChoice, type RespondentInput } from "../shared/callables";
+import { JUDGE_LIMITS, type JuryAnswer, type JuryBrief, type JurySubmission, type PublicChoice, type RespondentInput } from "../shared/callables";
 import { publicShortName } from "../shared/access";
-import { searchKey } from "../shared/text";
-import type { Evaluation, Founder, JuryLink, PioneersEvent } from "../shared/types";
+import { enumOptions, getFieldDef, isEmptyValue, parseDbField } from "../shared/fieldRegistry";
+import { eventMetrics, submissionQuestions, type FieldQuestion } from "../shared/forms";
+import { normalizeHttpUrl, searchKey } from "../shared/text";
+import { hasSubmitted, isLateUnwaived } from "../shared/types";
+import type { Evaluation, Form, Founder, JuryLink, PioneersEvent, Submission } from "../shared/types";
 import { sha256 } from "../api/crypto";
 import { cleanText } from "./clean";
 import type { ScoredTarget } from "./events";
@@ -108,3 +111,64 @@ export function resolveJudge(identity: RespondentInput | null | undefined, jury:
 /** Ce que ce jure peut noter : tout, sauf l'equipe (ou la startup) dont il est membre. */
 export const targetsFor = (targets: ScoredTarget[], founderId: string | null) =>
   founderId === null ? targets : targets.filter((t) => !t.memberIds.includes(founderId));
+
+// ---- Ce que le jure lit avant de noter (SPECS §2.0) -----------------------------
+// La Submission est une information libre, lue par le jury ; c'est la grille
+// (0 a 5 par critere) qui fait la note. Le jure lit donc, pour chaque equipe
+// qu'il note, ce qu'elle a rendu, et les chiffres declares de toutes ces equipes
+// (« 5 = la meilleure equipe »). Seulement les cibles de CE jure : un fondateur
+// qui note ne recoit pas la Submission de sa propre equipe.
+
+/** Le dossier Drive est rendu a part (lien mis en avant) ; les chiffres, compares entre equipes. */
+const DRIVE_FIELD = "submission.driveFolderUrl";
+
+/**
+ * Comment lire une question de la Submission : les liens a part, une valeur fixe
+ * par son libelle (les champs de la Submission n'ont pas de liste fermee) ; `read`
+ * rend `null` sans reponse.
+ */
+function answerReader(q: FieldQuestion): { field: string; read: (value: unknown) => JuryAnswer | null } {
+  const spec = getFieldDef(q.dbField).value;
+  const isLink = spec.kind === "url" || spec.kind === "files";
+  const options = isLink ? null : enumOptions(spec, new Map());
+  return {
+    field: parseDbField(q.dbField).field,
+    read: (value) => {
+      const values = (Array.isArray(value) ? value : [value]).filter((v) => !isEmptyValue(v));
+      if (values.length === 0) return null;
+      if (isLink) return { label: q.label, text: null, urls: values.map(String) };
+      const text = values.map((v) => options?.find((o) => o.value === v)?.label ?? String(v));
+      return { label: q.label, text: text.join(", "), urls: [] };
+    },
+  };
+}
+
+/** Les Submissions des cibles de ce jure (`targetIds`, au moins une) et les metriques qu'elles declarent. */
+export async function loadJuryBrief(eventId: string, targetIds: string[]): Promise<JuryBrief> {
+  const [formsSnap, submissionSnaps] = await Promise.all([
+    db().collection(COL.forms).where("eventId", "==", eventId).select("questions", "archivedDateISOString").get(),
+    db().getAll(...targetIds.map((id) => db().doc(docPaths.submission(eventId, id)))),
+  ]);
+  const forms = formsSnap.docs.map((d) => d.data() as Pick<Form, "questions" | "archivedDateISOString">);
+  const metrics = eventMetrics(forms);
+  // Le champ et le format de chaque question, une fois pour toutes les equipes.
+  const readers = submissionQuestions(forms)
+    .filter((q) => q.dbField !== DRIVE_FIELD)
+    .map(answerReader);
+  const submissions: Record<string, JurySubmission> = {};
+  for (const snap of submissionSnaps) {
+    const s = snap.data() as Submission | undefined;
+    if (!hasSubmitted(s) || !s) continue;
+    const declared = metrics.flatMap((m) => (typeof s.metrics?.[m.key] === "number" ? [[m.key, s.metrics[m.key]] as const] : []));
+    const answers = readers.flatMap((r) => r.read(snap.get(r.field)) ?? []);
+    const driveFolderUrl = s.driveFolderUrl ? normalizeHttpUrl(s.driveFolderUrl) : null;
+    submissions[snap.id] = {
+      driveFolderUrl,
+      late: isLateUnwaived(s),
+      answers,
+      metrics: Object.fromEntries(declared),
+    };
+  }
+  // Une metrique que personne n'a declaree ne compare rien.
+  return { metrics: metrics.filter((m) => Object.values(submissions).some((s) => m.key in s.metrics)), submissions };
+}

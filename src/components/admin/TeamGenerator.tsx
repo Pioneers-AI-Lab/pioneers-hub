@@ -12,6 +12,7 @@ import {
   assignLeaders,
   buildLeaderCounts,
   buildPairHistory,
+  buildPairPreferences,
   generateGroups,
   groupNumber,
   leaderIdOf,
@@ -22,9 +23,11 @@ import {
 } from "@shared/teamGenerator";
 import { matchingOf } from "@shared/events";
 import { sameIds } from "@shared/kpis";
-import type { DrawConstraints, EventTeam, Founder, WithId } from "@shared/types";
+import { readConnections, type DrawConstraints, type EventTeam, type Founder, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminEvent } from "@/context/AdminEventContext";
+import { useDocsListener } from "@/hooks/useFirestoreListener";
+import { refs } from "@/lib/firestore/refs";
 import { PROFILE_CATEGORY_LABEL, formatDateTime } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { publishTeams, refreshPublicNames, saveDraftTeams, teamIdFor, updatePublishedTeams, type DraftTeam } from "@/lib/teamsAdmin";
@@ -48,6 +51,9 @@ import { Empty, Section } from "@/components/ui/Section";
 // Un tirage publie se retouche encore (decision du 15/11) : memes gestes, plus
 // un retard a placer ou un absent a retirer, sans nouveau tirage ni verrou ; chaque
 // enregistrement est confirme (`updatePublishedTeams`, lib/teamsAdmin.ts).
+// Shortlists et « Met » des fondateurs (`private/connections`, lisibles par le
+// staff) : ecoutes ici, sur cette page seulement, et passees au generateur
+// (`buildPairPreferences`) ; le tirage attend qu'elles soient toutes arrivees.
 
 
 type Pair = [string, string];
@@ -187,6 +193,12 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
     [teamMemberships, modeOfEvent, mode, event.id],
   );
   const history = useMemo(() => buildPairHistory(teamMemberships, modeOfEvent, event.id), [teamMemberships, modeOfEvent, event.id]);
+  const connectionEntries = useMemo(() => eligible.map((f) => [f.id, refs.founderConnections(f.id)] as const), [eligible]);
+  const connections = useDocsListener(connectionEntries);
+  const preferences = useMemo(
+    () => buildPairPreferences(new Map([...connections.data].map(([id, doc]) => [id, readConnections(doc)]))),
+    [connections.data],
+  );
   // Le choix du staff (ceux du brouillon, sinon tout le batch) ; la presence fait
   // foi par-dessus, en direct : un absent releve n'est jamais « In » (`isIn`).
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
@@ -201,7 +213,10 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
   const [drawnSize, setDrawnSize] = useState(Number(size));
   const [keepApart, setKeepApart] = useState<Pair[]>(() => savedPairs(teams, "keepApart"));
   const [keepTogether, setKeepTogether] = useState<Pair[]>(() => savedPairs(teams, "keepTogether"));
-  const drawInput: DrawInput = { participants, history, rules: preset.rules, keepApart, keepTogether, groupWord: tool.groupWord };
+  const drawInput = useMemo<DrawInput>(
+    () => ({ participants, history, preferences, rules: preset.rules, keepApart, keepTogether, groupWord: tool.groupWord }),
+    [participants, history, preferences, preset.rules, keepApart, keepTogether, tool.groupWord],
+  );
   const [groups, setGroups] = useState<DraftTeam[]>(() => assignLeaders(withoutMembers(toDrafts(teams), absentIds), leaderCounts));
   const [picked, setPicked] = useState<string | null>(null);
   const [showParticipants, setShowParticipants] = useState(teams.length === 0);
@@ -212,10 +227,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
   const [isSaving, setIsSaving] = useState(false);
   // Publier, ou enregistrer une retouche du tirage publie : toujours confirme.
   const [isConfirming, setIsConfirming] = useState(false);
-  const report = scoreGroups(
-    groups.map((g) => g.memberIds),
-    drawInput,
-  );
+  const report = useMemo(() => scoreGroups(groups.map((g) => g.memberIds), drawInput), [groups, drawInput]);
 
   const placed = new Set(groups.flatMap((g) => g.memberIds));
   const unplaced = participants.filter((p) => !placed.has(p.id)).map((p) => p.id);
@@ -407,7 +419,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
           />
 
           <Section title="Rules" hint={tool.rulesHint}>
-            <Button size="md" fullWidth onClick={draw} disabled={participants.length < GROUP_SIZE_MIN}>
+            <Button size="md" fullWidth onClick={draw} loading={connections.isLoading} disabled={participants.length < GROUP_SIZE_MIN}>
               {groups.length > 0 ? "Draw again" : "Draw"}
             </Button>
             {groups.some((g) => g.locked) && (

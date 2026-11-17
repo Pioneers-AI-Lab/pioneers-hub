@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Select, Stack } from "@mantine/core";
 import { templateContext } from "@shared/forms";
-import { FORM_TEMPLATES, templateQuestions, type FormTemplateKey } from "@shared/presets/formTemplates";
+import { FORM_TEMPLATES, isOfferedTemplate, templateQuestions, type FormTemplateKey } from "@shared/presets/formTemplates";
 import { useAdmin } from "@/context/AdminContext";
 import { useAction } from "@/hooks/useAction";
 import { formatDateTime } from "@/lib/format";
@@ -64,7 +64,7 @@ export default function NewFormPage() {
             value={templateKey}
             onChange={(v) => v && setTemplateKey(v)}
             data={[
-              ...(Object.entries(FORM_TEMPLATES) as [FormTemplateKey, (typeof FORM_TEMPLATES)[FormTemplateKey]][]).map(([key, t]) => ({
+              ...(Object.entries(FORM_TEMPLATES) as [FormTemplateKey, (typeof FORM_TEMPLATES)[FormTemplateKey]][]).filter(([, t]) => isOfferedTemplate(t)).map(([key, t]) => ({
                 value: key,
                 label: `${t.label} · ${t.build && !(key === templateKey && event) ? "questions from its event" : countOf(key)}`,
               })),

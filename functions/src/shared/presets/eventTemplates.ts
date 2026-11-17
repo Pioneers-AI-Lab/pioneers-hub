@@ -1,5 +1,6 @@
 import type { Criterion, EventKind, EventMatching, EventMetric, PitchStage } from "../types";
 import type { FormTemplateKey } from "./formTemplates";
+import { isOfferedTemplate } from "./offered";
 import { teamSizeFor } from "../teamGenerator";
 import { standardEventMetric } from "./standardMetrics";
 
@@ -48,6 +49,8 @@ export type EventTemplate = {
   metrics: EventMetric[];
   /** Type de session 2025 correspondant (`session_events.Type`), pour l'import de l'historique. */
   legacyType2025: string | null;
+  /** Plus propose a la creation (decision du 17/11) : reste lu par les evenements qui le portent. */
+  retired?: boolean;
 };
 
 const c = (key: string, label: string, max = 5, weight = 1, min = 1): Criterion => ({ key, label, min, max, weight });
@@ -105,7 +108,8 @@ const DEFAULTS: Record<EventKind, Pick<EventTemplate, "durationMinutes" | "start
   team_challenge: { durationMinutes: 150, startTime: "09:30", matching: teams(3), forms: ["debrief", "peer_rating", "jury"] },
   pitch: { durationMinutes: 120, startTime: "14:00", matching: null, forms: ["jury"] },
   matching: { durationMinutes: 60, startTime: "12:30", matching: tables(4), forms: [] },
-  session: { durationMinutes: 60, startTime: "10:00", matching: null, forms: ["session_feedback"] },
+  // Une seance n'a pas de formulaire : les seances se notent a la retro de fin de semaine (decision du 13/11, 17/11).
+  session: { durationMinutes: 60, startTime: "10:00", matching: null, forms: [] },
   meeting: { durationMinutes: 30, startTime: "10:00", matching: null, forms: [] },
 };
 
@@ -190,17 +194,20 @@ export const EVENT_TEMPLATES = {
 
   // ---- matching ----
   lunch_roulette: t({ label: "Lunch roulette", summary: "Tables of 4, drawn so founders meet new people", kind: "matching", legacyType2025: "Diner/lunch" }),
-  speed_dating: t({ label: "Founder speed dating", summary: "Pairs, then picks: who stood out", kind: "matching", startTime: "14:00", matching: tables(2), forms: ["picks"] }),
+  // Plus de picks (decision du 17/11) : la Shortlist des fiches les remplace.
+  speed_dating: t({ label: "Founder speed dating", summary: "Pairs: founders meet one to one", kind: "matching", startTime: "14:00", matching: tables(2), forms: [] }),
   round_table: t({ label: "Round table (Pioneers Circles)", summary: "Tables of 5", kind: "matching", startTime: "18:00", matching: tables(5) }),
 
   // ---- session ----
-  masterclass: t({ label: "Masterclass or talk", summary: "Session feedback", kind: "session", legacyType2025: "Masterclass" }),
-  theme_session: t({ label: "Theme session", summary: "Session feedback", kind: "session", durationMinutes: 90, legacyType2025: "Theme session" }),
+  masterclass: t({ label: "Masterclass or talk", summary: "Nothing to fill in: sessions are rated at the week retro", kind: "session", legacyType2025: "Masterclass" }),
+  theme_session: t({ label: "Theme session", summary: "Nothing to fill in: sessions are rated at the week retro", kind: "session", durationMinutes: 90, legacyType2025: "Theme session" }),
+  // Retire le 17/11 : la presentation est dans Mon profil, les fondateurs a rencontrer dans la Shortlist.
   founder_introductions: t({
     label: "Founder introductions",
     summary: "Introduce yourself, who you want to meet, goal of the week",
     kind: "session",
     forms: ["founder_introductions"],
+    retired: true,
   }),
   announcement: t({ label: "Announcement", summary: "Nothing to fill in", kind: "session", durationMinutes: 30, forms: [], legacyType2025: "Announce/Organisation" }),
   social: t({ label: "Social event", summary: "Nothing to fill in", kind: "session", startTime: "19:00", durationMinutes: 180, forms: [], legacyType2025: "Socials" }),
@@ -221,7 +228,7 @@ export type EventTemplateKey = keyof typeof EVENT_TEMPLATES;
 
 /** Les modeles d'une etiquette, dans l'ordre du catalogue. */
 export const templatesOfKind = (kind: EventKind): EventTemplateKey[] =>
-  (Object.keys(EVENT_TEMPLATES) as EventTemplateKey[]).filter((key) => EVENT_TEMPLATES[key].kind === kind);
+  (Object.keys(EVENT_TEMPLATES) as EventTemplateKey[]).filter((key) => EVENT_TEMPLATES[key].kind === kind && isOfferedTemplate(EVENT_TEMPLATES[key]));
 
 /** Le modele d'une cle (`PioneersEvent.templateKey`), `null` si inconnue ou absente. */
 export const eventTemplateOf = (key: string | null): EventTemplate | null =>

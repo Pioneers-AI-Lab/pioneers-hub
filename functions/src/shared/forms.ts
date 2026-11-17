@@ -1,9 +1,9 @@
-import { criterionKeyOf, metricKeyOf } from "./fieldRegistry";
+import { criterionKeyOf, metricKeyOf, parseDbField, type DbFieldKey } from "./fieldRegistry";
 import { deriveAttachments, isJuryCriterion, ratingScale } from "./formRules";
 import { eventTemplateOf } from "./presets/eventTemplates";
 import { FORM_TEMPLATES, templateQuestions, type FormTemplateKey, type TemplateContext } from "./presets/formTemplates";
 import { standardEventMetric, standardMetricOf, type StandardMetricKey } from "./presets/standardMetrics";
-import { activeQuestions, type Criterion, type EventMetric, type Form, type FormVersion, type PioneersEvent, type Timestamps } from "./types";
+import { activeQuestions, type Criterion, type EventMetric, type Form, type FormQuestion, type FormVersion, type PioneersEvent, type Timestamps } from "./types";
 
 // ----------------------------
 // Un formulaire : sa construction et sa publication
@@ -152,6 +152,21 @@ export function eventMetrics(forms: readonly EventForm[]): EventMetric[] {
   for (const q of liveQuestions(forms)) {
     const key = metricKeyOf(q.dbField);
     if (key && !out.has(key)) out.set(key, standardMetricOf(key) ? standardEventMetric(key as StandardMetricKey) : { key, label: q.label, unit: null });
+  }
+  return [...out.values()];
+}
+
+/** Une question reliee a un champ de la base. */
+export type FieldQuestion = FormQuestion & { dbField: DbFieldKey };
+
+/**
+ * Les questions de la Submission hors metriques (champs `submission.*` : textes,
+ * liens, choix), une par champ, dans l'ordre des formulaires : ce que lit le jury.
+ */
+export function submissionQuestions(forms: readonly EventForm[]): FieldQuestion[] {
+  const out = new Map<string, FieldQuestion>();
+  for (const q of liveQuestions(forms)) {
+    if (q.dbField && !out.has(q.dbField) && !metricKeyOf(q.dbField) && parseDbField(q.dbField).doc === "submission") out.set(q.dbField, q as FieldQuestion);
   }
   return [...out.values()];
 }

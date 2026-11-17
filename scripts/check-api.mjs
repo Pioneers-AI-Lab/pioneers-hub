@@ -255,8 +255,11 @@ const call = async (key, name, args) => {
     );
   }
 
-  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", templateKey: "session_feedback" });
-  check(t.isError && /eventId/.test(t.data), "a feedback model needs its event", t.data);
+  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", templateKey: "week_retro" });
+  check(t.isError && /eventId/.test(t.data), "an event's model needs its event", t.data);
+  // Un modele retire (decision du 17/11) ne se cree plus, ni par l'API ni par le MCP.
+  t = await call(key, "pioneers_create_form", { batchId: "fall-2026", templateKey: "picks", eventId: "demo-hackathon-2" });
+  check(t.isError && /templateKey/.test(t.data), "a retired model (picks) is refused", t.data);
   t = await call(key, "pioneers_create_form", { batchId: "fall-2026", title: "x", questions: [{ type: "text", label: "Q", dbField: "founder.nope" }] });
   check(t.isError && /unknown_field/.test(t.data), "create_form refuses an unknown field", t.data);
   t = await call(key, "pioneers_create_form", { batchId: "fall-2026", title: "Anonymous", identityCheck: "anonymous", questions: [{ type: "long_text", label: "Intro", dbField: "founderDirectory.introduceYourself" }] });

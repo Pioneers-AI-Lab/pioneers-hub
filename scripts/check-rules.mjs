@@ -786,6 +786,20 @@ console.log("jury (form, shared link)");
       if (rows.some((r) => r.targetId === "team-d")) throw new Error(JSON.stringify(rows));
     });
   });
+  await expectOk("the judge reads the submissions of the teams they score, never their own team's", async () => {
+    const at = new Date().toISOString();
+    const sub = (teamId, extra) => adb.doc(`events/${EVENT}/submissions/${teamId}`).set({ teamId, late: false, lateWaived: false, submittedDateISOString: at, ...extra });
+    await sub("team-d", { notes: "Demo notes", proofUrls: ["https://proof.example/d"], driveFolderUrl: "https://drive.example/d", metrics: { conversationsDone: 7 }, late: true });
+    await sub("team-c", { metrics: { conversationsDone: 3 } });
+    if ((await sheet(null)).juryBrief !== null) throw new Error("a brief before the judge is chosen");
+    const jane = (await sheet(JANE)).juryBrief;
+    const d = jane?.submissions["team-d"];
+    if (jane?.metrics.map((m) => m.key).join() !== "conversationsDone" || jane.submissions["team-c"]?.metrics.conversationsDone !== 3) throw new Error(JSON.stringify(jane));
+    if (!d?.late || d.driveFolderUrl !== "https://drive.example/d" || d.metrics.conversationsDone !== 7) throw new Error(JSON.stringify(d));
+    if (!d.answers.some((a) => a.text === "Demo notes") || !d.answers.some((a) => a.urls.join() === "https://proof.example/d")) throw new Error(JSON.stringify(d.answers));
+    const ada = (await sheet({ judgeId: "founder-ada-example" })).juryBrief;
+    if (!ada?.submissions["team-d"] || "team-c" in ada.submissions) throw new Error("her own team's submission was sent");
+  });
   await expectOk("staff locks the scores (closes the jury form)", async () => {
     await updateDoc(doc(staff.db, `forms/${FORM}`), { status: "closed" });
     if ((await sheet(JANE)).state !== "closed") throw new Error("still open");

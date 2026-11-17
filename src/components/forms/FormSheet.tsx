@@ -17,7 +17,8 @@ import { paths } from "@/lib/paths";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, RowList } from "@/components/ui/Rows";
-import { Empty, Section } from "@/components/ui/Section";
+import { Empty, Section, SubsectionTitle } from "@/components/ui/Section";
+import { JuryBrief } from "@/components/forms/JuryBrief";
 import {
   PENDING_NOTE,
   changesSaved,
@@ -42,7 +43,8 @@ import {
 // enregistrement renvoie TOUT le formulaire (les valeurs deja donnees comprises,
 // un champ vide n'efface rien), sous un nouvel envoi, puis la page se relit.
 // Un jure note une equipe apres l'autre : chaque equipe a son bouton, qui
-// n'envoie que cette equipe.
+// n'envoie que cette equipe ; au-dessus de ses criteres, sa Submission et les
+// chiffres declares de toutes les equipes (`JuryBrief`).
 //
 // Apres l'echeance, enregistrer une Submission qui change ses valeurs la marque
 // en retard (0 point, sauf exception du staff) : la page le demande d'abord. Un
@@ -324,6 +326,12 @@ function Sheet() {
           setOpenId={setOpenId}
           render={(id) => (
             <>
+              {form.juryBrief && (
+                <>
+                  <JuryBrief brief={form.juryBrief} targets={form.targets.each_target} targetId={id} />
+                  <SubsectionTitle>Your scores</SubsectionTitle>
+                </>
+              )}
               {fields(scored, id)}
               {canEdit && (
                 <Button size="md" fullWidth maw={400} mb="md" loading={isSending} onClick={async () => (await save(id)) && setOpenId(null)}>

@@ -6,13 +6,14 @@ import { Anchor, Avatar, Stack, Text } from "@mantine/core";
 import { juryTargetOf } from "@shared/events";
 import { scoringSummary } from "@shared/scoringRules";
 import type { EvaluationTargetType, Leaderboard, LeaderboardRow } from "@shared/types";
+import { isStaffOrInvestor } from "@shared/access";
 import { useBatch } from "@/context/BatchContext";
 import { useEvents } from "@/context/EventsContext";
 import { useFounders } from "@/context/FoundersContext";
-import { useLeaderboards, type CumulativeRow } from "@/context/LeaderboardsContext";
+import { useLeaderboards } from "@/context/LeaderboardsContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
-import { formatDay, integer } from "@/lib/format";
+import { formatDay } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { rankedRowText } from "@/components/leaderboard/rankedRowText";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -20,15 +21,21 @@ import { PageLoader } from "@/components/ui/PageLoader";
 import { ButtonRow, LinkRow, RankNumber, Row, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 
-// Scores du jury (les avis entre pairs n'y entrent jamais), sur 10 ; ou, si
+// Scores du jury (les avis entre pairs n'y entrent jamais), sur 100 avec un bareme ; ou, si
 // l'evenement le choisit, la valeur d'une de ses metriques (`Leaderboard.metric`).
 // Une ligne de pitch est une startup : elle mene a sa fiche. Une ligne d'epreuve
 // est une equipe d'un jour, sans page : elle deplie ses membres, chacun vers sa fiche.
+// Decision du 17/11 : les fondateurs (et le public) voient le top 3 de chaque
+// evenement, le staff et les investors tout le classement ; plus de classement
+// individuel sur l'ensemble des hackathons.
+const PUBLIC_TOP = 3;
+
 export default function LeaderboardPage() {
   const { program } = useProgram();
-  const { batch } = useBatch();
+  const { batch, role } = useBatch();
   const { events, isLoading: isEventsLoading } = useEvents();
-  const { leaderboardsByEventId, cumulative, isHidden, isLoading } = useLeaderboards();
+  const { leaderboardsByEventId, isHidden, isLoading } = useLeaderboards();
+  const showAll = isStaffOrInvestor(role);
 
   // Un evenement classe : celui dont le leaderboard existe (un jury ou une metrique le classe, SPECS §2).
   const ranked = events.filter((e) => leaderboardsByEventId.has(e.id)).reverse();
@@ -53,16 +60,7 @@ export default function LeaderboardPage() {
 
   return (
     <>
-      <PageHeader back={back} title="Leaderboard" subtitle="Each hackathon by its scoring, and the founders across hackathons" />
-      {cumulative.length > 0 && (
-        <Section title="Founders" hint="Across hackathons: each founder gets their team's score (best team = 100), summed.">
-          <RowList>
-            {cumulative.map((row) => (
-              <CumulativeFounderRow key={row.founderId} row={row} />
-            ))}
-          </RowList>
-        </Section>
-      )}
+      <PageHeader back={back} title="Leaderboard" subtitle={showAll ? "Each event by its scoring" : "The top 3 of each event"} />
       {ranked.length === 0 && <Empty>No scored event yet.</Empty>}
       {ranked.map((event) => {
         const board = leaderboardsByEventId.get(event.id);
@@ -89,6 +87,7 @@ export default function LeaderboardPage() {
             ) : (
               <RowList>
                 {[...board.rows]
+                  .filter((row) => showAll || row.rank <= PUBLIC_TOP)
                   .sort((a, b) => a.rank - b.rank)
                   .map((row) => (
                     <RankedRow
@@ -175,28 +174,5 @@ function RankedRow({ row, board, target }: { row: LeaderboardRow; board: Leaderb
         </Stack>
       )}
     </>
-  );
-}
-
-/** Un fondateur au classement cumule : vers sa fiche. */
-function CumulativeFounderRow({ row }: { row: CumulativeRow }) {
-  const { program } = useProgram();
-  const { batch, viewerFounderId } = useBatch();
-  const { foundersById } = useFounders();
-  const founder = foundersById.get(row.founderId);
-  const props = {
-    leading: <RankNumber rank={row.rank} />,
-    title: row.founderId === viewerFounderId ? <Text span c="pioneers" inherit>{founder?.name ?? "Founder"}</Text> : (founder?.name ?? "Founder"),
-    subtitle: `${row.events} ${row.events === 1 ? "hackathon" : "hackathons"}`,
-    meta: (
-      <Text className="num" fw={600} fz="lg">
-        {integer(row.total)}
-      </Text>
-    ),
-  };
-  return founder ? (
-    <LinkRow href={paths.founder(program.id, batch.id, founder.id)} avatar={{ name: founder.name, photoUrl: founder.photoUrl }} {...props} />
-  ) : (
-    <Row {...props} />
   );
 }

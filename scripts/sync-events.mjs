@@ -5,6 +5,10 @@
 // node scripts/sync-events.mjs "Week 1" --prod   ecrit
 // --only cle1,cle2 : seulement ces evenements de la semaine (et rien a archiver) ; les
 // autres et leurs formulaires ne sont pas touches (une semaine en cours, retouchee par le staff).
+// --forms jury,debrief : seulement les formulaires de ces modeles (cle du modele : l'id du formulaire
+// d'un evenement est `<evenement>-<modele>`) sont crees, recrees ou archives ;
+// les autres (retouches a la main, par exemple les Submissions du 15/11) restent tels quels.
+// Ex. la grille du jury du 17/11 : --only <hackathons> --forms jury.
 //
 // Contrairement a import-events.mjs (qui cree sans jamais toucher a l'existant),
 // ce script MET A JOUR un evenement deja en base sur le planning valide :
@@ -40,10 +44,15 @@ const { CALENDAR_FIELDS, calendarIdOf } = require("../functions/lib/shared/calen
 const PROJECT_ID = "pioneers-3627c";
 const [week, ...flags] = process.argv.slice(2);
 const write = flags.includes("--prod");
-const onlyAt = flags.indexOf("--only");
-const only = onlyAt === -1 ? null : new Set((flags[onlyAt + 1] ?? "").split(",").filter(Boolean));
-if (!week || only?.size === 0) {
-  console.error('usage: node scripts/sync-events.mjs "Week 1" [--prod] [--only cle1,cle2]');
+/** La liste d'une option `--nom a,b` (un Set), `null` sans l'option. */
+const listFlag = (name) => {
+  const at = flags.indexOf(name);
+  return at === -1 ? null : new Set((flags[at + 1] ?? "").split(",").filter(Boolean));
+};
+const only = listFlag("--only");
+const onlyForms = listFlag("--forms");
+if (!week || only?.size === 0 || onlyForms?.size === 0) {
+  console.error('usage: node scripts/sync-events.mjs "Week 1" [--prod] [--only cle1,cle2] [--forms modele1,modele2]');
   process.exit(1);
 }
 const onEmulator = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
@@ -56,6 +65,7 @@ if (only && selected.length < only.size) {
   throw new Error(`Pas dans « ${week} » : ${[...only].filter((key) => !found.has(key)).join(", ")}`);
 }
 if (only) console.log(`--only : ${selected.length} evenement(s) sur ${weekEvents.length}, les autres et \`archived\` ne sont pas touches.`);
+if (onlyForms) console.log(`--forms : seulement les formulaires ${[...onlyForms].join(", ")} ; les autres ne sont pas touches.`);
 
 /** Les champs d'agenda que le planning fait foi ; le matching a part (equipes). */
 const AGENDA_FIELDS = [
@@ -143,9 +153,13 @@ for (const [n, e] of selected.entries()) {
   }
 
   // Les formulaires de l'evenement, tels que le planning les prevoit, face a ceux deja en base.
-  const plans = eventFormsPlan(e.key, effective, formOptions(e), now);
+  // `--forms` : un formulaire d'evenement s'appelle `<evenement>-<modele>`.
+  const isSelectedForm = (formId) => !onlyForms || [...onlyForms].some((key) => formId === `${e.key}-${key}`);
+  const plans = eventFormsPlan(e.key, effective, formOptions(e), now).filter((p) => isSelectedForm(p.id));
   const planned = new Set(plans.map((p) => p.id));
-  const existing = new Map((await db.collection("forms").where("eventId", "==", e.key).get()).docs.map((d) => [d.id, d]));
+  const existing = new Map(
+    (await db.collection("forms").where("eventId", "==", e.key).get()).docs.filter((d) => isSelectedForm(d.id)).map((d) => [d.id, d]),
+  );
   const answered = await withResponses([...existing.keys()]);
   for (const p of plans) {
     if (answered.has(p.id)) {

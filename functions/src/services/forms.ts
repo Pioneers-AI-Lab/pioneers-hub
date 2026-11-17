@@ -52,7 +52,7 @@ import type {
   SubjectSource,
   UnmatchedAnswer,
 } from "../shared/types";
-import { assertJuryKey, judgeChoices, loadJury, resolveJudge, targetsFor, type JudgeOption } from "./jury";
+import { assertJuryKey, judgeChoices, loadJury, loadJuryBrief, resolveJudge, targetsFor, type JudgeOption } from "./jury";
 import { loadEvent, scoredTargets, type ScoredTarget } from "./events";
 import { uiCaller, type Caller } from "../api/caller";
 import { founderIdIn, loadAccount } from "../api/viewer";
@@ -459,6 +459,13 @@ export async function getPublicForm(uid: string | null, req: Partial<CallableReq
   const state = formState(form, nowISO);
   const own = ownAnswers(questions, proven ? (lastResponse?.data() as FormResponse | undefined) : undefined);
 
+  // Lien de jury valide (`juryOf` l'a verifie) et jure choisi : les Submissions de SES cibles seulement.
+  const targetIds = ctx.targets.each_target.map((t) => t.value);
+  const [prefill, juryBrief] = await Promise.all([
+    proven ? readPrefill(form, respondent!, ctx, nowISO).then((p) => ({ ...p, ...own.answers })) : {},
+    jury && respondent && targetIds.length > 0 ? loadJuryBrief(form.eventId!, targetIds) : null,
+  ]);
+
   const lists = listsFrom(listSnaps);
   const publicQuestions: PublicFormQuestion[] = questions.map((q) => ({
     id: q.id,
@@ -491,13 +498,14 @@ export async function getPublicForm(uid: string | null, req: Partial<CallableReq
     respondent: respondent ? toPublicRespondent(respondent) : null,
     team: ctx.team ? { id: ctx.team.id, name: ctx.team.name } : null,
     targets: ctx.targets,
-    prefill: proven ? { ...(await readPrefill(form, respondent!, ctx, nowISO)), ...own.answers } : {},
+    prefill,
     canResubmit: proven && state === "open",
     // Le staff sans profil fondateur relit un formulaire « Sign in » sans pouvoir l'envoyer.
     preview: state === "draft" || (!viewerFounderId && needsAccount(form.identityCheck) && isStaffViewer(account?.viewer ?? null)),
     absent: respondent !== null && respondent.founder !== null && markSnap?.get("status") === "absent",
     pendingAnswerKeys: own.pendingKeys,
     newQuestionIds: respondent ? questionsAddedSince(form, completion).map((q) => q.id) : [],
+    juryBrief,
   };
 }
 

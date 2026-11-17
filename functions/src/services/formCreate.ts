@@ -6,7 +6,7 @@ import { isDbFieldKey, type DbFieldKey } from "../shared/fieldRegistry";
 import { addedFormDates } from "../shared/eventForms";
 import { formProblems, newQuestion } from "../shared/formRules";
 import { firstPublication, newForm } from "../shared/forms";
-import { FORM_TEMPLATES, type FormTemplateKey } from "../shared/presets/formTemplates";
+import { FORM_TEMPLATES, type FormTemplateKey, isOfferedTemplate } from "../shared/presets/formTemplates";
 import { FORM_APPROVALS, FORM_FIELD_TYPES, FORM_IDENTITY_CHECKS, PICKER_ENTITIES, QUESTION_SCOPES, type Batch, type Form, type PioneersEvent } from "../shared/types";
 import { FRONTEND_BASE_URL } from "../api/config";
 import { badRequest, notFound } from "../api/errors";
@@ -24,9 +24,13 @@ import { isoDateTime } from "./schemas";
 //
 // Staff seulement (regle `forms` : write staff).
 
-const TEMPLATE_KEYS = Object.keys(FORM_TEMPLATES) as [FormTemplateKey, ...FormTemplateKey[]];
+// Les modeles encore proposes (decision du 17/11) : un modele retire ne se cree plus, ni par l'API ni par le MCP.
+const TEMPLATE_KEYS = (Object.keys(FORM_TEMPLATES) as FormTemplateKey[]).filter((key) => isOfferedTemplate(FORM_TEMPLATES[key])) as [
+  FormTemplateKey,
+  ...FormTemplateKey[],
+];
 
-const QuestionInput = z
+export const QuestionInput = z
   .object({
     type: z.enum(FORM_FIELD_TYPES),
     label: z.string().trim().min(1).max(300),

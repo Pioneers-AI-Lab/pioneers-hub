@@ -69,7 +69,7 @@ export async function recomputeLeaderboard(eventId: string): Promise<void> {
     // Une cle sans question (formulaire archive depuis) classe encore, sous sa cle.
     const metric = key ? (eventMetrics(forms).find((m) => m.key === key) ?? { key, label: key, unit: null }) : null;
     const boardRef = db().doc(docPaths.leaderboard(eventId));
-    // Un bareme se publie apres la verification des preuves ; sans bareme, le classement est toujours public.
+    // Un bareme se publie une fois le jury passe ; sans bareme, le classement est toujours public.
     const published = scoring ? event.leaderboardRevealDateISOString !== null : true;
     const emptyBoard = (): Leaderboard => ({
       programId: event.programId,
@@ -115,7 +115,7 @@ export async function recomputeLeaderboard(eventId: string): Promise<void> {
           const m = mean(evals.flatMap((e) => (typeof e.scores[c.key] === "number" ? [e.scores[c.key]] : [])));
           if (m !== null) juryMeans[c.key] = m;
         }
-        return { id: t.id, metrics: s?.metrics ?? {}, juryMeans, late: isLateUnwaived(s), zeroedItemKeys: s?.zeroedItemKeys ?? [] };
+        return { id: t.id, metrics: s?.metrics ?? {}, juryMeans, late: isLateUnwaived(s), zeroedItemKeys: s?.zeroedItemKeys ?? [], outstanding: s?.outstanding === true };
       });
       // `scoreTeams` garde l'ordre de ses entrees : chaque resultat retrouve son equipe par position.
       const scored = scoreTeams(scoring, criteria, teams).map((p, i) => ({ p, team: teams[i], target: entered[i] }));
@@ -135,6 +135,8 @@ export async function recomputeLeaderboard(eventId: string): Promise<void> {
           total: p.total,
           late: team.late,
           normalized: p.normalized,
+          outstanding: p.outstanding,
+          outstandingEligible: p.outstandingEligible,
         }));
       tx.set(boardRef, { ...emptyBoard(), rows });
       return;

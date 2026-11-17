@@ -31,10 +31,21 @@ export async function saveTeamResults(
 }
 
 /**
- * La verification des preuves (SPECS §4.2) : lever le retard d'une soumission,
- * ou mettre a 0 des elements du bareme (une fausse preuve). Ni l'heure d'envoi
- * ni la source des releves ne changent ; le declencheur recalcule le classement.
+ * Lever (ou remettre) le retard d'une soumission (SPECS §4.2) : sinon le bareme lui donne 0.
+ * Ni l'heure d'envoi ni la source des releves ne changent ; le declencheur recalcule le classement.
  */
-export async function setTeamProofCheck(eventId: string, teamId: string, patch: Partial<Pick<Submission, "lateWaived" | "zeroedItemKeys">>): Promise<void> {
-  await updateDoc(refs.submission(eventId, teamId), patch);
+export async function setLateWaived(eventId: string, teamId: string, lateWaived: boolean): Promise<void> {
+  await updateDoc(refs.submission(eventId, teamId), { lateWaived });
+}
+
+/**
+ * L'Outstanding mention d'une equipe (decision du 17/11) : +20 a une equipe qui a
+ * 100. Elle vit sur la soumission, comme l'exception de retard ; une equipe notee
+ * par le jury sans avoir rien envoye recoit une soumission vide (ni heure d'envoi,
+ * ni metrique : rien d'autre ne change). Le declencheur recalcule le classement.
+ */
+export async function setTeamOutstanding(eventId: string, teamId: string, outstanding: boolean, hasSubmission: boolean): Promise<void> {
+  const ref = refs.submission(eventId, teamId);
+  if (hasSubmission) await updateDoc(ref, { outstanding });
+  else await setDoc(ref, { ...emptySubmission(teamId), id: teamId, outstanding });
 }

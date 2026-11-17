@@ -337,14 +337,7 @@
       ],
       "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11)",
       "matching": null,
-      "forms": [
-        "picks"
-      ],
-      "formSettings": {
-        "picks": {
-          "draft": true
-        }
-      },
+      "forms": [],
       "videoCallUrl": "https://meet.google.com/hmz-sdsb-oeh"
     },
     {
@@ -556,25 +549,32 @@
       "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)",
       "criteria": [
         {
+          "key": "potentialCustomers",
+          "label": "Potential customers (5 = the best team)",
+          "min": 0,
+          "max": 5,
+          "weight": 35
+        },
+        {
           "key": "evidence",
           "label": "Evidence",
           "min": 0,
-          "max": 20,
-          "weight": 20
+          "max": 5,
+          "weight": 25
         },
         {
           "key": "painSentence",
           "label": "Pain sentence",
           "min": 0,
-          "max": 15,
-          "weight": 15
+          "max": 5,
+          "weight": 20
         },
         {
           "key": "agentUse",
           "label": "Best tech/agent use",
           "min": 0,
-          "max": 15,
-          "weight": 15
+          "max": 5,
+          "weight": 20
         }
       ],
       "submissionFields": [
@@ -584,32 +584,32 @@
       "scoring": {
         "items": [
           {
+            "key": "potentialCustomers",
+            "label": "Potential customers",
+            "mode": "criterion",
+            "sourceKey": "potentialCustomers",
+            "maxPoints": 35
+          },
+          {
             "key": "evidence",
             "label": "Evidence",
             "mode": "criterion",
             "sourceKey": "evidence",
-            "maxPoints": 20
-          },
-          {
-            "key": "potentialCustomers",
-            "label": "Potential customers",
-            "mode": "proportional",
-            "sourceKey": "potentialCustomers",
-            "maxPoints": 30
+            "maxPoints": 25
           },
           {
             "key": "painSentence",
             "label": "Pain sentence",
             "mode": "criterion",
             "sourceKey": "painSentence",
-            "maxPoints": 15
+            "maxPoints": 20
           },
           {
             "key": "agentUse",
             "label": "Best tech/agent use",
             "mode": "criterion",
             "sourceKey": "agentUse",
-            "maxPoints": 15
+            "maxPoints": 20
           }
         ],
         "tieBreaks": []
@@ -830,10 +830,24 @@
       "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)",
       "criteria": [
         {
+          "key": "meetingsBooked",
+          "label": "Meetings booked (5 = the best team)",
+          "min": 0,
+          "max": 5,
+          "weight": 40
+        },
+        {
+          "key": "conversationsDone",
+          "label": "Conversations of 60 s or more (5 = the best team)",
+          "min": 0,
+          "max": 5,
+          "weight": 40
+        },
+        {
           "key": "scriptAndLearnings",
           "label": "Script and learnings",
           "min": 0,
-          "max": 20,
+          "max": 5,
           "weight": 20
         }
       ],
@@ -847,16 +861,16 @@
           {
             "key": "meetingsBooked",
             "label": "Meetings booked",
-            "mode": "per_unit",
+            "mode": "criterion",
             "sourceKey": "meetingsBooked",
-            "pointsPerUnit": 40
+            "maxPoints": 40
           },
           {
             "key": "conversationsDone",
-            "label": "Real conversations",
-            "mode": "per_unit",
+            "label": "Conversations of 60 s or more",
+            "mode": "criterion",
             "sourceKey": "conversationsDone",
-            "pointsPerUnit": 10
+            "maxPoints": 40
           },
           {
             "key": "scriptAndLearnings",
@@ -1009,11 +1023,18 @@
       "source": "planning valide du 13/11 (planning_semaine_16_novembre_2026.csv)",
       "criteria": [
         {
+          "key": "leadsCollected",
+          "label": "Valid leads (5 = the best team)",
+          "min": 0,
+          "max": 5,
+          "weight": 100
+        },
+        {
           "key": "leadQuality",
           "label": "Lead quality",
-          "min": 1,
+          "min": 0,
           "max": 5,
-          "weight": 5
+          "weight": 1
         }
       ],
       "submissionFields": [
@@ -1025,9 +1046,9 @@
           {
             "key": "leadsCollected",
             "label": "Valid leads",
-            "mode": "per_unit",
+            "mode": "criterion",
             "sourceKey": "leadsCollected",
-            "pointsPerUnit": 1
+            "maxPoints": 100
           },
           {
             "key": "leadQuality",
@@ -1368,17 +1389,17 @@
       "metrics": [
         {
           "key": "amountPaid",
-          "label": "Amount paid",
+          "label": "Money received from a real company, refunds excluded",
           "unit": "EUR"
         },
         {
           "key": "loisSigned",
-          "label": "LOIs signed",
+          "label": "Signed commitments",
           "unit": null
         },
         {
           "key": "closedWon",
-          "label": "Deals won",
+          "label": "Paying customers",
           "unit": null
         }
       ],
@@ -1423,7 +1444,29 @@
       ],
       "source": "Google Calendar officiel « Pioneers Residency FA2026 » (16/11), SPECS §4.2",
       "rankingMetricKey": null,
-      "criteria": [],
+      "criteria": [
+        {
+          "key": "amountPaid",
+          "label": "Money received (5 = the best team)",
+          "min": 0,
+          "max": 5,
+          "weight": 100
+        },
+        {
+          "key": "loisSigned",
+          "label": "Signed commitments",
+          "min": 0,
+          "max": 5,
+          "weight": 1
+        },
+        {
+          "key": "closedWon",
+          "label": "Paying customers",
+          "min": 0,
+          "max": 5,
+          "weight": 1
+        }
+      ],
       "submissionFields": [
         "driveFolderUrl"
       ],
@@ -1432,24 +1475,22 @@
           {
             "key": "amountPaid",
             "label": "Money received",
-            "mode": "per_unit",
+            "mode": "criterion",
             "sourceKey": "amountPaid",
-            "pointsPerUnit": 1
+            "maxPoints": 100
           },
           {
             "key": "loisSigned",
             "label": "Signed commitments",
-            "mode": "per_unit",
+            "mode": "criterion",
             "sourceKey": "loisSigned",
-            "pointsPerUnit": 1,
             "tieBreakOnly": true
           },
           {
             "key": "closedWon",
             "label": "Paying customers",
-            "mode": "per_unit",
+            "mode": "criterion",
             "sourceKey": "closedWon",
-            "pointsPerUnit": 1,
             "tieBreakOnly": true
           }
         ],
@@ -1458,19 +1499,13 @@
           "closedWon"
         ]
       },
-      "forms": [
-        "picks"
-      ],
+      "forms": [],
       "formSettings": {
         "debrief": {
           "deadline": "15:45"
         },
         "peer_rating": {
           "opens": "16:00"
-        },
-        "picks": {
-          "opens": "16:00",
-          "draft": true
         }
       }
     },
@@ -1689,28 +1724,23 @@
       ],
       "metrics": [
         {
-          "key": "accountsCreated",
-          "label": "Accounts created",
-          "unit": null
-        },
-        {
           "key": "amountPaid",
-          "label": "Amount paid",
+          "label": "Revenue",
           "unit": "EUR"
         },
         {
-          "key": "usage",
-          "label": "Usage (key action count)",
-          "unit": null
-        },
-        {
           "key": "closedWon",
-          "label": "Deals won",
+          "label": "Paying customers",
           "unit": null
         },
         {
           "key": "loisSigned",
-          "label": "LOIs signed",
+          "label": "Signed commitments",
+          "unit": null
+        },
+        {
+          "key": "activeUsers",
+          "label": "Active users",
           "unit": null
         }
       ],
@@ -1801,6 +1831,143 @@
         "jury": {
           "draft": true
         }
+      },
+      "submissionFields": [
+        "productUrl",
+        "driveFolderUrl"
+      ],
+      "criteria": [
+        {
+          "key": "amountPaid",
+          "label": "Revenue (5 = the best team)",
+          "min": 0,
+          "max": 5,
+          "weight": 20
+        },
+        {
+          "key": "closedWon",
+          "label": "Paying customers",
+          "min": 0,
+          "max": 5,
+          "weight": 10
+        },
+        {
+          "key": "loisSigned",
+          "label": "Signed commitments",
+          "min": 0,
+          "max": 5,
+          "weight": 12
+        },
+        {
+          "key": "activeUsers",
+          "label": "Active users",
+          "min": 0,
+          "max": 5,
+          "weight": 8
+        },
+        {
+          "key": "productLive",
+          "label": "Product online at the freeze",
+          "min": 0,
+          "max": 5,
+          "weight": 10
+        },
+        {
+          "key": "sellableAgent",
+          "label": "Real, sellable agent",
+          "min": 0,
+          "max": 5,
+          "weight": 15
+        },
+        {
+          "key": "plan",
+          "label": "Plan",
+          "min": 0,
+          "max": 5,
+          "weight": 10
+        },
+        {
+          "key": "pace",
+          "label": "Pace (check-ins)",
+          "min": 0,
+          "max": 5,
+          "weight": 10
+        },
+        {
+          "key": "teamwork",
+          "label": "Teamwork",
+          "min": 0,
+          "max": 5,
+          "weight": 5
+        }
+      ],
+      "scoring": {
+        "items": [
+          {
+            "key": "amountPaid",
+            "label": "Revenue",
+            "mode": "criterion",
+            "sourceKey": "amountPaid",
+            "maxPoints": 20
+          },
+          {
+            "key": "closedWon",
+            "label": "Paying customers",
+            "mode": "criterion",
+            "sourceKey": "closedWon",
+            "maxPoints": 10
+          },
+          {
+            "key": "loisSigned",
+            "label": "Signed commitments",
+            "mode": "criterion",
+            "sourceKey": "loisSigned",
+            "maxPoints": 12
+          },
+          {
+            "key": "activeUsers",
+            "label": "Active users",
+            "mode": "criterion",
+            "sourceKey": "activeUsers",
+            "maxPoints": 8
+          },
+          {
+            "key": "productLive",
+            "label": "Product online at the freeze",
+            "mode": "criterion",
+            "sourceKey": "productLive",
+            "maxPoints": 10
+          },
+          {
+            "key": "sellableAgent",
+            "label": "Real, sellable agent",
+            "mode": "criterion",
+            "sourceKey": "sellableAgent",
+            "maxPoints": 15
+          },
+          {
+            "key": "plan",
+            "label": "Plan",
+            "mode": "criterion",
+            "sourceKey": "plan",
+            "maxPoints": 10
+          },
+          {
+            "key": "pace",
+            "label": "Pace (check-ins)",
+            "mode": "criterion",
+            "sourceKey": "pace",
+            "maxPoints": 10
+          },
+          {
+            "key": "teamwork",
+            "label": "Teamwork",
+            "mode": "criterion",
+            "sourceKey": "teamwork",
+            "maxPoints": 5
+          }
+        ],
+        "tieBreaks": []
       }
     },
     {

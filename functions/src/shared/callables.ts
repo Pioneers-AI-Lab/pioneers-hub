@@ -8,6 +8,7 @@
 
 import type {
   CalendarSyncResult,
+  EventMetric,
   FieldWriteStatus,
   FormAnswer,
   FormFieldType,
@@ -50,6 +51,32 @@ export type RespondentInput = { founderId: string } | { judgeId: string } | { na
 
 /** Le repondant reconnu par le serveur. */
 export type PublicRespondent = { founderId: string | null; judgeId: string | null; label: string };
+
+/** Une reponse de la Submission, telle que le jure la lit : un texte, ou des liens (ouverts dans un nouvel onglet). */
+export type JuryAnswer = { label: string; text: string | null; urls: string[] };
+
+/** La Submission d'une equipe notee, lue par le jure (SPECS §2.0 : information libre, la grille fait la note). */
+export type JurySubmission = {
+  driveFolderUrl: string | null;
+  /** Envoyee apres l'echeance, sans exception du staff (`isLateUnwaived`) : elle vaut 0. */
+  late: boolean;
+  /** Les questions repondues, dans l'ordre du formulaire, sans les chiffres ni le dossier Drive. */
+  answers: JuryAnswer[];
+  /** Les chiffres declares (`submission.metrics.<cle>`), aux cles de `JuryBrief.metrics`. */
+  metrics: Record<string, number>;
+};
+
+/**
+ * Ce que le jure lit avant de noter : la Submission de chaque cible qu'il note
+ * (jamais celle de sa propre equipe), et les metriques a comparer entre elles
+ * (« 5 = la meilleure equipe »).
+ */
+export type JuryBrief = {
+  /** Les metriques de l'evenement declarees par au moins une de ces equipes. */
+  metrics: EventMetric[];
+  /** Par id de cible ; absente : pas encore de Submission. */
+  submissions: Record<string, JurySubmission>;
+};
 
 /**
  * Un formulaire vu SANS COMPTE (page /forms/[formId]). Le serveur rend les noms
@@ -111,6 +138,8 @@ export type PublicForm = {
   pendingAnswerKeys: string[];
   /** Les questions ajoutees depuis sa derniere reponse (`questionsAddedSince`). */
   newQuestionIds: string[];
+  /** Lien de jury valide et jure choisi : les Submissions de ses cibles. `null` sinon. */
+  juryBrief: JuryBrief | null;
 };
 
 /** `details.reason` du refus d'un envoi lu sur une version qui ne suffit plus (question obligatoire ajoutee...). */
@@ -240,7 +269,7 @@ export type Callables = {
   };
   /**
    * Staff : publie (ou retire, `publish: false`) le classement d'un evenement a
-   * bareme, apres la verification des preuves, puis recalcule les scores du
+   * bareme, une fois le jury passe, puis recalcule les scores du
    * batch. Journalise.
    */
   publishEventRanking: {

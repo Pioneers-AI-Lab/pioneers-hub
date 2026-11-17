@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, CopyButton, Group, Stack, Text } from "@mantine/core";
-import { FORM_TEMPLATES, type FormTemplate, type FormTemplateKey } from "@shared/presets/formTemplates";
+import { FORM_TEMPLATES, isOfferedTemplate, type FormTemplate, type FormTemplateKey } from "@shared/presets/formTemplates";
 import { isWorkTeamEvent } from "@shared/events";
 import { formState } from "@shared/forms";
 import { activeQuestions, isLateUnwaived, isPickable, type Evaluation, type Form, type WithId } from "@shared/types";
@@ -38,19 +38,14 @@ import { HelpBlock } from "@/components/ui/useHelp";
 // formulaire.
 
 /**
- * Les modeles de formulaire proposes pour un evenement, avec ce qu'ils recueillent
- * (pour le staff) ; la Submission et le Peer rating, seulement avec des equipes de travail.
+ * Ce que recueille chaque modele de formulaire d'un evenement (pour le staff). Un modele retire
+ * n'est pas propose (`isOfferedTemplate`) ; la Submission et le Peer rating, seulement avec des equipes de travail.
  */
 const EVENT_FORM_TEMPLATES: Partial<Record<FormTemplateKey, string>> = {
   debrief: "Team results, sent by the team lead before the deadline",
   peer_rating: "Each founder scores their teammates, in private",
-  jury: "One shared link: the jury scores every team",
-  picks: "Who stood out: private, ranked choices",
-  founder_introductions: "Intro, founders to meet, goal for the week",
-  week_retro: "Anonymous: rate the sessions, what to keep and change",
-  exercise_feedback: "How useful the exercise was",
-  session_feedback: "A rating and a word on the session",
-  weekly_feedback: "Anonymous: how the week went",
+  jury: "One shared link: the jury scores every team, 0 to 5 per criterion",
+  week_retro: "Energy, a score per session, more or less of what",
 };
 
 /** Ce qui fait le resultat de l'evenement : classement, resultats, jury, picks. */
@@ -75,7 +70,10 @@ export function EventFormsField() {
   const [isPicking, setPicking] = useState(false);
   const nowISO = new Date().toISOString();
   const hasWorkTeams = isWorkTeamEvent(event);
-  const offered = (Object.keys(EVENT_FORM_TEMPLATES) as FormTemplateKey[]).filter((key) => hasWorkTeams || !(FORM_TEMPLATES[key] as FormTemplate).needsWorkTeams);
+  const offered = (Object.keys(EVENT_FORM_TEMPLATES) as FormTemplateKey[]).filter((key) => {
+    const template: FormTemplate = FORM_TEMPLATES[key];
+    return isOfferedTemplate(template) && (hasWorkTeams || !template.needsWorkTeams);
+  });
 
   /** `null` : un formulaire vierge, rattache a l'evenement, aux dates de son modele dans l'evenement. */
   const create = async (templateKey: FormTemplateKey | null) => {

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button, Group, NumberInput, SegmentedControl, Select, Stack, Switch, Text, TextInput } from "@mantine/core";
 import { criterionQuestion, metricQuestion } from "@shared/presets/formTemplates";
 import { standardEventMetricKey } from "@shared/presets/standardMetrics";
-import { labelsOf, scoringMaxTotal, variableExists } from "@shared/scoringRules";
+import { labelsOf, OUTSTANDING_BONUS_POINTS, scoringMaxTotal, variableExists } from "@shared/scoringRules";
 import { keyFromLabel } from "@shared/text";
 import { scoringOf, type ScoringItem, type ScoringItemInput } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
@@ -13,9 +13,11 @@ import { useAction } from "@/hooks/useAction";
 import { call } from "@/lib/firebase";
 import { formatDateTime } from "@/lib/format";
 import { appendQuestion } from "@/lib/formsAdmin";
+import { setTeamOutstanding } from "@/lib/resultsAdmin";
 import { rankedRowText } from "@/components/leaderboard/rankedRowText";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, RankNumber, Row, RowList } from "@/components/ui/Rows";
+import { ToggleButton } from "@/components/ui/ToggleButton";
 import { Section, SubsectionTitle } from "@/components/ui/Section";
 
 // ----------------------------
@@ -133,9 +135,13 @@ export function LeaderboardSection() {
   );
 }
 
-/** Le classement calcule (`leaderboards/{eventId}`, recalcule a chaque saisie), avec les elements mis a 0 par equipe. */
+/**
+ * Le classement calcule (`leaderboards/{eventId}`, recalcule a chaque saisie). Une equipe au maximum de sa
+ * grille (`outstandingEligible`, calcule par le serveur) peut recevoir l'Outstanding mention (decision du 17/11).
+ * Les elements mis a 0 avant le 17/11 restent indiques.
+ */
 function Ranking() {
-  const { leaderboard: board, submissionsByTeamId } = useAdminEvent();
+  const { event, leaderboard: board, submissionsByTeamId } = useAdminEvent();
   if (!board || board.rows.length === 0) return null;
   return (
     <Stack gap="xs" mt="md">
@@ -146,6 +152,11 @@ function Ranking() {
           .map((row) => {
             const zeroed = labelsOf(board.scoring ?? { items: [] }, submissionsByTeamId.get(row.targetId)?.zeroedItemKeys ?? []);
             const text = rankedRowText(board, row, zeroed.length ? [`Set to 0: ${zeroed.join(", ")}`] : []);
+            const value = (
+              <Text className="num" fw={600}>
+                {text.value}
+              </Text>
+            );
             return (
               <Row
                 key={row.targetId}
@@ -153,9 +164,19 @@ function Ranking() {
                 title={row.name}
                 subtitle={text.subtitle}
                 meta={
-                  <Text className="num" fw={600}>
-                    {text.value}
-                  </Text>
+                  row.outstandingEligible ? (
+                    <Group gap="xs" wrap="nowrap">
+                      {value}
+                      <ToggleButton
+                        on={row.outstanding === true}
+                        onToggle={(next) => setTeamOutstanding(event.id, row.targetId, next, submissionsByTeamId.has(row.targetId))}
+                      >
+                        Outstanding +{OUTSTANDING_BONUS_POINTS}
+                      </ToggleButton>
+                    </Group>
+                  ) : (
+                    value
+                  )
                 }
               />
             );

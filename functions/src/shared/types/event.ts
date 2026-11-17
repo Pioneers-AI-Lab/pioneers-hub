@@ -356,8 +356,13 @@ export type Submission = {
    */
   late: boolean;
   lateWaived: boolean;
-  /** Elements du bareme mis a 0 par le staff (une fausse preuve), par cle d'element. */
+  /** Elements du bareme mis a 0 par le staff (une fausse preuve), par cle d'element. Plus pose depuis le 17/11 (le jury juge les preuves) : lu pour l'historique. */
   zeroedItemKeys: string[];
+  /**
+   * Outstanding mention (decision du 17/11) : posee par le staff, elle ajoute 20 % du
+   * maximum de la grille a une equipe qui l'atteint (100 -> 120). Absent des anciens documents.
+   */
+  outstanding?: boolean;
   /** Dernier ecrivain : le repondant du Debrief, ou le staff qui corrige. Source des releves. */
   recordedByUid: string | null;
   recordedSource: "self_reported" | "staff" | null;
@@ -371,6 +376,9 @@ export const submissionStamp = (uid: string, source: "self_reported" | "staff", 
   // Un envoi par formulaire connait l'echeance : il dit s'il est en retard.
   ...(deadline !== undefined ? { late: deadline !== null && now > deadline } : {}),
 });
+
+/** L'equipe a vraiment envoye sa Submission (un document cree par le staff seul, mention ou retard leve, n'en est pas une). */
+export const hasSubmitted = (s: Pick<Submission, "submittedDateISOString"> | null | undefined): boolean => Boolean(s?.submittedDateISOString);
 
 /** Envoyee apres l'echeance et sans exception du staff : le bareme lui donne 0. */
 export const isLateUnwaived = (s: Pick<Submission, "late" | "lateWaived"> | null | undefined): boolean => s?.late === true && s.lateWaived !== true;
@@ -396,6 +404,7 @@ export const emptySubmission = (teamId: string): Submission => ({
   late: false,
   lateWaived: false,
   zeroedItemKeys: [],
+  outstanding: false,
   recordedByUid: null,
   recordedSource: null,
 });
@@ -522,8 +531,17 @@ export type LeaderboardRow = {
   points?: Record<string, number>;
   total?: number;
   late?: boolean;
-  /** Le score ramene a la meilleure equipe = 100 : il s'additionne d'un hackathon a l'autre (classement cumule). */
+  /**
+   * La note sur 100 (decision du 17/11) : le total ramene au maximum de la grille, sans
+   * la ramener a la meilleure equipe ; 120 avec l'Outstanding mention. Un bareme sans
+   * maximum (points par unite, ancien) reste ramene a la meilleure equipe = 100.
+   * Elle nourrit le sous-score Execution des membres.
+   */
   normalized?: number;
+  /** L'Outstanding mention compte dans `total` et `normalized`. */
+  outstanding?: boolean;
+  /** L'equipe a le maximum de sa grille : le staff peut lui donner la mention (calcule par `scoreTeams`). */
+  outstandingEligible?: boolean;
 };
 
 /**

@@ -7,7 +7,7 @@ import { isWorkTeamEvent } from "../shared/events";
 import { countRequiredFields, listMissingFields } from "../shared/fieldRegistry";
 import { formAudience, formNeedsTeam } from "../shared/formRules";
 import { COMMITMENT_STATUS_SCORES, computeFounderScore, computeStartupScore, type FounderScoreInputs } from "../shared/scoring";
-import { countsAcrossHackathons } from "../shared/scoringRules";
+import { countsInExecution } from "../shared/scoringRules";
 import {
   isBatchParticipant,
   mean,
@@ -166,7 +166,7 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
   // ---- Execution : le score normalise de son equipe a chaque hackathon publie, dans l'ordre des hackathons.
   const hackathonScores = new Map(founders.map((f) => [f.id, [] as number[]]));
   const published = boards
-    .filter(countsAcrossHackathons)
+    .filter(countsInExecution)
     .map((b) => ({ board: b, event: eventById.get(b.eventId) }))
     .filter((x) => x.event && x.event.archivedDateISOString === null)
     .sort((a, b) => a.event!.startDateISOString.localeCompare(b.event!.startDateISOString));

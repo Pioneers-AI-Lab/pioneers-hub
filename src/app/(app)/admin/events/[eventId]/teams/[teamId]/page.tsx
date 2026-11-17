@@ -6,7 +6,7 @@ import { useParamsTS } from "@/hooks/useParamsTS";
 import { formatDateTime } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { StaffTeamResults } from "@/components/admin/StaffTeamResults";
-import { TeamProofCheck } from "@/components/admin/TeamProofCheck";
+import { TeamSubmission } from "@/components/admin/TeamSubmission";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Empty } from "@/components/ui/Section";
 
@@ -48,7 +48,7 @@ export default function AdminTeamResultsPage() {
       ) : (
         <Empty>The event has not started yet. Results open once it does.</Empty>
       )}
-      {submission && <TeamProofCheck eventId={event.id} teamId={team.id} scoring={event.scoring ?? null} submission={submission} />}
+      {submission && <TeamSubmission eventId={event.id} teamId={team.id} submission={submission} />}
     </>
   );
 }

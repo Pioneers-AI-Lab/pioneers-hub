@@ -80,7 +80,15 @@ export type FormTemplate = {
   questions: FormQuestion[];
   /** Questions construites depuis l'evenement (Debrief, jury, picks) ; `questions` sinon. */
   build?: (ctx: TemplateContext) => FormQuestion[];
+  /**
+   * Plus propose au staff (decision du 17/11, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §4.6) :
+   * le modele reste lu par les formulaires deja crees, mais on n'en cree plus.
+   */
+  retired?: boolean;
 };
+
+/** Un modele retire n'est plus propose : `isOfferedTemplate` (presets/offered.ts). */
+export { isOfferedTemplate } from "./offered";
 
 /** Les questions d'un modele pour cet evenement. */
 export const templateQuestions = (template: FormTemplate, ctx: TemplateContext): FormQuestion[] =>
@@ -204,7 +212,9 @@ export const FORM_TEMPLATES = {
     label: "Jury",
     kind: "jury",
     title: "Jury",
-    description: "Score each team on every criterion. You can come back and correct your scores until the jury is locked.",
+    // Echelle commune (decision du 17/11) : la grille fait 100 points, chaque critere est note de 0 a 5.
+    description:
+      "Read each team's submission and check the proofs in its Drive folder, then score every criterion from 0 to 5: 0 nothing (or nothing you can check), 3 what we expect, 5 exceptional. For a number, 5 is the best team. Score on your own, before any discussion. You can come back and correct your scores until the jury is locked.",
     identityCheck: "jury_link",
     needsEvent: true,
     // Les jures notent pendant l'evenement ; le verrou, c'est la fermeture du formulaire.
@@ -218,6 +228,7 @@ export const FORM_TEMPLATES = {
 
   // Les choix prives et classes (SPECS §4.1) : mutual picks, « qui t'a marque ».
   picks: template({
+    retired: true,
     label: "Picks",
     kind: "picks",
     title: "Picks",
@@ -240,6 +251,7 @@ export const FORM_TEMPLATES = {
   // l'evenement), et son objectif de la semaine. Connexion obligatoire (decision
   // du 15/11) : il ecrit la presentation et les picks du repondant.
   founder_introductions: template({
+    retired: true,
     label: "Founder introductions",
     kind: "motivation",
     title: "Founder introductions",
@@ -282,6 +294,7 @@ export const FORM_TEMPLATES = {
 
   // Formulaire de motivation hebdomadaire.
   motivation: template({
+    retired: true,
     label: "Weekly motivation form",
     kind: "motivation",
     title: "Weekly motivation",
@@ -299,6 +312,7 @@ export const FORM_TEMPLATES = {
 
   // SP26 « Goal form ».
   goal: template({
+    retired: true,
     label: "Goal form",
     kind: "goal",
     title: "Goal form",
@@ -319,6 +333,7 @@ export const FORM_TEMPLATES = {
   }),
 
   exercise_feedback: template({
+    retired: true,
     label: "Exercise feedback",
     kind: "exercise_feedback",
     title: "Exercise feedback",
@@ -332,6 +347,7 @@ export const FORM_TEMPLATES = {
   }),
 
   session_feedback: template({
+    retired: true,
     label: "Session feedback",
     kind: "session_feedback",
     title: "Session feedback",
@@ -347,6 +363,7 @@ export const FORM_TEMPLATES = {
 
   // Feedback de semaine : anonyme, rattache seulement au batch.
   weekly_feedback: template({
+    retired: true,
     label: "Weekly feedback (anonymous)",
     kind: "custom",
     title: "Weekly feedback",
@@ -359,25 +376,24 @@ export const FORM_TEMPLATES = {
     ],
   }),
 
-  // La retro de fin de semaine (SPECS §4.4, decision du 13/11) : anonyme, 3 minutes
-  // sur place. Donnees brutes, aucun champ en base : Claude les analyse.
+  // La retro de fin de semaine (SPECS §4.4) : 3 minutes sur place. Depuis le 17/11, depuis son
+  // compte comme tout formulaire de fondateur (plus d'anonyme), et trois blocs seulement : l'energie,
+  // chaque seance, plus ou moins de quoi. « Recommend », « keep » et « change » passent a la fin du
+  // programme. Donnees brutes, aucun champ en base : Claude les analyse.
   week_retro: template({
-    label: "Week retro (anonymous)",
+    label: "Week retro",
     kind: "custom",
     title: "Week retro",
-    description: "Anonymous, 3 minutes. Rate each session of the week, then tell us what to keep and what to change.",
-    identityCheck: "anonymous",
+    description: "3 minutes. Your energy this week, a score for each session, and what you want more or less of.",
+    identityCheck: "account",
     needsEvent: true,
     // Rempli sur place, pendant la retro.
     timing: { opens: "start", deadline: "day_after_opening" },
     questions: [],
     build: ({ sessions }) => [
+      q("energy", { type: "rating", label: "Your energy this week", scale: { min: 1, max: 10 }, required: true }),
       ...(sessions ?? []).map((s) => q(`session_${s.id}`, { type: "rating", label: s.label })),
       q("sessionsWhy", { type: "long_text", label: "Any session you rated 1 or 2: why?" }),
-      q("energy", { type: "rating", label: "Your energy this week", scale: { min: 1, max: 10 }, required: true }),
-      q("recommend", { type: "rating", label: "Would you recommend Pioneers to a friend?", scale: { min: 0, max: 10 }, required: true }),
-      q("keep", { type: "long_text", label: "One thing to keep" }),
-      q("change", { type: "long_text", label: "One thing to change" }),
       q("moreLess", { type: "long_text", label: "What do you want to see more of, or less of?" }),
     ],
   }),
