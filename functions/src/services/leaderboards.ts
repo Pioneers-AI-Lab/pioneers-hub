@@ -3,7 +3,6 @@ import { getFirestore, type Transaction } from "firebase-admin/firestore";
 import { COL, docPaths, eventCollectionPaths } from "../shared/collections";
 import { eventMetrics, juryCriteria } from "../shared/forms";
 import {
-  isLateUnwaived,
   mean,
   scoringOf,
   weightedMean,
@@ -17,7 +16,7 @@ import {
 import { z } from "zod";
 import { FAMILY_KEY } from "../shared/fieldRegistry";
 import { recomputeBatchScores } from "./scores";
-import { compareTeamPoints, juryMeansOf, normalizeToBest, scoreTeams, scoringFrom, scoringProblems } from "../shared/scoringRules";
+import { compareTeamPoints, normalizeToBest, scoredTeamOf, scoreTeams, scoringFrom, scoringProblems } from "../shared/scoringRules";
 import { writeUiAudit, type AuditActor } from "./audit";
 import { cleanId, invalidArgument } from "./clean";
 import { loadEvent, scoredTargets } from "./events";
@@ -108,12 +107,8 @@ export async function recomputeLeaderboard(eventId: string): Promise<void> {
     if (scoring) {
       // Une equipe entre au classement des qu'elle a soumis ou qu'un jure l'a notee.
       const entered = targets.filter((t) => submissionOf.has(t.id) || evaluationsOf.has(t.id));
-      const teams = entered.map((t) => {
-        const s = submissionOf.get(t.id);
-        const evals = evaluationsOf.get(t.id) ?? [];
-        const juryMeans = juryMeansOf(evals, criteria.map((c) => c.key));
-        return { id: t.id, metrics: s?.metrics ?? {}, juryMeans, late: isLateUnwaived(s), zeroedItemKeys: s?.zeroedItemKeys ?? [], outstanding: s?.outstanding === true };
-      });
+      const keys = criteria.map((c) => c.key);
+      const teams = entered.map((t) => scoredTeamOf(t.id, submissionOf.get(t.id), evaluationsOf.get(t.id) ?? [], keys));
       // `scoreTeams` garde l'ordre de ses entrees : chaque resultat retrouve son equipe par position.
       const scored = scoreTeams(scoring, criteria, teams).map((p, i) => ({ p, team: teams[i], target: entered[i] }));
       const rows: LeaderboardRow[] = scored

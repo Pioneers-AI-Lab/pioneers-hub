@@ -167,7 +167,7 @@ Inputs and their tool: attendance \`mark_attendance\`; team results \`set_team_r
 Lock my team answers (\`pioneers_list\` \`team_locks\`, and \`teamLock\` in \`pioneers_get\` founder), the weekly update reviews (\`weeklyReviews\` in \`pioneers_get\` founder or startup), individual jury scores (\`evaluations\` in \`pioneers_get\` event) and form responses (\`pioneers_list\` \`responses\`) are returned to staff only. Never repeat them to a founder or copy them where founders read.
 
 ## Never writable here
-- Peer ratings and jury scores: only their form writes them (refusal \`form_only\`). Picks are retired.
+- Peer ratings: only their form writes them (refusal \`form_only\`). Picks are retired. Jury scores: their form, or \`score_jury\` for staff, saved as the connected staff member's own score after they validate the table; never in another juror's name.
 - A founder's shortlist, "met" and task ticks (\`taskCompletions\`): written by the founder alone, never by staff or the API.
 - \`scores\`, \`scoreSignals\`, \`founderStats\`, \`batchStats\`, \`leaderboards\`: computed by the server.
 - The calendar fields of an event linked to Google Calendar.
@@ -203,6 +203,14 @@ Each document has its audience (see \`model\`). Do not copy a value from a restr
 2. Before publication: \`draw_teams\` (constraints: \`keepApart\`, \`keepTogether\`, \`excludeFounderIds\`). The preview shows the groups and what the draw had to relax; another \`seed\` gives another draw. It is saved as a draft.
 3. \`publish_teams\` when the user agrees: founders see their group.
 4. After publication: no new draw, only \`edit_teams\` with the full list of groups (published group ids stay, a group with results cannot be emptied).
+
+## Score a jury with Claude (hackathon, pitch)
+1. \`pioneers_get\` \`jury_sheet\` with the event's id: the grid (criteria, scale, points), every team or startup with its Submission, links and form answers, and your earlier scores. If \`juryForm.locked\`, stop: the scores are locked (reopening is the user's call).
+2. Pitch, Selection Day, Pre-IC, IC: the jury judges a LIVE session. Ask the user for their notes from the session (what was said, shown, answered) for each startup before scoring; never score a pitch from the deck alone.
+3. Read EVERY target before scoring any: open each Drive folder and proof link (with the Google Drive tools), compare the numbers across teams, check that a figure is backed by evidence. A criterion such as "5 = the best team" is relative.
+4. Score each criterion with a whole number on its scale, and write one or two sentences per criterion (\`rationale\`): what you checked, what is missing. If evidence is missing, say so and score what is proven.
+5. \`pioneers_run\` \`score_jury\` once with all the targets. Show the WHOLE table of the preview (scores, your points, rank, projected total with the other jurors, teams not scored) and let the user correct before confirming. Each score is the user's own staff score: one vote, like a juror.
+6. Late Submissions count 0 unless waived (\`waive_late\`); the Outstanding mention and the ranking's publication are separate, the user's decisions.
 
 ## A founder was marked absent by mistake
 1. \`pioneers_get\` the event: the founder's mark, and whether its teams are published.

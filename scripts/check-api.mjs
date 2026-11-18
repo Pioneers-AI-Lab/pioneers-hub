@@ -591,6 +591,42 @@ const call = async (key, name, args) => {
   a = await run("set_attendance_optional", { eventId: "demo-masterclass", optional: true });
   check((await db.doc("events/demo-masterclass").get()).get("attendanceOptional") === true, "set_attendance_optional", a.applied?.data);
 
+  // ---- Noter un jury avec Claude (fiche de notation, puis toutes les notes d'un coup) ----
+  t = await call(key, "pioneers_get", { object: "jury_sheet", id: "demo-hackathon-2" });
+  const sheet = t.data;
+  const critKeys = sheet?.grid?.criteria?.map((c) => c.key) ?? [];
+  check(!t.isError && critKeys.includes("execution") && sheet.targets?.length === 2 && sheet.targets.every((x) => x.name) && sheet.juryForm?.locked === false && sheet.juror, "jury_sheet: the grid, every team, the juror's name", t.data);
+  check(!/peerRating|pickedFounderIds/.test(JSON.stringify(sheet)), "jury_sheet carries no peer rating nor pick");
+  const fullScores = (n) => Object.fromEntries(sheet.grid.criteria.map((c) => [c.key, Math.min(c.max, Math.max(c.min, n))]));
+  t = await call(key, "pioneers_run", { action: "score_jury", args: { eventId: "demo-hackathon-2", evaluations: [{ targetId: "team-c", scores: { ...fullScores(4), nope: 3 } }] } });
+  check(t.isError && /unknown_criterion/.test(t.data), "score_jury refuses an unknown criterion", t.data);
+  t = await call(key, "pioneers_run", { action: "score_jury", args: { eventId: "demo-hackathon-2", evaluations: [{ targetId: "team-c", scores: { [critKeys[0]]: 99 } }] } });
+  check(t.isError && /invalid_score|missing_score/.test(t.data), "score_jury refuses a score off the scale", t.data);
+  t = await call(key, "pioneers_run", { action: "score_jury", args: { eventId: "demo-hackathon-2", evaluations: [{ targetId: "team-x", scores: fullScores(3) }] } });
+  check(t.isError && /not_a_target/.test(t.data), "score_jury refuses a team outside the jury", t.data);
+  a = await run("score_jury", {
+    eventId: "demo-hackathon-2",
+    evaluations: [
+      { targetId: "team-c", scores: fullScores(5), rationale: { [critKeys[0]]: "Drive shows 12 signed calls, best of the batch." } },
+      { targetId: "team-d", scores: fullScores(3), rationale: { [critKeys[0]]: "Claims 8 calls, only 3 backed by screenshots." }, comment: "Ask for the missing proofs." },
+    ],
+  });
+  const table = a.preview.data?.preview?.table ?? [];
+  check(table.length === 2 && table[0].team === "Team Demo C" && table[0].rank === 1 && /with Claude/.test(a.preview.data.preview.juror), "score_jury previews the whole table, ranked", a.preview.data);
+  // Par le formulaire de jury, sous le nom complet du staff : le meme jure que par le lien.
+  const juryResponses = await db.collection("formResponses").where("formId", "==", "demo-jury-2").where("recordedVia", "==", "mcp").get();
+  const judgeId = juryResponses.docs[0]?.get("respondentJudgeId");
+  const evalC = judgeId ? (await db.doc(`events/demo-hackathon-2/evaluations/${judgeId}_team-c`).get()).data() : null;
+  check(evalC?.evaluatorKind === "judge" && /^jury-/.test(evalC.evaluatorId) && evalC.scores[critKeys[0]] === sheet.grid.criteria[0].max && /Drive shows/.test(evalC.comment ?? "") && juryResponses.size === 1, "score_jury sends the jury form under the staff's name, with its justification", { evalC, responses: juryResponses.size });
+  t = await call(key, "pioneers_run", { action: "score_jury", args: { eventId: "demo-hackathon-2", evaluations: [{ targetId: "team-c", scores: fullScores(4) }] } });
+  check(t.data?.preview?.table?.[0]?.replacesYourScore === true, "scoring again replaces your own score", t.data);
+  t = await call(key, "pioneers_get", { object: "jury_sheet", id: "demo-hackathon-2" });
+  check(t.data?.targets?.find((x) => x.id === "team-c")?.yourScore?.scores, "the jury sheet shows your earlier score", t.data?.targets);
+  await run("set_form_status", { formId: "demo-jury-2", status: "closed" });
+  t = await call(key, "pioneers_run", { action: "score_jury", args: { eventId: "demo-hackathon-2", evaluations: [{ targetId: "team-c", scores: fullScores(4) }] } });
+  check(t.isError && /jury_locked/.test(t.data), "a closed jury form locks the scores", t.data);
+  await run("set_form_status", { formId: "demo-jury-2", status: "open" });
+
   // ---- Droits par role : chacun voit et ecrit ce que l'app lui permet ----
   const keyFor = async (uid) => (await callable("createApiKey", await idToken(uid), { name: `${uid} check` })).result?.key;
   const [adaKey, icKey, lpKey, strangerKey] = await Promise.all(["ada-1", "ic-1", "lp-1", "stranger-1"].map(keyFor));
@@ -610,6 +646,8 @@ const call = async (key, name, args) => {
       check(!/Secret lock|teamLock|goalAmbitious|weeklyReviews/.test(JSON.stringify(got.data)), `${who}: no team lock nor weekly review`, JSON.stringify(got.data).slice(0, 200));
       const locks = await call(k, "pioneers_list", { object: "team_locks", batchId: "fall-2026" });
       check(locks.isError, `${who}: list team_locks refused`, locks.data);
+      const sheetTry = await call(k, "pioneers_get", { object: "jury_sheet", id: "demo-hackathon-2" });
+      check(sheetTry.isError, `${who}: jury_sheet refused`, sheetTry.data);
     }
   }
   let g = await rest(adaKey, "/v1/founders/ada-example");

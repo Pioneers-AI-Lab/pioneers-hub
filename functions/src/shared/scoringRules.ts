@@ -1,4 +1,5 @@
 import {
+  isLateUnwaived,
   mean,
   roundTo,
   weightedMean,
@@ -10,6 +11,7 @@ import {
   type LeaderboardRow,
   type ScoringItem,
   type ScoringItemInput,
+  type Submission,
 } from "./types";
 
 // ----------------------------
@@ -95,6 +97,25 @@ export function juryMeansOf(evaluations: readonly Pick<Evaluation, "scores">[], 
   }
   return out;
 }
+
+/**
+ * Ce que le bareme lit d'une cible : les metriques, le retard, les elements mis a 0 et
+ * la mention de sa Submission, et la moyenne de ses jures. LA meme entree pour le
+ * leaderboard (services/leaderboards.ts) et la table de `score_jury` (shared/admin/jury.ts).
+ */
+export const scoredTeamOf = (
+  id: string,
+  submission: Pick<Submission, "metrics" | "late" | "lateWaived" | "zeroedItemKeys" | "outstanding"> | null | undefined,
+  evaluations: readonly Pick<Evaluation, "scores">[],
+  criteriaKeys: readonly string[],
+): ScoredTeam => ({
+  id,
+  metrics: submission?.metrics ?? {},
+  juryMeans: juryMeansOf(evaluations, criteriaKeys),
+  late: isLateUnwaived(submission),
+  zeroedItemKeys: submission?.zeroedItemKeys ?? [],
+  outstanding: submission?.outstanding === true,
+});
 
 /** Ramene a la meilleure equipe = 100 (0 si personne n'a de points). */
 export const normalizeToBest = (value: number, top: number): number => (top > 0 ? roundTo((value / top) * 100, 2) : 0);

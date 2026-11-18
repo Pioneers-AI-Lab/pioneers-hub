@@ -127,7 +127,7 @@ const TOOLS: Tool[] = [
     description:
       "Returns ONE object in full by id, with what YOUR role may see. A founder comes with their person, Profile Book, " +
       "private profile, internal data and aggregated stats; a startup with its profile, internal assessment and recent " +
-      "weekly updates; an event with its forms, teams, attendance and submissions; a form with its questions. A missing part is one you cannot see.",
+      "weekly updates; an event with its forms, teams, attendance and submissions; a form with its questions; a `jury_sheet` (id = the event's) with everything to score its jury. A missing part is one you cannot see.",
     schema: GetInput,
     annotations: READ_ONLY,
     run: (caller, args) => getObject(caller, GetInput.parse(args)),

@@ -66,10 +66,11 @@ export const writePlan = <R>(preview: unknown, writes: readonly DocWrite[], resu
 /**
  * Le plan d'une action HORS transaction (services des callables : comptes,
  * agenda, jury, classement) : l'apercu, puis l'effet, qui ecrit lui-meme son
- * audit au nom de l'appelant. `changed` faux : rien a faire, pas de plan.
+ * audit au nom de l'appelant (`selfAudited` faux : la ligne d'audit de l'API).
+ * `changed` faux : rien a faire, pas de plan.
  */
-export const effectPlan = <R>(preview: unknown, targetPaths: string[], effect: () => Promise<R>, changed = true): OperationPlan<R> =>
-  changed ? { preview, targetPaths, effect, effectAudits: true } : { preview, targetPaths };
+export const effectPlan = <R>(preview: unknown, targetPaths: string[], effect: () => Promise<R>, changed = true, selfAudited = true): OperationPlan<R> =>
+  changed ? { preview, targetPaths, effect, effectAudits: selfAudited } : { preview, targetPaths };
 
 /** Un id tire sans lecture (collection().doc()), pour une creation : jamais dans l'apercu. */
 export const newDocId = (collection: string) => getFirestore().collection(collection).doc().id;

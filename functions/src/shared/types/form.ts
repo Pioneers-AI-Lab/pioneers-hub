@@ -379,6 +379,8 @@ export type FormResponse = BatchScoped & {
   writes: FieldWrite[];
   unmatched: UnmatchedAnswer[];
   status: FormResponseStatus;
+  /** `mcp` : envoyee par le staff avec Claude (`score_jury`, 18/11), au nom du staff. Absent : par le lien ou le formulaire. */
+  recordedVia?: "mcp";
   submittedDateISOString: DateISOString;
 };
 

@@ -362,10 +362,13 @@ const OTHER_PICKERS: Partial<Record<PickerEntity, (form: Form) => Promise<Public
   },
 };
 
-/** Le jury d'un formulaire `jury_link` : lien verifie, cibles notees, noms a choisir. */
+/**
+ * Le jury d'un formulaire `jury_link` : lien verifie, cibles notees, noms a choisir.
+ * `key: null` : un membre du staff qui note depuis l'API (`score_jury`), deja verifie.
+ */
 async function juryOf(form: Form, key: unknown) {
-  if (typeof key !== "string" || !key) throw new HttpsError("permission-denied", INCOMPLETE_JURY_LINK);
-  const [, event] = await Promise.all([assertJuryKey(form.eventId, key), loadEvent(null, form.eventId!)]);
+  if (key !== null && (typeof key !== "string" || !key)) throw new HttpsError("permission-denied", INCOMPLETE_JURY_LINK);
+  const [, event] = await Promise.all([key === null ? null : assertJuryKey(form.eventId, key), loadEvent(null, form.eventId!)]);
   const target = juryTargetOf(event);
   const scored = await scoredTargets(null, form.eventId!, event);
   return { event, target, scored, names: await loadJury(form.eventId!, event, scored) };
@@ -782,9 +785,15 @@ function writeGroups(questions: FormQuestion[], answers: Map<string, FormAnswer>
 
 // ---- submitFormResponse ----------------------------------------------------------
 
+/**
+ * `asStaffJudge` : un membre du staff note le jury depuis l'API (`score_jury`, 18/11). Sans le
+ * secret du lien (l'appelant est staff), sous SON nom complet : le meme jure que par le lien
+ * (`jury-{empreinte du nom}`), donc une seule voix ; la reponse porte `recordedVia: "mcp"`.
+ */
 export async function submitFormResponse(
   uid: string | null,
   req: Partial<CallableRequest<"submitFormResponse">>,
+  asStaffJudge?: { fullName: string },
 ): Promise<CallableResponse<"submitFormResponse">> {
   const formId = cleanId(req.formId, "formId");
   const submissionId = String(req.submissionId ?? "");
@@ -796,9 +805,9 @@ export async function submitFormResponse(
 
   // Un jury (la requete porte le secret du lien) : le lien et les noms se lisent
   // avant la transaction (des collections entieres), comme le jure les a vus.
-  const before = req.key ? ((await formRef.get()).data() as Form | undefined) : undefined;
-  const jury = before && isJuryForm(before) && before.archivedDateISOString === null ? await juryOf(before, req.key) : null;
-  const judge = jury ? resolveJudge(req.respondent, jury.names) : null;
+  const before = req.key || asStaffJudge ? ((await formRef.get()).data() as Form | undefined) : undefined;
+  const jury = before && isJuryForm(before) && before.archivedDateISOString === null ? await juryOf(before, asStaffJudge ? null : req.key) : null;
+  const judge = jury ? resolveJudge(asStaffJudge ? { name: asStaffJudge.fullName } : req.respondent, jury.names) : null;
   if (jury && !judge) throw new HttpsError("invalid-argument", "Choose or type your name first.");
 
   return db().runTransaction(async (tx) => {
@@ -908,6 +917,7 @@ export async function submitFormResponse(
       unmatched,
       status: responseStatus(writes),
       submittedDateISOString: nowISO,
+      ...(asStaffJudge ? { recordedVia: "mcp" as const } : {}),
     };
     tx.create(responseRef, plain(response));
     // Le « To do » du fondateur (qui ne lit pas `formResponses`). Un formulaire

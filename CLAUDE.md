@@ -225,7 +225,11 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
 - **Jamais lus par l'API** : `peerRatings`, `picks`, `judges`, `apiKeys`, `writePlans`, `founders/*/private/connections`, `shortlistHistory`
   (SPECS §4.8 ; `draw_teams` lit les connections pour tirer, sans les rendre). **Staff seulement par l'API** : `teamLocks`, `founderReviews`,
   `startupReviews`, les notes du jury une par une, `formResponses` (jamais ceux d'un formulaire d'avis ou de picks, ni leurs valeurs ailleurs).
-  Avis, picks et notes du jury ne s'ecrivent que par leur formulaire (`DOC_KINDS[...].formOnly`, refus `form_only`).
+  Avis, picks et notes du jury ne s'ecrivent que par leur formulaire (`DOC_KINDS[...].formOnly`, refus `form_only`), avec UNE exception
+  (18/11) : `score_jury` (staff), toutes les notes d'un jury en une fois, apercu en table, puis envoi PAR le formulaire de jury
+  (`submitFormResponse(..., { fullName })`, sans le secret du lien) sous le nom complet du staff : le meme jure que par le lien
+  (`jury-{empreinte}`, une seule voix), justification par critere dans `evaluation.comment`, reponse `recordedVia: "mcp"`. Fiche de
+  notation `pioneers_get` `jury_sheet` = ce que lit un jure (`loadJuryBrief`) + la grille (shared/admin/jury.ts).
 - **OAuth 2.1** (`functions/src/oauth`, connecteur claude.ai et Claude Code) : decouverte RFC 9728 / 8414, enregistrement
   dynamique, `/oauth/authorize` -> page front `/oauth/consent` (callables `oauthDescribeRequest` / `oauthDecide`),
   `/oauth/token` avec PKCE S256. Acces 1 h, rafraichissement 30 j a rotation ; un code ou un rafraichissement rejoue

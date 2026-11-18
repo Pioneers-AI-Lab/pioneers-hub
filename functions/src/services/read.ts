@@ -42,6 +42,7 @@ import { describeFields } from "./fields";
 import { isDbFieldKey, parseDbField } from "../shared/fieldRegistry";
 import { listAccounts } from "./accounts";
 import { actionsFor } from "./actions";
+import { jurySheet } from "./admin/jury";
 import { formUrl } from "../api/config";
 
 // ----------------------------
@@ -164,7 +165,7 @@ const shortForm = (f: Doc<Form>) => ({
 
 /** Les objets qu'on lit seuls, sans sous-document. */
 const SIMPLE_GETS = { program: COL.programs, batch: COL.batches, note: COL.notes } as const;
-export const GET_OBJECTS = [...(Object.keys(SIMPLE_GETS) as (keyof typeof SIMPLE_GETS)[]), "founder", "startup", "event", "form"] as const;
+export const GET_OBJECTS = [...(Object.keys(SIMPLE_GETS) as (keyof typeof SIMPLE_GETS)[]), "founder", "startup", "event", "form", "jury_sheet"] as const;
 
 /** Le type d'objet de chaque URL REST (`/v1/founders/{id}` -> `founder`) : le routeur ET la spec OpenAPI le lisent. */
 export const REST_OBJECTS = {
@@ -175,6 +176,7 @@ export const REST_OBJECTS = {
   events: "event",
   notes: "note",
   forms: "form",
+  jury_sheets: "jury_sheet",
 } as const satisfies Record<string, (typeof GET_OBJECTS)[number]>;
 
 export const ListInput = z
@@ -469,6 +471,10 @@ export async function getObject(caller: Caller, input: GetInput): Promise<Record
         .slice(0, 8);
       return { object, ...withId(startupSnap), profile, internal, recentCheckins, score, scoreSignals, weeklyReviews: reviews && sortedReviews(reviews) };
     }
+
+    case "jury_sheet":
+      // L'id est celui de l'evenement ; staff seulement (services/admin/jury.ts).
+      return jurySheet(caller, id);
 
     case "form": {
       const form = withId<Form>(required(await db.doc(docPaths.form(id)).get(), object, id));

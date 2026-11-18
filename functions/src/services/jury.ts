@@ -32,7 +32,7 @@ const db = () => getFirestore();
 /** Un nom compare sans casse, accents ni espaces en trop. */
 
 const founderJudgeId = (founderId: string) => `founder-${founderId}`;
-const namedJudgeId = (name: string) => `jury-${sha256(nameKey(name)).slice(0, 20)}`;
+export const namedJudgeId = (name: string) => `jury-${sha256(nameKey(name)).slice(0, 20)}`;
 
 export type JudgeOption = { id: string; name: string; hint: string | null; founderId: string | null };
 

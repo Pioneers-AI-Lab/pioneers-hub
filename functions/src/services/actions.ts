@@ -31,6 +31,7 @@ import {
 } from "./admin/results";
 import { createStartups, rateBackground, reviewFounder, reviewStartup, setAttendanceOptional } from "./admin/reviews";
 import { drawTeams, editTeams, publishTeams, setMatching } from "./admin/teams";
+import { scoreJury } from "./admin/jury";
 
 // ----------------------------
 // services - les ACTIONS de l'Admin, par nom
@@ -64,6 +65,7 @@ const ACTION_LIST: Described[] = [
   { op: setTeamResults, description: "Correct a team's results (metrics, product link, proofs, notes), as a staff correction." },
   { op: waiveLate, description: "Count (or not) a team's late Submission." },
   { op: setOutstanding, description: "Give (or remove) the Outstanding mention to a team with the grid's maximum." },
+  { op: scoreJury, description: "Score every team or startup of a jury form at once, as YOUR staff score, with a justification per criterion (read `pioneers_get` `jury_sheet` first)." },
   { op: deleteJuryScore, description: "Delete a jury score entered by mistake (kept in the audit log)." },
   { op: resetJuryLink, description: "Replace an event's shared jury link (the old one stops working)." },
   { op: setEventScoringAction, description: "Set an event's scoring grid (jury criteria points, tie-breaks), or remove it." },
