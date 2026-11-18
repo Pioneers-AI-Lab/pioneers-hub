@@ -44,18 +44,12 @@ export const FormResponses = memo(function FormResponses() {
   const [openId, setOpenId] = useState<string | null>(null);
 
   const event = form.eventId ? (eventsById.get(form.eventId) ?? null) : null;
-  const audience = useMemo(
-    () =>
-      formAudience({
-        form,
-        batchId: form.batchId,
-        founders,
-        event,
-        attendance,
-        teamMemberIds: event ? teamMemberships.filter((m) => m.eventId === event.id).map((m) => m.founderId) : [],
-      }),
-    [form, founders, event, attendance, teamMemberships],
-  );
+  const audience = useMemo(() => {
+    const mine = event ? teamMemberships.filter((m) => m.eventId === event.id) : [];
+    const teams = new Map<string, string[]>();
+    for (const m of mine) teams.set(m.teamId, [...(teams.get(m.teamId) ?? []), m.founderId]);
+    return formAudience({ form, batchId: form.batchId, founders, event, attendance, teams: [...teams.values()] });
+  }, [form, founders, event, attendance, teamMemberships]);
 
   const progress = responseProgress(audience, responses);
 

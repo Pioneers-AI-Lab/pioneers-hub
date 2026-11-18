@@ -165,11 +165,12 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
   // Les absents de chaque evenement suivi, une fois.
   const absentByEvent = new Map([...attendanceByEvent].map(([id, marks]) => [id, absentFounderIds(marks)]));
   const isAbsentAt = (eventId: string, founderId: string) => absentByEvent.get(eventId)?.has(founderId) ?? false;
-  const teamMembersOf = new Map<string, string[]>();
+  const teamsOf = new Map<string, Map<string, string[]>>();
   const workTeams = new Map<string, string[]>();
   for (const m of memberships) {
     if (m.kind !== "event_team" || !m.eventId) continue;
-    pushTo(teamMembersOf, m.eventId, m.founderId);
+    if (!teamsOf.has(m.eventId)) teamsOf.set(m.eventId, new Map());
+    pushTo(teamsOf.get(m.eventId)!, m.teamId, m.founderId);
     const event = eventById.get(m.eventId);
     // Un absent n'a pas travaille avec l'equipe (18/11) : ni coequipier compte, ni note.
     if (event && isWorkTeamEvent(event) && !isAbsentAt(m.eventId, m.founderId)) pushTo(workTeams, `${m.eventId}/${m.teamId}`, m.founderId);
@@ -187,7 +188,7 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
       founders,
       event,
       attendance: event ? (attendanceByEvent.get(event.id) ?? []) : [],
-      teamMemberIds: event ? (teamMembersOf.get(event.id) ?? []) : [],
+      teams: event ? [...(teamsOf.get(event.id)?.values() ?? [])] : [],
     });
     if (audience.kind !== "founders") continue;
     for (const id of audience.founderIds) {

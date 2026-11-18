@@ -48,7 +48,10 @@ export default function EventPage() {
   const board = leaderboardsByEventId.get(event.id);
   // Un fondateur voit les formulaires publies qui le concernent (comme To do : ni absent, ni jury) ; le staff voit tout et ouvre l'editeur.
   const founder = viewerFounderId ? foundersById.get(viewerFounderId) : undefined;
-  const shown = forms.filter((f) => isStaff || (f.version > 0 && !!founder && formConcernsFounder(f, founder, event, mine !== null, myAttendance)));
+  const teammates = (mine?.memberIds ?? []).flatMap((id) => foundersById.get(id) ?? []);
+  const shown = forms.filter(
+    (f) => isStaff || (f.version > 0 && !!founder && formConcernsFounder(f, founder, event, mine?.memberIds ?? null, myAttendance, teammates)),
+  );
   const guests =
     event.audience === "batch"
       ? `All founders of ${batch.name}`

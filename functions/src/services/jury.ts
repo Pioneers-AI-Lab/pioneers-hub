@@ -204,7 +204,7 @@ export async function loadJuryBrief(eventId: string, event: PioneersEvent, targe
     event,
     founders: founderSnaps.flatMap((d) => (d.exists ? [{ id: d.id, ...(d.data() as Omit<AudienceInput["founders"][number], "id">) }] : [])),
     attendance: attendanceSnap?.docs.map((d) => d.data() as Pick<Attendance, "founderId" | "status">) ?? [],
-    teamMemberIds: memberIds,
+    teams: targets.map((t) => t.memberIds),
   };
   const checked = memberIds.length ? checkedForms(forms, audience, new Date().toISOString()) : [];
   // `in` : 30 formulaires par requete.

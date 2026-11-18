@@ -71,7 +71,7 @@ check("critere -> chiffre : meme cle, une question de note du jury seulement", (
   const members = ["a", "b", "c"];
   const audience = (extra = {}) => ({
     batchId: "b", event: { kind: "team_challenge", templateKey: "hackathon", matching: { mode: "challenge", size: 3 }, teamSize: 3, audience: "batch", guestFounderIds: [], startupIds: [] },
-    founders: members.map((id) => founder(id)), attendance: [], teamMemberIds: members, ...extra,
+    founders: members.map((id) => founder(id)), attendance: [], teams: [members], ...extra,
   });
   const submission = form("sub", "Submission", "team");
   const peer = form("peer", "Peer rating", "each_teammate");
@@ -108,5 +108,27 @@ check("critere -> chiffre : meme cle, une question de note du jury seulement", (
     assert.deepEqual(checkedForms(forms, audience(), NOW), []);
     const closed = form("closed", "Final numbers", "team", { status: "closed" });
     assert.deepEqual(checkedForms([...forms, submission, peer, closed], audience(), NOW).map((f) => [f.id, f.due]), [["sub", "team"], ["peer", "each_member"], ["closed", "team"]]);
+  });
+
+  check("Peer rating : seul de son equipe (absents, depart), on n'y est attendu ni au To do, ni au taux, ni au jury", () => {
+    const { formAudience, formConcernsFounder, teammatesToRate } = require("../../functions/lib/shared/formRules.js");
+    // LA regle des coequipiers a noter, celle du lien : ni absent, ni parti, une fiche inconnue est la.
+    const fiches = new Map([["b", founder("b", { status: "left" })], ["c", founder("c")]]);
+    assert.deepEqual(teammatesToRate(["a", "b", "c", "d"], "a", "b", new Set(["c"]), (id) => fiches.get(id)), ["d"]);
+    const aud = audience();
+    const ev = aud.event;
+    // Vue du fondateur (To do) : il ne connait que son equipe ; un coequipier inconnu est suppose la.
+    assert.equal(formConcernsFounder({ ...peer, batchId: "b" }, founder("a"), ev, ["a"]), false);
+    assert.equal(formConcernsFounder({ ...peer, batchId: "b" }, founder("a"), ev, ["a", "b"]), true);
+    // Ses coequipiers connus et partis : rien a noter ; la fiche d'un coequipier present le garde.
+    assert.equal(formConcernsFounder({ ...peer, batchId: "b" }, founder("a"), ev, ["a", "b"], undefined, [founder("b", { status: "left" })]), false);
+    assert.equal(formConcernsFounder({ ...peer, batchId: "b" }, founder("a"), ev, ["a", "b"], undefined, [founder("b")]), true);
+    // La Submission, elle, reste due par un fondateur seul.
+    assert.equal(formConcernsFounder({ ...submission, batchId: "b" }, founder("a"), ev, ["a"]), true);
+    // Vue du staff : les absents et les partis ne sont pas des coequipiers.
+    const absent = audience({ teams: [["a", "b"], ["c"]], attendance: [{ founderId: "b", status: "absent" }] });
+    assert.deepEqual(formAudience({ ...absent, form: peer }).founderIds, []);
+    const left = audience({ teams: [["a", "b", "c"]], founders: [founder("a"), founder("b", { status: "left" }), founder("c")] });
+    assert.deepEqual(formAudience({ ...left, form: peer }).founderIds, ["a", "c"]);
   });
 }

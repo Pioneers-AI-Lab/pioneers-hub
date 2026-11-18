@@ -284,17 +284,17 @@ check("Weekly update : tout le batch meme marque absent, startup pour les fondat
   const f = (id, startupId) => ({ id, batchId: "fall-2026", status: "active", archivedDateISOString: null, isExternalFounder: false, startupId });
   const founders = [f("ada", "lumen"), f("ben", null)];
   const attendance = [{ founderId: "ada", status: "absent" }];
-  const audience = (form) => formAudience({ form, batchId: "fall-2026", founders, event, attendance, teamMemberIds: [] });
+  const audience = (form) => formAudience({ form, batchId: "fall-2026", founders, event, attendance, teams: [] });
   assert.deepEqual(audience(startupForm), { kind: "founders", basis: "batch", founderIds: ["ada"] });
   assert.deepEqual(audience(founderForm).founderIds, ["ada", "ben"]);
-  assert.equal(formConcernsFounder(startupForm, founders[1], event, false), false);
-  assert.equal(formConcernsFounder(startupForm, founders[0], event, false, attendance[0]), true);
+  assert.equal(formConcernsFounder(startupForm, founders[1], event, null), false);
+  assert.equal(formConcernsFounder(startupForm, founders[0], event, null, attendance[0]), true);
   // Pas une reunion : hors de la presence d'Engagement ; ses formulaires comptent a temps.
   assert.deepEqual(mandatoryAttendance("fall-2026", [event], founders, new Map([[event.id, attendance]])).get("ada"), { attended: 0, total: 0 });
   assert.equal(countsInFormsOnTime(founderForm, event, "2026-12-05T00:00:00.000Z"), true);
   // Un evenement ordinaire garde sa regle : l'absent ne recoit pas le formulaire.
   const masterclass = { ...event, templateKey: "masterclass" };
-  assert.deepEqual(formAudience({ form: founderForm, batchId: "fall-2026", founders, event: masterclass, attendance, teamMemberIds: [] }).founderIds, ["ben"]);
+  assert.deepEqual(formAudience({ form: founderForm, batchId: "fall-2026", founders, event: masterclass, attendance, teams: [] }).founderIds, ["ben"]);
 });
 
 check("modeles : Program end depuis son compte, sans champ ; Exit form retire", () => {

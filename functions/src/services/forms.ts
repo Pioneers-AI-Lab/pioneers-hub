@@ -17,7 +17,18 @@ import {
   type ResolvedSubjects,
   type SubjectKey,
 } from "../shared/fieldRegistry";
-import { FORM_ANSWER_MAX, answerToFieldValue, fieldValueToAnswer, formNeedsStartup, formNeedsTeam, isStartupForm, isTeamForm, questionsAddedSince, ratingScale } from "../shared/formRules";
+import {
+  FORM_ANSWER_MAX,
+  answerToFieldValue,
+  fieldValueToAnswer,
+  formNeedsStartup,
+  formNeedsTeam,
+  isStartupForm,
+  isTeamForm,
+  questionsAddedSince,
+  ratingScale,
+  teammatesToRate,
+} from "../shared/formRules";
 import {
   FORM_UPDATED,
   type CallableRequest,
@@ -194,27 +205,33 @@ async function memberShortNames(tx: Transaction | null, teams: Pick<EventTeam, "
 }
 
 /**
- * Les coequipiers a noter, en nom court, avec leur vignette (on note quelqu'un qu'on reconnait).
- * Un coequipier marque absent a l'evenement (`absentAt`) n'est pas propose (18/11) : il n'a pas
- * travaille avec l'equipe, et l'envoi refuse de le noter. La vignette ne sert qu'a l'ecran
- * (`getPublicForm`, hors transaction) : l'envoi (`tx`) ne la lit pas.
+ * Les coequipiers a noter (`teammatesToRate` : ni absents a l'evenement `absentAt`, ni partis), en nom
+ * court, avec leur vignette (on note quelqu'un qu'on reconnait) ; l'envoi refuse de noter les autres.
+ * La vignette ne sert qu'a l'ecran (`getPublicForm`, hors transaction) : l'envoi (`tx`) ne la lit pas.
  */
 async function teammateChoices(
   tx: Transaction | null,
   team: NonNullable<ScopeContext["team"]>,
   founderId: string,
+  batchId: string,
   absentAt: string | null,
 ): Promise<PublicTeammate[]> {
   const mates = team.memberIds.filter((id) => id !== founderId);
-  // En parallele ; les vignettes (rares absents compris) a l'ecran seulement.
-  const [absent, names, photos] = await Promise.all([
+  if (mates.length === 0) return [];
+  const fieldMask = ["batchId", "status", "archivedDateISOString", "isExternalFounder", ...(tx ? [] : ["photoUrl"])];
+  const refs = mates.map((id) => db().doc(docPaths.founder(id)));
+  const [absent, names, snaps] = await Promise.all([
     absentAt ? absentAmong(tx, absentAt, mates) : new Set<string>(),
     memberShortNames(tx, [team]),
-    tx || mates.length === 0 ? null : founderPhotos(mates),
+    tx ? tx.getAll(...refs, { fieldMask }) : db().getAll(...refs, { fieldMask }),
   ]);
-  return mates
-    .filter((id) => !absent.has(id))
-    .map((id) => ({ value: id, label: names.get(id) || "Teammate", hint: null, photoUrl: photos?.get(id) ?? null }));
+  const fiche = new Map(snaps.flatMap((s) => (s.exists ? [[s.id, s.data() as Pick<Founder, "batchId" | "status" | "archivedDateISOString" | "isExternalFounder" | "photoUrl">] as const] : [])));
+  return teammatesToRate(team.memberIds, founderId, batchId, absent, (id) => fiche.get(id)).map((id) => ({
+    value: id,
+    label: names.get(id) || "Teammate",
+    hint: null,
+    photoUrl: fiche.get(id)?.photoUrl ?? null,
+  }));
 }
 
 /** Ceux de `founderIds` marques absents a l'evenement. */
@@ -223,12 +240,6 @@ async function absentAmong(tx: Transaction | null, eventId: string, founderIds: 
   const refs = founderIds.map((id) => db().doc(docPaths.attendance(eventId, id)));
   const snaps = await (tx ? tx.getAll(...refs) : db().getAll(...refs));
   return absentFounderIds(snaps.flatMap((s) => (s.exists ? [s.data() as Pick<Attendance, "founderId" | "status">] : [])));
-}
-
-/** Les vignettes de fondateurs (quelques Ko chacune, en `data:` URL). */
-async function founderPhotos(ids: string[]): Promise<Map<string, string | null>> {
-  const snaps = await db().getAll(...ids.map((id) => db().doc(docPaths.founder(id))), { fieldMask: ["photoUrl"] });
-  return new Map(snaps.map((s) => [s.id, (s.data() as Pick<Founder, "photoUrl"> | undefined)?.photoUrl ?? null]));
 }
 
 /**
@@ -248,7 +259,7 @@ async function scopeContext(
   const wantsTeam = scopes.has("team") || scopes.has("each_teammate") || form.attachments.team?.from === "respondent_team";
   if (respondent.founderId && wantsTeam) ctx.team = await teamOf(tx, form.eventId, respondent.founderId);
   if (ctx.team && scopes.has("each_teammate")) {
-    ctx.targets.each_teammate = await teammateChoices(tx, ctx.team, respondent.founderId!, formHasAbsentees(form, event) ? form.eventId : null);
+    ctx.targets.each_teammate = await teammateChoices(tx, ctx.team, respondent.founderId!, form.batchId, formHasAbsentees(form, event) ? form.eventId : null);
   }
   const target = juryTargetOf(event);
   if (scopes.has("each_target")) {

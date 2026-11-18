@@ -1,16 +1,17 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { formConcernsFounder, isFormStillDone, questionsAddedSince } from "@shared/formRules";
+import { formConcernsFounder, formRatesTeammates, isFormStillDone, questionsAddedSince } from "@shared/formRules";
 import { formState } from "@shared/forms";
 import { isProvenIdentity, type Form, type WithId } from "@shared/types";
-import { queries } from "@/lib/firestore/refs";
+import { queries, refs } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
-import { useQueryListener } from "@/hooks/useFirestoreListener";
+import { useDocsListener, useQueryListener } from "@/hooks/useFirestoreListener";
 import { useAnonymousFormsDone } from "@/hooks/useAnonymousFormsDone";
 import { useBatch } from "@/context/BatchContext";
 import { useEvents } from "@/context/EventsContext";
 import { useFounder } from "@/context/FounderContext";
+import { useFounders } from "@/context/FoundersContext";
 
 // ----------------------------
 // Les formulaires que le fondateur connecte doit encore remplir (SPECS §3.1)
@@ -55,12 +56,19 @@ export function FormsToFillProvider({ children }: { children: ReactNode }) {
   const forms = useQueryListener(queries.openFormsOfBatch(batch.id));
   const completions = useQueryListener(queries.myFormCompletions(batch.id, founder.id));
   const anonymousDone = useAnonymousFormsDone(founder.id);
+  const { foundersById } = useFounders();
+  // Son equipe aux evenements d'un Peer rating ouvert : seul a noter, il n'a rien a remplir (`formRatesTeammates`).
+  const teamEntries = useMemo(() => {
+    const peerEventIds = new Set(forms.data.flatMap((f) => (f.eventId && formRatesTeammates(f) ? [f.eventId] : [])));
+    return teamMemberships.flatMap((m) => (m.eventId && peerEventIds.has(m.eventId) ? [[m.eventId, refs.eventTeam(m.eventId, m.teamId)] as const] : []));
+  }, [forms.data, teamMemberships]);
+  const teams = useDocsListener(teamEntries);
 
   const value = useMemo<FormsToFillValue>(() => {
     const nowISO = new Date().toISOString();
     const completionOf = new Map(completions.data.map((c) => [c.formId, c]));
-    const teamEventIds = new Set(teamMemberships.map((m) => m.eventId));
     const attendanceByEventId = new Map(attendance.map((a) => [a.parentId, a]));
+    const teamEventIds = new Set(teamMemberships.map((m) => m.eventId));
     const items = forms.data.flatMap((f): FormToFill[] => {
       const state = formState(f, nowISO);
       if (f.archivedDateISOString !== null || (state !== "open" && state !== "not_open_yet")) return [];
@@ -69,16 +77,19 @@ export function FormsToFillProvider({ children }: { children: ReactNode }) {
       const isDone = isFormStillDone(f, completion, f.identityCheck === "anonymous" ? anonymousDone.has(f.id) : completion !== undefined);
       if (isDone && !isProvenIdentity(f.identityCheck)) return [];
       const event = f.eventId ? (allEventsById.get(f.eventId) ?? null) : null;
-      const isTeamMember = f.eventId !== null && teamEventIds.has(f.eventId);
-      if (!formConcernsFounder(f, founder, event, isTeamMember, f.eventId ? attendanceByEventId.get(f.eventId) : undefined)) return [];
+      // Hors Peer rating, l'appartenance suffit (`memberships`).
+      const isMember = f.eventId !== null && teamEventIds.has(f.eventId);
+      const team = f.eventId ? (teams.data.get(f.eventId)?.memberIds ?? (isMember ? [founder.id] : null)) : null;
+      const teammates = (team ?? []).flatMap((id) => (id === founder.id ? [] : (foundersById.get(id) ?? [])));
+      if (!formConcernsFounder(f, founder, event, team, f.eventId ? attendanceByEventId.get(f.eventId) : undefined, teammates)) return [];
       const doneDateISOString = isDone ? (completion?.completedDateISOString ?? null) : null;
       return [{ form: f, done: isDone, doneDateISOString, eventName: event?.name ?? null, newQuestions: added.length }];
     });
     return {
       items,
-      isLoading: forms.isLoading || completions.isLoading || isEventsLoading,
+      isLoading: forms.isLoading || completions.isLoading || isEventsLoading || teams.isLoading,
     };
-  }, [forms.data, forms.isLoading, completions.data, completions.isLoading, allEventsById, isEventsLoading, anonymousDone, teamMemberships, attendance, founder]);
+  }, [forms.data, forms.isLoading, completions.data, completions.isLoading, allEventsById, isEventsLoading, anonymousDone, teamMemberships, teams.data, teams.isLoading, foundersById, attendance, founder]);
 
   return <FormsToFillContextProvider value={value}>{children}</FormsToFillContextProvider>;
 }

@@ -352,6 +352,9 @@ export const versionedSnapshot = (form: Pick<Form, "questions" | "attachments" |
 /** Le formulaire parle de l'equipe du repondant ou de ses coequipiers : il faut etre membre d'une equipe publiee. */
 export const formNeedsTeam = (form: Pick<Form, "questions">) => activeQuestions(form).some((q) => SCOPE_RULES[scopeOf(q)].needsTeam);
 
+/** Le formulaire fait noter ses coequipiers (Peer rating) : seul de son equipe, on n'y est pas attendu. */
+export const formRatesTeammates = (form: Pick<Form, "questions">) => activeQuestions(form).some((q) => scopeOf(q) === "each_teammate");
+
 /** La question ecrit un document de la startup du repondant (`checkin.*`, `startup.*`...). */
 const writesStartup = (q: Pick<FormQuestion, "dbField">) => q.dbField !== null && requiredSubjects([q.dbField]).includes("startup");
 
@@ -405,9 +408,28 @@ export type AudienceInput = {
   founders: (Pick<Founder, "batchId" | "status" | "archivedDateISOString" | "isExternalFounder" | "startupId"> & { id: string })[];
   event: Pick<PioneersEvent, "kind" | "templateKey" | "matching" | "teamSize" | "audience" | "guestFounderIds" | "startupIds"> | null;
   attendance: Pick<Attendance, "founderId" | "status">[];
-  /** Membres des equipes publiees de l'evenement (`memberships`). */
-  teamMemberIds: string[];
+  /** Les equipes publiees de l'evenement (`memberships`), une liste de membres chacune. */
+  teams: readonly (readonly string[])[];
 };
+
+type AudienceFounder = AudienceInput["founders"][number];
+
+/**
+ * Les coequipiers a noter dans un Peer rating : ni absents, ni partis (`isBatchParticipant`).
+ * Une fiche inconnue (`founderOf` rend `undefined`) est supposee la. LA regle du lien (`getPublicForm`,
+ * l'envoi) et de l'audience (`formRatesTeammates`).
+ */
+export const teammatesToRate = (
+  team: readonly string[],
+  founderId: string,
+  batchId: string,
+  absent: ReadonlySet<string>,
+  founderOf: (id: string) => Omit<AudienceFounder, "id" | "startupId"> | undefined,
+): string[] =>
+  team.filter((id) => {
+    const f = founderOf(id);
+    return id !== founderId && !absent.has(id) && (!f || isBatchParticipant(f, batchId));
+  });
 
 /**
  * A qui s'adresse le formulaire, anonyme ou non : les participants du batch
@@ -415,23 +437,27 @@ export type AudienceInput = {
  * (`tracksAttendance`), ses attendus moins ses absents (`eventRoster`, shared/attendance.ts). Le Debrief :
  * les membres des equipes publiees. Sinon tous les presents si la presence a
  * ete relevee (un feedback de seance ne se demande pas aux absents), sinon les
- * membres des equipes publiees (hackathon), sinon les invites ou le batch.
+ * membres des equipes publiees (hackathon), sinon les invites ou le batch. Un formulaire qui fait
+ * noter ses coequipiers ne s'adresse qu'a qui en a un a noter (`teammatesToRate`, 18/11).
  */
 function addressees(input: AudienceInput): { basis: AudienceBasis; founderIds: string[] } {
+  const { event } = input;
   const needsTeam = formNeedsTeam(input.form);
   const needsStartup = formNeedsStartup(input.form);
+  const absent = event && tracksAttendance(event) ? absentFounderIds(input.attendance) : new Set<string>();
+  const known = new Map(input.founders.map((f) => [f.id, f]));
+  const hasTeammate = (id: string) => input.teams.some((t) => t.includes(id) && teammatesToRate(t, id, input.batchId, absent, (o) => known.get(o)).length > 0);
+  const ratesTeammates = formRatesTeammates(input.form);
   const participants = input.founders.filter((f) => isBatchParticipant(f, input.batchId) && (!needsStartup || !!f.startupId));
   const among = (basis: AudienceBasis, keep: (id: string) => boolean) => ({
     basis,
-    founderIds: participants.filter((f) => keep(f.id)).map((f) => f.id),
+    founderIds: participants.filter((f) => keep(f.id) && (!ratesTeammates || hasTeammate(f.id))).map((f) => f.id),
   });
 
-  const { event } = input;
-  const members = new Set(input.teamMemberIds);
+  const members = new Set(input.teams.flat());
   // Sans evenement, ou sans presence (Weekly update) : tout le batch, sans absent.
   if (!event || !tracksAttendance(event)) return needsTeam ? among("teams", (id) => members.has(id)) : among("batch", () => true);
   // Le Debrief : les membres des equipes publiees, personne avant le tirage.
-  const absent = absentFounderIds(input.attendance);
   if (needsTeam) return among("teams", (id) => members.has(id) && !absent.has(id));
   const roster = eventRoster(input.batchId, event, participants, input.attendance);
   const present = new Set(roster.rows.filter((r) => r.status !== "absent").map((r) => r.founder.id));
@@ -480,27 +506,31 @@ export function responseProgress(
  * l'evenement (il lit la sienne, pas celle des autres) et ses seules equipes.
  * Un absent ne le voit donc pas ; un fondateur sans equipe voit celui d'un
  * hackathon a equipes : mieux vaut un formulaire de trop qu'un formulaire cache. Un
- * formulaire anonyme suit l'audience de son evenement, comme les autres. Deux
+ * formulaire anonyme suit l'audience de son evenement, comme les autres. Trois
  * exceptions : le Debrief ne s'adresse qu'aux membres d'une equipe publiee
- * (`formNeedsTeam`), et un formulaire de jury a aucun fondateur.
+ * (`formNeedsTeam`), un formulaire de jury a aucun fondateur, et un Peer rating a qui a un
+ * coequipier a noter (ses fiches `teammates` disent les partis ; la presence des autres ne
+ * se lit pas : un coequipier absent est suppose la, le lien dira « No teammate to rate »).
  */
 export function formConcernsFounder(
   form: Pick<Form, "batchId" | "identityCheck" | "questions">,
-  founder: AudienceInput["founders"][number],
+  founder: AudienceFounder,
   event: AudienceInput["event"],
-  /** Le fondateur est dans une equipe publiee de l'evenement du formulaire. */
-  isTeamMember: boolean,
+  /** Les membres de son equipe publiee a l'evenement du formulaire (lui compris), `null` sans equipe. */
+  team: readonly string[] | null,
   /** Sa presence a l'evenement du formulaire, absente si elle n'a pas ete relevee. */
   attendance?: Pick<Attendance, "founderId" | "status">,
+  /** Les fiches de ses coequipiers connues (un parti n'est pas a noter). */
+  teammates: readonly AudienceFounder[] = [],
 ): boolean {
   if (isJuryForm(form)) return false;
   const { founderIds } = addressees({
     form,
     batchId: form.batchId,
-    founders: [founder],
+    founders: [founder, ...teammates],
     event,
     attendance: attendance ? [attendance] : [],
-    teamMemberIds: isTeamMember ? [founder.id] : [],
+    teams: team ? [team] : [],
   });
   return founderIds.includes(founder.id);
 }
