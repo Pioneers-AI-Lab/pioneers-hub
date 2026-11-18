@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Anchor, Badge, Button, Checkbox, CopyButton, Group, SegmentedControl, Stack, Text, TextInput } from "@mantine/core";
+import { Anchor, Badge, Button, Checkbox, CopyButton, Group, Input, SegmentedControl, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import type { AccountAccess, AccountRow } from "@shared/callables";
 import type { InvestorAccess, UserRole } from "@shared/types";
@@ -121,11 +121,10 @@ function AccessEditor({ value, onChange }: { value: AccountAccess; onChange: (ne
         )}
       </WithHelp>
       {value.roles.includes("investor") && (
-        <Stack gap={4}>
-          <Text size="sm" fw={500}>
-            Investor access
-          </Text>
+        <Input.Wrapper labelElement="div" label="Investor access">
           <SegmentedControl
+            mt="calc(var(--mantine-spacing-xs) / 2)"
+            aria-label="Investor access"
             value={value.investorAccess ?? "portfolio"}
             onChange={(v) => onChange({ ...value, investorAccess: v as InvestorAccess })}
             data={[
@@ -133,7 +132,7 @@ function AccessEditor({ value, onChange }: { value: AccountAccess; onChange: (ne
               { value: "portfolio", label: "Portfolio · no notes" },
             ]}
           />
-        </Stack>
+        </Input.Wrapper>
       )}
     </Stack>
   );

@@ -152,6 +152,20 @@
   line-height: 1.3;
 }
 
+/* Une question parmi d'autres sur le volet d'un coequipier (Peer rating). */
+.subQuestion {
+  font-size: var(--mantine-font-size-lg);
+}
+
+.subQuestion + .description {
+  margin-top: 4px;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.subQuestion ~ .scale {
+  margin-top: 12px;
+}
+
 .number {
   margin-right: 10px;
   color: var(--mantine-color-pioneers-filled);

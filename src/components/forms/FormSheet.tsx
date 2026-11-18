@@ -2,26 +2,23 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Anchor, Box, Button, Container, Group, MultiSelect, NumberInput, SegmentedControl, Select, Stack, Text, TextInput, Textarea } from "@mantine/core";
+import { Anchor, Box, Button, Container, Group, Input, MultiSelect, NumberInput, SegmentedControl, Select, Stack, Text, TextInput, Textarea } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { APP_NAME } from "@shared/brand";
 import { JUDGE_LIMITS, type PublicChoice, type PublicFormQuestion } from "@shared/callables";
 import { FORM_ANSWER_MAX, ratingScale } from "@shared/formRules";
-import { absentFromEventMessage } from "@shared/forms";
-import { answerKey, isPerTarget, needsAccount, parseAnswerKey, type QuestionScope } from "@shared/types";
+import { answerKey, parseAnswerKey } from "@shared/types";
 import { useAuth } from "@/context/AuthContext";
 import { usePublicForm } from "@/context/PublicFormContext";
 import { call } from "@/lib/firebase";
 import { formatDateTime } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { ButtonRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section, SubsectionTitle } from "@/components/ui/Section";
 import { JuryBrief } from "@/components/forms/JuryBrief";
 import {
   PENDING_NOTE,
-  changesSaved,
   draftsFromPrefill,
   formNotes,
   isEmptyDraft,
@@ -34,21 +31,15 @@ import {
 } from "@/components/forms/formDrafts";
 
 // ----------------------------
-// Un formulaire a portee, sur une seule page (SPECS §2, modele standard)
+// Le jury, sur une seule page (SPECS §4.2)
 // ----------------------------
-// Le Debrief d'un hackathon et le jury : des questions sur l'equipe du
-// repondant (« son equipe »), sur chacun de ses coequipiers, ou sur chaque
-// equipe a noter. Le serveur rend les cibles ; la page les deplie. Une identite
-// prouvee (compte, lien de jury) retrouve ses reponses (`prefill`) : chaque
-// enregistrement renvoie TOUT le formulaire (les valeurs deja donnees comprises,
-// un champ vide n'efface rien), sous un nouvel envoi, puis la page se relit.
-// Un jure note une equipe apres l'autre : chaque equipe a son bouton, qui
+// Les formulaires des fondateurs (equipe et coequipiers compris) vont un ecran a la
+// fois (`TypeForm`, 18/11) ; le jury compare les equipes, il garde la page : une
+// question par critere sur chaque equipe a noter (les seules questions d'un jury,
+// `formProblems`). Le jure choisit ou saisit son nom, retrouve ses notes
+// (`prefill`) et note une equipe apres l'autre : chaque equipe a son bouton, qui
 // n'envoie que cette equipe ; au-dessus de ses criteres, sa Submission et les
 // chiffres declares de toutes les equipes (`JuryBrief`).
-//
-// Apres l'echeance, enregistrer une Submission qui change ses valeurs la marque
-// en retard (0 point, sauf exception du staff) : la page le demande d'abord. Un
-// renvoi sans changement ne demande rien (le serveur n'en fait rien).
 // Apercu du staff (`preview`) : les questions, sans repondant ni envoi.
 
 function Frame({ children }: { children: ReactNode }) {
@@ -62,28 +53,7 @@ function Frame({ children }: { children: ReactNode }) {
 export function FormSheet() {
   const { form, respondentInput } = usePublicForm();
   const header = <SheetHeader />;
-  if (needsAccount(form.identityCheck) && !form.viewerFounderId && !form.preview) {
-    return (
-      <Frame>
-        {header}
-        <Text size="sm" mb="md">
-          Sign in with your Pioneers account to answer: this form is tied to your name.
-        </Text>
-        <Button component={Link} href={paths.signIn(paths.form(form.formId))} size="md">
-          Sign in
-        </Button>
-      </Frame>
-    );
-  }
-  if (form.absent) {
-    return (
-      <Frame>
-        {header}
-        <Empty>{absentFromEventMessage(form.event?.name ?? null)}</Empty>
-      </Frame>
-    );
-  }
-  if (form.identityCheck !== "anonymous" && !form.respondent && !form.preview) {
+  if (!form.respondent && !form.preview) {
     return (
       <Frame>
         {header}
@@ -121,20 +91,19 @@ function SheetHeader() {
   );
 }
 
-/** Qui repond : un nom de la liste (fondateur, ou jure), ou un nom saisi par un jure exterieur. */
+/** Qui note : un nom de la liste (fondateur, staff, invite), ou un nom saisi par un jure exterieur. */
 function WhoAreYou() {
   const { form, setRespondent } = usePublicForm();
   const [chosen, setChosen] = useState<string | null>(null);
   const [name, setName] = useState("");
   const typed = name.trim();
-  const isJury = form.identityCheck === "jury_link";
   const options = form.respondents.map((r) => ({ value: r.value, label: r.hint ? `${r.label} · ${r.hint}` : r.label }));
-  const start = () => setRespondent(typed ? { name: typed } : isJury ? { judgeId: chosen! } : { founderId: chosen! });
+  const start = () => setRespondent(typed ? { name: typed } : { judgeId: chosen! });
 
   return (
     <Stack gap="md" maw={480}>
       <Text size="sm" c="dimmed">
-        {isJury ? "Who is scoring? Your scores are shared with the Pioneers team only." : "Who are you?"}
+        Who is scoring? Your scores are shared with the Pioneers team only.
       </Text>
       {options.length > 0 && (
         <Select
@@ -173,69 +142,42 @@ function WhoAreYou() {
   );
 }
 
-/** L'apercu du staff n'a pas de coequipiers : un exemple montre les questions par coequipier. */
-const SAMPLE_TEAMMATE = { value: "preview", label: "A teammate", hint: null };
-
 function Sheet() {
   const { form, juryKey, respondentInput, setRespondent, reload } = usePublicForm();
   const [drafts, setDrafts] = useState<Drafts>(() => draftsFromPrefill(form.prefill));
   const [submissionId, setSubmissionId] = useState(newSubmissionId);
   const [isSending, setSending] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [isConfirmingLate, setConfirmingLate] = useState(false);
   const isPreview = form.preview;
   // L'apercu se remplit pour voir les champs, sans rien envoyer.
   const canFill = form.state === "open" || isPreview;
   const canEdit = canFill && !isPreview;
-
-  const of = (scope: QuestionScope) => form.questions.filter((q) => q.scope === scope);
-  const self = of("self");
-  const team = of("team");
-  const mates = of("each_teammate");
-  const scored = of("each_target");
-  const isJury = form.identityCheck === "jury_link";
-
-  if ((team.length > 0 || mates.length > 0) && !form.team && !isPreview) {
-    return <Empty>You were not in a team at this event, or the teams are not published yet.</Empty>;
-  }
-  const teammates = isPreview && form.targets.each_teammate.length === 0 ? [SAMPLE_TEAMMATE] : form.targets.each_teammate;
-  const deadline = form.deadlineDateISOString;
+  const targets = form.targets.each_target;
 
   const set = (key: string, value: Draft | undefined) => setDrafts((d) => ({ ...d, [key]: value }));
   const byId = new Map(form.questions.map((q) => [q.id, q]));
   const questionOf = (key: string) => byId.get(parseAnswerKey(key).questionId);
 
-  /** Le premier probleme des reponses envoyees (`onlyTarget` : une seule equipe notee). */
-  const problemIn = (onlyTarget: string | null) => {
+  /** Le premier probleme des notes d'une equipe. */
+  const problemIn = (targetId: string) => {
+    const target = targets.find((t) => t.value === targetId);
     for (const q of form.questions) {
-      const scope = q.scope;
-      const targets = isPerTarget(scope) ? form.targets[scope].filter((t) => !onlyTarget || t.value === onlyTarget) : [null];
-      if (onlyTarget && !isPerTarget(scope)) continue;
-      for (const t of targets) {
-        const p = problemOf(q, drafts[answerKey(q.id, t?.value ?? null)]);
-        if (p) return `${q.label}${t ? ` (${t.label})` : ""}: ${p}`;
-      }
+      const p = problemOf(q, drafts[answerKey(q.id, targetId)]);
+      if (p) return `${q.label}${target ? ` (${target.label})` : ""}: ${p}`;
     }
     return null;
   };
 
-  /** Enregistre la feuille ; depuis une equipe notee (`onlyTarget`), ses seules notes. `lateConfirmed` : le retard est accepte. */
-  async function save(onlyTarget: string | null = null, lateConfirmed = false): Promise<boolean> {
-    const problem = problemIn(onlyTarget);
+  /** Enregistre les notes d'une equipe, et seulement les siennes. */
+  async function save(targetId: string): Promise<boolean> {
+    const problem = problemIn(targetId);
     if (problem) {
       notifications.show({ color: "red", title: "Not saved yet", message: problem });
       return false;
     }
-    // Apres l'echeance, des valeurs de l'equipe changees : l'envoi sera en retard (si ce formulaire en decide).
-    const isLate = form.setsSubmissionLate && deadline !== null && new Date().toISOString() > deadline;
-    if (!onlyTarget && !lateConfirmed && isLate && changesSaved(drafts, form.prefill, team.map((q) => q.id), (key) => questionOf(key)?.type)) {
-      setConfirmingLate(true);
-      return false;
-    }
-    setConfirmingLate(false);
     setSending(true);
     try {
-      const sent = onlyTarget ? Object.fromEntries(Object.entries(drafts).filter(([key]) => parseAnswerKey(key).targetId === onlyTarget)) : drafts;
+      const sent = Object.fromEntries(Object.entries(drafts).filter(([key]) => parseAnswerKey(key).targetId === targetId));
       await call("submitFormResponse")({
         formId: form.formId,
         version: form.version,
@@ -244,7 +186,7 @@ function Sheet() {
         key: juryKey,
         answers: toAnswers(sent, (key) => questionOf(key)?.type),
       });
-      notifications.show({ color: "teal", message: isJury ? "Scores saved" : "Saved" });
+      notifications.show({ color: "teal", message: "Scores saved" });
       // Un nouvel envoi pour la prochaine correction ; la page relit les valeurs enregistrees.
       setSubmissionId(newSubmissionId());
       reload();
@@ -257,9 +199,9 @@ function Sheet() {
     }
   }
 
-  const fields = (questions: PublicFormQuestion[], targetId: string | null) => (
+  const fields = (targetId: string) => (
     <Stack gap="md" py="xs">
-      {questions.map((q) => {
+      {form.questions.map((q) => {
         const key = answerKey(q.id, targetId);
         return (
           <SheetField
@@ -277,9 +219,9 @@ function Sheet() {
 
   return (
     <>
-      {form.respondent && form.identityCheck !== "account" && form.identityCheck !== "email_code" && (
+      {form.respondent && (
         <Text size="sm" mb="md">
-          {isJury ? "Scoring as " : "Answering as "}
+          {"Scoring as "}
           <strong>{form.respondent.label}</strong>
           {!form.viewerFounderId && (
             <>
@@ -291,49 +233,27 @@ function Sheet() {
           )}
         </Text>
       )}
-      {form.state === "closed" && <Empty>{isJury ? "Scores are locked. You can still read yours." : "This form is closed. You can still read your answers."}</Empty>}
+      {form.state === "closed" && <Empty>Scores are locked. You can still read yours.</Empty>}
       {form.state === "not_open_yet" && <Empty>This form is not open yet. Come back later.</Empty>}
       {formNotes(form).map((note) => (
         <Empty key={note}>{note}</Empty>
       ))}
 
-      {self.length > 0 && <Section title="You">{fields(self, null)}</Section>}
-      {team.length > 0 && (
-        <Section title={form.team ? `Your team · ${form.team.name}` : "Your team"} help="One teammate can fill this in for the whole team. The last save counts.">
-          {fields(team, null)}
-        </Section>
-      )}
-      {mates.length > 0 && (
-        <Section title="Your teammates" help="Private: only the Pioneers team reads it.">
-          {teammates.length === 0 ? (
-            <Empty>No teammate to rate.</Empty>
-          ) : (
-            <Stack gap="lg">
-              {teammates.map((t) => (
-                <Box key={t.value}>
-                  <Text fw={600}>{t.label}</Text>
-                  {fields(mates, t.value)}
-                </Box>
-              ))}
-            </Stack>
-          )}
-        </Section>
-      )}
-      {scored.length > 0 && (
+      {targets.length > 0 && (
         <TargetList
-          targets={form.targets.each_target}
-          isDone={(id) => scored.some((q) => !isEmptyDraft(drafts[answerKey(q.id, id)]))}
+          targets={targets}
+          isDone={(id) => form.questions.some((q) => !isEmptyDraft(drafts[answerKey(q.id, id)]))}
           openId={openId}
           setOpenId={setOpenId}
           render={(id) => (
             <>
               {form.juryBrief && (
                 <>
-                  <JuryBrief brief={form.juryBrief} targets={form.targets.each_target} targetId={id} />
+                  <JuryBrief brief={form.juryBrief} targets={targets} targetId={id} />
                   <SubsectionTitle>Your scores</SubsectionTitle>
                 </>
               )}
-              {fields(scored, id)}
+              {fields(id)}
               {canEdit && (
                 <Button size="md" fullWidth maw={400} mb="md" loading={isSending} onClick={async () => (await save(id)) && setOpenId(null)}>
                   Save scores
@@ -344,34 +264,11 @@ function Sheet() {
         />
       )}
 
-      {canEdit && (self.length > 0 || team.length > 0 || mates.length > 0) && (
-        <div className="savebar" style={{ bottom: 0 }}>
-          <Button size="md" fullWidth maw={400} loading={isSending} onClick={() => void save()}>
-            {form.prefill && Object.keys(form.prefill).length > 0 ? "Save changes" : "Submit"}
-          </Button>
-        </div>
-      )}
       <Group mt="xl">
         <Button component={Link} href={paths.home()} variant="subtle" color="gray">
           Go to {APP_NAME}
         </Button>
       </Group>
-      <ResponsiveDialog opened={isConfirmingLate} onClose={() => setConfirmingLate(false)} title="Save after the deadline?">
-        <Stack>
-          <Text size="sm">
-            The deadline passed{deadline ? ` (${formatDateTime(deadline)})` : ""}. If you save these changes, your team&apos;s submission is marked
-            late and scores 0 points, unless the Pioneers team makes an exception.
-          </Text>
-          <Group justify="flex-end">
-            <Button variant="default" size="md" onClick={() => setConfirmingLate(false)}>
-              Keep it as it is
-            </Button>
-            <Button color="red" size="md" loading={isSending} onClick={() => void save(null, true)}>
-              Save anyway
-            </Button>
-          </Group>
-        </Stack>
-      </ResponsiveDialog>
     </>
   );
 }
@@ -454,21 +351,20 @@ function SheetField({
     case "rating": {
       const scale = ratingScale(q);
       const steps = scale.max - scale.min + 1;
+      const ratingLabel = (
+        <>
+          {label}
+          <Text span c="dimmed" inherit>{` · ${scale.min} to ${scale.max}`}</Text>
+        </>
+      );
       if (steps > 11) {
-        return <NumberInput {...common} min={scale.min} max={scale.max} value={typeof value === "number" ? value : ""} onChange={(v) => onChange(typeof v === "number" ? v : undefined)} />;
+        return <NumberInput {...common} label={ratingLabel} min={scale.min} max={scale.max} value={typeof value === "number" ? value : ""} onChange={(v) => onChange(typeof v === "number" ? v : undefined)} />;
       }
+      // Le meme habillage (taille du theme) que les autres champs : libelle et aide a la meme taille.
       return (
-        <Stack gap="xs">
-          <Text size="sm" fw={500}>
-            {label}
-            <Text span c="dimmed" size="sm">{` · ${scale.min} to ${scale.max}`}</Text>
-          </Text>
-          {description && (
-            <Text size="xs" c="dimmed">
-              {description}
-            </Text>
-          )}
+        <Input.Wrapper labelElement="div" label={ratingLabel} description={description}>
           <SegmentedControl
+            mt="calc(var(--mantine-spacing-xs) / 2)"
             fullWidth
             disabled={disabled}
             aria-label={q.label}
@@ -476,7 +372,7 @@ function SheetField({
             value={typeof value === "number" ? String(value) : ""}
             onChange={(v) => onChange(Number(v))}
           />
-        </Stack>
+        </Input.Wrapper>
       );
     }
     case "long_text":

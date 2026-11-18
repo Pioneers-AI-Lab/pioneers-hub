@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Box,
   Button,
+  Input,
   MultiSelect,
   NumberInput,
   SegmentedControl,
@@ -98,13 +99,11 @@ function splitCharsOf(key: DbFieldKey): string[] | undefined {
 /** Oui / Non / non renseigne, en un geste. */
 function YesNo({ label, value, onChange, withAsterisk }: { label: string; value: boolean | null; onChange: (v: boolean | null) => void; withAsterisk?: boolean }) {
   return (
-    <Stack gap="xs">
-      <Text size="sm" fw={500}>
-        {label}
-        {withAsterisk && <Text span c="var(--input-asterisk-color)"> *</Text>}
-      </Text>
+    <Input.Wrapper labelElement="div" label={label} withAsterisk={withAsterisk}>
       <SegmentedControl
+        mt="calc(var(--mantine-spacing-xs) / 2)"
         fullWidth
+        aria-label={label}
         value={value === null ? "unset" : value ? "yes" : "no"}
         onChange={(v) => onChange(v === "unset" ? null : v === "yes")}
         data={[
@@ -113,7 +112,7 @@ function YesNo({ label, value, onChange, withAsterisk }: { label: string; value:
           { value: "no", label: "No" },
         ]}
       />
-    </Stack>
+    </Input.Wrapper>
   );
 }
 

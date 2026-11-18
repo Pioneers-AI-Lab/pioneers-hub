@@ -524,6 +524,7 @@ console.log("hackathon submission and peer rating (forms)");
   await expectOk("founder opens the peer rating: her teammate", async () => {
     const form = await publicForm(ada.functions, PEER);
     if (form.targets.each_teammate.map((t) => t.value).join() !== "chloe-demo") throw new Error(JSON.stringify(form.targets));
+    if (!("photoUrl" in form.targets.each_teammate[0])) throw new Error("no teammate photo");
   });
   await expectOk("founder sends the team results after the deadline (late)", async () => {
     await submitForm(ada.functions, FORM, results);

@@ -23,6 +23,7 @@ import {
   type CallableRequest,
   type CallableResponse,
   type PublicChoice,
+  type PublicTeammate,
   type PublicForm,
   type PublicFormQuestion,
   type PublicRespondent,
@@ -159,7 +160,7 @@ const toPublicRespondent = (r: Respondent): PublicRespondent => ({ founderId: r.
 type ScopeContext = {
   event: PioneersEvent | null;
   team: (Pick<EventTeam, "name" | "memberIds" | "memberNames"> & { id: string }) | null;
-  targets: Record<"each_teammate" | "each_target", PublicChoice[]>;
+  targets: { each_teammate: PublicTeammate[]; each_target: PublicChoice[] };
 };
 
 const emptyContext = (event: PioneersEvent | null): ScopeContext => ({ event, team: null, targets: { each_teammate: [], each_target: [] } });
@@ -192,10 +193,20 @@ async function memberShortNames(tx: Transaction | null, teams: Pick<EventTeam, "
   return names;
 }
 
-/** Les coequipiers, en nom court. */
-async function teammateChoices(tx: Transaction | null, team: NonNullable<ScopeContext["team"]>, founderId: string): Promise<PublicChoice[]> {
-  const names = await memberShortNames(tx, [team]);
-  return team.memberIds.filter((id) => id !== founderId).map((id) => ({ value: id, label: names.get(id) || "Teammate", hint: null }));
+/**
+ * Les coequipiers, en nom court, avec leur vignette (on note quelqu'un qu'on reconnait). La vignette
+ * ne sert qu'a l'ecran (`getPublicForm`, hors transaction) : l'envoi (`tx`) ne la lit pas.
+ */
+async function teammateChoices(tx: Transaction | null, team: NonNullable<ScopeContext["team"]>, founderId: string): Promise<PublicTeammate[]> {
+  const ids = team.memberIds.filter((id) => id !== founderId);
+  const [names, photos] = await Promise.all([memberShortNames(tx, [team]), tx || ids.length === 0 ? null : founderPhotos(ids)]);
+  return ids.map((id) => ({ value: id, label: names.get(id) || "Teammate", hint: null, photoUrl: photos?.get(id) ?? null }));
+}
+
+/** Les vignettes de fondateurs (quelques Ko chacune, en `data:` URL). */
+async function founderPhotos(ids: string[]): Promise<Map<string, string | null>> {
+  const snaps = await db().getAll(...ids.map((id) => db().doc(docPaths.founder(id))), { fieldMask: ["photoUrl"] });
+  return new Map(snaps.map((s) => [s.id, (s.data() as Pick<Founder, "photoUrl"> | undefined)?.photoUrl ?? null]));
 }
 
 /**

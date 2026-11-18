@@ -27,6 +27,9 @@ export const FUNCTIONS_REGION = "europe-west4";
 /** Un element a choisir sur un formulaire public : fondateur, startup, evenement, equipe, mentor ou option. */
 export type PublicChoice = { value: string; label: string; hint: string | null };
 
+/** Un coequipier a noter (Peer rating) : avec sa vignette, pour le reconnaitre. */
+export type PublicTeammate = PublicChoice & { photoUrl: string | null };
+
 /** Une question telle que le repondant la voit : options et listes deja resolues par le serveur. */
 export type PublicFormQuestion = {
   id: string;
@@ -122,7 +125,7 @@ export type PublicForm = {
   /** Son equipe publiee a l'evenement du formulaire, pour les questions « son equipe ». */
   team: { id: string; name: string } | null;
   /** Les cibles des questions par cible : ses coequipiers, les equipes (ou startups) a noter sauf la sienne. */
-  targets: Record<"each_teammate" | "each_target", PublicChoice[]>;
+  targets: { each_teammate: PublicTeammate[]; each_target: PublicChoice[] };
   /**
    * Les reponses deja donnees, par `answerKey` : seulement pour une identite
    * prouvee (compte, lien de jury). Le formulaire se relit et se corrige.

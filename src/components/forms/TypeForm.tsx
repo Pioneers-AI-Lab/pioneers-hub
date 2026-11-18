@@ -2,20 +2,22 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { Button, Group, Text, TextInput, Textarea, VisuallyHidden } from "@mantine/core";
+import { Avatar, Button, Group, Stack, Text, TextInput, Textarea, VisuallyHidden } from "@mantine/core";
 import { APP_NAME } from "@shared/brand";
-import type { PublicChoice, PublicForm, PublicFormQuestion } from "@shared/callables";
+import type { PublicChoice, PublicForm, PublicFormQuestion, PublicTeammate } from "@shared/callables";
 import { FORM_ANSWER_MAX, ratingScale } from "@shared/formRules";
 import { absentFromEventMessage } from "@shared/forms";
-import { needsAccount as needsAccountFor, type FormResponseStatus } from "@shared/types";
+import { SCOPE_RULES, answerKey, needsAccount as needsAccountFor, parseAnswerKey, type FormResponseStatus } from "@shared/types";
 import { call } from "@/lib/firebase";
 import { formatDateTime, searchKey } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { usePublicForm } from "@/context/PublicFormContext";
 import { markAnonymousFormDone } from "@/hooks/useAnonymousFormsDone";
 import { AppLogo } from "@/components/chrome/AppLogo";
+import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import {
   PENDING_NOTE,
+  changesSaved,
   draftsFromPrefill,
   formNotes,
   newSubmissionId,
@@ -58,6 +60,8 @@ type Step =
   | { kind: "intro" }
   | { kind: "name" }
   | { kind: "question"; question: PublicFormQuestion; number: number }
+  /** Un coequipier (Peer rating) : sa photo, son nom, puis toutes les questions par coequipier sur ce volet. */
+  | { kind: "teammate"; teammate: PublicTeammate; questions: PublicFormQuestion[] }
   | { kind: "done" };
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -65,6 +69,10 @@ const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const SEARCH_FROM = 8;
 const ANONYMOUS_NOTE = "Anonymous: your name is not recorded.";
 const NAME_QUESTION = "Who are you?";
+const NO_TEAM = "You were not in a team at this event, or the teams are not published yet.";
+const PRIVATE_NOTE = "Private: only the Pioneers team reads it.";
+/** L'apercu du staff n'a pas de coequipiers : un exemple montre le volet d'un coequipier. */
+const SAMPLE_TEAMMATE: PublicTeammate = { value: "preview", label: "A teammate", hint: null, photoUrl: null };
 
 const cx = (...classes: (string | false | null | undefined)[]) => classes.filter(Boolean).join(" ");
 
@@ -72,22 +80,51 @@ const cx = (...classes: (string | false | null | undefined)[]) => classes.filter
 const ratingShortcut = (n: number, scale: { min: number; max: number }) =>
   scale.max - scale.min < 10 && scale.min >= 0 ? String(n % 10) : undefined;
 
-const stepLabel = (step: Step, form: PublicForm) =>
-  step.kind === "question" ? step.question.label : step.kind === "name" ? NAME_QUESTION : step.kind === "done" ? "Thank you" : form.title;
+function stepLabel(step: Step, form: PublicForm): string {
+  switch (step.kind) {
+    case "question":
+      return step.question.label;
+    case "teammate":
+      return step.teammate.label;
+    case "name":
+      return NAME_QUESTION;
+    case "done":
+      return "Thank you";
+    case "intro":
+      return form.title;
+  }
+}
+
+const stepKey = (s: Step) => (s.kind === "question" ? s.question.id : s.kind === "teammate" ? `teammate-${s.teammate.value}` : s.kind);
+
+/** Les cles de reponse d'un volet (une question, ou chaque question d'un coequipier). */
+const stepAnswers = (s: Step): { question: PublicFormQuestion; key: string }[] =>
+  s.kind === "question" ? [{ question: s.question, key: s.question.id }] : s.kind === "teammate" ? s.questions.map((q) => ({ question: q, key: answerKey(q.id, s.teammate.value) })) : [];
 
 export function TypeForm({ form }: { form: PublicForm }) {
   const { reload } = usePublicForm();
   const needsAccount = needsAccountFor(form.identityCheck) && !form.viewerFounderId && !form.preview;
-  const canAnswer = (form.state === "open" || form.preview) && !needsAccount && !form.absent;
   const isPreview = form.preview;
   const asksName = form.identityCheck === "select_name" && !form.viewerFounderId;
+  // Questions de l'equipe (une reponse pour l'equipe) et par coequipier (Peer rating) : il faut une equipe.
+  const ownQuestions = form.questions.filter((q) => q.scope !== "each_teammate");
+  const mateQuestions = form.questions.filter((q) => q.scope === "each_teammate");
+  const teamKeys = form.questions.filter((q) => q.scope === "team").map((q) => q.id);
+  const noTeam = form.questions.some((q) => SCOPE_RULES[q.scope].needsTeam) && !form.team && !isPreview;
+  const teammates = mateQuestions.length === 0 ? [] : isPreview && form.targets.each_teammate.length === 0 ? [SAMPLE_TEAMMATE] : form.targets.each_teammate;
+  const nothingToAnswer = ownQuestions.length === 0 && teammates.length === 0;
+  const canAnswer = (form.state === "open" || form.preview) && !needsAccount && !form.absent && !noTeam && !nothingToAnswer;
 
   const steps: Step[] = [
     { kind: "intro" },
     ...(canAnswer && asksName ? [{ kind: "name" } as const] : []),
-    ...(canAnswer ? form.questions.map((question, i) => ({ kind: "question" as const, question, number: i + 1 })) : []),
+    ...(canAnswer ? ownQuestions.map((question, i) => ({ kind: "question" as const, question, number: i + 1 })) : []),
+    ...(canAnswer ? teammates.map((teammate) => ({ kind: "teammate" as const, teammate, questions: mateQuestions })) : []),
     { kind: "done" },
   ];
+  const byId = new Map(form.questions.map((q) => [q.id, q]));
+  const typeOf = (key: string) => byId.get(parseAnswerKey(key).questionId)?.type;
+  const submitLabel = Object.keys(form.prefill).length > 0 ? "Save changes" : "Submit";
   const doneIndex = steps.length - 1;
   const lastInputIndex = doneIndex - 1;
 
@@ -101,12 +138,14 @@ export function TypeForm({ form }: { form: PublicForm }) {
   const [status, setStatus] = useState<FormResponseStatus | null>(null);
   const [submissionId] = useState(newSubmissionId);
   const [version, setVersion] = useState(form.version);
+  /** Un envoi d'equipe apres l'echeance attend la confirmation du retard (il vaudra 0). */
+  const [isConfirmingLate, setConfirmingLate] = useState(false);
 
   // Relu sur une nouvelle version (envoi refuse, `FORM_UPDATED`) : a la premiere question a completer,
   // sinon a la derniere (une question retiree raccourcit le parcours).
   if (form.version !== version) {
     setVersion(form.version);
-    const target = steps.findIndex((s) => s.kind === "question" && problemOf(s.question, drafts[s.question.id]) !== null);
+    const target = steps.findIndex((s) => stepAnswers(s).some(({ question, key }) => problemOf(question, drafts[key]) !== null));
     setLeaving(null);
     setIndex(target >= 0 ? target : Math.min(index, lastInputIndex));
   }
@@ -121,7 +160,8 @@ export function TypeForm({ form }: { form: PublicForm }) {
     const slide = viewportRef.current?.querySelector<HTMLElement>("[data-current]");
     if (!slide) return;
     slide.scrollTop = 0;
-    (slide.querySelector<HTMLElement>("input, textarea") ?? slide).focus({ preventScroll: true });
+    // Un volet a plusieurs questions (coequipier) garde le focus : son champ texte n'est pas la premiere question.
+    (slide.querySelector<HTMLElement>("[data-autofocus]") ?? slide).focus({ preventScroll: true });
   }, [index]);
 
   // Raccourcis hors des champs de saisie : Entree pour l'action du volet, une
@@ -157,7 +197,12 @@ export function TypeForm({ form }: { form: PublicForm }) {
     setError(null);
   }
 
-  async function submit(current: Drafts, who: string | null) {
+  async function submit(current: Drafts, who: string | null, lateConfirmed = false) {
+    // Apres l'echeance, des valeurs de l'equipe changees : l'envoi sera en retard (si ce formulaire en decide).
+    const deadline = form.deadlineDateISOString;
+    const isLate = form.setsSubmissionLate && deadline !== null && new Date().toISOString() > deadline;
+    if (!lateConfirmed && isLate && changesSaved(current, form.prefill, teamKeys, typeOf)) return setConfirmingLate(true);
+    setConfirmingLate(false);
     setIsSending(true);
     try {
       const { data } = await call("submitFormResponse")({
@@ -165,7 +210,7 @@ export function TypeForm({ form }: { form: PublicForm }) {
         version: form.version,
         submissionId,
         respondent: who ? { founderId: who } : null,
-        answers: toAnswers(current, (key) => form.questions.find((q) => q.id === key)?.type),
+        answers: toAnswers(current, typeOf),
       });
       // Le serveur ne sait pas qui a envoye une reponse anonyme : ce navigateur la retire du « To do ».
       if (form.identityCheck === "anonymous" && form.viewerFounderId) markAnonymousFormDone(form.viewerFounderId, form.formId);
@@ -185,9 +230,9 @@ export function TypeForm({ form }: { form: PublicForm }) {
   function next(current: Drafts = drafts, who: string | null = respondent) {
     if (isSending) return;
     if (step.kind === "name" && !who) return setError("Choose your name to continue.");
-    if (step.kind === "question") {
-      const problem = problemOf(step.question, current[step.question.id]);
-      if (problem) return setError(problem);
+    for (const { question, key } of stepAnswers(step)) {
+      const problem = problemOf(question, current[key]);
+      if (problem) return setError(step.kind === "teammate" ? `${question.label} ${problem}` : problem);
     }
     if (!isLastInput) goTo(index + 1);
     else if (!isPreview) void submit(current, who);
@@ -233,8 +278,8 @@ export function TypeForm({ form }: { form: PublicForm }) {
             {(form.event || form.batchName) && <p className={styles.eyebrow}>{[form.batchName, form.event?.name].filter(Boolean).join(" · ")}</p>}
             <h1 className={styles.title}>{form.title}</h1>
             {form.description && <p className={styles.description}>{form.description}</p>}
-            <IntroNotes form={form} needsAccount={needsAccount} />
-            {canAnswer && action(isLast ? "Submit" : "Start", "press Enter", isLast)}
+            <IntroNotes form={form} needsAccount={needsAccount} isTeamForm={teamKeys.length > 0} noTeam={noTeam} nothingToAnswer={nothingToAnswer} />
+            {canAnswer && action(isLast ? submitLabel : "Start", "press Enter", isLast)}
           </>
         );
       case "name":
@@ -257,7 +302,7 @@ export function TypeForm({ form }: { form: PublicForm }) {
         );
       case "question": {
         const q = s.question;
-        const { field, hint } = renderField(q, s.number);
+        const { field, hint } = renderField(q, q.id, isLast);
         // Weekly update founder : l'objectif donne la semaine d'avant, au-dessus de « What did you achieve? ».
         const previousGoal = form.previousGoal?.questionId === q.id ? form.previousGoal.goal : null;
         return (
@@ -268,14 +313,36 @@ export function TypeForm({ form }: { form: PublicForm }) {
                 <p className={cx(styles.description, styles.previousGoal)}>{previousGoal}</p>
               </>
             )}
+            {q.scope === "team" && form.team && <p className={styles.eyebrow}>Your team · {form.team.name}</p>}
             <QuestionHeading number={s.number} label={q.label} required={q.required} description={q.description} />
             {field}
             {form.pendingAnswerKeys.includes(q.id) && <p className={styles.note}>{PENDING_NOTE}</p>}
             {errorLine}
-            {action(isLast ? "Submit" : "OK", hint, isLast)}
+            {action(isLast ? submitLabel : "OK", hint, isLast)}
           </>
         );
       }
+      case "teammate":
+        return (
+          <>
+            <Group gap="md" wrap="nowrap">
+              <Avatar src={s.teammate.photoUrl} name={s.teammate.label} color="initials" size={64} radius="xl" />
+              <h2 className={styles.question}>{s.teammate.label}</h2>
+            </Group>
+            <p className={styles.description}>{PRIVATE_NOTE}</p>
+            <Stack gap={28} mt={28}>
+              {stepAnswers(s).map(({ question: q, key }) => (
+                <div key={q.id}>
+                  <QuestionHeading label={q.label} required={q.required} description={q.description} small />
+                  {renderField(q, key, isLast, false).field}
+                  {form.pendingAnswerKeys.includes(key) && <p className={styles.note}>{PENDING_NOTE}</p>}
+                </div>
+              ))}
+            </Stack>
+            {errorLine}
+            {action(isLast ? submitLabel : "OK", "press Enter", isLast)}
+          </>
+        );
       case "done":
         return (
           <>
@@ -295,9 +362,15 @@ export function TypeForm({ form }: { form: PublicForm }) {
     }
   }
 
-  /** De quoi repondre a une question, et le raccourci clavier a rappeler. */
-  function renderField(q: PublicFormQuestion, number: number): { field: ReactNode; hint: string | null } {
-    const value = drafts[q.id];
+  /**
+   * De quoi repondre a une question, et le raccourci clavier a rappeler. `key` : la cle de la reponse
+   * (`question@coequipier` sur un volet de coequipier) ; `single` faux : plusieurs questions sur le volet,
+   * un choix n'avance pas et les raccourcis (1 a 5, A, B...) sont coupes (ils viseraient la premiere).
+   */
+  function renderField(q: PublicFormQuestion, key: string, isLast: boolean, single = true): { field: ReactNode; hint: string | null } {
+    const value = drafts[key];
+    // Seule question du volet : elle avance au clic, porte les raccourcis et prend le focus.
+    const pick = (v: Draft) => (single ? pickOne(key, v) : setDraft(key, v));
     const text = typeof value === "string" ? value : "";
     switch (q.type) {
       case "text":
@@ -316,9 +389,10 @@ export function TypeForm({ form }: { form: PublicForm }) {
                 inputMode={q.type === "number" ? "decimal" : q.type === "text" ? undefined : "url"}
                 maxLength={q.type === "text" ? FORM_ANSWER_MAX.text : q.type === "number" ? undefined : FORM_ANSWER_MAX.link}
                 autoComplete="off"
-                enterKeyHint={number === form.questions.length ? "done" : "next"}
+                enterKeyHint={isLast ? "done" : "next"}
+                data-autofocus={single || undefined}
                 value={text}
-                onChange={(e) => setDraft(q.id, e.currentTarget.value)}
+                onChange={(e) => setDraft(key, e.currentTarget.value)}
                 onKeyDown={(e) => onFieldKey(e, false)}
                 error={Boolean(error)}
               />
@@ -340,8 +414,9 @@ export function TypeForm({ form }: { form: PublicForm }) {
               maxRows={10}
               maxLength={FORM_ANSWER_MAX.long_text}
               value={text}
-              onChange={(e) => setDraft(q.id, e.currentTarget.value)}
+              onChange={(e) => setDraft(key, e.currentTarget.value)}
               onKeyDown={(e) => onFieldKey(e, true)}
+              data-autofocus={single || undefined}
               error={Boolean(error)}
             />
           ),
@@ -360,8 +435,8 @@ export function TypeForm({ form }: { form: PublicForm }) {
                   role="radio"
                   aria-checked={value === n}
                   className={cx(styles.option, styles.scaleItem, value === n && styles.selected, "num")}
-                  data-shortcut={ratingShortcut(n, scale)}
-                  onClick={() => pickOne(q.id, n)}
+                  data-shortcut={single ? ratingShortcut(n, scale) : undefined}
+                  onClick={() => pick(n)}
                 >
                   {n}
                 </button>
@@ -382,7 +457,8 @@ export function TypeForm({ form }: { form: PublicForm }) {
                 choices={q.options ?? []}
                 selected={Array.isArray(value) ? value : text ? [text] : []}
                 multiple={isMulti}
-                onPick={(v) => (isMulti ? toggle(q.id, v, null) : pickOne(q.id, v))}
+                onPick={(v) => (isMulti ? toggle(key, v, null) : pick(v))}
+                shortcuts={single}
                 searchLabel={q.label}
               />
             </>
@@ -404,7 +480,8 @@ export function TypeForm({ form }: { form: PublicForm }) {
                 selected={Array.isArray(value) ? value : []}
                 multiple={max > 1}
                 ranked={isFounder && max > 1}
-                onPick={(v) => (max > 1 ? toggle(q.id, v, max) : pickOne(q.id, [v]))}
+                onPick={(v) => (max > 1 ? toggle(key, v, max) : pick([v]))}
+                shortcuts={single}
                 searchLabel={q.label}
               />
             </>
@@ -440,7 +517,7 @@ export function TypeForm({ form }: { form: PublicForm }) {
       <main ref={viewportRef} className={styles.viewport}>
         {steps.map((s, position) => (
           <section
-            key={s.kind === "question" ? s.question.id : s.kind}
+            key={stepKey(s)}
             className={cx(styles.slide, position === index && styles.current, position === leaving?.index && position !== index && styles.leaving)}
             data-current={position === index || undefined}
             inert={position !== index || undefined}
@@ -459,11 +536,40 @@ export function TypeForm({ form }: { form: PublicForm }) {
           Back
         </Button>
       </footer>
+
+      <ResponsiveDialog opened={isConfirmingLate} onClose={() => setConfirmingLate(false)} title="Save after the deadline?">
+        <Stack>
+          <Text size="sm">
+            The deadline passed{form.deadlineDateISOString ? ` (${formatDateTime(form.deadlineDateISOString)})` : ""}. If you save these changes, your
+            team&apos;s submission is marked late and scores 0 points, unless the Pioneers team makes an exception.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" size="md" onClick={() => setConfirmingLate(false)}>
+              Keep it as it is
+            </Button>
+            <Button color="red" size="md" loading={isSending} onClick={() => void submit(drafts, respondent, true)}>
+              Save anyway
+            </Button>
+          </Group>
+        </Stack>
+      </ResponsiveDialog>
     </div>
   );
 }
 
-function IntroNotes({ form, needsAccount }: { form: PublicForm; needsAccount: boolean }) {
+function IntroNotes({
+  form,
+  needsAccount,
+  isTeamForm,
+  noTeam,
+  nothingToAnswer,
+}: {
+  form: PublicForm;
+  needsAccount: boolean;
+  isTeamForm: boolean;
+  noTeam: boolean;
+  nothingToAnswer: boolean;
+}) {
   if (form.state === "closed" && !form.preview) {
     return (
       <>
@@ -474,6 +580,8 @@ function IntroNotes({ form, needsAccount }: { form: PublicForm; needsAccount: bo
   }
   if (form.state === "not_open_yet" && !form.preview) return <p className={styles.note}>This form is not open yet. Come back later.</p>;
   if (form.absent) return <p className={styles.note}>{absentFromEventMessage(form.event?.name ?? null)}</p>;
+  if (noTeam) return <p className={styles.note}>{NO_TEAM}</p>;
+  if (nothingToAnswer) return <p className={styles.note}>No teammate to rate.</p>;
   if (needsAccount) {
     return (
       <>
@@ -488,6 +596,7 @@ function IntroNotes({ form, needsAccount }: { form: PublicForm; needsAccount: bo
   }
   const lines = [
     form.deadlineDateISOString ? `Due ${formatDateTime(form.deadlineDateISOString)}` : null,
+    isTeamForm && form.team ? `Your team · ${form.team.name}: one teammate can fill this in for the whole team, the last save counts` : null,
     form.identityCheck === "anonymous" ? ANONYMOUS_NOTE : null,
     ...formNotes(form),
   ].filter(Boolean);
@@ -522,15 +631,19 @@ function QuestionHeading({
   label,
   required,
   description,
+  small = false,
 }: {
   number?: number;
   label: string;
   required: boolean;
   description: string | null;
+  /** Une question parmi d'autres sur le volet (coequipier). */
+  small?: boolean;
 }) {
+  const Heading = small ? "h3" : "h2";
   return (
     <>
-      <h2 className={styles.question}>
+      <Heading className={cx(styles.question, small && styles.subQuestion)}>
         {number !== undefined && <span className={cx(styles.number, "num")}>{number}</span>}
         {label}
         {required && (
@@ -538,7 +651,7 @@ function QuestionHeading({
             *
           </span>
         )}
-      </h2>
+      </Heading>
       {description && <p className={styles.description}>{description}</p>}
     </>
   );
@@ -556,10 +669,13 @@ function ChoiceList({
   ranked = false,
   onPick,
   searchLabel,
+  shortcuts = true,
 }: {
   choices: PublicChoice[];
   selected: string[];
   multiple?: boolean;
+  /** Les lettres A, B, C : coupees quand le volet a plusieurs questions. */
+  shortcuts?: boolean;
   /** Choix classes (picks) : le rang de chaque choix s'affiche, dans l'ordre du clic. */
   ranked?: boolean;
   onPick: (value: string) => void;
@@ -593,7 +709,7 @@ function ChoiceList({
       <div className={cx(styles.choices, isSearchable && styles.scrollList)} role={multiple ? "group" : "radiogroup"} aria-label={searchLabel}>
         {visible.map((c, i) => {
           const isSelected = selected.includes(c.value);
-          const letter = !isSearchable ? LETTERS[i] : undefined;
+          const letter = !isSearchable && shortcuts ? LETTERS[i] : undefined;
           const rank = ranked && isSelected ? selected.indexOf(c.value) + 1 : null;
           return (
             <button
