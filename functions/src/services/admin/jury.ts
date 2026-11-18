@@ -4,6 +4,7 @@ import { z } from "zod";
 import { juryAnswersPlan, juryFormOf, juryGridOf } from "../../shared/admin/jury";
 import { COL, docPaths, eventCollectionPaths } from "../../shared/collections";
 import { juryTargetOf } from "../../shared/events";
+import { briefMetricRanks } from "../../shared/juryBrief";
 import { EVALUATION_DECISIONS, type Evaluation, type Form, type Person, type PioneersEvent, type Submission, type User } from "../../shared/types";
 import type { Caller } from "../../api/caller";
 import { sha256 } from "../../api/crypto";
@@ -64,9 +65,10 @@ export async function jurySheet(caller: Caller, eventId: string) {
   if (!staffOnly(caller)) throw forbidden("not_visible", "The jury sheet is for staff only.");
   const [ctx, fullName] = await Promise.all([getFirestore().runTransaction((tx) => juryContext(tx, eventId), { readOnly: true }), staffFullName(caller.uid)]);
   const target = juryTargetOf(ctx.event);
-  const brief = ctx.targets.length
-    ? await loadJuryBrief(eventId, ctx.targets.map((t) => t.id), target)
-    : { source: "submission" as const, metrics: [], submissions: {} };
+  const targetIds = ctx.targets.map((t) => t.id);
+  const brief = await loadJuryBrief(eventId, targetIds, target);
+  // La place de chaque cible sur chaque chiffre declare (shared/juryBrief.ts), comme le lit un jure.
+  const ranks = brief.metrics.map((m) => [m.key, briefMetricRanks(brief, targetIds, m.key)] as const);
   // Le staff est le jure de son nom complet, comme par le lien (`jury-{empreinte}`).
   const judgeId = namedJudgeId(fullName);
   const received = new Map<string, number>();
@@ -93,6 +95,10 @@ export async function jurySheet(caller: Caller, eventId: string) {
         name: t.name,
         members: t.memberNames ?? undefined,
         brief: brief.submissions[t.id] ?? null,
+        // Ses reponses, un bloc par formulaire, questions sans reponse comprises (`text: null`).
+        answers: brief.blocks?.[t.id] ?? [],
+        // Sa place sur chaque chiffre declare : 1 = la meilleure, parmi `of` cibles qui l'ont declare (`tied` : ex aequo).
+        ranks: Object.fromEntries(ranks.flatMap(([key, byTarget]) => (byTarget.has(t.id) ? [[key, byTarget.get(t.id)]] : []))),
         scoresReceived: received.get(t.id) ?? 0,
         yourScore: m ? { scores: m.scores, comment: m.comment } : null,
       };

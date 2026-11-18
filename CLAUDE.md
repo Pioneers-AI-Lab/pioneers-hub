@@ -218,6 +218,12 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   `jury-{empreinte du nom normalise}` ; un fondateur ne voit pas sa propre equipe. Verrou = formulaire ferme ;
   `deleteJuryScore` supprime une note (entiere dans l'audit). Staff : Admin > Events > evenement
   (Forms, Jury). Feuille papier : ouvrir le lien connecte, taper le nom.
+  Ce que lit le jure (18/11, `loadJuryBrief` -> `JuryBrief`, `components/forms/JuryBrief.tsx`) : la cible et ses membres, puis
+  `blocks` = un bloc par formulaire de l'evenement qui ecrit dans les documents de la cible (equipe : Submission ; startup :
+  Submission, fiche), TOUTES les questions, sans reponse = `text: null` (« Not answered »), Drive a part ; puis les chiffres
+  de toutes les cibles classes (`shared/juryBrief.ts#briefMetricRanks`, ex aequo 1, 2, 2, 4) ; sous chaque critere
+  `evaluation.scores.<k>` dont `k` est une metrique declaree (`criterionMetrics`), la valeur, la place et la meilleure.
+  `submissions[id].answers` (liste plate) reste pour les clients d'avant.
 - **Series des indicateurs** : declencheurs Firestore `onCheckinWritten` (`checkins/{id}`) et `onStartupUpdated`
   (`startups/{id}`, equipe changee), en **europe-west9** (region de la base, exigee pour un declencheur Firestore).
   Tout ecrivain d'un update du jeudi est couvert. Regle pure `shared/kpis.ts#planStartupKpis` : par indicateur

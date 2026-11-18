@@ -174,3 +174,42 @@ export function submissionQuestions(forms: readonly EventForm[], docKinds: reado
   }
   return [...out.values()];
 }
+
+// ---- Ce que lit un jure (18/11, services/jury.ts#loadJuryBrief) ------------------------------
+
+/** Le dossier Drive d'une equipe : mis en avant par le jury, hors des blocs de reponses. */
+export const DRIVE_FIELD = "submission.driveFolderUrl";
+
+/** Les documents qu'un formulaire de l'evenement remplit pour une cible du jury : la Submission ; une startup a aussi sa fiche (Pitch deck). */
+export const JURY_TARGET_DOCS: Record<"team" | "startup", readonly DocKind[]> = { team: ["submission"], startup: ["submission", "startup", "startupProfile"] };
+
+type BriefForm = EventForm & Pick<Form, "title" | "opensDateISOString">;
+
+/**
+ * Les blocs que lit le jure : un par formulaire vivant de l'evenement qui remplit les documents de la
+ * cible, dans l'ordre d'ouverture (H5 : Plan, Snapshot, Final numbers), avec TOUTES ses questions de
+ * ces documents (chiffres compris), sans le dossier Drive.
+ */
+export function juryBlockForms(forms: readonly BriefForm[], target: "team" | "startup"): { title: string; questions: FieldQuestion[] }[] {
+  const kinds = JURY_TARGET_DOCS[target];
+  return forms
+    .filter((f) => f.archivedDateISOString === null)
+    .sort((a, b) => (a.opensDateISOString ?? "").localeCompare(b.opensDateISOString ?? ""))
+    .flatMap((f) => {
+      const questions = activeQuestions(f).filter((q): q is FieldQuestion => !!q.dbField && q.dbField !== DRIVE_FIELD && kinds.includes(parseDbField(q.dbField).doc));
+      return questions.length ? [{ title: f.title, questions }] : [];
+    });
+}
+
+/** Chaque critere du jury qui note un chiffre declare (`evaluation.scores.<cle>`, `cle` dans `metricKeys`) : id de la question -> cle. */
+export function juryCriterionMetrics(forms: readonly EventForm[], metricKeys: ReadonlySet<string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const q of liveQuestions(forms)) {
+    const key = criterionKeyOf(q.dbField);
+    if (key && metricKeys.has(key) && isJuryCriterion(q)) out[q.id] = key;
+  }
+  return out;
+}
+
+/** Un formulaire vivant de l'evenement demande le dossier Drive. */
+export const asksDriveFolder = (forms: readonly EventForm[]): boolean => liveQuestions(forms).some((q) => q.dbField === DRIVE_FIELD);

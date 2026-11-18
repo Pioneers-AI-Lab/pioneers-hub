@@ -827,6 +827,15 @@ console.log("jury (form, shared link)");
     if (jane?.metrics.map((m) => m.key).join() !== "conversationsDone" || jane.submissions["team-c"]?.metrics.conversationsDone !== 3) throw new Error(JSON.stringify(jane));
     if (!d?.late || d.driveFolderUrl !== "https://drive.example/d" || d.metrics.conversationsDone !== 7) throw new Error(JSON.stringify(d));
     if (!d.answers.some((a) => a.text === "Demo notes") || !d.answers.some((a) => a.urls.join() === "https://proof.example/d")) throw new Error(JSON.stringify(d.answers));
+    // 18/11 : un bloc par formulaire, TOUTES ses questions (chiffres compris), sans reponse = `text: null` ;
+    // une equipe qui n'a rien envoye a aussi ses blocs, vides ; jamais le dossier Drive (mis a part).
+    const blocks = jane.blocks?.["team-d"] ?? [];
+    const all = blocks.flatMap((b) => b.answers);
+    if (!blocks.length || !blocks.every((b) => b.title) || !all.some((a) => a.text === "Demo notes") || !all.some((a) => a.text === "7")) throw new Error(JSON.stringify(blocks));
+    if (all.some((a) => a.urls.includes("https://drive.example/d"))) throw new Error("the Drive folder is in the blocks");
+    const { isBlankAnswer } = createRequire(import.meta.url)("../functions/lib/shared/juryBrief.js");
+    const cBlank = (jane.blocks?.["team-c"] ?? []).flatMap((b) => b.answers).filter(isBlankAnswer);
+    if (cBlank.length === 0) throw new Error("no unanswered question for team-c: " + JSON.stringify(jane.blocks?.["team-c"]));
     const ada = (await sheet({ judgeId: "founder-ada-example" })).juryBrief;
     if (!ada?.submissions["team-d"] || "team-c" in ada.submissions) throw new Error("her own team's submission was sent");
   });

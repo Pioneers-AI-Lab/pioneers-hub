@@ -1,10 +1,11 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { COL, docPaths, eventCollectionPaths } from "../shared/collections";
-import { JUDGE_LIMITS, type JuryAnswer, type JuryBrief, type JurySubmission, type PublicChoice, type RespondentInput } from "../shared/callables";
+import { JUDGE_LIMITS, type JuryAnswer, type JuryBlock, type JuryBrief, type JurySubmission, type PublicChoice, type RespondentInput } from "../shared/callables";
 import { publicShortName } from "../shared/access";
-import { enumOptions, getFieldDef, isEmptyValue, parseDbField } from "../shared/fieldRegistry";
-import { eventMetrics, submissionQuestions, type FieldQuestion } from "../shared/forms";
+import { enumOptions, getFieldDef, isEmptyValue, parseDbField, resolveDocPath, type DocKind } from "../shared/fieldRegistry";
+import { asksDriveFolder, eventMetrics, juryBlockForms, juryCriterionMetrics, type FieldQuestion } from "../shared/forms";
+import { isBlankAnswer } from "../shared/juryBrief";
 import { nameKey, normalizeHttpUrl } from "../shared/text";
 import { hasSubmitted, isLateUnwaived } from "../shared/types";
 import type { Evaluation, Form, Founder, JuryLink, PioneersEvent, Submission } from "../shared/types";
@@ -122,27 +123,28 @@ export function resolveJudge(identity: RespondentInput | null | undefined, jury:
 export const targetsFor = (targets: ScoredTarget[], founderId: string | null) =>
   founderId === null ? targets : targets.filter((t) => !t.memberIds.includes(founderId));
 
-// ---- Ce que le jure lit avant de noter (SPECS §2.0) -----------------------------
+// ---- Ce que le jure lit avant de noter (SPECS §2.0 ; blocs et places le 18/11) ----------------
 // La Submission est une information libre, lue par le jury ; c'est la grille
-// (0 a 5 par critere) qui fait la note. Le jure lit donc, pour chaque equipe
-// qu'il note, ce qu'elle a rendu, et les chiffres declares de toutes ces equipes
-// (« 5 = la meilleure equipe »). Seulement les cibles de CE jure : un fondateur
-// qui note ne recoit pas la Submission de sa propre equipe.
-
-/** Le dossier Drive est rendu a part (lien mis en avant) ; les chiffres, compares entre equipes. */
-const DRIVE_FIELD = "submission.driveFolderUrl";
+// (0 a 5 par critere) qui fait la note. Le jure lit donc, pour chaque cible
+// qu'il note, ses reponses a chaque formulaire de l'evenement (questions sans
+// reponse comprises), et les chiffres declares de toutes ces cibles (« 5 = la
+// meilleure equipe »). Seulement les cibles de CE jure : un fondateur qui note ne
+// recoit pas la Submission de sa propre equipe. Quels formulaires, quelles
+// questions, quel critere note quel chiffre : logique pure de shared/forms.ts.
 
 /**
- * Comment lire une question de la Submission : les liens a part, une valeur fixe
- * par son libelle (les champs de la Submission n'ont pas de liste fermee) ; `read`
- * rend `null` sans reponse.
+ * Comment lire une question : les liens a part, une valeur fixe par son libelle (les champs de la
+ * Submission n'ont pas de liste fermee) ; `read` rend `null` sans reponse, `blank` est alors la reponse.
  */
-function answerReader(q: FieldQuestion): { field: string; read: (value: unknown) => JuryAnswer | null } {
+function answerReader(q: FieldQuestion): { doc: DocKind; field: string; blank: JuryAnswer; read: (value: unknown) => JuryAnswer | null } {
   const spec = getFieldDef(q.dbField).value;
   const isLink = spec.kind === "url" || spec.kind === "files";
   const options = isLink ? null : enumOptions(spec, new Map());
+  const { doc, field } = parseDbField(q.dbField);
   return {
-    field: parseDbField(q.dbField).field,
+    doc,
+    field,
+    blank: { label: q.label, text: null, urls: [] },
     read: (value) => {
       const values = (Array.isArray(value) ? value : [value]).filter((v) => !isEmptyValue(v));
       if (values.length === 0) return null;
@@ -153,51 +155,60 @@ function answerReader(q: FieldQuestion): { field: string; read: (value: unknown)
   };
 }
 
-/**
- * Un pitch (lot 5) : le Pitch deck de chaque startup notee, lu dans sa fiche (`startup.*`,
- * `startupProfile.*`), a la place d'une Submission. Expose a qui a le lien du jury, comme une Submission.
- */
-async function loadPitchDecks(questions: FieldQuestion[], targetIds: string[]): Promise<Record<string, JurySubmission>> {
-  const readers = questions.map((q) => ({ doc: parseDbField(q.dbField).doc, ...answerReader(q) }));
-  const snaps = await db().getAll(...targetIds.flatMap((id) => [db().doc(docPaths.startup(id)), db().doc(docPaths.startupProfile(id))]));
-  const out: Record<string, JurySubmission> = {};
-  targetIds.forEach((id, i) => {
-    const [startup, profile] = [snaps[2 * i], snaps[2 * i + 1]];
-    const answers = readers.flatMap((r) => r.read((r.doc === "startup" ? startup : profile).get(r.field)) ?? []);
-    if (answers.length) out[id] = { driveFolderUrl: null, late: false, answers, metrics: {} };
-  });
-  return out;
-}
+/** Le brief d'un jury sans cible (rien a noter encore). */
+export const EMPTY_JURY_BRIEF: JuryBrief = { source: "submission", metrics: [], submissions: {}, blocks: {}, criterionMetrics: {}, asksDriveFolder: false };
 
 /**
- * Ce que le jure lit sur ses cibles (`targetIds`, au moins une) : les Submissions des equipes et les
- * metriques qu'elles declarent ; des startups notees (un pitch) avec un Pitch deck, leurs Pitch decks.
+ * Ce que le jure lit sur ses cibles (`targetIds`) : un bloc par formulaire de l'evenement qui remplit
+ * leurs documents (Submission d'une equipe ; Pitch deck d'une startup, dans sa fiche), les chiffres
+ * declares et leur place, et quel critere note quel chiffre. Chaque document lu UNE fois.
+ * `submissions[id]` (dossier Drive, retard, chiffres, et `answers`, liste plate des reponses donnees
+ * pour les clients d'avant le 18/11) n'existe qu'une fois la cible ayant rendu quelque chose.
  */
 export async function loadJuryBrief(eventId: string, targetIds: string[], target: "team" | "startup"): Promise<JuryBrief> {
-  const formsSnap = await db().collection(COL.forms).where("eventId", "==", eventId).select("questions", "archivedDateISOString").get();
-  const forms = formsSnap.docs.map((d) => d.data() as Pick<Form, "questions" | "archivedDateISOString">);
-  const deckQuestions = target === "startup" ? submissionQuestions(forms, ["startup", "startupProfile"]) : [];
-  if (deckQuestions.length > 0) return { source: "pitch_deck", metrics: [], submissions: await loadPitchDecks(deckQuestions, targetIds) };
-  const submissionSnaps = await db().getAll(...targetIds.map((id) => db().doc(docPaths.submission(eventId, id))));
+  if (targetIds.length === 0) return EMPTY_JURY_BRIEF;
+  const formsSnap = await db().collection(COL.forms).where("eventId", "==", eventId).select("title", "questions", "archivedDateISOString", "opensDateISOString").get();
+  const forms = formsSnap.docs.map((d) => d.data() as Pick<Form, "title" | "questions" | "archivedDateISOString" | "opensDateISOString">);
+  const plan = juryBlockForms(forms, target).map((f) => ({ title: f.title, readers: f.questions.map(answerReader) }));
+  // Un pitch : la startup a rempli sa fiche (Pitch deck), pas (seulement) une Submission.
+  const source = plan.some((f) => f.readers.some((r) => r.doc !== "submission")) ? "pitch_deck" : "submission";
+  const kinds = [...new Set<DocKind>(["submission", ...plan.flatMap((f) => f.readers.map((r) => r.doc))])];
+  const snaps = await db().getAll(
+    ...targetIds.flatMap((id) =>
+      kinds.map((k) => {
+        const at = resolveDocPath(k, { eventId, teamId: id, startupId: id });
+        if (!at.ok) throw new Error(`jury brief: no path for ${k}`);
+        return db().doc(at.path);
+      }),
+    ),
+  );
   const metrics = eventMetrics(forms);
-  // Le champ et le format de chaque question, une fois pour toutes les equipes.
-  const readers = submissionQuestions(forms)
-    .filter((q) => q.dbField !== DRIVE_FIELD)
-    .map(answerReader);
+  const blocks: Record<string, JuryBlock[]> = {};
   const submissions: Record<string, JurySubmission> = {};
-  for (const snap of submissionSnaps) {
-    const s = snap.data() as Submission | undefined;
-    if (!hasSubmitted(s) || !s) continue;
-    const declared = metrics.flatMap((m) => (typeof s.metrics?.[m.key] === "number" ? [[m.key, s.metrics[m.key]] as const] : []));
-    const answers = readers.flatMap((r) => r.read(snap.get(r.field)) ?? []);
-    const driveFolderUrl = s.driveFolderUrl ? normalizeHttpUrl(s.driveFolderUrl) : null;
-    submissions[snap.id] = {
-      driveFolderUrl,
-      late: isLateUnwaived(s),
+  let next = 0;
+  for (const id of targetIds) {
+    const snapOf = new Map(kinds.map((k) => [k, snaps[next++]]));
+    const own = plan.map((f) => ({ title: f.title, answers: f.readers.map((r) => r.read(snapOf.get(r.doc)?.get(r.field)) ?? r.blank) }));
+    blocks[id] = own;
+    const s = snapOf.get("submission")?.data() as Submission | undefined;
+    const sent = hasSubmitted(s) && s !== undefined;
+    const answers = own.flatMap((b) => b.answers.filter((a) => !isBlankAnswer(a)));
+    if (!sent && !(source === "pitch_deck" && answers.length > 0)) continue;
+    submissions[id] = {
+      driveFolderUrl: sent && s.driveFolderUrl ? normalizeHttpUrl(s.driveFolderUrl) : null,
+      late: sent && isLateUnwaived(s),
       answers,
-      metrics: Object.fromEntries(declared),
+      metrics: sent ? Object.fromEntries(metrics.flatMap((m) => (typeof s.metrics?.[m.key] === "number" ? [[m.key, s.metrics[m.key]] as const] : []))) : {},
     };
   }
   // Une metrique que personne n'a declaree ne compare rien.
-  return { source: "submission", metrics: metrics.filter((m) => Object.values(submissions).some((s) => m.key in s.metrics)), submissions };
+  const compared = metrics.filter((m) => Object.values(submissions).some((s) => m.key in s.metrics));
+  return {
+    source,
+    metrics: compared,
+    submissions,
+    blocks,
+    criterionMetrics: juryCriterionMetrics(forms, new Set(compared.map((m) => m.key))),
+    asksDriveFolder: asksDriveFolder(forms),
+  };
 }

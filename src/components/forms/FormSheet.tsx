@@ -16,7 +16,7 @@ import { paths } from "@/lib/paths";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ButtonRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section, SubsectionTitle } from "@/components/ui/Section";
-import { JuryBrief } from "@/components/forms/JuryBrief";
+import { JuryBrief, MetricRankNote } from "@/components/forms/JuryBrief";
 import {
   PENDING_NOTE,
   draftsFromPrefill,
@@ -204,14 +204,11 @@ function Sheet() {
       {form.questions.map((q) => {
         const key = answerKey(q.id, targetId);
         return (
-          <SheetField
-            key={q.id}
-            q={q}
-            disabled={!canFill}
-            pending={form.pendingAnswerKeys.includes(key)}
-            value={drafts[key]}
-            onChange={(v) => set(key, v)}
-          />
+          <Stack key={q.id} gap="xs">
+            <SheetField q={q} disabled={!canFill} pending={form.pendingAnswerKeys.includes(key)} value={drafts[key]} onChange={(v) => set(key, v)} />
+            {/* Un critere chiffre : la valeur de la cible, sa place, la meilleure (« 5 = la meilleure equipe »). */}
+            {form.juryBrief && <MetricRankNote brief={form.juryBrief} targets={targets} targetId={targetId} questionId={q.id} />}
+          </Stack>
         );
       })}
     </Stack>

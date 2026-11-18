@@ -70,6 +70,12 @@ export type JurySubmission = {
 };
 
 /**
+ * Les reponses d'une cible a UN formulaire de l'evenement (18/11) : toutes ses questions, dans
+ * l'ordre, chiffres compris ; une question sans reponse a `text: null` et aucun lien.
+ */
+export type JuryBlock = { title: string; answers: JuryAnswer[] };
+
+/**
  * Ce que le jure lit avant de noter : la Submission de chaque cible qu'il note
  * (jamais celle de sa propre equipe), et les metriques a comparer entre elles
  * (« 5 = la meilleure equipe »).
@@ -81,6 +87,16 @@ export type JuryBrief = {
   metrics: EventMetric[];
   /** Par id de cible ; absente : pas encore de Submission. */
   submissions: Record<string, JurySubmission>;
+  /**
+   * Par id de cible (18/11) : un bloc par formulaire de l'evenement qui la concerne (Submission d'une
+   * equipe, ses formulaires du H5, Pitch deck d'une startup), questions sans reponse comprises, sans le
+   * dossier Drive (`driveFolderUrl`). Absent d'un serveur d'avant : `submissions[id].answers`.
+   */
+  blocks?: Record<string, JuryBlock[]>;
+  /** La question du jury (id) -> le chiffre declare qu'elle note (cle de `metrics`) : sa place s'affiche dessous. */
+  criterionMetrics?: Record<string, string>;
+  /** Un formulaire de l'evenement demande le dossier Drive : sans lui, « No Drive folder shared ». */
+  asksDriveFolder?: boolean;
 };
 
 /**
