@@ -161,8 +161,8 @@ check("un pitch : Pitch deck et jury, et le bareme de la grille sur l'evenement"
   assert.deepEqual(pitchEvent("pitch_day").scoring, PITCH_SCORING);
   // Un hackathon : sa grille par defaut (17/11), des criteres de 0 a 5 dont les points font 100.
   const hackathon = pitchEvent("hackathon");
-  assert.deepEqual(hackathon.scoring.items.map((i) => [i.sourceKey, i.mode, i.maxPoints]), [["result", "criterion", 70], ["workQuality", "criterion", 30]]);
-  assert.deepEqual(EVENT_TEMPLATES.hackathon.criteria.map((c) => [c.key, c.min, c.max, c.weight]), [["result", 0, 5, 70], ["workQuality", 0, 5, 30]]);
+  assert.deepEqual(hackathon.scoring.items.map((i) => [i.sourceKey, i.mode, i.maxPoints]), [["result", "criterion", 90], ["outputQuality", "criterion", 10]]);
+  assert.deepEqual(EVENT_TEMPLATES.hackathon.criteria.map((c) => [c.key, c.min, c.max, c.weight]), [["result", 0, 5, 90], ["outputQuality", 0, 5, 10]]);
   assert.deepEqual(planOf("pitch_day").map((p) => p.id).sort(), ["pitch-1-jury", "pitch-1-pitch_deck"]);
 });
 

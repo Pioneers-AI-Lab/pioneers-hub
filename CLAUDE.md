@@ -183,7 +183,7 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   et champ `picks.pickedFounderIds` : proposes seulement au formulaire / a la question qui les a deja, LA regle
   `formRules.ts#retiredFormProblems(form, stored)` (editeur, `saveForm`, `create_form` et `duplicatedForm` avec
   `stored = null` ; `create_form` / `update_form` n'acceptent plus `anonymous` ni `select_name`). Grille par defaut du
-  pack `hackathon` : Result 70 + Quality of the work 30 (a ajuster) ; `customer_day` / `traction_sprint` sans tirage ni formulaire. Anciens formulaires anonymes et Picks toujours lus. Les picks deja
+  pack `hackathon` : Result 90 + Quality of output 10 (a ajuster ; grilles FA26 : SPECS §4.2) ; `customer_day` / `traction_sprint` sans tirage ni formulaire. Anciens formulaires anonymes et Picks toujours lus. Les picks deja
   donnes : section « Picks (archived) » de la page d'admin de l'evenement (`AdminContext.eventIdsWithPicks`, aucun
   ecouteur sans eux) et reseau de `founderStats` ; plus de section Picks dans le To do. Bareme : seulement des
   criteres du jury avec leurs points ; un element `per_unit` / `proportional` (`isLegacyScoringItem`) se garde tel

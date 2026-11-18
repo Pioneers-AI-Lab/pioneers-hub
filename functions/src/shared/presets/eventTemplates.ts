@@ -83,11 +83,11 @@ const pitch = { kind: "pitch", criteria: PITCH_RUBRIC, scoring: PITCH_SCORING } 
  * des criteres de 0 a 5 dont les points font 100, l'Outstanding mention seulement a 100 (bareme).
  * Un DEFAUT MINIMAL que le staff ajuste a chaque hackathon (Admin > Events > Leaderboard : criteres,
  * points, departages ; « Copy scoring from… ») : le critere principal est le chiffre que publie le
- * calendrier (5 = la meilleure equipe), puis la qualite du travail.
+ * calendrier (5 = la meilleure equipe), puis la qualite des livrables (Quality of output).
  */
 const HACKATHON_GRID = [
-  { key: "result", label: "Result (5 = the best team)", points: 70 },
-  { key: "workQuality", label: "Quality of the work", points: 30 },
+  { key: "result", label: "Result (5 = the best team)", points: 90 },
+  { key: "outputQuality", label: "Quality of output", points: 10 },
 ] as const;
 const HACKATHON_CRITERIA: Criterion[] = HACKATHON_GRID.map((g) => c(g.key, g.label, 5, g.points, 0));
 const HACKATHON_SCORING = scoringFrom(HACKATHON_GRID.map((g) => ({ label: g.label, mode: "criterion" as const, sourceKey: g.key, maxPoints: g.points })))!;

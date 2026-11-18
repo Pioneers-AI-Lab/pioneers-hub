@@ -169,11 +169,11 @@ const HACKATHON_FORMS = ["debrief", "jury", "peer_rating"];
 const H5_FORM_KEYS = [...Object.keys(H5_FORMS), "jury", "peer_rating"].sort();
 /** Les grilles du jury (§2.2 a §2.6) : [cle, points] ; `null` = departage (0 point), dans l'ordre des departages. */
 const GRIDS = {
-  1: [["potentialCustomers", 35], ["evidence", 25], ["painSentence", 20], ["agentUse", 20]],
-  2: [["meetingsBooked", 40], ["conversationsDone", 40], ["scriptAndLearnings", 20]],
-  3: [["leadsCollected", 100], ["leadQuality", null]],
-  4: [["amountPaid", 100], ["loisSigned", null], ["closedWon", null]],
-  5: [["amountPaid", 20], ["closedWon", 10], ["loisSigned", 12], ["activeUsers", 8], ["productLive", 10], ["sellableAgent", 15], ["plan", 10], ["pace", 10], ["teamwork", 5]],
+  1: [["potentialCustomers", 35], ["evidence", 30], ["painSentence", 15], ["agentUse", 10], ["outputQuality", 10]],
+  2: [["meetingsBooked", 35], ["conversationsDone", 35], ["scriptAndLearnings", 20], ["outputQuality", 10]],
+  3: [["leadsCollected", 90], ["outputQuality", 10], ["leadQuality", null]],
+  4: [["amountPaid", 90], ["outputQuality", 10], ["loisSigned", null], ["closedWon", null]],
+  5: [["amountPaid", 20], ["closedWon", 10], ["loisSigned", 10], ["activeUsers", 5], ["productLive", 10], ["sellableAgent", 15], ["plan", 5], ["pace", 10], ["teamwork", 5], ["outputQuality", 10]],
 };
 /** Une note par critere d'une grille (le premier element est la cle : GRIDS comme PITCH_GRID). */
 const notes = (grid, value) => Object.fromEntries(grid.map(([k]) => [k, value]));
@@ -449,7 +449,7 @@ function codeChecks() {
   const h1 = fileEvent(HACKATHON_KEYS[1]);
   const team = (id, juryMeans, extra = {}) => ({ id, metrics: {}, juryMeans, late: false, zeroedItemKeys: [], outstanding: false, ...extra });
   const scoreH1 = (...teams) => m.rules.scoreTeams(h1.scoring, h1.criteria, teams);
-  behaves("grid: 4/5 on a 25-point criterion gives 20 (§2.0)", () => [20, scoreH1(team("a", { evidence: 4 }))[0].points.evidence]);
+  behaves("grid: 4/5 on a 30-point criterion gives 24 (§2.0)", () => [24, scoreH1(team("a", { evidence: 4 }))[0].points.evidence]);
   behaves("grid: absolute note, not brought back to the best team", () => [50, scoreH1(team("a", notes(GRIDS[1], 2.5)))[0].normalized]);
   behaves("Outstanding: +20 at 100 only -> 120", () => {
     const [top, below] = scoreH1(team("a", notes(GRIDS[1], 5), { outstanding: true }), team("b", { ...notes(GRIDS[1], 5), evidence: 4.9 }, { outstanding: true }));
@@ -460,7 +460,7 @@ function codeChecks() {
   behaves("late Submission scores 0", () => [0, scoreH1(team("a", notes(GRIDS[1], 5), { late: true }))[0].total]);
   behaves("tie-break criterion gives 0 point but breaks ties (H4)", () => {
     const e = fileEvent(HACKATHON_KEYS[4]);
-    const [a, b] = m.rules.scoreTeams(e.scoring, e.criteria, [team("a", { amountPaid: 5, loisSigned: 5, closedWon: 0 }), team("b", { amountPaid: 5, loisSigned: 3, closedWon: 5 })]);
+    const [a, b] = m.rules.scoreTeams(e.scoring, e.criteria, [team("a", { ...notes(GRIDS[4], 5), closedWon: 0 }), team("b", { ...notes(GRIDS[4], 5), loisSigned: 3 })]);
     return [[100, 100, true], [a.total, b.total, m.rules.compareTeamPoints(e.scoring, a, b) < 0]];
   });
 

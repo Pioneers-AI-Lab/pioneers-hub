@@ -560,21 +560,28 @@
           "label": "Evidence",
           "min": 0,
           "max": 5,
-          "weight": 25
+          "weight": 30
         },
         {
           "key": "painSentence",
           "label": "Pain sentence",
           "min": 0,
           "max": 5,
-          "weight": 20
+          "weight": 15
         },
         {
           "key": "agentUse",
           "label": "Best tech/agent use",
           "min": 0,
           "max": 5,
-          "weight": 20
+          "weight": 10
+        },
+        {
+          "key": "outputQuality",
+          "label": "Quality of output",
+          "min": 0,
+          "max": 5,
+          "weight": 10
         }
       ],
       "submissionFields": [
@@ -595,21 +602,28 @@
             "label": "Evidence",
             "mode": "criterion",
             "sourceKey": "evidence",
-            "maxPoints": 25
+            "maxPoints": 30
           },
           {
             "key": "painSentence",
             "label": "Pain sentence",
             "mode": "criterion",
             "sourceKey": "painSentence",
-            "maxPoints": 20
+            "maxPoints": 15
           },
           {
             "key": "agentUse",
             "label": "Best tech/agent use",
             "mode": "criterion",
             "sourceKey": "agentUse",
-            "maxPoints": 20
+            "maxPoints": 10
+          },
+          {
+            "key": "outputQuality",
+            "label": "Quality of output",
+            "mode": "criterion",
+            "sourceKey": "outputQuality",
+            "maxPoints": 10
           }
         ],
         "tieBreaks": []
@@ -834,14 +848,14 @@
           "label": "Meetings booked (5 = the best team)",
           "min": 0,
           "max": 5,
-          "weight": 40
+          "weight": 35
         },
         {
           "key": "conversationsDone",
           "label": "Conversations of 60 s or more (5 = the best team)",
           "min": 0,
           "max": 5,
-          "weight": 40
+          "weight": 35
         },
         {
           "key": "scriptAndLearnings",
@@ -849,6 +863,13 @@
           "min": 0,
           "max": 5,
           "weight": 20
+        },
+        {
+          "key": "outputQuality",
+          "label": "Quality of output",
+          "min": 0,
+          "max": 5,
+          "weight": 10
         }
       ],
       "submissionFields": [
@@ -863,14 +884,14 @@
             "label": "Meetings booked",
             "mode": "criterion",
             "sourceKey": "meetingsBooked",
-            "maxPoints": 40
+            "maxPoints": 35
           },
           {
             "key": "conversationsDone",
             "label": "Conversations of 60 s or more",
             "mode": "criterion",
             "sourceKey": "conversationsDone",
-            "maxPoints": 40
+            "maxPoints": 35
           },
           {
             "key": "scriptAndLearnings",
@@ -878,6 +899,13 @@
             "mode": "criterion",
             "sourceKey": "scriptAndLearnings",
             "maxPoints": 20
+          },
+          {
+            "key": "outputQuality",
+            "label": "Quality of output",
+            "mode": "criterion",
+            "sourceKey": "outputQuality",
+            "maxPoints": 10
           }
         ],
         "tieBreaks": []
@@ -1027,7 +1055,14 @@
           "label": "Valid leads (5 = the best team)",
           "min": 0,
           "max": 5,
-          "weight": 100
+          "weight": 90
+        },
+        {
+          "key": "outputQuality",
+          "label": "Quality of output",
+          "min": 0,
+          "max": 5,
+          "weight": 10
         },
         {
           "key": "leadQuality",
@@ -1048,7 +1083,14 @@
             "label": "Valid leads",
             "mode": "criterion",
             "sourceKey": "leadsCollected",
-            "maxPoints": 100
+            "maxPoints": 90
+          },
+          {
+            "key": "outputQuality",
+            "label": "Quality of output",
+            "mode": "criterion",
+            "sourceKey": "outputQuality",
+            "maxPoints": 10
           },
           {
             "key": "leadQuality",
@@ -1450,7 +1492,14 @@
           "label": "Money received (5 = the best team)",
           "min": 0,
           "max": 5,
-          "weight": 100
+          "weight": 90
+        },
+        {
+          "key": "outputQuality",
+          "label": "Quality of output",
+          "min": 0,
+          "max": 5,
+          "weight": 10
         },
         {
           "key": "loisSigned",
@@ -1477,7 +1526,14 @@
             "label": "Money received",
             "mode": "criterion",
             "sourceKey": "amountPaid",
-            "maxPoints": 100
+            "maxPoints": 90
+          },
+          {
+            "key": "outputQuality",
+            "label": "Quality of output",
+            "mode": "criterion",
+            "sourceKey": "outputQuality",
+            "maxPoints": 10
           },
           {
             "key": "loisSigned",
@@ -1874,14 +1930,14 @@
           "label": "Signed commitments",
           "min": 0,
           "max": 5,
-          "weight": 12
+          "weight": 10
         },
         {
           "key": "activeUsers",
           "label": "Active users",
           "min": 0,
           "max": 5,
-          "weight": 8
+          "weight": 5
         },
         {
           "key": "productLive",
@@ -1902,7 +1958,7 @@
           "label": "Plan",
           "min": 0,
           "max": 5,
-          "weight": 10
+          "weight": 5
         },
         {
           "key": "pace",
@@ -1917,6 +1973,13 @@
           "min": 0,
           "max": 5,
           "weight": 5
+        },
+        {
+          "key": "outputQuality",
+          "label": "Quality of output",
+          "min": 0,
+          "max": 5,
+          "weight": 10
         }
       ],
       "scoring": {
@@ -1940,14 +2003,14 @@
             "label": "Signed commitments",
             "mode": "criterion",
             "sourceKey": "loisSigned",
-            "maxPoints": 12
+            "maxPoints": 10
           },
           {
             "key": "activeUsers",
             "label": "Active users",
             "mode": "criterion",
             "sourceKey": "activeUsers",
-            "maxPoints": 8
+            "maxPoints": 5
           },
           {
             "key": "productLive",
@@ -1968,7 +2031,7 @@
             "label": "Plan",
             "mode": "criterion",
             "sourceKey": "plan",
-            "maxPoints": 10
+            "maxPoints": 5
           },
           {
             "key": "pace",
@@ -1983,6 +2046,13 @@
             "mode": "criterion",
             "sourceKey": "teamwork",
             "maxPoints": 5
+          },
+          {
+            "key": "outputQuality",
+            "label": "Quality of output",
+            "mode": "criterion",
+            "sourceKey": "outputQuality",
+            "maxPoints": 10
           }
         ],
         "tieBreaks": []

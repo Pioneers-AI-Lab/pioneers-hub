@@ -13,7 +13,8 @@ const crit = (key, points) => ({ key, label: key, min: 0, max: 5, weight: points
 const item = (key, points, tieBreakOnly = false) => ({ label: key, mode: "criterion", sourceKey: key, ...(points ? { maxPoints: points } : {}), ...(tieBreakOnly ? { tieBreakOnly } : {}) });
 const team = (id, juryMeans, extra = {}) => ({ id, metrics: {}, juryMeans, late: false, zeroedItemKeys: [], outstanding: false, ...extra });
 
-// H1 : 35 / 25 / 20 / 20.
+// Une grille d'exemple de 100 points (l'ancien H1 du 17/11), fixe : elle teste les regles, pas le planning
+// (la conformite des grilles FA26 a la doc : scripts/check-doc-conformity.mjs).
 const h1Criteria = [crit("potentialCustomers", 35), crit("evidence", 25), crit("painSentence", 20), crit("agentUse", 20)];
 const h1 = scoringFrom([item("potentialCustomers", 35), item("evidence", 25), item("painSentence", 20), item("agentUse", 20)]);
 const all5 = { potentialCustomers: 5, evidence: 5, painSentence: 5, agentUse: 5 };
