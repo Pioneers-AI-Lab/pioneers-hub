@@ -612,6 +612,7 @@ const call = async (key, name, args) => {
   const critKeys = sheet?.grid?.criteria?.map((c) => c.key) ?? [];
   check(!t.isError && critKeys.includes("execution") && sheet.targets?.length === 2 && sheet.targets.every((x) => x.name) && sheet.juryForm?.locked === false && sheet.juror, "jury_sheet: the grid, every team, the juror's name", t.data);
   check(!/peerRating|pickedFounderIds/.test(JSON.stringify(sheet)), "jury_sheet carries no peer rating nor pick");
+  check(sheet.targets.every((x) => typeof x.formsFilled?.done === "boolean" && Array.isArray(x.formsFilled.missing) && x.formsFilled.missing.every((m) => typeof m === "string")), "jury_sheet: each team's forms filled (counts, no names)", sheet.targets?.map((x) => x.formsFilled));
   const fullScores = (n) => Object.fromEntries(sheet.grid.criteria.map((c) => [c.key, Math.min(c.max, Math.max(c.min, n))]));
   t = await call(key, "pioneers_run", { action: "score_jury", args: { eventId: "demo-hackathon-2", evaluations: [{ targetId: "team-c", scores: { ...fullScores(4), nope: 3 } }] } });
   check(t.isError && /unknown_criterion/.test(t.data), "score_jury refuses an unknown criterion", t.data);

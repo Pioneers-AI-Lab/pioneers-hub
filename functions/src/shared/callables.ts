@@ -97,7 +97,12 @@ export type JuryBrief = {
   criterionMetrics?: Record<string, string>;
   /** Un formulaire de l'evenement demande le dossier Drive : sans lui, « No Drive folder shared ». */
   asksDriveFolder?: boolean;
+  /** Par equipe notee (18/11, `formsFilledOf`) ; absent pour une startup. */
+  formsFilled?: Record<string, JuryFormsFilled>;
 };
+
+/** Ce qu'une equipe notee a rempli : `done` quand rien ne manque ; `missing` : « Submission », « Peer rating (2/4) » (des comptes, jamais de noms). */
+export type JuryFormsFilled = { done: boolean; missing: string[] };
 
 /**
  * Un formulaire vu SANS COMPTE (page /forms/[formId]). Le serveur rend les noms

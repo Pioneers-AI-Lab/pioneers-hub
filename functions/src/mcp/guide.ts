@@ -205,7 +205,7 @@ Each document has its audience (see \`model\`). Do not copy a value from a restr
 4. After publication: no new draw, only \`edit_teams\` with the full list of groups (published group ids stay, a group with results cannot be emptied).
 
 ## Score a jury with Claude (hackathon, pitch)
-1. \`pioneers_get\` \`jury_sheet\` with the event's id: the grid (criteria, scale, points), every team or startup with its Submission, links and form answers, and your earlier scores. If \`juryForm.locked\`, stop: the scores are locked (reopening is the user's call).
+1. \`pioneers_get\` \`jury_sheet\` with the event's id: the grid (criteria, scale, points), every team or startup with its Submission, links and form answers, whether the team filled all its forms (\`formsFilled\`: team forms and each present member's peer rating, counts only), and your earlier scores. If \`juryForm.locked\`, stop: the scores are locked (reopening is the user's call).
 2. Pitch, Selection Day, Pre-IC, IC: the jury judges a LIVE session. Ask the user for their notes from the session (what was said, shown, answered) for each startup before scoring; never score a pitch from the deck alone.
 3. Read EVERY target before scoring any: open each Drive folder and proof link (with the Google Drive tools), compare the numbers across teams, check that a figure is backed by evidence. A criterion such as "5 = the best team" is relative.
 4. Score each criterion with a whole number on its scale, and write one or two sentences per criterion (\`rationale\`): what you checked, what is missing. If evidence is missing, say so and score what is proven.

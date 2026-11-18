@@ -1,4 +1,8 @@
-import type { JuryAnswer, JuryBrief } from "./callables";
+import type { JuryAnswer, JuryBrief, JuryFormsFilled } from "./callables";
+import { docIds } from "./collections";
+import { formAudience, isTeamForm, type AudienceInput } from "./formRules";
+import { formState } from "./forms";
+import { activeQuestions, scopeOf, type Form } from "./types";
 
 // ----------------------------
 // Ce que lit un jure : la place d'une cible sur un chiffre declare (18/11)
@@ -44,3 +48,38 @@ export const ordinal = (n: number): string => {
 
 /** « 2nd of 8 », « 1st of 8 (tied) ». */
 export const rankLabel = (r: MetricRank): string => `${ordinal(r.rank)} of ${r.of}${r.tied ? " (tied)" : ""}`;
+
+// ---- Les formulaires de l'equipe notee sont-ils remplis ? (18/11) ---------------------------
+// Chaque formulaire d'equipe (une reponse coche tous ses membres) et chaque Peer rating (une reponse
+// par membre attendu), deja ouverts. Qui est attendu : `formAudience`, comme le To do et le taux de reponse.
+
+export type FormsFilledForm = Pick<Form, "title" | "status" | "archivedDateISOString" | "opensDateISOString" | "questions" | "identityCheck"> & { id: string };
+
+/** Un formulaire verifie : ce qu'il demande (`team` : une reponse ; `each_member` : une par attendu) et ses attendus. */
+export type CheckedForm = { id: string; title: string; due: "team" | "each_member"; expected: ReadonlySet<string> };
+
+/** Les formulaires vivants, deja ouverts, d'equipe ou d'avis entre coequipiers, avec leurs attendus. */
+export function checkedForms(forms: readonly FormsFilledForm[], audience: Omit<AudienceInput, "form">, now: string): CheckedForm[] {
+  return forms.flatMap((f) => {
+    const state = formState(f, now);
+    if (f.archivedDateISOString !== null || (state !== "open" && state !== "closed")) return [];
+    const questions = activeQuestions(f);
+    const due = isTeamForm(questions) ? "team" : questions.some((q) => scopeOf(q) === "each_teammate") ? "each_member" : null;
+    const who = due ? formAudience({ ...audience, form: f }) : null;
+    return due && who?.kind === "founders" ? [{ id: f.id, title: f.title, due, expected: new Set(who.founderIds) }] : [];
+  });
+}
+
+/** Ce qu'une equipe a rempli (`JuryFormsFilled`) ; `completed` : les ids `formCompletions` de ces formulaires. */
+export function formsFilledOf(forms: readonly CheckedForm[], memberIds: readonly string[], completed: ReadonlySet<string>): JuryFormsFilled {
+  const missing = forms.flatMap((f): string[] => {
+    const hasDone = (id: string) => completed.has(docIds.formCompletion(f.id, id));
+    const owed = memberIds.filter((id) => f.expected.has(id));
+    // Une reponse d'equipe coche tous ses membres, meme un membre ajoute apres.
+    if (f.due === "team") return owed.length === 0 || memberIds.some(hasDone) ? [] : [f.title];
+    // Seul attendu de son equipe, un membre n'a personne a noter.
+    const done = owed.filter(hasDone).length;
+    return owed.length < 2 || done === owed.length ? [] : [`${f.title} (${done}/${owed.length})`];
+  });
+  return { done: missing.length === 0, missing };
+}

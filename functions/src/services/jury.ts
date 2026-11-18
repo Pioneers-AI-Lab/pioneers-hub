@@ -5,10 +5,12 @@ import { JUDGE_LIMITS, type JuryAnswer, type JuryBlock, type JuryBrief, type Jur
 import { publicShortName } from "../shared/access";
 import { enumOptions, getFieldDef, isEmptyValue, parseDbField, resolveDocPath, type DocKind } from "../shared/fieldRegistry";
 import { asksDriveFolder, eventMetrics, juryBlockForms, juryCriterionMetrics, type FieldQuestion } from "../shared/forms";
-import { isBlankAnswer } from "../shared/juryBrief";
+import { checkedForms, formsFilledOf, isBlankAnswer, type FormsFilledForm } from "../shared/juryBrief";
+import { juryTargetOf } from "../shared/events";
+import type { AudienceInput } from "../shared/formRules";
 import { nameKey, normalizeHttpUrl } from "../shared/text";
 import { hasSubmitted } from "../shared/types";
-import type { Evaluation, Form, Founder, JuryLink, PioneersEvent, Submission } from "../shared/types";
+import type { Attendance, Evaluation, Founder, JuryLink, PioneersEvent, Submission } from "../shared/types";
 import { sha256 } from "../api/crypto";
 import { staffNames as loadStaffNames } from "./accounts";
 import { cleanText } from "./clean";
@@ -164,24 +166,55 @@ export const EMPTY_JURY_BRIEF: JuryBrief = { source: "submission", metrics: [], 
  * declares et leur place, et quel critere note quel chiffre. Chaque document lu UNE fois.
  * `submissions[id]` (dossier Drive, retard, chiffres, et `answers`, liste plate des reponses donnees
  * pour les clients d'avant le 18/11) n'existe qu'une fois la cible ayant rendu quelque chose.
+ * Une equipe : `formsFilled[id]` (shared/juryBrief.ts).
  */
-export async function loadJuryBrief(eventId: string, targetIds: string[], target: "team" | "startup"): Promise<JuryBrief> {
-  if (targetIds.length === 0) return EMPTY_JURY_BRIEF;
-  const formsSnap = await db().collection(COL.forms).where("eventId", "==", eventId).select("title", "questions", "archivedDateISOString", "opensDateISOString").get();
-  const forms = formsSnap.docs.map((d) => d.data() as Pick<Form, "title" | "questions" | "archivedDateISOString" | "opensDateISOString">);
+export async function loadJuryBrief(eventId: string, event: PioneersEvent, targets: readonly Pick<ScoredTarget, "id" | "memberIds">[]): Promise<JuryBrief> {
+  if (targets.length === 0) return EMPTY_JURY_BRIEF;
+  const target = juryTargetOf(event);
+  const targetIds = targets.map((t) => t.id);
+  const formsSnap = await db()
+    .collection(COL.forms)
+    .where("eventId", "==", eventId)
+    .select("title", "questions", "archivedDateISOString", "opensDateISOString", "status", "identityCheck")
+    .get();
+  const forms: FormsFilledForm[] = formsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<FormsFilledForm, "id">) }));
   const plan = juryBlockForms(forms, target).map((f) => ({ title: f.title, readers: f.questions.map(answerReader) }));
   // Un pitch : la startup a rempli sa fiche (Pitch deck), pas (seulement) une Submission.
   const source = plan.some((f) => f.readers.some((r) => r.doc !== "submission")) ? "pitch_deck" : "submission";
   const kinds = [...new Set<DocKind>(["submission", ...plan.flatMap((f) => f.readers.map((r) => r.doc))])];
-  const snaps = await db().getAll(
-    ...targetIds.flatMap((id) =>
-      kinds.map((k) => {
-        const at = resolveDocPath(k, { eventId, teamId: id, startupId: id });
-        if (!at.ok) throw new Error(`jury brief: no path for ${k}`);
-        return db().doc(at.path);
-      }),
+  // Une equipe : qui doit quoi (`formAudience` : fiches des membres, presence), puis les « J'ai repondu ».
+  const memberIds = target === "team" ? [...new Set(targets.flatMap((t) => t.memberIds))] : [];
+  const [snaps, founderSnaps, attendanceSnap] = await Promise.all([
+    db().getAll(
+      ...targetIds.flatMap((id) =>
+        kinds.map((k) => {
+          const at = resolveDocPath(k, { eventId, teamId: id, startupId: id });
+          if (!at.ok) throw new Error(`jury brief: no path for ${k}`);
+          return db().doc(at.path);
+        }),
+      ),
+    ),
+    memberIds.length
+      ? db().getAll(...memberIds.map((id) => db().doc(docPaths.founder(id))), { fieldMask: ["batchId", "status", "archivedDateISOString", "isExternalFounder", "startupId"] })
+      : [],
+    memberIds.length ? db().collection(eventCollectionPaths.attendance(eventId)).select("founderId", "status").get() : null,
+  ]);
+  const audience: Omit<AudienceInput, "form"> = {
+    batchId: event.batchId,
+    event,
+    founders: founderSnaps.flatMap((d) => (d.exists ? [{ id: d.id, ...(d.data() as Omit<AudienceInput["founders"][number], "id">) }] : [])),
+    attendance: attendanceSnap?.docs.map((d) => d.data() as Pick<Attendance, "founderId" | "status">) ?? [],
+    teamMemberIds: memberIds,
+  };
+  const checked = memberIds.length ? checkedForms(forms, audience, new Date().toISOString()) : [];
+  // `in` : 30 formulaires par requete.
+  const completionSnaps = await Promise.all(
+    Array.from({ length: Math.ceil(checked.length / 30) }, (_, i) =>
+      db().collection(COL.formCompletions).where("formId", "in", checked.slice(i * 30, i * 30 + 30).map((f) => f.id)).select().get(),
     ),
   );
+  const completed = new Set(completionSnaps.flatMap((q) => q.docs.map((d) => d.id)));
+  const formsFilled = checked.length ? Object.fromEntries(targets.map((t) => [t.id, formsFilledOf(checked, t.memberIds, completed)])) : undefined;
   const metrics = eventMetrics(forms);
   const blocks: Record<string, JuryBlock[]> = {};
   const submissions: Record<string, JurySubmission> = {};
@@ -210,5 +243,6 @@ export async function loadJuryBrief(eventId: string, targetIds: string[], target
     blocks,
     criterionMetrics: juryCriterionMetrics(forms, new Set(compared.map((m) => m.key))),
     asksDriveFolder: asksDriveFolder(forms),
+    formsFilled,
   };
 }

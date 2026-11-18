@@ -57,3 +57,56 @@ check("critere -> chiffre : meme cle, une question de note du jury seulement", (
   ]);
   assert.deepEqual(juryCriterionMetrics([jury], new Set(["potentialCustomers", "evidencePosts"])), { criterion_potentialCustomers: "potentialCustomers" });
 });
+
+// ---- Formulaires remplis par l'equipe notee (18/11) : checkedForms + formsFilledOf -----------
+{
+  const { checkedForms, formsFilledOf } = require("../../functions/lib/shared/juryBrief.js");
+  const NOW = "2026-11-18T12:00:00.000Z";
+  const FIELD = { team: "submission.notes", each_teammate: "peerRating.comment", self: "founderDirectory.edge", each_target: "evaluation.comment" };
+  const form = (id, title, scope, extra = {}) => ({
+    id, title, status: "open", archivedDateISOString: null, opensDateISOString: "2026-11-18T08:30:00.000Z", identityCheck: "account",
+    questions: [{ id: `${id}-q`, type: "text", label: "Q", scope, dbField: FIELD[scope] }], ...extra,
+  });
+  const founder = (id, extra = {}) => ({ id, batchId: "b", status: "active", archivedDateISOString: null, isExternalFounder: false, startupId: null, ...extra });
+  const members = ["a", "b", "c"];
+  const audience = (extra = {}) => ({
+    batchId: "b", event: { kind: "team_challenge", templateKey: "hackathon", matching: { mode: "challenge", size: 3 }, teamSize: 3, audience: "batch", guestFounderIds: [], startupIds: [] },
+    founders: members.map((id) => founder(id)), attendance: [], teamMemberIds: members, ...extra,
+  });
+  const submission = form("sub", "Submission", "team");
+  const peer = form("peer", "Peer rating", "each_teammate");
+  const retro = form("retro", "Week retro", "self");
+  const filled = (forms, aud, ...done) => formsFilledOf(checkedForms(forms, aud, NOW), members, new Set(done));
+
+  check("formulaires remplis : la Submission par un membre coche l'equipe, chaque attendu rend son Peer rating", () => {
+    assert.deepEqual(filled([submission, peer, retro], audience(), "sub_a", "sub_b", "sub_c", "peer_a", "peer_b", "peer_c"), { done: true, missing: [] });
+    // Un membre ajoute apres l'envoi n'a pas la coche : la Submission reste rendue.
+    assert.deepEqual(filled([submission], audience(), "sub_a"), { done: true, missing: [] });
+  });
+
+  check("formulaires remplis : ce qui manque, en comptes (Submission, Peer rating 1/3)", () => {
+    assert.deepEqual(filled([submission, peer], audience(), "peer_b"), { done: false, missing: ["Submission", "Peer rating (1/3)"] });
+  });
+
+  check("formulaires remplis : ni absent ni fondateur parti ; seul attendu, personne a noter", () => {
+    const absentC = audience({ attendance: [{ founderId: "c", status: "absent" }] });
+    assert.deepEqual(filled([peer], absentC, "peer_a", "peer_b"), { done: true, missing: [] });
+    const leftC = audience({ founders: [founder("a"), founder("b"), founder("c", { status: "left" })] });
+    assert.deepEqual(filled([peer], leftC, "peer_a"), { done: false, missing: ["Peer rating (1/2)"] });
+    const alone = audience({ attendance: [{ founderId: "b", status: "absent" }, { founderId: "c", status: "absent" }] });
+    assert.deepEqual(filled([peer], alone), { done: true, missing: [] });
+  });
+
+  check("formulaires remplis : ni brouillon, ni archive, ni pas encore ouvert, ni individuel, ni jury", () => {
+    const forms = [
+      form("draft", "Draft", "team", { status: "draft" }),
+      form("old", "Old debrief", "team", { archivedDateISOString: "2026-11-17T14:57:47.458Z" }),
+      form("later", "Peer later", "each_teammate", { opensDateISOString: "2026-11-30T08:00:00.000Z" }),
+      form("jury", "Jury", "each_target", { identityCheck: "jury_link" }),
+      retro,
+    ];
+    assert.deepEqual(checkedForms(forms, audience(), NOW), []);
+    const closed = form("closed", "Final numbers", "team", { status: "closed" });
+    assert.deepEqual(checkedForms([...forms, submission, peer, closed], audience(), NOW).map((f) => [f.id, f.due]), [["sub", "team"], ["peer", "each_member"], ["closed", "team"]]);
+  });
+}

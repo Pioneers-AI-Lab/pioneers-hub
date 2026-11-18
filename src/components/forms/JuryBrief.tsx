@@ -11,7 +11,7 @@ import { Empty, SubsectionTitle } from "@/components/ui/Section";
 // ----------------------------
 // Ce que le jure lit avant de noter une cible (SPECS §2.0 ; refonte du 18/11)
 // ----------------------------
-// Dans l'ordre : 1. QUI il note (l'equipe ou la startup, ses membres) ; 2. ses reponses, un bloc
+// Dans l'ordre : 1. QUI il note (l'equipe ou la startup, ses membres, `brief.formsFilled`) ; 2. ses reponses, un bloc
 // par formulaire de l'evenement (Submission, H5 Plan / Snapshot / Final numbers, Pitch deck),
 // questions sans reponse comprises (« Not answered »), et le dossier Drive ; 3. les chiffres
 // declares de toutes les cibles, avec leur place (« 5 = la meilleure equipe »). Sa grille suit
@@ -50,6 +50,7 @@ export function JuryBrief({ brief, targets, targetId }: { brief: Brief; targets:
   const blocks: JuryBlock[] =
     brief.blocks?.[targetId] ?? (submission ? [{ title: isDeck ? "Pitch deck" : "Submission", answers: submission.answers }] : []);
   const sentNothing = !submission && blocks.every((b) => b.answers.every(isBlankAnswer));
+  const filled = brief.formsFilled?.[targetId];
 
   return (
     <Stack gap="md" py="xs">
@@ -62,6 +63,11 @@ export function JuryBrief({ brief, targets, targetId }: { brief: Brief; targets:
         {target?.hint && (
           <Text size="sm" c="dimmed">
             {target.hint}
+          </Text>
+        )}
+        {filled && (
+          <Text size="sm" c={filled.done ? "dimmed" : "orange"}>
+            {filled.done ? "All forms filled." : `Not all forms filled: ${filled.missing.join(" · ")}`}
           </Text>
         )}
       </Stack>

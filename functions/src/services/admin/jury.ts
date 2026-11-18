@@ -66,7 +66,7 @@ export async function jurySheet(caller: Caller, eventId: string) {
   const [ctx, fullName] = await Promise.all([getFirestore().runTransaction((tx) => juryContext(tx, eventId), { readOnly: true }), staffFullName(caller.uid)]);
   const target = juryTargetOf(ctx.event);
   const targetIds = ctx.targets.map((t) => t.id);
-  const brief = await loadJuryBrief(eventId, targetIds, target);
+  const brief = await loadJuryBrief(eventId, ctx.event, ctx.targets);
   // La place de chaque cible sur chaque chiffre declare (shared/juryBrief.ts), comme le lit un jure.
   const ranks = brief.metrics.map((m) => [m.key, briefMetricRanks(brief, targetIds, m.key)] as const);
   // Le staff est le jure de son nom complet, comme par le lien (`jury-{empreinte}`).
@@ -95,6 +95,8 @@ export async function jurySheet(caller: Caller, eventId: string) {
         name: t.name,
         members: t.memberNames ?? undefined,
         brief: brief.submissions[t.id] ?? null,
+        // Ses formulaires d'equipe et Peer ratings remplis (`JuryFormsFilled`).
+        formsFilled: brief.formsFilled?.[t.id] ?? null,
         // Ses reponses, un bloc par formulaire, questions sans reponse comprises (`text: null`).
         answers: brief.blocks?.[t.id] ?? [],
         // Sa place sur chaque chiffre declare : 1 = la meilleure, parmi `of` cibles qui l'ont declare (`tied` : ex aequo).

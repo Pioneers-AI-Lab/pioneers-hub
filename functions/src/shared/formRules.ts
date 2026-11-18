@@ -398,7 +398,7 @@ export type FormAudience =
   | { kind: "jury" }
   | { kind: "founders"; basis: AudienceBasis; founderIds: string[] };
 
-type AudienceInput = {
+export type AudienceInput = {
   /** Son identite et ses questions : `formNeedsTeam` (membres des equipes publiees), `formNeedsStartup` (fondateurs d'une startup). */
   form: Pick<Form, "identityCheck" | "questions">;
   batchId: string;
