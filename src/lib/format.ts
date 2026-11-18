@@ -105,16 +105,6 @@ export const formatScore = (v: number | null | undefined, scale: ScoreScale) =>
 /** Le remplissage d'une barre de score, de 0 a 100 % : au-dessus de l'echelle (Outstanding), pleine. */
 export const scoreFill = (v: number | null | undefined, scale: ScoreScale) => Math.min(100, ((v ?? 0) / scale) * 100);
 
-/**
- * D'ou vient un sous-score, en une ligne : « Hackathons (3): 74 · Peer ratings (4): 63 ». Un signal a
- * 0 % (suivi : Background d'une startup) est dit « not counted ».
- * Seulement sur 100 (les signaux importes de Spring 2026 n'ont pas ces libelles) ; `undefined` sans signal.
- */
-export const scoreSourceLine = (signals: readonly { label: string; score: number; weight: number }[] | undefined, scale: ScoreScale) =>
-  scale === 100 && signals?.length
-    ? signals.map((s) => `${s.label}: ${formatScore(s.score, scale)}${s.weight === 0 ? " (not counted)" : ""}`).join(" · ")
-    : undefined;
-
 /** Les notes d'une grille du staff, de 0 a `max`, pour un SegmentedControl (`"0"` ... `"5"`). */
 export const noteOptions = (max: number) => Array.from({ length: max + 1 }, (_, i) => String(i));
 

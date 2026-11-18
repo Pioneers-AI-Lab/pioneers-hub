@@ -3,8 +3,9 @@
 import { useState, type ReactNode } from "react";
 import { Box, Button, Group, SegmentedControl, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { batchAudiencesOf } from "@shared/access";
 import { isSlackChannelId, isSlackTeamId, normalizeSlackId } from "@shared/slackLinks";
-import type { Batch, BatchStatus, LeaderboardVisibility, WithId } from "@shared/types";
+import type { Batch, BatchAudience, BatchStatus, LeaderboardVisibility, WithId } from "@shared/types";
 import { calendarIdOf } from "@shared/calendarSync";
 import type { CalendarSyncResult } from "@shared/types";
 import { joinList } from "@/lib/format";
@@ -20,7 +21,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 
 // Admin > Batch settings : statut, jalons (compte a rebours de l'accueil),
-// visibilite du leaderboard (masque pendant les mutual picks, SPECS §12 q.1),
+// visibilite du leaderboard (masque pendant les mutual picks, SPECS §12 q.1), qui voit
+// l'onglet Startups et les scores (18/11, shared/access.ts#canSeeStartupsTab / canSeeScores),
 // Slack, l'agenda Google (SPECS §2, 16/11 : ses evenements deviennent ceux du
 // batch). Et la creation d'un programme ou d'un batch.
 export default function BatchSettingsPage() {
@@ -43,10 +45,24 @@ export default function BatchSettingsPage() {
   );
 }
 
+const AUDIENCE_OPTIONS: { value: BatchAudience; label: string }[] = [
+  { value: "none", label: "No one" },
+  { value: "staff", label: "Staff" },
+  { value: "founders", label: "Founders" },
+];
+
+/** Qui voit une partie du batch (types/batch.ts#BatchAudience). */
+function AudienceControl({ value, onChange }: { value: BatchAudience; onChange: (v: BatchAudience) => void }) {
+  return <SegmentedControl fullWidth value={value} onChange={(v) => onChange(v as BatchAudience)} data={AUDIENCE_OPTIONS} />;
+}
+
 /** `children` : ce qui s'affiche sous les reglages, avant la barre d'enregistrement. */
 function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: ReactNode }) {
   const [status, setStatus] = useState<BatchStatus>(batch.status);
   const [visibility, setVisibility] = useState<LeaderboardVisibility>(batch.settings.leaderboardVisibility);
+  const audiences = batchAudiencesOf(batch.settings);
+  const [startupsVisibility, setStartupsVisibility] = useState<BatchAudience>(audiences.startups);
+  const [scoresVisibility, setScoresVisibility] = useState<BatchAudience>(audiences.scores);
   const [endDay, setEndDay] = useState(batch.endDayString ?? "");
   const [milestones, setMilestones] = useState(batch.milestones);
   const [slackTeamId, setSlackTeamId] = useState(batch.settings.slackTeamId ?? "");
@@ -62,6 +78,8 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
   const dirty =
     status !== batch.status ||
     visibility !== batch.settings.leaderboardVisibility ||
+    startupsVisibility !== audiences.startups ||
+    scoresVisibility !== audiences.scores ||
     (endDay || null) !== batch.endDayString ||
     JSON.stringify(milestones) !== JSON.stringify(batch.milestones) ||
     teamId !== (batch.settings.slackTeamId ?? null) ||
@@ -75,7 +93,7 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
         status,
         endDayString: endDay || null,
         milestones,
-        settings: { ...batch.settings, leaderboardVisibility: visibility, slackTeamId: teamId, slackChannelId: channelId, googleCalendarId: calendarId },
+        settings: { ...batch.settings, leaderboardVisibility: visibility, startupsVisibility, scoresVisibility, slackTeamId: teamId, slackChannelId: channelId, googleCalendarId: calendarId },
       });
       notifications.show({ message: "Settings saved" });
     } catch (err) {
@@ -110,6 +128,17 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
             { value: "hidden", label: "Hidden" },
           ]}
         />
+      </Section>
+
+      <Section title="Startups tab" help="The Startups tab and the Startups tile of the batch home. Staff includes investors.">
+        <AudienceControl value={startupsVisibility} onChange={setStartupsVisibility} />
+      </Section>
+
+      <Section
+        title="Performance scores"
+        help="Program Performance, startup scores and what explains them, on the cards, the lists and the batch home. Staff includes investors."
+      >
+        <AudienceControl value={scoresVisibility} onChange={setScoresVisibility} />
       </Section>
 
       <Section

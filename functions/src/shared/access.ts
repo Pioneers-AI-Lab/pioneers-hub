@@ -1,4 +1,4 @@
-import type { Founder, FounderDirectory, FounderProfile, InvestorAccess, PioneersEvent, Person, Startup, User, UserRole } from "./types";
+import type { BatchAudience, BatchSettings, Founder, FounderDirectory, FounderProfile, InvestorAccess, PioneersEvent, Person, Startup, User, UserRole } from "./types";
 
 // ----------------------------
 // Qui voit quoi : la regle, en logique pure (SPECS §6.2)
@@ -69,9 +69,10 @@ export function roleInBatch(viewer: Viewer | null, viewerFounderId: string | nul
  *                              teamLocks (Lock my team, SPECS §6.2)
  *   membres ou investors    membres de la startup, staff, investors
  *                           -> startups/private/profile, kpiSeries, checkins, metricSnapshots
- *   staff ou investors      -> scores
+ *   tous                    -> scores, scoreSignals (open data, 18/11) ; l'ecran suit
+ *                              `settings.scoresVisibility` (canSeeScores)
  *   insider                 staff, investors IC
- *                           -> private/internal, founderStats, scoreSignals, notes,
+ *                           -> private/internal, founderStats, notes,
  *                              evaluations, presences, assessments validees, eloMatches,
  *                              mentors, investors, equipes non publiees
  *   staff                   -> avis entre pairs individuels, picks des autres, shortlistHistory,
@@ -88,6 +89,27 @@ export const isInsiderViewer = (viewer: Viewer | null): boolean => isInsider(rol
 export const isInvestor = (role: BatchRole): boolean => role === "investor_ic" || role === "investor_portfolio";
 
 export const isStaffOrInvestor = (role: BatchRole): boolean => role === "staff" || isInvestor(role);
+
+/**
+ * Les reglages « qui voit » du batch (types/batch.ts#BatchAudience), avec leur valeur par defaut :
+ * l'onglet Startups masque a tous (les startups naissent le 25/11), les scores au staff et aux investors.
+ */
+export const batchAudiencesOf = (settings: Pick<BatchSettings, "startupsVisibility" | "scoresVisibility">) => ({
+  startups: settings.startupsVisibility ?? "none",
+  scores: settings.scoresVisibility ?? "staff",
+});
+
+/** `founders` = tout compte du batch (l'audience « batch »), pas un visiteur public. */
+const canSeeAudience = (role: BatchRole, audience: BatchAudience): boolean =>
+  audience === "founders" ? canReadFounderDirectory(role) : audience === "staff" && isStaffOrInvestor(role);
+
+/** L'onglet Startups et sa tuile (`settings.startupsVisibility`). */
+export const canSeeStartupsTab = (role: BatchRole, settings: Pick<BatchSettings, "startupsVisibility">): boolean =>
+  canSeeAudience(role, batchAudiencesOf(settings).startups);
+
+/** Les scores et leurs signaux (`settings.scoresVisibility`). */
+export const canSeeScores = (role: BatchRole, settings: Pick<BatchSettings, "scoresVisibility">): boolean =>
+  canSeeAudience(role, batchAudiencesOf(settings).scores);
 
 /**
  * Un evenement a audience restreinte (`audience: "guests"` : office hours, visio

@@ -26,8 +26,20 @@ export type BatchMilestone = {
  */
 export type LeaderboardVisibility = "visible" | "hidden";
 
+/**
+ * Qui voit une partie du batch (Admin > Batch settings, decision du 18/11) : `none` personne,
+ * `staff` le staff et les investors, `founders` aussi les fondateurs (shared/access.ts#canSeeAudience).
+ * Regle d'AFFICHAGE : les documents restent lisibles (firestore.rules).
+ */
+export const BATCH_AUDIENCES = ["none", "staff", "founders"] as const;
+export type BatchAudience = (typeof BATCH_AUDIENCES)[number];
+
 export type BatchSettings = {
   leaderboardVisibility: LeaderboardVisibility;
+  /** L'onglet Startups et la tuile de l'accueil. Absent : `none` (les startups naissent le 25/11). */
+  startupsVisibility?: BatchAudience;
+  /** Les scores (Program Performance, score des startups) et leurs signaux. Absent : `staff`. */
+  scoresVisibility?: BatchAudience;
   /** Channel general du batch (`#fall26-general`), cible des annonces. */
   slackChannelId: string | null;
   /**

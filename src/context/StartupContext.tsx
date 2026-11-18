@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { isInsider, isStaffOrInvestor, canReadStartupProfile, isStartupMember } from "@shared/access";
+import { isInsider, isStaffOrInvestor, canReadStartupProfile, canSeeScores, isStartupMember } from "@shared/access";
 import type { Checkin, Evaluation, KpiSeries, ScoreSignals, Startup, StartupInternal, StartupProfile, WithId } from "@shared/types";
 import { queries, refs, type WithParent } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
@@ -19,7 +19,8 @@ import { paths } from "@/lib/paths";
 // ici : il depend de la startup, pas du batch.
 //   tous                       startups/{id}
 //   membres, staff, investors  private/profile, updates du jeudi (checkins), kpiSeries
-//   staff, IC                  private/internal, notes des pitchs (evaluations), detail du score (scoreSignals)
+//   staff, IC                  private/internal, notes des pitchs (evaluations)
+//   selon reglage              detail du score (scoreSignals, `settings.scoresVisibility` : canSeeScores)
 
 type StartupValue = {
   startup: WithId<Startup>;
@@ -31,7 +32,7 @@ type StartupValue = {
   kpis: WithId<KpiSeries> | null;
   /** Notes recues (pitchs), `parentId` = l'evenement. */
   evaluations: WithParent<Evaluation>[];
-  /** Le detail de son score (staff, IC), `null` sinon. */
+  /** Le detail de son score (qui voit les scores), `null` sinon. */
   signals: WithId<ScoreSignals> | null;
   canSeeProfile: boolean;
   isProfileLoading: boolean;
@@ -44,6 +45,7 @@ export function StartupProvider({ children }: { children: ReactNode }) {
   const { startupId } = useParamsTS<{ startupId: string }>();
   const { program } = useProgram();
   const { batch, role, viewerFounderId } = useBatch();
+  const showScores = canSeeScores(role, batch.settings);
 
   const startup = useDocListener(refs.startup(startupId));
   const found = startup.data !== null && startup.data.batchId === batch.id;
@@ -61,7 +63,7 @@ export function StartupProvider({ children }: { children: ReactNode }) {
   );
   const kpis = useDocListener(startup.isLoading ? undefined : canSeeProfile ? refs.kpiSeries(startupId) : null);
   const evaluations = useQueryListener(isInsider(role) ? queries.evaluationsOfTarget(startupId) : null);
-  const signals = useDocListener(isInsider(role) ? refs.scoreSignals("startup", startupId) : null);
+  const signals = useDocListener(showScores ? refs.scoreSignals("startup", startupId) : null);
 
   const value = useMemo<StartupValue | null>(
     () =>

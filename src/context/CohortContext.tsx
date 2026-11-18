@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { isStaffOrInvestor } from "@shared/access";
+import { canSeeScores } from "@shared/access";
 import type { BatchStats, FounderScore, ScoreScale, StartupScore, WithId } from "@shared/types";
 import { programPerformance, scoreScaleOf, startupScore } from "@shared/types";
 import { queries, refs } from "@/lib/firestore/refs";
@@ -13,14 +13,15 @@ import { useBatch } from "@/context/BatchContext";
 // Niveau 2 : la cohorte (statistiques et scores du batch)
 // ----------------------------
 // Ce que montrait le dashboard Spring 2026 : la vue d'ensemble (publique,
-// `batchStats`) et les scores (staff et investors, `scores`). Monte au layout
+// `batchStats`) et les scores (`scores`, open data : qui les voit suit
+// `settings.scoresVisibility`, Admin > Batch settings). Monte au layout
 // du batch : l'accueil, les listes et les fiches s'en servent.
 // Les PONDERATIONS s'appliquent ici, a la lecture (SPECS §5), selon l'echelle de
 // chaque score (`scale` : 100 pour le Hub depuis le 17/11, 10 pour Spring 2026).
 
 type CohortValue = {
   stats: WithId<BatchStats> | null;
-  /** Vrai si le role lit les scores (staff, investors). */
+  /** Vrai si le role voit les scores (`settings.scoresVisibility`) : scores, tri, signaux. */
   canSeeScores: boolean;
   founderScores: Map<string, WithId<FounderScore>>;
   startupScores: Map<string, WithId<StartupScore>>;
@@ -39,9 +40,9 @@ export { useCohort };
 
 export function CohortProvider({ children }: { children: ReactNode }) {
   const { batch, role } = useBatch();
-  const canSeeScores = isStaffOrInvestor(role);
+  const showScores = canSeeScores(role, batch.settings);
   const stats = useDocListener(refs.batchStats(batch.id));
-  const scores = useQueryListener(canSeeScores ? queries.scoresOfBatch(batch.id) : null);
+  const scores = useQueryListener(showScores ? queries.scoresOfBatch(batch.id) : null);
 
   const value = useMemo<CohortValue>(() => {
     const founderScores = new Map<string, WithId<FounderScore>>();
@@ -56,7 +57,7 @@ export function CohortProvider({ children }: { children: ReactNode }) {
     }
     return {
       stats: stats.data,
-      canSeeScores,
+      canSeeScores: showScores,
       founderScores,
       startupScores,
       founderPerformance: (id) => {
@@ -68,7 +69,7 @@ export function CohortProvider({ children }: { children: ReactNode }) {
       startupScoreOf: (id) => startupScoreById.get(id) ?? null,
       isLoading: stats.isLoading || scores.isLoading,
     };
-  }, [stats.data, stats.isLoading, scores.data, scores.isLoading, canSeeScores]);
+  }, [stats.data, stats.isLoading, scores.data, scores.isLoading, showScores]);
 
   return <CohortContextProvider value={value}>{children}</CohortContextProvider>;
 }

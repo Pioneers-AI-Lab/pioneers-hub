@@ -19,12 +19,13 @@ import { useFounder } from "@/context/FounderContext";
 import { useLeaderboards } from "@/context/LeaderboardsContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
-import { formatDay, percent, scoreSourceLine } from "@/lib/format";
+import { formatDay, percent } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { Field, FieldGrid } from "@/components/ui/Field";
 import { LinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 import { ScoreHeadline } from "@/components/insights/ScoreBar";
+import { ScoreSignalList } from "@/components/insights/ScoreSignalList";
 import { rankedRowText } from "@/components/leaderboard/rankedRowText";
 import { ATTENDANCE_STYLE } from "@/components/event/eventLabels";
 import { useFounderLinks } from "./FounderLink";
@@ -36,8 +37,8 @@ import { ScoreRadar } from "@/components/charts/ScoreRadar";
 // La fiche fondateur, cote evaluation (dashboard Spring 2026)
 // ----------------------------
 // Chaque bloc ne s'affiche que si le role a lu ses donnees (FounderContext,
-// CohortContext) : un fondateur voit ses equipes et ses semaines, jamais son
-// score ni sa presence.
+// CohortContext) : un fondateur voit ses equipes et ses semaines, jamais sa
+// presence ; les scores selon `settings.scoresVisibility` (Admin > Batch settings).
 
 /** Initiales des piliers sur le radar (comme la reference). */
 const PILLAR_SHORT: Record<FounderPillarKey, string> = {
@@ -89,22 +90,7 @@ export function FounderPerformance() {
               label: pillarWeightOf(rules, p) === 0 ? `${pillarName(p)} (not counted)` : pillarName(p),
               weight: pillarWeightOf(rules, p) / totalWeight,
               value: valueOf(p),
-              source: scoreSourceLine(list, scale),
-              details:
-                list.length > 0 ? (
-                  <Stack gap={2}>
-                    {list.map((sig) => (
-                      <Group key={sig.label} justify="space-between" gap="xs" wrap="nowrap">
-                        <Text size="xs" c="dimmed" truncate>
-                          {sig.label}
-                        </Text>
-                        <Text size="xs" className="num" style={{ flexShrink: 0 }}>
-                          {sig.raw}
-                        </Text>
-                      </Group>
-                    ))}
-                  </Stack>
-                ) : undefined,
+              details: list.length > 0 && <ScoreSignalList signals={list} scale={scale} />,
             };
           })}
         />

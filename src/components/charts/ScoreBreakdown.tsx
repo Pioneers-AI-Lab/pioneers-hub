@@ -10,9 +10,8 @@ import { CHART_COLORS } from "./ChartCard";
 // ----------------------------
 // Detail d'un score (fiche fondateur, « Score breakdown — click to expand »)
 // ----------------------------
-// Une ligne par composante : initiale, nom, poids, valeur sur son echelle, mini barre ;
-// sous le nom, d'ou vient la valeur (`source` : « Hackathons (3): 74 · Peer ratings (4): 63 »),
-// toujours affiche. Un appui deplie les signaux qui l'expliquent : la ligne entiere est
+// Une ligne par composante : initiale, nom, poids, valeur sur son echelle, mini barre.
+// Un appui deplie les signaux qui l'expliquent : la ligne entiere est
 // le bouton, un chevron `v` (retourne une fois ouvert) signale les lignes depliables.
 
 export type BreakdownRow = {
@@ -22,8 +21,6 @@ export type BreakdownRow = {
   /** Poids dans le score global (0-1). */
   weight: number;
   value: number | null;
-  /** D'ou vient la valeur, en une ligne sous le nom. */
-  source?: string;
   /** Signaux affiches au depliage. */
   details?: ReactNode;
 };
@@ -50,16 +47,9 @@ export function ScoreBreakdown({ rows, scale }: { rows: BreakdownRow[]; scale: S
                 <Text size="xs" c="dimmed" fw={600} w={22}>
                   {r.short}
                 </Text>
-                <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
-                  <Text size="sm" truncate>
-                    {r.label}
-                  </Text>
-                  {r.source && (
-                    <Text size="xs" c="dimmed" className="num">
-                      {r.source}
-                    </Text>
-                  )}
-                </Stack>
+                <Text size="sm" truncate style={{ flex: 1, minWidth: 0 }}>
+                  {r.label}
+                </Text>
                 <Text size="xs" c="dimmed" className="num" visibleFrom="xs">
                   {Math.round(r.weight * 100)}%
                 </Text>

@@ -4,11 +4,10 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { Anchor, Box, Group, Text } from "@mantine/core";
-import { isInvestor } from "@shared/access";
+import { canSeeStartupsTab, isInvestor } from "@shared/access";
 import { useBatch } from "@/context/BatchContext";
 import { useProgram } from "@/context/ProgramContext";
 import { formatPeriod } from "@/lib/format";
-import { SHOW_STARTUPS_TAB } from "@/lib/features";
 import { paths } from "@/lib/paths";
 import { ViewAsFounderPicker, ViewAsSwitch } from "./ViewAsSwitch";
 
@@ -17,7 +16,7 @@ import { ViewAsFounderPicker, ViewAsSwitch } from "./ViewAsSwitch";
 // ----------------------------
 // Mobile : barre d'onglets fixee en bas (a portee de pouce), texte seul.
 // Tablette et ordinateur : la meme liste en onglets sous l'en-tete.
-// « Startups » est masque derriere un drapeau (lib/features.ts).
+// « Startups » suit le reglage du batch (`settings.startupsVisibility`, Admin > Batch settings).
 // Les onglets dependent du role : un fondateur a « To do » et « Me ». Les outils
 // du staff sont tous dans /admin (menu du compte), pas sous un batch. Un staff a, a
 // la place de son etiquette de role, le « View as » (ViewAsSwitch).
@@ -47,7 +46,7 @@ export function BatchShell({ children }: { children: ReactNode }) {
   const tabs: { label: string; href: string; exact?: boolean; also?: string[] }[] = [
     { label: "Home", href: base, exact: true, also: [paths.leaderboard(program.id, batch.id)] },
     { label: "Founders", href: paths.founders(program.id, batch.id) },
-    ...(SHOW_STARTUPS_TAB ? [{ label: "Startups", href: paths.startups(program.id, batch.id) }] : []),
+    ...(canSeeStartupsTab(role, batch.settings) ? [{ label: "Startups", href: paths.startups(program.id, batch.id) }] : []),
     { label: "Calendar", href: paths.calendar(program.id, batch.id), also: [`${base}/events`] },
     ...(role === "founder"
       ? [

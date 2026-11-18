@@ -5,6 +5,7 @@ import {
   canEditFounderProfile,
   canReadFounderDirectory,
   canReadFounderProfile,
+  canSeeScores,
   isInsider,
   isViewerFounder,
 } from "@shared/access";
@@ -40,8 +41,8 @@ import { paths } from "@/lib/paths";
 //   batch          private/directory, equipes (memberships)
 //   lui-meme, IC   private/profile, semaines (founderWeeks), shortlist et rencontres (private/connections ;
 //                  sur SA fiche, celles de MyConnectionsContext, deja ouvert au batch)
-//   staff, IC      private/internal, founderStats, scoreSignals, presences
-// Le score lui-meme vient de CohortContext (deja lu pour les listes).
+//   staff, IC      private/internal, founderStats, presences
+//   selon reglage  scoreSignals (`settings.scoresVisibility`, comme le score : CohortContext, deja lu pour les listes)
 
 type FounderValue = {
   founder: WithId<Founder>;
@@ -53,7 +54,7 @@ type FounderValue = {
   teamMemberships: WithId<Membership>[];
   /** Presence, reseau (staff et IC). */
   stats: WithId<FounderStats> | null;
-  /** Detail des sous-scores (staff et IC). */
+  /** Detail des sous-scores (qui voit les scores, `canSeeScores`). */
   signals: WithId<ScoreSignals> | null;
   /** Formulaires de motivation et d'objectifs, semaine par semaine (le fondateur, staff et IC). */
   weeks: WithId<FounderWeek>[];
@@ -83,6 +84,7 @@ export function FounderProvider({ children, founderId: explicitId }: { children:
   const founderId = explicitId ?? params.founderId ?? "";
   const { program } = useProgram();
   const { batch, role, viewerFounderId } = useBatch();
+  const showScores = canSeeScores(role, batch.settings);
 
   const canSeeDirectory = canReadFounderDirectory(role);
   const canSeeProfile = canReadFounderProfile(role, viewerFounderId, founderId);
@@ -94,7 +96,7 @@ export function FounderProvider({ children, founderId: explicitId }: { children:
   const internal = useDocListener(canSeeInternal ? refs.founderInternal(founderId) : null);
   const teamMemberships = useQueryListener(canSeeDirectory ? queries.teamMembershipsOfFounder(batch.id, founderId) : null);
   const stats = useDocListener(canSeeInternal ? refs.founderStats(founderId) : null);
-  const signals = useDocListener(canSeeInternal ? refs.scoreSignals("founder", founderId) : null);
+  const signals = useDocListener(showScores ? refs.scoreSignals("founder", founderId) : null);
   const weeks = useQueryListener(canSeeProfile ? queries.weeksOfFounder(batch.id, founderId) : null);
   const isSelf = isViewerFounder(viewerFounderId, founderId);
   const attendance = useQueryListener(canSeeInternal || isSelf ? queries.attendanceOfFounder(founderId) : null);

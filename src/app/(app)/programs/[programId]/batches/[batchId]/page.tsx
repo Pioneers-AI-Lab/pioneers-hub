@@ -11,7 +11,8 @@ import { useFounders } from "@/context/FoundersContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
 import { PROFILE_CATEGORY_LABEL, formatDay, formatScore, percent, todayDayString } from "@/lib/format";
-import { SHOW_MILESTONES, SHOW_STARTUPS_TAB } from "@/lib/features";
+import { canSeeStartupsTab } from "@shared/access";
+import { SHOW_MILESTONES } from "@/lib/features";
 import { paths } from "@/lib/paths";
 import { LinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Section } from "@/components/ui/Section";
@@ -29,9 +30,9 @@ import { NextSession } from "@/components/event/NextSession";
 // quel qu'il soit, « See all » vers l'onglet Calendar), la vue d'ensemble du
 // batch (« Batch overview », pour tous : `batchStats` est public ; effectif,
 // experience, profils, competences, nationalites), les meilleurs fondateurs et
-// startups (staff et investors), les resultats. Les prochains evenements et
-// « Add to calendar » vivent sur la page Calendar ; la tuile Startups et les jalons
-// sont masques (lib/features.ts).
+// startups (qui voit les scores, `settings.scoresVisibility`), les resultats. Les prochains
+// evenements et « Add to calendar » vivent sur la page Calendar ; la tuile Startups suit
+// `settings.startupsVisibility` (Admin > Batch settings), les jalons sont masques (lib/features.ts).
 export default function BatchHomePage() {
   const { program } = useProgram();
   const { batch, role, isSignedIn } = useBatch();
@@ -108,7 +109,7 @@ export default function BatchHomePage() {
         <StatGrid>
           <StatTile label="Founders" value={stats?.founders ?? founders.length} href={paths.founders(program.id, batch.id)} />
           {stats && <StatTile label="Nationalities" value={Object.keys(stats.nationalities).length} />}
-          {SHOW_STARTUPS_TAB && <StatTile label="Startups" value={startups.length} href={paths.startups(program.id, batch.id)} />}
+          {canSeeStartupsTab(role, batch.settings) && <StatTile label="Startups" value={startups.length} href={paths.startups(program.id, batch.id)} />}
           {stats?.avgYearsOfXP !== null && stats?.avgYearsOfXP !== undefined && (
             <StatTile label="Avg years of XP" value={stats.avgYearsOfXP.toFixed(1)} />
           )}

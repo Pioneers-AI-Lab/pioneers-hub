@@ -32,12 +32,13 @@ import { useEvents } from "@/context/EventsContext";
 import { useLeaderboards } from "@/context/LeaderboardsContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartup } from "@/context/StartupContext";
-import { formatDay, integer, percent, scoreSourceLine } from "@/lib/format";
+import { formatDay, integer, percent } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { Field } from "@/components/ui/Field";
 import { ExternalLinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Section, SubsectionTitle } from "@/components/ui/Section";
 import { ScoreBar, ScoreHeadline } from "@/components/insights/ScoreBar";
+import { ScoreSignalList } from "@/components/insights/ScoreSignalList";
 import { ChartCard } from "@/components/charts/ChartCard";
 import { MarketBubbles } from "@/components/charts/MarketBubbles";
 import { MetricAreaChart } from "@/components/charts/MetricAreaChart";
@@ -71,20 +72,14 @@ export function StartupScoreSection() {
       <ScoreHeadline label="Overall" value={startupScoreOf(startup.id)} scale={scale} hint={startupWeightingHint(score)} />
       <Stack gap="md" mt="xs">
         {STARTUP_SUBSCORES.map((key) => {
-          const source = scoreSourceLine(signals?.signals[key], scale);
+          const list = signals?.signals[key] ?? [];
           return (
             <ScoreBar
               key={key}
               label={SUBSCORE_LABEL[key]}
               value={score.subScores[key]}
               scale={scale}
-              detail={
-                source && (
-                  <Text size="xs" c="dimmed" className="num">
-                    {source}
-                  </Text>
-                )
-              }
+              detail={list.length > 0 && <ScoreSignalList signals={list} scale={scale} />}
             />
           );
         })}

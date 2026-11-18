@@ -20,6 +20,7 @@ import { COL, docPaths, eventCollectionPaths } from "../../shared/collections";
 import { archiveWrite, createWrite, isArchivedAs, mergeWrite } from "../../shared/docWrites";
 import {
   ATTENDANCE_STATUSES,
+  BATCH_AUDIENCES,
   BATCH_MILESTONE_KEYS,
   type Attendance,
   type Batch,
@@ -236,6 +237,8 @@ export const UpdateBatchInput = z
       .optional()
       .describe("Milestone dates to change (others stay)."),
     leaderboardVisibility: z.enum(["visible", "hidden"]).optional().describe("Whether founders see the batch leaderboard."),
+    startupsVisibility: z.enum(BATCH_AUDIENCES).optional().describe("Who sees the Startups tab: none, staff (with investors) or founders (everyone in the batch)."),
+    scoresVisibility: z.enum(BATCH_AUDIENCES).optional().describe("Who sees the performance scores and their signals: none, staff (with investors) or founders."),
     googleCalendarId: z.string().trim().min(1).nullable().optional().describe("Link the batch to a Google Calendar (its events then come from it); null unlinks."),
   })
   .strict();
@@ -244,14 +247,14 @@ export const updateBatch: Operation<typeof UpdateBatchInput> = {
   name: "update_batch",
   input: UpdateBatchInput,
   allowed: staffOnly,
-  async plan(tx, _caller, { batchId, milestones, leaderboardVisibility, googleCalendarId, ...given }) {
+  async plan(tx, _caller, { batchId, milestones, leaderboardVisibility, startupsVisibility, scoresVisibility, googleCalendarId, ...given }) {
     const batch = await mustRead<Batch>(tx, docPaths.batch(batchId), "batch", "batchId");
     const patch: Partial<Batch> = { ...given };
     if (milestones) {
       const dayOf = new Map(milestones.map((m) => [m.key, m.dayString]));
       patch.milestones = batch.milestones.map((m) => (dayOf.has(m.key) ? { ...m, dayString: dayOf.get(m.key)! } : m));
     }
-    const settings = Object.fromEntries(Object.entries({ leaderboardVisibility, googleCalendarId }).filter(([, v]) => v !== undefined));
+    const settings = Object.fromEntries(Object.entries({ leaderboardVisibility, startupsVisibility, scoresVisibility, googleCalendarId }).filter(([, v]) => v !== undefined));
     if (Object.keys(settings).length) patch.settings = { ...batch.settings, ...settings };
     const start = patch.startDayString ?? batch.startDayString;
     const end = patch.endDayString !== undefined ? patch.endDayString : batch.endDayString;

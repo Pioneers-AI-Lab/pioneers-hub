@@ -321,7 +321,7 @@ document ENTIER, jamais un champ) :
 | `startups/{id}` | public |
 | `startups/{id}/private/profile`, `kpiSeries` | membres + staff + investors |
 | `startups/{id}/private/internal` | staff + investors IC |
-| `scores/*` (sous-scores, ponderes a l'affichage) | staff + investors (IC et portfolio) |
+| `scores/*` (sous-scores, ponderes a l'affichage), `scoreSignals/*` | public (open data, 18/11) ; l'ecran suit `settings.scoresVisibility` (`shared/access.ts#canSeeScores`, Admin > Batch settings : none / staff (+ investors) / founders) ; signaux bruts pour staff et investors, phrase simple pour les fondateurs (`components/insights/ScoreSignalList.tsx`) |
 | `events/{id}` | public, listes d'invites comprises (`canSeeEvent` ne filtre que l'affichage) |
 | `events/*/peerRatings`, `events/*/judges`, `formResponses`, `apiKeys`, `auditLogs` | staff (l'auteur relit ses avis donnes) |
 
@@ -429,8 +429,8 @@ d'espacement (12 px entre cartes soeurs, partout), surface `.card`, une couleur 
   Onglets : Home, Founders, Calendar (+ To do, Me). Pas de titre de page sous un onglet (16/11, place verticale) :
   nom et dates du batch dans la ligne du haut de `BatchShell` (dates masquees sur mobile) ; compteur d'une liste dans sa recherche
   (`components/ui/SearchCount.tsx`) ; « Add to calendar » en bas de Calendar ; une `Section` en tete de son
-  conteneur n'a ni marge ni filet (`.section:first-child`, `globals.css`). Startups et la section Milestones de l'accueil sont MASQUES
-  par drapeau (`lib/features.ts`, decision du 15/11 : startups formees le 25/11) ; le code reste.
+  conteneur n'a ni marge ni filet (`.section:first-child`, `globals.css`). L'onglet Startups et sa tuile suivent `settings.startupsVisibility`
+  (18/11, `shared/access.ts#canSeeStartupsTab`, Admin > Batch settings ; absent = personne) ; la section Milestones de l'accueil reste masquee par drapeau (`lib/features.ts`).
 - Champs de saisie en 16 px (sinon iOS zoome) : taille `md` par defaut (theme.ts). Boutons
   d'action principaux `size="md"`, pleine largeur sur mobile ; enregistrement dans `.savebar`.
 - Verifier en 390 px de large : aucun debordement horizontal.

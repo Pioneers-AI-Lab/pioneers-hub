@@ -104,7 +104,9 @@ console.log("public (not signed in)");
   await expectDenied("read a founder private profile", () => read(doc(db, "founders/ada-example/private/profile")));
   await expectOk("read startup", () => read(doc(db, "startups/lumen")));
   await expectDenied("read startup profile", () => read(doc(db, "startups/lumen/private/profile")));
-  await expectDenied("read scores", () => read(doc(db, "scores/founder_ada-example")));
+  // Scores et signaux : open data (18/11), l'ecran suit `settings.scoresVisibility`.
+  await expectOk("read scores", () => read(doc(db, "scores/founder_ada-example")));
+  await expectOk("read score signals", () => read(doc(db, "scoreSignals/founder_ada-example")));
   await expectOk("list leaderboards of the batch (visible)", () =>
     count(query(collection(db, "leaderboards"), where("batchId", "==", "fall-2026"))),
   );
@@ -137,7 +139,8 @@ console.log("founder (ada, member of lumen)");
   await expectDenied("read another founder identity", () => read(doc(db, "people/person-ben-sample")));
   await expectDenied("read another founder weekly tracking", () => read(doc(db, "founderWeeks/ben-sample_2026-11-16")));
   await expectDenied("read startup internal record", () => read(doc(db, "startups/lumen/private/internal")));
-  await expectDenied("read scores", () => read(doc(db, "scores/founder_ada-example")));
+  await expectOk("read scores", () => read(doc(db, "scores/founder_ada-example")));
+  await expectOk("read score signals", () => read(doc(db, "scoreSignals/founder_ada-example")));
   await expectDenied("read notes", () => read(doc(db, "notes/demo-note")));
   await expectOk("query her own attendance across sessions", () =>
     count(query(collectionGroup(db, "attendance"), where("founderId", "==", "ada-example"))),
@@ -251,7 +254,7 @@ console.log("investor (portfolio access)");
   await expectDenied("read startup internal record", () => read(doc(db, "startups/lumen/private/internal")));
   await expectOk("read KPIs", () => read(doc(db, "kpiSeries/lumen")));
   await expectOk("read scores", () => read(doc(db, "scores/founder_ada-example")));
-  await expectDenied("read score signals (staff judgements)", () => read(doc(db, "scoreSignals/founder_ada-example")));
+  await expectOk("read score signals", () => read(doc(db, "scoreSignals/founder_ada-example")));
   await expectOk("read a weekly update", () => read(doc(db, "checkins/lumen_2026-11-16_ada-example")));
   await expectOk("read a metric snapshot", () => read(doc(db, "metricSnapshots/lumen_totalAmountPaid_2026-11-16")));
   await expectDenied("read a founder identity", () => read(doc(db, "people/person-ben-sample")));
@@ -271,7 +274,7 @@ console.log("mentor (no access in v1)");
   const { app, db } = await clientAs("mentor-1");
   await expectOk("list ALL founders (public cards)", () => count(foundersOfBatch(db)));
   await expectDenied("read founder directory", () => read(doc(db, "founders/ada-example/private/directory")));
-  await expectDenied("read scores", () => read(doc(db, "scores/founder_ada-example")));
+  await expectOk("read scores", () => read(doc(db, "scores/founder_ada-example")));
   await expectDenied("read own mentor record", () => read(doc(db, "mentors/mia-mentor")));
   await deleteApp(app);
 }

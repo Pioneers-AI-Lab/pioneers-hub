@@ -79,13 +79,12 @@ export default function ChartsGalleryPage() {
                   label: "Engagement",
                   weight: 0.2,
                   value: 60,
-                  source: "Attendance (12): 69 · Forms on time (4): 50",
                   details: <Text size="xs" c="dimmed">Attendance (12): 69% (9/12 mandatory)</Text>,
                 },
-                { key: "x", short: "Ex", label: "Execution", weight: 0.2, value: 104, source: "Hackathons (3): 112 · Peer reliability (5): 88" },
-                { key: "l", short: "L", label: "Likability", weight: 0.2, value: 56, source: "Supporters (5): 56" },
-                { key: "c", short: "C", label: "Commitment", weight: 0.2, value: 100, source: "Existing project: 100" },
-                { key: "b", short: "B", label: "Background", weight: 0.2, value: 84, source: "Background grid: 84" },
+                { key: "x", short: "Ex", label: "Execution", weight: 0.2, value: 104 },
+                { key: "l", short: "L", label: "Likability", weight: 0.2, value: 56 },
+                { key: "c", short: "C", label: "Commitment", weight: 0.2, value: 100 },
+                { key: "b", short: "B", label: "Background", weight: 0.2, value: 84 },
               ]}
             />
           </ChartCard>

@@ -640,15 +640,15 @@ service cloud.firestore {
 
     // ---- Evaluation interne ------------------------------------------------
 
-    // Sous-scores (non ponderes) : staff + investors des deux niveaux.
+    // Sous-scores (non ponderes) et leur detail : open data (decision du 18/11). L'ecran
+    // les montre selon `batches.settings.scoresVisibility` (shared/access.ts#canSeeScores).
     match /scores/{scoreId} {
-      allow read: if isStaffOrInvestor();
+      allow read: if true;
       allow write: if false;
     }
 
-    // Detail des sous-scores : contient des appreciations du staff.
     match /scoreSignals/{scoreId} {
-      allow read: if isInsider();
+      allow read: if true;
       allow write: if false;
     }
 
