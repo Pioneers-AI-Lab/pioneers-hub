@@ -139,7 +139,7 @@ check("avant le premier pitch : Team = Background moyen, pas de Market", () => {
 check("Commitment : Clear idea de sa startup (sur 100) a 50 %", () => {
   const clearIdea = pitchMeans([pitch("P", [{ clearIdea: 4 }]), pitch("Q", [{ clearIdea: 2 }])]).clearIdea;
   assert.equal(clearIdea, 60);
-  const base = { nowISOString: "2026-12-05T12:00:00.000Z", attendance: { attended: 0, total: 0 }, formsOnTime: { onTime: 0, expected: 0 }, profileCompleteness: 1, hackathons: [], peerRatings: [], milestones: [], supporters: 0, batchMaxSupporters: 0, background: null };
+  const base = { nowISOString: "2026-12-05T12:00:00.000Z", attendance: { attended: 0, total: 0 }, formsOnTime: { onTime: 0, expected: 0 }, profileCompleteness: 1, hackathons: [], peerReliability: [], milestones: [], supporters: 0, batchMaxSupporters: 0, background: null };
   const s = computeFounderScore({ ...base, clearIdea, hasExistingProject: true, hasExistingCoFounders: "none" });
   // 60 x 0,5 + 100 x 0,25 + 0 x 0,25 = 55
   assert.equal(s.subScores.commitment, 55);

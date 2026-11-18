@@ -534,7 +534,7 @@
           "status": "missing_capture"
         },
         {
-          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
+          "what": "Avis entre pairs : « How did you feel working with this person? » et « How reliable was this person in delivering on commitments? » 1-5 + une phrase",
           "target": "events/{id}/peerRatings",
           "capture": "fondateur",
           "status": "missing_capture"
@@ -835,7 +835,7 @@
           "status": "missing_structure"
         },
         {
-          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
+          "what": "Avis entre pairs : « How did you feel working with this person? » et « How reliable was this person in delivering on commitments? » 1-5 + une phrase",
           "target": "events/{id}/peerRatings",
           "capture": "fondateur",
           "status": "missing_capture"
@@ -1042,7 +1042,7 @@
           "status": "missing_capture"
         },
         {
-          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
+          "what": "Avis entre pairs : « How did you feel working with this person? » et « How reliable was this person in delivering on commitments? » 1-5 + une phrase",
           "target": "events/{id}/peerRatings",
           "capture": "fondateur",
           "status": "missing_capture"
@@ -1472,7 +1472,7 @@
           "status": "missing_structure"
         },
         {
-          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
+          "what": "Avis entre pairs : « How did you feel working with this person? » et « How reliable was this person in delivering on commitments? » 1-5 + une phrase",
           "target": "events/{id}/peerRatings",
           "capture": "fondateur",
           "status": "missing_capture"
@@ -1871,7 +1871,7 @@
           "status": "missing_capture"
         },
         {
-          "what": "Avis entre pairs : « Would you start a company with this person? » 1-5 + une phrase",
+          "what": "Avis entre pairs : « How did you feel working with this person? » et « How reliable was this person in delivering on commitments? » 1-5 + une phrase",
           "target": "events/{id}/peerRatings",
           "capture": "fondateur",
           "status": "missing_capture"

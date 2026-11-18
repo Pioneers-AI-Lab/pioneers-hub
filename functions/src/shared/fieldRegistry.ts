@@ -668,7 +668,8 @@ export const DB_FIELDS = {
   "submission.driveFolderUrl": field("Drive folder", { kind: "url" }),
 
   // ---- Avis entre pairs (Debrief, portee « chaque coequipier ») ----
-  "peerRating.rating": field("Would start a company with this person", { kind: "rating", min: 1, max: 5 }),
+  "peerRating.likability": field("How it felt working with this person", { kind: "rating", min: 1, max: 5 }),
+  "peerRating.reliability": field("Reliable in delivering on commitments", { kind: "rating", min: 1, max: 5 }),
   "peerRating.comment": field("One line on this teammate", text(280)),
 
   // ---- Choix prives (formulaire Picks ou Founder introductions) ----

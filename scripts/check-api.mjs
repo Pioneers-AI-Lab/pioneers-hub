@@ -311,8 +311,8 @@ const call = async (key, name, args) => {
   );
   t = await call(key, "pioneers_create_form", { batchId: "fall-2026", templateKey: "peer_rating", eventId: "demo-hackathon-1" });
   check(
-    !t.isError && t.data.preview.form.identityCheck === "account" && t.data.preview.form.questions.some((q) => q.writesTo === "peerRating.rating" && q.about === "each_teammate"),
-    "a peer rating previews its rating, for each teammate",
+    !t.isError && t.data.preview.form.identityCheck === "account" && ["peerRating.likability", "peerRating.reliability"].every((f) => t.data.preview.form.questions.some((q) => q.writesTo === f && q.about === "each_teammate")),
+    "a peer rating previews its two scores, for each teammate",
     t.data,
   );
   // L'ancien « Thursday update » est retire (le Weekly update startup le remplace, sur l'agenda).

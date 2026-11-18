@@ -369,7 +369,8 @@ const TRACKING_BASE: Record<TrackingDocKind, (s: ResolvedSubjects, l: Loaded) =>
     raterFounderId: s.founderId,
     rateeFounderId: s.targetId,
     teamId: s.teamId,
-    rating: null,
+    likability: null,
+    reliability: null,
     comment: null,
   }),
   evaluation: (s) => ({

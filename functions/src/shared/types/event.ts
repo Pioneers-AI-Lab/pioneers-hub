@@ -527,15 +527,18 @@ export type Attendance = {
 // ---- peerRatings/{raterFounderId}_{rateeFounderId} ---------------------------
 
 /**
- * Apres chaque hackathon (brief du 11/11) : « Would you start a company with
- * this person? », une note (1-5) et une phrase. Prive : staff seulement,
- * l'auteur relit les siens. Jamais montre au fondateur note.
+ * Apres chaque hackathon : deux notes (1-5, decision du 18/11) et une phrase.
+ * `likability` « How did you feel working with this person? » (4 ou 5 compte
+ * dans Likability) ; `reliability` « How reliable was this person in delivering
+ * on commitments? » (Execution). Prive : staff seulement, l'auteur relit les
+ * siens. Jamais montre au fondateur note.
  */
 export type PeerRating = BatchScoped & {
   raterFounderId: string;
   rateeFounderId: string;
   teamId: string;
-  rating: number;
+  likability: number | null;
+  reliability: number | null;
   comment: string | null;
   submittedDateISOString: DateISOString;
 };

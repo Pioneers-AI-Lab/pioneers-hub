@@ -342,8 +342,8 @@ export type FounderStats = BatchScoped & {
   workingWithMutual: string[];
   /** Nombre de coequipiers differents sur l'ensemble des exercices. */
   uniqueTeammates: number;
-  /** Moyenne « je retravaillerais avec lui ou elle » (1-5). Agregat uniquement. */
-  peerRating: { average: number | null; count: number };
+  /** Moyennes des peer ratings recus (1-5) : ressenti et fiabilite. Agregat uniquement. */
+  peerRating: { likability: { average: number | null; count: number }; reliability: { average: number | null; count: number } };
   computedDateISOString: DateISOString;
 };
 

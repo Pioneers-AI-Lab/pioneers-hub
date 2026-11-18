@@ -31,7 +31,7 @@ const inputs = (extra = {}) => ({
   formsOnTime: { onTime: 0, expected: 0 },
   profileCompleteness: 1,
   hackathons: [],
-  peerRatings: [],
+  peerReliability: [],
   milestones: [],
   supporters: 0,
   batchMaxSupporters: 0,
@@ -137,8 +137,8 @@ check("une ligne de classement sans note n'est pas comptee", () => {
 
 check("Peer ratings recus : la moyenne, (note - 1) x 25", () => {
   // moyenne 4 -> 75
-  assert.equal(sub({ peerRatings: [5, 3, 4] }).execution, 75);
-  assert.equal(signalsOf({ peerRatings: [5, 3, 4] }, "execution")[0].label, "Peer ratings (3)");
+  assert.equal(sub({ peerReliability: [5, 3, 4] }).execution, 75);
+  assert.equal(signalsOf({ peerReliability: [5, 3, 4] }, "execution")[0].label, "Peer reliability (3)");
 });
 
 check("Execution : trois signaux a poids egal", () => {
@@ -147,7 +147,7 @@ check("Execution : trois signaux a poids egal", () => {
     { key: "met", dueDateISOString: "2026-11-19T00:00:00.000Z", achieved: false },
   ];
   // (64 + 75 + 50) / 3 = 63
-  const s = sub({ hackathons: [{ name: "H1", score: 80, weight: 1 }, { name: "H5", score: 60, weight: 4 }], peerRatings: [5, 3, 4], milestones });
+  const s = sub({ hackathons: [{ name: "H1", score: 80, weight: 1 }, { name: "H5", score: 60, weight: 4 }], peerReliability: [5, 3, 4], milestones });
   assert.equal(s.execution, 63);
 });
 
@@ -227,9 +227,9 @@ check("Likability : une meme personne compte une fois (shortlist et note de 5)",
       ["x", new Set(["a"])], // hors du batch
     ]),
     [
-      { raterFounderId: "b", rateeFounderId: "a", rating: 5 }, // deja compte
-      { raterFounderId: "c", rateeFounderId: "a", rating: 4 },
-      { raterFounderId: "d", rateeFounderId: "a", rating: 3 }, // 3 ne compte pas
+      { raterFounderId: "b", rateeFounderId: "a", likability: 5 }, // deja compte
+      { raterFounderId: "c", rateeFounderId: "a", likability: 4 },
+      { raterFounderId: "d", rateeFounderId: "a", likability: 3 }, // 3 ne compte pas
     ],
   );
   assert.deepEqual([...supporters.get("a")].sort(), ["b", "c"]);

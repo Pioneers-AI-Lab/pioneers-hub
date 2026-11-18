@@ -128,7 +128,11 @@ const expectQuestions = (name, specs, questions) =>
   );
 
 /** §2.1 */
-const PEER_RATING = [Q("rating", "peerRating.rating", "Would you start a company with this person?", { scale: "1-5" }), Q("text", "peerRating.comment", "Why? (optional)")];
+const PEER_RATING = [
+  Q("rating", "peerRating.likability", "How did you feel working with this person?", { scale: "1-5" }),
+  Q("rating", "peerRating.reliability", "How reliable was this person in delivering on commitments?", { scale: "1-5" }),
+  Q("text", "peerRating.comment", "Why? (optional)"),
+];
 const DRIVE = Q("link", "submission.driveFolderUrl", "Your team's Drive folder");
 const PROBLEM = Q("single_choice", "submission.problemSource", "Problem");
 const metric = (key, label) => Q("number", `submission.metrics.${key}`, label);
@@ -500,7 +504,7 @@ function codeChecks() {
     formsOnTime: { onTime: 0, expected: 0 },
     profileCompleteness: 1,
     hackathons: [],
-    peerRatings: [],
+    peerReliability: [],
     milestones: [],
     supporters: 0,
     batchMaxSupporters: 0,
@@ -520,7 +524,7 @@ function codeChecks() {
     attendance: { attended: 1, total: 1 },
     formsOnTime: { onTime: 1, expected: 1 },
     hackathons: [{ name: "H1", score: 80, weight: 1 }],
-    peerRatings: [4],
+    peerReliability: [4],
     milestones: [{ key: "met", dueDateISOString: "2026-11-01T00:00:00.000Z", achieved: true }],
     supporters: 1,
     batchMaxSupporters: 1,
@@ -537,12 +541,12 @@ function codeChecks() {
   behaves("Existing co-founders: in batch 100, outside 70, none 0", () => [[100, 70, 0], ["in_batch", "outside_batch", "none"].map((v) => founder({ hasExistingCoFounders: v }).subScores.commitment)]);
   behaves("Existing project: 100 or 0", () => [[100, 0], [true, false].map((v) => founder({ hasExistingProject: v }).subScores.commitment)]);
   behaves("Likability: best of the batch = 100", () => [50, founder({ supporters: 5, batchMaxSupporters: 10 }).subScores.likability]);
-  behaves("Likability: shortlist or peer rating 4-5, one person counts once", () => {
+  behaves("Likability: shortlist or peer likability 4-5, one person counts once", () => {
     const ids = new Set(["a", "b", "c", "d"]);
     const out = S.supportersOf(ids, new Map([["b", new Set(["a"])]]), [
-      { raterFounderId: "b", rateeFounderId: "a", rating: 5 },
-      { raterFounderId: "c", rateeFounderId: "a", rating: 4 },
-      { raterFounderId: "d", rateeFounderId: "a", rating: 3 },
+      { raterFounderId: "b", rateeFounderId: "a", likability: 5 },
+      { raterFounderId: "c", rateeFounderId: "a", likability: 4 },
+      { raterFounderId: "d", rateeFounderId: "a", likability: 3 },
     ]);
     return [["b", "c"], [...(out.get("a") ?? [])].sort()];
   });

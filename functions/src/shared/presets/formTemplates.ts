@@ -26,9 +26,6 @@ import { CHECKIN_GOALS, CHECKIN_METRICS, withUnit, type CheckinGoalKey, type Che
 // la semaine. Leurs questions se construisent a partir des reglages par defaut du
 // modele d'evenement (`build`), que le staff ajuste ensuite dans l'editeur.
 
-/** La question des avis entre pairs (SPECS §4.3), de 1 a 5. */
-const PEER_QUESTION = "Would you start a company with this person?";
-
 /** Les champs d'equipe qu'une Submission peut demander, en plus de ses metriques. */
 export const SUBMISSION_FIELDS = ["painSentence", "problemSource", "productUrl", "proofUrls", "learnings", "driveFolderUrl", "notes"] as const;
 export type SubmissionFieldKey = (typeof SUBMISSION_FIELDS)[number];
@@ -298,21 +295,29 @@ export const FORM_TEMPLATES = {
   }),
 
   // L'avis sur chaque coequipier (SPECS §4.3, decision du 13/11) : un formulaire a
-  // part, le meme pour tout le batch, rempli avant de quitter le debrief.
+  // part, le meme pour tout le batch, rempli avant de quitter le debrief. Deux notes
+  // (18/11) : le ressenti compte dans Likability (4 ou 5), la fiabilite dans Execution.
   peer_rating: template({
     label: "Peer rating",
     kind: "peer_feedback",
     title: "Peer rating",
-    description: "30 seconds, one score per teammate. Private: only the Pioneers team reads it.",
+    description: "30 seconds, two scores per teammate. Private: only the Pioneers team reads it.",
     identityCheck: "account",
     needsEvent: true,
     needsWorkTeams: true,
     questions: [
-      q("peerRating", {
+      q("peerLikability", {
         type: "rating",
-        label: PEER_QUESTION,
-        description: "1 = no, 5 = without hesitation.",
-        dbField: "peerRating.rating",
+        label: "How did you feel working with this person?",
+        description: "1 = badly, 5 = great.",
+        dbField: "peerRating.likability",
+        required: true,
+      }),
+      q("peerReliability", {
+        type: "rating",
+        label: "How reliable was this person in delivering on commitments?",
+        description: "1 = not at all, 5 = completely.",
+        dbField: "peerRating.reliability",
         required: true,
       }),
       q("peerComment", { type: "text", label: "Why? (optional)", dbField: "peerRating.comment" }),

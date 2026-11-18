@@ -66,7 +66,7 @@ const num = (v: number) => `${roundTo(v, 1)}`;
 /** Peer rating de 1 a 5 -> sur 100 : 1 = 0, 3 = 50, 5 = 100. */
 export const peerRatingOn100 = (rating: number) => (rating - 1) * 25;
 
-/** Un peer rating qui compte dans Likability : 4 ou 5. */
+/** Un peer rating (« How did you feel working with this person? ») qui compte dans Likability : 4 ou 5. */
 export const LIKABILITY_MIN_PEER_RATING = 4;
 
 const CO_FOUNDER_SCORES: Record<ExistingCoFounders, number> = { in_batch: 100, outside_batch: 70, none: 0 };
@@ -109,12 +109,12 @@ export function hackathonsByFounder(
 /**
  * Likability : pour chaque fondateur, les fondateurs DISTINCTS du batch qui l'ont shortliste
  * un jour (`shortlisted` : qui chacun a shortliste, historique et listes actuelles) ou lui
- * ont donne un peer rating de 4 ou 5. Une meme personne compte une fois ; jamais soi-meme.
+ * ont donne 4 ou 5 au ressenti du peer rating (`likability`). Une meme personne compte une fois ; jamais soi-meme.
  */
 export function supportersOf(
   founderIds: ReadonlySet<string>,
   shortlisted: ReadonlyMap<string, ReadonlySet<string>>,
-  peerRatings: readonly { raterFounderId: string; rateeFounderId: string; rating: number }[],
+  peerRatings: readonly { raterFounderId: string; rateeFounderId: string; likability: number | null }[],
 ): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
   const add = (to: string, from: string) => {
@@ -124,7 +124,7 @@ export function supportersOf(
     out.set(to, set);
   };
   for (const [from, targets] of shortlisted) for (const to of targets) add(to, from);
-  for (const r of peerRatings) if (r.rating >= LIKABILITY_MIN_PEER_RATING) add(r.rateeFounderId, r.raterFounderId);
+  for (const r of peerRatings) if ((r.likability ?? 0) >= LIKABILITY_MIN_PEER_RATING) add(r.rateeFounderId, r.raterFounderId);
   return out;
 }
 
@@ -239,8 +239,8 @@ export type FounderScoreInputs = {
   profileCompleteness: number;
   /** La note sur 100 (120 avec l'Outstanding mention) de son equipe a chaque hackathon publie ou il etait present. */
   hackathons: HackathonInput[];
-  /** Les peer ratings recus (1-5). */
-  peerRatings: number[];
+  /** La fiabilite recue des coequipiers (peer rating `reliability`, 1-5). */
+  peerReliability: number[];
   milestones: MilestoneInput[];
   /** Fondateurs distincts qui l'ont shortliste un jour ou lui ont donne 4 ou 5, et le maximum du batch. */
   supporters: number;
@@ -285,9 +285,9 @@ export function computeFounderScore(i: FounderScoreInputs): ComputedScore<Founde
     const raw = i.hackathons.map((h) => `${h.name} ${num(h.score)}${h.weight !== 1 ? ` (x${h.weight})` : ""}`).join(" · ");
     execution.push(sig(`Hackathons (${i.hackathons.length})`, raw, hackathonMean, 1));
   }
-  const peerAverage = mean(i.peerRatings);
+  const peerAverage = mean(i.peerReliability);
   if (peerAverage !== null) {
-    execution.push(sig(`Peer ratings (${i.peerRatings.length})`, `${peerAverage.toFixed(1)}/5 on average`, peerRatingOn100(peerAverage), 1));
+    execution.push(sig(`Peer reliability (${i.peerReliability.length})`, `${peerAverage.toFixed(1)}/5 on average`, peerRatingOn100(peerAverage), 1));
   }
   const due = dueMilestones(i.milestones, i.nowISOString);
   if (due.length > 0) {

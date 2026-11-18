@@ -9,6 +9,7 @@ import { nameKey, normalizeHttpUrl } from "../shared/text";
 import { hasSubmitted, isLateUnwaived } from "../shared/types";
 import type { Evaluation, Form, Founder, JuryLink, PioneersEvent, Submission } from "../shared/types";
 import { sha256 } from "../api/crypto";
+import { staffNames as loadStaffNames } from "./accounts";
 import { cleanText } from "./clean";
 import type { ScoredTarget } from "./events";
 
@@ -20,8 +21,8 @@ import type { ScoredTarget } from "./events";
 // serveur web ni dans un referent) ; il vit dans `events/{id}/judges/link`,
 // lisible du seul staff, qui le recopie a tout moment ou le remplace.
 //
-// Le jure choisit son nom dans la liste (invites de l'evenement, noms deja venus
-// noter, fondateurs du batch en nom court) ou le saisit. Son id est stable par
+// Le jure choisit son nom dans la liste (invites de l'evenement, staff, noms deja
+// venus noter, fondateurs du batch en nom court) ou le saisit. Son id est stable par
 // evenement : `founder-{founderId}`, ou `jury-{empreinte du nom normalise}` ;
 // le meme nom retrouve donc ses notes. Un fondateur ne note pas sa propre
 // equipe (ni sa startup) : `targetsFor`.
@@ -45,13 +46,14 @@ export async function assertJuryKey(eventId: string | null, key: unknown): Promi
 
 /**
  * Les noms a choisir : seuls des noms deja publics ou deja vus des jures :
- * invites (l'evenement est public), noms deja venus noter, fondateurs du batch
- * en nom court (comme les formulaires).
+ * invites (l'evenement est public), staff en nom court (18/11 : il note aussi),
+ * noms deja venus noter, fondateurs du batch en nom court (comme les formulaires).
  */
 export async function loadJury(eventId: string, event: PioneersEvent, targets: ScoredTarget[]) {
-  const [foundersSnap, evaluationsSnap] = await Promise.all([
+  const [foundersSnap, evaluationsSnap, staffNames] = await Promise.all([
     db().collection(COL.founders).where("batchId", "==", event.batchId).select("name", "archivedDateISOString").get(),
     db().collection(eventCollectionPaths.evaluations(eventId)).select("evaluatorKind", "evaluatorId", "evaluatorName").get(),
+    loadStaffNames(),
   ]);
   const evaluations = evaluationsSnap.docs.map((d) => d.data() as Pick<Evaluation, "evaluatorKind" | "evaluatorId" | "evaluatorName">);
   const founders = foundersSnap.docs
@@ -67,12 +69,15 @@ export async function loadJury(eventId: string, event: PioneersEvent, targets: S
   }));
   const options = new Map(founderOptions.map(({ o }) => [o.id, o]));
   const named = new Map<string, JudgeOption>();
-  const addNamed = (id: string, name: string) => {
+  const addNamed = (id: string, name: string, hint: string | null = null) => {
     const key = nameKey(name);
-    if (!options.has(id) && !named.has(key)) named.set(key, { id, name, hint: null, founderId: null });
+    if (!options.has(id) && !named.has(key)) named.set(key, { id, name, hint, founderId: null });
   };
   for (const e of evaluations) if (e.evaluatorKind === "judge") addNamed(e.evaluatorId, e.evaluatorName);
   for (const g of event.guests) if (!g.founderId && g.name.trim()) addNamed(namedJudgeId(g.name), g.name.trim());
+  // Le staff : l'id d'un nom saisi (son nom complet), pour retrouver ses notes s'il l'avait tape.
+  const staff = staffNames.map((fullName) => ({ fullName, id: namedJudgeId(fullName) }));
+  for (const { fullName, id } of staff) addNamed(id, publicShortName(fullName), STAFF_HINT);
   for (const o of named.values()) options.set(o.id, o);
 
   // Un nom saisi retrouve son option : nom affiche, ou nom complet d'un fondateur.
@@ -83,8 +88,14 @@ export async function loadJury(eventId: string, event: PioneersEvent, targets: S
   };
   for (const o of options.values()) index(o.name, o);
   for (const { fullName, o } of founderOptions) index(fullName, o);
+  for (const { fullName, id } of staff) {
+    const o = options.get(id);
+    if (o) index(fullName, o);
+  }
   return { options, byName };
 }
+
+const STAFF_HINT = "Pioneers team";
 
 export type Jury = Awaited<ReturnType<typeof loadJury>>;
 

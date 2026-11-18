@@ -238,9 +238,14 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
   }
   const teammates = countMap();
   for (const members of workTeams.values()) for (const a of members) for (const b of members) if (a !== b) addTo(teammates, a, b);
-  const peer = new Map<string, number[]>();
-  for (const r of peerRatings) pushTo(peer, r.rateeFounderId, r.rating);
-  // Likability : qui l'a shortliste un jour, ou lui a donne 4 ou 5 (une personne compte une fois).
+  // Peer rating : la fiabilite compte dans Execution, le ressenti (4 ou 5) dans Likability.
+  const reliability = new Map<string, number[]>();
+  const likability = new Map<string, number[]>();
+  for (const r of peerRatings) {
+    if (r.reliability !== null) pushTo(reliability, r.rateeFounderId, r.reliability);
+    if (r.likability !== null) pushTo(likability, r.rateeFounderId, r.likability);
+  }
+  // Likability : qui l'a shortliste un jour, ou lui a donne 4 ou 5 au ressenti (une personne compte une fois).
   const supporters = supportersOf(founderIds, shortlisted, peerRatings);
 
   const batchMaxSupporters = Math.max(0, ...founders.map((f) => supporters.get(f.id)?.size ?? 0));
@@ -285,7 +290,8 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
       weeks: [],
       events: [],
     }).filter((m) => m.priority === "required" && m.weekStartDayString === null && m.eventId === null).length;
-    const ratings = peer.get(f.id) ?? [];
+    const reliabilityRatings = reliability.get(f.id) ?? [];
+    const likabilityRatings = likability.get(f.id) ?? [];
     const reviews = reviewsOfFounder.get(f.id) ?? [];
     const inputs: FounderScoreInputs = {
       nowISOString: now,
@@ -293,7 +299,7 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
       formsOnTime: formsOnTime.get(f.id)!,
       profileCompleteness: requiredFields > 0 ? Math.max(0, (requiredFields - missingRequired) / requiredFields) : 1,
       hackathons: hackathons.get(f.id) ?? [],
-      peerRatings: ratings,
+      peerReliability: reliabilityRatings,
       milestones: founderMilestones(batch.settings.scoreMilestoneDueDates, {
         shortlistedCount: shortlisted.get(f.id)?.size ?? 0,
         reciprocalMetCount: reciprocalMetCount(f.id, metOf),
@@ -342,7 +348,10 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
       workingWithOutgoing: wOut,
       workingWithMutual: wIn.filter((id) => wOut.includes(id)),
       uniqueTeammates: teammates.get(f.id)?.size ?? 0,
-      peerRating: { average: mean(ratings), count: ratings.length },
+      peerRating: {
+        likability: { average: mean(likabilityRatings), count: likabilityRatings.length },
+        reliability: { average: mean(reliabilityRatings), count: reliabilityRatings.length },
+      },
       computedDateISOString: now,
     };
     write.set(db().doc(`${COL.founderStats}/${f.id}`), stats);

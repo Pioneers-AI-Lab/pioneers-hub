@@ -129,7 +129,7 @@ const founder = (now, milestones) => ({
   formsOnTime: { onTime: 0, expected: 0 },
   profileCompleteness: 1,
   hackathons: [],
-  peerRatings: [],
+  peerReliability: [],
   milestones,
   supporters: 0,
   batchMaxSupporters: 0,

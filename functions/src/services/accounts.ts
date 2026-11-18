@@ -1,9 +1,9 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import { getAuth, type UserRecord } from "firebase-admin/auth";
 import { getFirestore, type Transaction } from "firebase-admin/firestore";
-import { COL } from "../shared/collections";
+import { COL, docPaths } from "../shared/collections";
 import type { AccountAccess, AccountRow } from "../shared/callables";
-import { USER_ROLES, type BatchMembership, type User, type UserRole } from "../shared/types";
+import { USER_ROLES, type BatchMembership, type Person, type User, type UserRole } from "../shared/types";
 import { FRONTEND_BASE_URL } from "../api/config";
 import { actorOf, writeUiAudit, type AuditActor } from "./audit";
 
@@ -171,4 +171,35 @@ export async function createSetPasswordLink(actorUid: string, uid: string): Prom
   const link = await getAuth().generatePasswordResetLink(user.email, { url: `${FRONTEND_BASE_URL}/signin` });
   await writeUiAudit(null, actorUid, "account.setPasswordLink", `${COL.users}/${uid}`, { email: user.email });
   return link;
+}
+
+/**
+ * Les noms complets des comptes staff : la personne rattachee (`people.displayName`), sinon le nom
+ * du compte de connexion (Firebase Auth, Google le donne). Jamais l'email ; sans nom, pas dans la liste.
+ * Garde 5 minutes par instance (le lien de jury le lit a chaque ouverture et chaque envoi).
+ */
+const STAFF_NAMES_TTL_MS = 5 * 60 * 1000;
+let staffNamesCache: { at: number; names: Promise<string[]> } | null = null;
+export function staffNames(): Promise<string[]> {
+  if (!staffNamesCache || Date.now() - staffNamesCache.at > STAFF_NAMES_TTL_MS) {
+    const names = readStaffNames();
+    staffNamesCache = { at: Date.now(), names };
+    names.catch(() => (staffNamesCache = null));
+  }
+  return staffNamesCache.names;
+}
+
+async function readStaffNames(): Promise<string[]> {
+  const staff = (await db().collection(COL.users).where("roles", "array-contains", "staff").select("personId").get()).docs.map((d) => ({
+    uid: d.id,
+    personId: (d.data() as Pick<User, "personId">).personId,
+  }));
+  const linked = staff.flatMap((s) => s.personId ?? []);
+  const [people, accounts] = await Promise.all([
+    linked.length ? db().getAll(...linked.map((id) => db().doc(docPaths.person(id))), { fieldMask: ["displayName"] }) : [],
+    getAuth().getUsers(staff.map((s) => ({ uid: s.uid }))),
+  ]);
+  const personName = new Map(people.map((p) => [p.id, (p.data() as Pick<Person, "displayName"> | undefined)?.displayName?.trim()]));
+  const accountName = new Map(accounts.users.map((u) => [u.uid, u.displayName?.trim()]));
+  return staff.flatMap((s) => (s.personId && personName.get(s.personId)) || accountName.get(s.uid) || []);
 }
