@@ -4,7 +4,7 @@ import type { BatchScoped, DateISOString } from "./common";
 // teamLocks/{founderId}  (le fondateur lui-meme + staff + investors IC)
 // ----------------------------
 // La reponse d'un fondateur au formulaire « Lock my team » (lot 2,
-// docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.10) : verrouille-t-il une equipe,
+// docs/FONCTIONNALITES.md §2.10) : verrouille-t-il une equipe,
 // avec qui, sous quel nom. Le staff en tire les startups (Admin > Startups,
 // shared/teamLocks.ts). Un id de fondateur n'existe que dans UN batch : l'id
 // du document suffit (une reponse par fondateur et par batch).

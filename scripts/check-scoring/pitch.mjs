@@ -1,7 +1,7 @@
-// La grille Pitch (lot 5, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.11 et §3.1, SPECS §4.9) : neuf
-// criteres de 0 a 5 et leurs points (25 / 15 | 20 / 20 | 6 / 5 / 4 / 3 / 2), trois familles (Team 40,
+// La grille Pitch (lot 5, docs/FONCTIONNALITES.md §2.11 et §3.1, SPECS §4.9) : dix
+// criteres de 0 a 5 et leurs points (20 / 10 / 10 | 20 / 20 | 6 / 5 / 4 / 3 / 2, 18/11), trois familles (Team 40,
 // Speed of execution 40, Market 20) sur 100, Outstanding +20 seulement a 100, anciennes cles de Spring
-// 2026 sur 5, moyenne des jures puis des pitchs, score startup et Clear idea du Commitment ; le pack
+// 2026 sur 5, moyenne des jures puis des pitchs, score startup (Team = famille Team, Background suivi) ; le pack
 // d'un pitch (Pitch deck 48 h avant, echeance la veille ; jury et questions d'apres la grille par etape).
 // Logique pure : functions/lib/shared (pitchGrid, scoring, eventForms, events, presets).
 import { createRequire } from "node:module";
@@ -33,29 +33,28 @@ const all = (note) => Object.fromEntries(PITCH_CRITERIA.map((c) => [c.key, note]
 
 // ---- La grille ------------------------------------------------------------------------------
 
-check("neuf criteres de 0 a 5 : 25 + 15 | 20 + 20 | 6 + 5 + 4 + 3 + 2 = 100", () => {
+check("dix criteres de 0 a 5 : 20 + 10 + 10 | 20 + 20 | 6 + 5 + 4 + 3 + 2 = 100", () => {
   assert.deepEqual(
     PITCH_CRITERIA.map((c) => [c.key, c.points]),
-    [["teamStrength", 25], ["founderMarketFit", 15], ["progress", 20], ["traction", 20], ["clearIdea", 6], ["market", 5], ["competition", 4], ["highPotential", 3], ["businessModel", 2]],
+    [["teamStrength", 20], ["edgeComplementarity", 10], ["founderMarketFit", 10], ["progress", 20], ["traction", 20], ["clearIdea", 6], ["market", 5], ["competition", 4], ["highPotential", 3], ["businessModel", 2]],
   );
   assert.ok(PITCH_RUBRIC.every((c) => c.min === 0 && c.max === 5));
   assert.equal(scoringMaxTotal(PITCH_SCORING, PITCH_RUBRIC), 100);
 });
 
 check("familles sur 100 d'apres les points de leurs criteres ; note de la grille = somme des points", () => {
-  // Team : 4/5 x 25 + 2/5 x 15 = 26 sur 40 -> 65 ; Speed : 5/5 x 20 + 3/5 x 20 = 32 sur 40 -> 80 ;
+  // Team : 4/5 x 20 + 3/5 x 10 + 2/5 x 10 = 26 sur 40 -> 65 ; Speed : 5/5 x 20 + 3/5 x 20 = 32 sur 40 -> 80 ;
   // Market : (6 + 5 + 4 + 3 + 2) x 1/5 = 4 sur 20 -> 20. Grille : 26 + 32 + 4 = 62.
-  const g = pitchGrid({ teamStrength: 4, founderMarketFit: 2, progress: 5, traction: 3, clearIdea: 1, market: 1, competition: 1, highPotential: 1, businessModel: 1 }, false);
+  const g = pitchGrid({ teamStrength: 4, edgeComplementarity: 3, founderMarketFit: 2, progress: 5, traction: 3, clearIdea: 1, market: 1, competition: 1, highPotential: 1, businessModel: 1 }, false);
   near(g.families.team, 65);
   near(g.families.speed, 80);
   near(g.families.market, 20);
   near(g.total, 62);
-  near(g.clearIdea, 20);
   assert.equal(g.outstanding, false);
 });
 
 check("la grille du jury et le bareme du leaderboard donnent la meme note", () => {
-  const means = { teamStrength: 4, founderMarketFit: 2, progress: 5, traction: 3, clearIdea: 1, market: 1, competition: 1, highPotential: 1, businessModel: 1 };
+  const means = { teamStrength: 4, edgeComplementarity: 3, founderMarketFit: 2, progress: 5, traction: 3, clearIdea: 1, market: 1, competition: 1, highPotential: 1, businessModel: 1 };
   const [row] = scoreTeams(PITCH_SCORING, PITCH_RUBRIC, [{ id: "s", metrics: {}, juryMeans: means, late: false, zeroedItemKeys: [], outstanding: false }]);
   near(row.normalized, pitchGrid(means, false).total);
 });
@@ -65,8 +64,6 @@ check("Outstanding : +20 seulement a 100, sur la grille et sur chaque famille (1
   assert.equal(top.outstanding, true);
   assert.equal(top.total, 120);
   assert.deepEqual(top.families, { team: 120, speed: 120, market: 120 });
-  // Clear idea est un critere : la mention ne le touche pas.
-  assert.equal(top.clearIdea, 100);
   const below = pitchGrid({ ...all(5), businessModel: 4 }, true);
   assert.equal(below.outstanding, false);
   near(below.total, 99.6);
@@ -79,7 +76,6 @@ check("sans note, pas de poids : un critere non note sort de sa famille ; une fa
   assert.equal(g.families.team, 100);
   assert.equal(g.families.speed, null);
   assert.equal(g.families.market, null);
-  assert.equal(g.clearIdea, null);
   assert.equal(pitchGrid({}, true).total, null);
 });
 
@@ -89,7 +85,8 @@ check("moyenne des jures, critere par critere", () => {
 });
 
 check("anciennes cles de Spring 2026, sur 5 : chaque famille ramenee a 5 ; une famille sans note absente", () => {
-  assert.deepEqual(legacyPitchScores({ teamStrength: 4, founderMarketFit: 2, progress: 5, traction: 3 }), { teamQuality: 3.25, speedOfExecution: 4 });
+  // Team : (4/5 x 20 + 2/5 x 10) / 30 = 66,7 -> 3,33 sur 5 (Edge complementarity non note).
+  assert.deepEqual(legacyPitchScores({ teamStrength: 4, founderMarketFit: 2, progress: 5, traction: 3 }), { teamQuality: 3.33, speedOfExecution: 4 });
   assert.equal(isPitchGrid(["teamQuality", "speedOfExecution", "marketPotential"]), false);
   assert.equal(isPitchGrid(PITCH_CRITERIA.map((c) => c.key)), true);
   assert.equal(criterionLabel("teamQuality"), "Team quality");
@@ -104,7 +101,7 @@ check("questions d'apres la grille : moyennes, decisions comptees, « would inve
   assert.deepEqual(v, { overall: 3.5, decisions: { go: 2, maybe: 1 }, wouldInvest: { yes: 1, answered: 2 }, betLikelihood: 4 });
 });
 
-// ---- Le score startup et le Commitment ---------------------------------------------------------
+// ---- Le score startup et le Commitment (18/11 : Clear idea n'y compte plus) -----------------------
 
 const pitch = (name, scores, mention = false) => ({ name, grid: pitchGrid(pitchJuryMeans(scores.map((s) => ({ scores: s }))), mention) });
 
@@ -117,32 +114,32 @@ check("familles d'une startup : moyenne de ses pitchs, chaque pitch = moyenne de
   assert.equal(m.team, 100);
   // Speed et Market : seulement le Selection Day (le pitch 1 n'y a pas de note).
   assert.equal(m.speed, 120);
-  assert.equal(m.clearIdea, 100);
+  assert.equal("clearIdea" in m, false);
 });
 
-check("score startup : Team 50 % Background + 50 % pitch, Traction 50 % weekly + 50 % pitch, Market = pitch", () => {
-  const p = pitch("Pitch Day #1", [{ teamStrength: 4, founderMarketFit: 4, progress: 3, traction: 3, clearIdea: 5, market: 5, competition: 5, highPotential: 5, businessModel: 5 }]);
+check("score startup : Team = famille Team (Background suivi a 0 %), Traction 50 % weekly + 50 % pitch, Market = pitch", () => {
+  const p = pitch("Pitch Day #1", [{ teamStrength: 4, edgeComplementarity: 4, founderMarketFit: 4, progress: 3, traction: 3, clearIdea: 5, market: 5, competition: 5, highPotential: 5, businessModel: 5 }]);
   const c = computeStartupScore({ founderBackgrounds: [60], founderExecutions: [70], weeklyTraction: 40, pitches: [p] });
-  // Team (60 + 80) / 2 = 70 ; Traction (40 + 60) / 2 = 50 ; Market 100 ; Execution 70.
-  assert.deepEqual(c.subScores, { market: 100, team: 70, execution: 70, traction: 50 });
-  assert.equal(c.signals.team[1].label, "Pitches (1): Team");
-  assert.equal(c.signals.team[1].raw, "Pitch Day #1 80");
-  // 70 x 0,4 + 70 x 0,2 + 50 x 0,2 + 100 x 0,2 = 72
-  near(startupScore({ subScores: c.subScores, scale: 100 }), 72);
+  // Team 80 (le Background 60 ne compte pas) ; Traction (40 + 60) / 2 = 50 ; Market 100 ; Execution 70.
+  assert.deepEqual(c.subScores, { market: 100, team: 80, execution: 70, traction: 50 });
+  assert.equal(c.signals.team[0].label, "Pitches (1): Team");
+  assert.equal(c.signals.team[0].raw, "Pitch Day #1 80");
+  assert.deepEqual([c.signals.team[1].score, c.signals.team[1].weight], [60, 0]);
+  // 80 x 0,4 + 70 x 0,2 + 50 x 0,2 + 100 x 0,2 = 76
+  near(startupScore({ subScores: c.subScores, scale: 100 }), 76);
 });
 
-check("avant le premier pitch : Team = Background moyen, pas de Market", () => {
+check("avant le premier pitch : pas de Team (le Background est suivi, pas compte), pas de Market", () => {
   const c = computeStartupScore({ founderBackgrounds: [60, 80], founderExecutions: [], weeklyTraction: null, pitches: [] });
-  assert.deepEqual(c.subScores, { market: null, team: 70, execution: null, traction: null });
+  assert.deepEqual(c.subScores, { market: null, team: null, execution: null, traction: null });
+  assert.equal(c.signals.team[0].score, 70);
 });
 
-check("Commitment : Clear idea de sa startup (sur 100) a 50 %", () => {
-  const clearIdea = pitchMeans([pitch("P", [{ clearIdea: 4 }]), pitch("Q", [{ clearIdea: 2 }])]).clearIdea;
-  assert.equal(clearIdea, 60);
-  const base = { nowISOString: "2026-12-05T12:00:00.000Z", attendance: { attended: 0, total: 0 }, formsOnTime: { onTime: 0, expected: 0 }, profileCompleteness: 1, hackathons: [], peerReliability: [], milestones: [], supporters: 0, batchMaxSupporters: 0, background: null };
-  const s = computeFounderScore({ ...base, clearIdea, hasExistingProject: true, hasExistingCoFounders: "none" });
-  // 60 x 0,5 + 100 x 0,25 + 0 x 0,25 = 55
-  assert.equal(s.subScores.commitment, 55);
+check("Commitment (suivi) : projet existant 50 %, cofondateurs 50 % (hors du batch : 50) ; plus de Clear idea", () => {
+  const base = { nowISOString: "2026-12-05T12:00:00.000Z", attendance: { attended: 0, total: 0 }, formsOnTime: { onTime: 0, expected: 0 }, profileCompleteness: 1, hackathons: [], peerReliability: [], milestones: [], shortlisters: 0, batchSize: 0, peerLikability: [], edge: null, background: null };
+  // 100 x 0,5 + 50 x 0,5 = 75
+  assert.equal(computeFounderScore({ ...base, hasExistingProject: true, hasExistingCoFounders: "outside_batch" }).subScores.commitment, 75);
+  assert.equal(computeFounderScore({ ...base, hasExistingProject: false, hasExistingCoFounders: "in_batch" }).subScores.commitment, 50);
 });
 
 // ---- Le pack d'un pitch --------------------------------------------------------------------------
@@ -183,7 +180,7 @@ check("Pitch deck : 48 h avant le pitch, echeance la veille ; une reponse pour t
   assert.equal(formNeedsStartup(deck), true);
 });
 
-check("jury d'un pitch : les neuf criteres, puis Overall, Decision (etapes), Would invest et How likely (avant l'IC)", () => {
+check("jury d'un pitch : les dix criteres, puis Overall, Decision (etapes), Would invest et How likely (avant l'IC)", () => {
   const criteria = PITCH_CRITERIA.map((c) => `criterion_${c.key}`);
   assert.deepEqual(juryIds("pitch_day"), [...criteria, "overall", "wouldInvest", "betLikelihood", "comment"]);
   assert.deepEqual(juryIds("selection_day"), [...criteria, "overall", "decision", "wouldInvest", "betLikelihood", "comment"]);
@@ -192,7 +189,7 @@ check("jury d'un pitch : les neuf criteres, puis Overall, Decision (etapes), Wou
   const jury = planOf("selection_day").find((p) => p.templateKey === "jury").form;
   const byId = new Map(jury.questions.map((q) => [q.id, q]));
   assert.deepEqual(byId.get("criterion_teamStrength").scale, { min: 0, max: 5 });
-  assert.equal(byId.get("criterion_teamStrength").weight, 25);
+  assert.equal(byId.get("criterion_teamStrength").weight, 20);
   assert.deepEqual(byId.get("overall").scale, { min: 0, max: 5 });
   assert.equal(byId.get("overall").dbField, "evaluation.overallScore");
   assert.deepEqual(byId.get("decision").options, ["go", "no_go", "maybe"]);

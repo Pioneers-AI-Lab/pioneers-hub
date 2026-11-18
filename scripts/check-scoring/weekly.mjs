@@ -1,4 +1,4 @@
-// Lot 4 (docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.8, §2.9, §3.2) : la revue des Weekly updates
+// Lot 4 (docs/FONCTIONNALITES.md §2.8, §2.9, §3.2) : la revue des Weekly updates
 // et ce qu'elle donne aux scores, puis le plan des formulaires hebdomadaires.
 //   - grille Weekly startup : Traction 60 / Progress 40 sur 100, Outstanding +20 seulement a 100 ;
 //   - milestone Weekly goal : moyenne des semaines notees (objectif de la semaine d'avant juge
@@ -131,9 +131,10 @@ const founder = (now, milestones) => ({
   hackathons: [],
   peerReliability: [],
   milestones,
-  supporters: 0,
-  batchMaxSupporters: 0,
-  clearIdea: null,
+  shortlisters: 0,
+  batchSize: 0,
+  peerLikability: [],
+  edge: null,
   hasExistingProject: null,
   hasExistingCoFounders: null,
   background: null,

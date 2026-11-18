@@ -64,7 +64,7 @@ export type EventMatching = {
   size: { min: number; max: number };
   /**
    * Les startups du batch (au moins deux fondateurs presents) sont des equipes fixes du
-   * tirage, les autres fondateurs sont tires entre eux (H5, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md
+   * tirage, les autres fondateurs sont tires entre eux (H5, docs/FONCTIONNALITES.md
    * §4.2 : `shared/teamGenerator.ts#startupFixedGroups`, TeamGenerator). Absent : tirage de tous.
    */
   lockedTeamsFromStartups?: boolean;
@@ -216,7 +216,7 @@ export type PioneersEvent = BatchScoped &
      */
     calendarSource?: CalendarSource | null;
     /**
-     * Presence optionnelle (docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §1, 17/11) : relevee,
+     * Presence optionnelle (docs/FONCTIONNALITES.md §1, 17/11) : relevee,
      * mais elle ne compte pas dans Engagement, ni les formulaires de l'evenement dans
      * « Forms on time » (`shared/attendance.ts#isAttendanceOptional`). Absent : obligatoire.
      * Reglee par le staff (Admin > Events > Attendance) ou par data/events.json.

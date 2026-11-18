@@ -5,6 +5,8 @@ import { Box, Group, Stack, Text, UnstyledButton } from "@mantine/core";
 import { isWorkTeamEvent } from "@shared/events";
 import {
   COMMITMENT_STATUS_LABELS,
+  pillarName,
+  pillarWeightOf,
   scaleRulesOf,
   scoreScaleOf,
   type AttendanceStatus,
@@ -37,20 +39,12 @@ import { ScoreRadar } from "@/components/charts/ScoreRadar";
 // CohortContext) : un fondateur voit ses equipes et ses semaines, jamais son
 // score ni sa presence.
 
-const PILLAR_LABEL: Record<FounderPillarKey, string> = {
-  engagement: "Engagement",
-  execution: "Execution",
-  likability: "Likability",
-  commitment: "Commitment",
-  background: "Background",
-  achievements: "Achievements",
-};
-
 /** Initiales des piliers sur le radar (comme la reference). */
 const PILLAR_SHORT: Record<FounderPillarKey, string> = {
   engagement: "E",
   execution: "Ex",
   likability: "L",
+  edge: "Ed",
   commitment: "C",
   background: "B",
   achievements: "A",
@@ -58,8 +52,9 @@ const PILLAR_SHORT: Record<FounderPillarKey, string> = {
 
 /**
  * Program Performance (fiche fondateur du dashboard) : le score global, le
- * radar des cinq piliers, et le detail de chacun (poids, valeur, source,
- * signaux). Sur 100 (Hub) ou sur 10 (Spring 2026, importe) : `score.scale`.
+ * radar des piliers, et le detail de chacun (poids, valeur, source, signaux).
+ * Sur 100 (Hub : poids 10 / 50 / 30 / 10, Commitment et Background a 0 %, suivis)
+ * ou sur 10 (Spring 2026, importe, 20 % chacun) : `score.scale`.
  */
 export function FounderPerformance() {
   const { founder, signals } = useFounder();
@@ -67,8 +62,9 @@ export function FounderPerformance() {
   const score = founderScores.get(founder.id);
   if (!score) return null;
   const scale = scoreScaleOf(score);
-  const { pillars, performanceHint } = scaleRulesOf(score);
-  const weight = 1 / pillars.length;
+  const rules = scaleRulesOf(score);
+  const { pillars, performanceHint } = rules;
+  const totalWeight = pillars.reduce((sum, p) => sum + pillarWeightOf(rules, p), 0) || 1;
   const valueOf = (p: FounderPillarKey) => score.subScores[p] ?? null;
 
   return (
@@ -89,8 +85,9 @@ export function FounderPerformance() {
             return {
               key: p,
               short: PILLAR_SHORT[p],
-              label: PILLAR_LABEL[p],
-              weight,
+              // Un pilier a 0 % (suivi) : calcule et montre, jamais compte.
+              label: pillarWeightOf(rules, p) === 0 ? `${pillarName(p)} (not counted)` : pillarName(p),
+              weight: pillarWeightOf(rules, p) / totalWeight,
               value: valueOf(p),
               source: scoreSourceLine(list, scale),
               details:

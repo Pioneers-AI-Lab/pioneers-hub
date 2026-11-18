@@ -163,6 +163,7 @@ const emptyDirectory = (email: string): FounderDirectory => ({
   nationality: null,
   country: null,
   introduceYourself: null,
+  edge: null,
   education: [],
   degree: null,
   fieldOfStudy: null,

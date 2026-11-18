@@ -163,6 +163,7 @@ export function ProfileEditor({ back }: EditorProps) {
             nationality: directory.nationality ?? null,
             country: directory.country ?? null,
             introduceYourself: directory.introduceYourself ?? null,
+            edge: directory.edge ?? null,
             education: directory.education,
             degree: directory.degree ?? null,
             fieldOfStudy: directory.fieldOfStudy ?? null,
@@ -276,6 +277,11 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
       <Section title="About">
         <Stack>
           <Textarea label="Introduce yourself" {...req("founderDirectory.introduceYourself")} autosize minRows={3} value={dir.introduceYourself ?? ""} onChange={(e) => setD("introduceYourself", text(e.currentTarget.value))} />
+          <WithHelp label="Your edge" help="What makes you stand out, whatever the market: strong in code, in marketing, you never give up, you lead... One or two sentences.">
+            {(field) => (
+              <Textarea {...field} {...req("founderDirectory.edge")} autosize minRows={2} value={dir.edge ?? ""} onChange={(e) => setD("edge", text(e.currentTarget.value))} />
+            )}
+          </WithHelp>
           <WithHelp label="Track record" help="What you are most proud of, in 2 to 4 points.">
             {(field) => (
               <Textarea {...field} {...req("founderDirectory.trackRecord")} autosize minRows={3} value={dir.trackRecord ?? ""} onChange={(e) => setD("trackRecord", text(e.currentTarget.value))} />

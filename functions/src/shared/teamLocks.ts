@@ -4,7 +4,7 @@ import { slugify } from "./text";
 import type { Founder, Membership, Startup, StartupInternal, StartupProfile, TeamLock, WithId } from "./types";
 
 // ----------------------------
-// Lock my team -> startups (lot 2, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.10)
+// Lock my team -> startups (lot 2, docs/FONCTIONNALITES.md §2.10)
 // ----------------------------
 // Chaque fondateur dit s'il verrouille une equipe et avec qui (`teamLocks/{founderId}`,
 // types/teamLock.ts). Le staff en tire les startups dans Admin > Startups : une

@@ -19,7 +19,7 @@ import { useAdminBackground, type BackgroundRow } from "@/context/AdminBackgroun
 import { useAction } from "@/hooks/useAction";
 import { useParamsTS } from "@/hooks/useParamsTS";
 import { saveBackground } from "@/lib/backgroundAdmin";
-import { formatDateTime, yesNoLabel } from "@/lib/format";
+import { formatDateTime, noteOptions, yesNoLabel } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { ActionBar } from "@/components/admin/ActionBar";
 import { BlockedState } from "@/components/ui/BlockedState";
@@ -37,7 +37,7 @@ import { WithHelp } from "@/components/ui/Help";
 // 100. La grille part de la note enregistree, sinon de la proposition de Claude (dite
 // comme telle), sinon vide. Enregistrer passe au fondateur suivant a noter.
 
-const NOTES = Array.from({ length: BACKGROUND_MAX_NOTE + 1 }, (_, i) => String(i));
+const NOTES = noteOptions(BACKGROUND_MAX_NOTE);
 
 type Draft = NonNullable<FounderBackground["scores"]>;
 

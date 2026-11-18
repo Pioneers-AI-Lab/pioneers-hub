@@ -202,6 +202,15 @@ service cloud.firestore {
                     && s.get('pedigree', 0) == 5 && s.get('geography', 0) == 5)));
     }
 
+    // Note de l'Edge (`private/internal.edge`, miroir de shared/edge.ts#edgeRatingWrite) : un entier
+    // de 0 a 5, sur un texte ecrit (`ratedText` non vide).
+    function edgeOk() {
+      let e = request.resource.data.get('edge', null);
+      return e == null
+        || (e.get('score', null) is int && e.score >= 0 && e.score <= 5
+            && e.get('ratedText', null) is string && e.ratedText.size() > 0);
+    }
+
     // ---- Comptes -----------------------------------------------------------
 
     match /users/{uid} {
@@ -345,13 +354,13 @@ service cloud.firestore {
         allow write: if docId != 'connections' && docId != 'internal' && isStaff();
         // Donnees internes : le staff, grille Background valide (backgroundOk).
         allow delete: if docId == 'internal' && isStaff();
-        allow create, update: if docId == 'internal' && isStaff() && backgroundOk();
+        allow create, update: if docId == 'internal' && isStaff() && backgroundOk() && edgeOk();
         // « Mon profil » (FOUNDER_SELF_EDITABLE.founderDirectory et .founderProfile).
         allow update: if docId == 'directory'
           && isViewerFounder(founderData(founderId).batchId, founderId)
           && onlyChanges([
             'whatsapp', 'linkedinUrl', 'phone', 'gender', 'nationality', 'country', 'introduceYourself',
-            'education', 'degree', 'fieldOfStudy', 'yearsOfXP', 'notableCompanies', 'trackRecord',
+            'edge', 'education', 'degree', 'fieldOfStudy', 'yearsOfXP', 'notableCompanies', 'trackRecord',
             'interestedInWorkingOn', 'hasExistingProject', 'projectExplanation', 'hasExistingCoFounders',
             'openToJoinAnotherProject', 'mainStartup2025', 'repeatFounder', 'lookingForCoFounder', 'coFounderTypeWanted',
             'coFounderSkillsWanted', 'industriesToExplore', 'anythingElse'])

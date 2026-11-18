@@ -2,21 +2,22 @@ import { getFirestore } from "firebase-admin/firestore";
 import { z } from "zod";
 import { BACKGROUND_CRITERIA, BACKGROUND_MAX_NOTE, backgroundRatingWrite, type BackgroundScores } from "../../shared/background";
 import { COL, docPaths } from "../../shared/collections";
+import { EDGE_MAX_NOTE, edgeRatingWrite } from "../../shared/edge";
 import { parisToday } from "../../shared/dates";
 import { attendanceOptionalWrite } from "../../shared/admin/events";
 import { RuleError } from "../../shared/docWrites";
 import { normalizeDraft, startupCreationWrites, STARTUP_MAX_MEMBERS } from "../../shared/teamLocks";
 import { founderReviewWrite, STARTUP_REVIEW_CRITERIA, startupReviewWrite, WEEKLY_REVIEW_MAX_NOTE } from "../../shared/weeklyReviews";
-import type { Batch, Founder, PioneersEvent, Startup } from "../../shared/types";
+import type { Batch, Founder, FounderDirectory, PioneersEvent, Startup } from "../../shared/types";
 import type { Operation } from "../operations";
 import { dayString } from "../schemas";
-import { mustRead, readWhere, staffOnly, writePlan } from "./writes";
+import { mustRead, readDoc, readWhere, staffOnly, writePlan } from "./writes";
 
 // ----------------------------
-// services/admin - revues des Weekly updates, Background, startups, presence optionnelle
+// services/admin - revues des Weekly updates, Background, Edge, startups, presence optionnelle
 // ----------------------------
-// Admin > Reviews, Admin > Background, Admin > Startups et Admin > Events >
-// Attendance : les gestes de shared/weeklyReviews.ts, shared/background.ts et
+// Admin > Reviews, Admin > Background, Admin > Edge, Admin > Startups et Admin > Events >
+// Attendance : les gestes de shared/weeklyReviews.ts, shared/background.ts, shared/edge.ts et
 // shared/teamLocks.ts, comme a l'ecran (memes refus : RuleError -> 400).
 
 const week = dayString.describe("The week's Monday, YYYY-MM-DD.");
@@ -105,6 +106,27 @@ export const rateBackground: Operation<typeof RateBackgroundInput> = {
       [backgroundRatingWrite(founderId, { scores: scores as BackgroundScores, outstanding: outstanding ?? false }, caller.uid, new Date().toISOString())],
       { founderId },
     );
+  },
+};
+
+export const RateEdgeInput = z
+  .object({
+    founderId: z.string().min(1),
+    score: note(EDGE_MAX_NOTE).describe("The founder's edge (intrinsic, whatever the market), from 0 to 5, rated on the text they wrote."),
+  })
+  .strict();
+
+export const rateEdge: Operation<typeof RateEdgeInput> = {
+  name: "rate_edge",
+  input: RateEdgeInput,
+  allowed: staffOnly,
+  async plan(tx, caller, { founderId, score }) {
+    const [founder, directory] = await Promise.all([
+      mustRead<Founder>(tx, docPaths.founder(founderId), "founder", "founderId"),
+      readDoc<FounderDirectory>(tx, docPaths.founderDirectory(founderId)),
+    ]);
+    const text = directory?.edge ?? null;
+    return writePlan({ founder: founder.name, edge: text, score }, [edgeRatingWrite(founderId, { score, ratedText: text }, caller.uid, new Date().toISOString())], { founderId });
   },
 };
 

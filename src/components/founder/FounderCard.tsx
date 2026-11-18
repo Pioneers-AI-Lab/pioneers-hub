@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Alert, Avatar, Box, Button, Group, Stack, Text, Title } from "@mantine/core";
+import { EDGE_MAX_NOTE } from "@shared/edge";
 import { EXISTING_CO_FOUNDERS_LABELS, type FounderStatus } from "@shared/types";
 import { useFounder } from "@/context/FounderContext";
 import { useStartups } from "@/context/StartupsContext";
@@ -16,6 +17,7 @@ import { PageLoader } from "@/components/ui/PageLoader";
 import { LinkRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 import { tagsOrNull as tags } from "@/components/ui/Tags";
+import { EdgeRating } from "@/components/admin/EdgeRating";
 import { ConnectionButtons } from "./ConnectionButtons";
 import { FounderConnections } from "./FounderConnections";
 import { QuickContacts } from "./QuickContacts";
@@ -42,7 +44,7 @@ const yesNo = (v: boolean | null | undefined) => (v === true ? "Yes" : v === fal
  */
 export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
   const { program } = useProgram();
-  const { batch } = useBatch();
+  const { batch, role } = useBatch();
   const { founder, directory, profile, internal, canSeeDirectory, isSelf, canEdit, isDetailsLoading } = useFounder();
   // Le fondateur lui-meme ou le staff : bouton d'edition et alerte « profil incomplet ».
   const editHref = paths.founderEdit(program.id, batch.id, founder.id);
@@ -121,6 +123,7 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
             <Stack gap="md">
               <Field label="Track record">{dir.trackRecord}</Field>
               <Field label="Introduction">{dir.introduceYourself}</Field>
+              <Field label="Edge">{dir.edge}</Field>
               {(dir.trackRecord3Liners ?? []).length > 0 && (
                 <Field label="Highlights">{dir.trackRecord3Liners.join("\n")}</Field>
               )}
@@ -208,9 +211,17 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
 
       {internal && (
         <Section title="Internal" help="Pioneers team and investment committee only.">
-          <FieldGrid>
+          <Stack gap="md">
             <Field label="Account">{founder.uid ? `Linked ${formatDay(founder.claimedDateISOString?.slice(0, 10))}` : "Not linked"}</Field>
-          </FieldGrid>
+            {/* Le staff note l'Edge ici (comme dans Admin > Edge) ; un investor IC lit la note. */}
+            <Field label="Edge rating">
+              {role === "staff" ? (
+                <EdgeRating founderId={founder.id} founderName={founder.name} text={dir?.edge ?? null} rating={internal.edge ?? null} />
+              ) : internal.edge ? (
+                `${internal.edge.score}/${EDGE_MAX_NOTE}`
+              ) : null}
+            </Field>
+          </Stack>
         </Section>
       )}
 

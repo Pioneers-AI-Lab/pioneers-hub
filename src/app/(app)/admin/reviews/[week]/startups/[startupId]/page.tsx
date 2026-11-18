@@ -19,7 +19,7 @@ import { useAdmin } from "@/context/AdminContext";
 import { useAdminReviews, type StartupReviewRow } from "@/context/AdminReviewsContext";
 import { useAction } from "@/hooks/useAction";
 import { useParamsTS } from "@/hooks/useParamsTS";
-import { formatDateTime, metricValue } from "@/lib/format";
+import { formatDateTime, metricValue, noteOptions } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { nextReviewHref, saveLabel, saveStartupReview, weekLabel } from "@/lib/reviewsAdmin";
 import { ActionBar } from "@/components/admin/ActionBar";
@@ -38,7 +38,7 @@ import { WithHelp } from "@/components/ui/Help";
 // semaine d'avant, pour juger le Progress. Normalement une update par startup ; si plusieurs
 // membres l'ont envoyee, chacune s'affiche (la plus recente d'abord).
 
-const NOTES = Array.from({ length: WEEKLY_REVIEW_MAX_NOTE + 1 }, (_, i) => String(i));
+const NOTES = noteOptions(WEEKLY_REVIEW_MAX_NOTE);
 
 export default function AdminReviewStartupPage() {
   const { week, startupId } = useParamsTS<{ week: string; startupId: string }>();

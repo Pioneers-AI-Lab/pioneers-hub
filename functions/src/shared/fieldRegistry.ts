@@ -522,6 +522,8 @@ export const DB_FIELDS = {
     writePolicy: "merge_unique",
   }),
   "founderDirectory.introduceYourself": field("Introduce yourself", longText(), { expected: once("required") }),
+  // L'Edge (18/11, shared/edge.ts) : ecrit par le fondateur, note par le staff (`private/internal.edge`).
+  "founderDirectory.edge": field("Your edge", longText(), { expected: once("required") }),
   "founderDirectory.gender": field("Gender", text(40)),
   "founderDirectory.nationality": field("Nationality", text(80), { expected: once("required") }),
   "founderDirectory.country": field("Country", text(80)),
@@ -583,7 +585,7 @@ export const DB_FIELDS = {
   "founderWeek.priorityForWeek": field("Priority for the week", longText()),
   "founderWeek.feelingForWeek": field("How do you feel", longText()),
   "founderWeek.anythingSpecific": field("Anything specific to mention", longText()),
-  // Weekly update founder (lot 4, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.8).
+  // Weekly update founder (lot 4, docs/FONCTIONNALITES.md §2.8).
   "founderWeek.achieved": field("Achieved this week", longText(), { expected: weekly }),
   "founderWeek.messagesSent": field("Problem validation: messages sent this week", num()),
   "founderWeek.conversationsDone": field("Problem validation: conversations with potential users this week", num()),

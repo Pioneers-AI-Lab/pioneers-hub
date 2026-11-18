@@ -151,6 +151,7 @@ for (const f of founders) {
     nationality: null,
     country: "France",
     introduceYourself: "Demo introduction.",
+    edge: "Ships fast and never gives up.",
     education: ["Demo University"],
     degree: "MSc",
     fieldOfStudy: "Computer Science",

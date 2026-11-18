@@ -1,7 +1,7 @@
 import type { BatchScoped, DateISOString, ShortlistRecord } from "./types";
 
 // ----------------------------
-// L'historique des shortlists (docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §3.1, Likability)
+// L'historique des shortlists (docs/FONCTIONNALITES.md §3.1, Likability)
 // ----------------------------
 // Logique pure, partagee par le declencheur (services/shortlistHistory.ts) et le
 // rattrapage (scripts/backfill-shortlist-history.mjs). Un enregistrement par paire

@@ -1,4 +1,4 @@
-// La grille Background (lot 2, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.13) : quatre criteres
+// La grille Background (lot 2, docs/FONCTIONNALITES.md §2.13) : quatre criteres
 // de 0 a 5 et leurs points (40 / 25 / 20 / 15), Outstanding +20 seulement a 100, une note du
 // staff seule comptee. Logique pure : functions/lib/shared/background.js.
 import { createRequire } from "node:module";

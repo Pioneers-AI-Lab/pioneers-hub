@@ -4,7 +4,7 @@ import { OUTSTANDING_BONUS_POINTS, pointsOn100, reachesMax, withOutstanding } fr
 import type { FounderBackground, FounderBackgroundProposal } from "./types";
 
 // ----------------------------
-// La grille Background (lot 2, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.13)
+// La grille Background (lot 2, docs/FONCTIONNALITES.md §2.13)
 // ----------------------------
 // Notee une fois par le staff a l'onboarding (Admin > Background), sur le profil :
 // quatre criteres de 0 a 5 et leurs points (40 / 25 / 20 / 15 = 100, `BACKGROUND_CRITERIA`),
@@ -45,6 +45,9 @@ export type BackgroundScores = Record<BackgroundCriterion, number>;
 /** Une note de critere renseignee (un nombre). */
 export const isNote = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
+/** Une note enregistrable : un entier de 0 a `max` (grilles du staff : Background, Weekly startup, Edge). */
+export const isWholeNote = (v: unknown, max: number): v is number => isNote(v) && Number.isInteger(v) && v >= 0 && v <= max;
+
 /**
  * La note sur 100, avant l'Outstanding : chaque critere rapporte note ÷ 5 × ses points.
  * Un critere absent est retire et les autres se partagent son poids (« sans note,
@@ -84,7 +87,7 @@ export function backgroundProblems(scores: Partial<Record<BackgroundCriterion, u
   const problems: string[] = [];
   for (const c of BACKGROUND_CRITERIA) {
     const v = scores[c.key];
-    if (!isNote(v) || !Number.isInteger(v) || v < 0 || v > BACKGROUND_MAX_NOTE) problems.push(`${c.label}: a score from 0 to ${BACKGROUND_MAX_NOTE}.`);
+    if (!isWholeNote(v, BACKGROUND_MAX_NOTE)) problems.push(`${c.label}: a score from 0 to ${BACKGROUND_MAX_NOTE}.`);
   }
   if (problems.length === 0 && outstanding && !canBeOutstanding(scores as BackgroundScores)) {
     problems.push("The Outstanding mention is only given at 100.");

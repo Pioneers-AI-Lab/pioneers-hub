@@ -1,6 +1,7 @@
-// Les scores sur 100 (decision du 17/11, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §3 et §4.1) :
+// Les scores sur 100 (decisions du 17/11 et du 18/11, docs/FONCTIONNALITES.md §3 et §4.1) :
 // un cas par sous-score et par signal, « sans note, pas de poids », H5 x4, absence sans effet
-// sur Execution, Likability (une personne compte une fois), Outstanding au-dessus de 100,
+// sur Execution, Likability (shortlists rapportees a la moitie du batch, ressenti du peer rating),
+// Edge, poids de la Program Performance (10 / 50 / 30 / 10, Commitment et Background a 0 %), Outstanding au-dessus de 100,
 // milestones avant et apres leur echeance, score startup, et les scores sur 10 de Spring 2026.
 // Logique pure : functions/lib/shared/scoring.js, attendance.js, types/score.js. La grille
 // Background elle-meme (points, Outstanding) : background.mjs ; ici, le sous-score qui la lit.
@@ -18,9 +19,11 @@ const {
   hackathonsByFounder,
   hackathonWeightOf,
   peerRatingOn100,
-  supportersOf,
+  shortlistersOf,
+  shortlistersOn100,
 } = require("../../functions/lib/shared/scoring.js");
 const { mandatoryAttendance } = require("../../functions/lib/shared/attendance.js");
+const { edgeProblems, edgeRatingWrite, edgeStatus } = require("../../functions/lib/shared/edge.js");
 const { programPerformance, startupScore, scoreScaleOf } = require("../../functions/lib/shared/types/score.js");
 
 const NOW = "2026-11-20T12:00:00.000Z";
@@ -33,9 +36,10 @@ const inputs = (extra = {}) => ({
   hackathons: [],
   peerReliability: [],
   milestones: [],
-  supporters: 0,
-  batchMaxSupporters: 0,
-  clearIdea: null,
+  shortlisters: 0,
+  batchSize: 0,
+  peerLikability: [],
+  edge: null,
   hasExistingProject: null,
   hasExistingCoFounders: null,
   background: null,
@@ -207,47 +211,67 @@ check("un batch sans echeances n'a pas de milestones", () => {
 
 // ---- Likability ---------------------------------------------------------------------------
 
-check("Likability : rapportee au meilleur du batch (= 100)", () => {
-  assert.equal(sub({ supporters: 3, batchMaxSupporters: 6 }).likability, 50);
-  assert.equal(sub({ supporters: 6, batchMaxSupporters: 6 }).likability, 100);
+check("Likability, shortlists : rapportees a la moitie du batch, plafonnees a 100", () => {
+  // Batch de 32 : 16 fondateurs qui l'ont shortliste = 100.
+  assert.equal(shortlistersOn100(8, 32), 50);
+  assert.equal(shortlistersOn100(16, 32), 100);
+  assert.equal(shortlistersOn100(20, 32), 100);
+  assert.equal(sub({ shortlisters: 4, batchSize: 32 }).likability, 25);
+  assert.equal(signalsOf({ shortlisters: 4, batchSize: 32 }, "likability")[0].raw, "4 founders, 16 for 100");
 });
 
-check("Likability sans aucun soutien dans le batch : pas de poids (null)", () => {
-  assert.equal(sub({ supporters: 0, batchMaxSupporters: 0 }).likability, null);
-  assert.equal(sub({ supporters: 0, batchMaxSupporters: 4 }).likability, 0);
+check("Likability : shortlists 50 %, ressenti du peer rating 50 % ((note - 1) x 25)", () => {
+  // Shortlists 8/16 = 50 ; ressenti moyen 4 = 75 -> 62,5
+  assert.equal(sub({ shortlisters: 8, batchSize: 32, peerLikability: [5, 3] }).likability, 62.5);
+  // Sans batch (aucun participant) : le ressenti seul.
+  assert.equal(sub({ peerLikability: [5] }).likability, 100);
+  assert.equal(sub({}).likability, null);
 });
 
-check("Likability : une meme personne compte une fois (shortlist et note de 5)", () => {
-  const ids = new Set(["a", "b", "c", "d"]);
-  const supporters = supportersOf(
-    ids,
+check("Likability : une meme personne compte une fois ; jamais soi-meme ; un 5 au peer rating n'est pas une shortlist", () => {
+  const shortlisters = shortlistersOf(
     new Map([
       ["b", new Set(["a"])], // historique et liste actuelle : un ensemble
       ["a", new Set(["a"])], // jamais soi-meme
-      ["x", new Set(["a"])], // hors du batch
+      ["c", new Set(["a", "b"])],
     ]),
-    [
-      { raterFounderId: "b", rateeFounderId: "a", likability: 5 }, // deja compte
-      { raterFounderId: "c", rateeFounderId: "a", likability: 4 },
-      { raterFounderId: "d", rateeFounderId: "a", likability: 3 }, // 3 ne compte pas
-    ],
   );
-  assert.deepEqual([...supporters.get("a")].sort(), ["b", "c"]);
+  assert.deepEqual([...shortlisters.get("a")].sort(), ["b", "c"]);
+  assert.deepEqual([...shortlisters.get("b")], ["c"]);
+});
+
+// ---- Edge ---------------------------------------------------------------------------------
+
+check("Edge : la note du staff de 0 a 5, sur 100 ; sans note, pas de poids", () => {
+  const edge = { score: 4, ratedText: "Ships fast", ratedByUid: "staff", ratedDateISOString: NOW };
+  assert.equal(sub({ edge }).edge, 80);
+  assert.equal(signalsOf({ edge }, "edge")[0].raw, "4/5");
+  assert.equal(sub({}).edge, null);
+});
+
+check("Edge : a noter tant que le texte n'est pas note, ou s'il a change depuis la note", () => {
+  const rating = { score: 4, ratedText: "Ships fast", ratedByUid: "staff", ratedDateISOString: NOW };
+  assert.equal(edgeStatus(null, null), "missing");
+  assert.equal(edgeStatus("  ", rating), "missing");
+  assert.equal(edgeStatus("Ships fast", null), "to_rate");
+  assert.equal(edgeStatus("Ships fast\n", rating), "rated");
+  assert.equal(edgeStatus("Ships fast, never gives up", rating), "to_rate");
+  assert.deepEqual(edgeProblems(5), []);
+  assert.equal(edgeProblems(6).length, 1);
+  assert.equal(edgeProblems(2.5).length, 1);
+  assert.throws(() => edgeRatingWrite("a", { score: 7, ratedText: "x" }, "staff", NOW));
+  assert.throws(() => edgeRatingWrite("a", { score: 3, ratedText: "  " }, "staff", NOW), /edge|written/i);
+  assert.equal(edgeRatingWrite("a", { score: 3, ratedText: " Ships fast \n" }, "staff", NOW).data.edge.ratedText, "Ships fast");
 });
 
 // ---- Commitment ---------------------------------------------------------------------------
 
-check("Commitment : projet existant 25 %, cofondateurs 25 % (hors du batch = 70)", () => {
-  // Clear idea absente : (100 x 25 + 70 x 25) / 50 = 85
-  assert.equal(sub({ hasExistingProject: true, hasExistingCoFounders: "outside_batch" }).commitment, 85);
+check("Commitment (suivi, 0 %) : projet existant 50 %, cofondateurs 50 % (hors du batch = 50) ; ni Clear idea ni statut", () => {
+  // (100 + 50) / 2 = 75
+  const extra = { hasExistingProject: true, hasExistingCoFounders: "outside_batch" };
+  assert.equal(sub(extra).commitment, 75);
   assert.equal(sub({ hasExistingProject: false, hasExistingCoFounders: "in_batch" }).commitment, 50);
-});
-
-check("Commitment avec Clear idea (50 %) ; le statut d'engagement n'y est plus", () => {
-  // (40 x 50 + 100 x 25 + 70 x 25) / 100 = 62,5
-  const extra = { clearIdea: 40, hasExistingProject: true, hasExistingCoFounders: "outside_batch" };
-  assert.equal(sub(extra).commitment, 62.5);
-  assert.deepEqual(signalsOf(extra, "commitment").map((s) => s.label), ["Clear idea", "Existing project", "Existing co-founders"]);
+  assert.deepEqual(signalsOf(extra, "commitment").map((s) => s.label), ["Existing project", "Existing co-founders"]);
 });
 
 check("Commitment sans donnee : pas de poids (null)", () => {
@@ -277,39 +301,47 @@ check("Background sans note du staff (proposition seule, ou rien) : pas de poids
 
 // ---- Program Performance ----------------------------------------------------------------------
 
-check("Program Performance : moyenne des sous-scores disponibles (20 % chacun)", () => {
-  const s = sub({ profileCompleteness: 0.8, supporters: 1, batchMaxSupporters: 2, hasExistingProject: true });
-  // engagement 80, likability 50, commitment 100 ; execution et background retires
-  assert.equal(s.execution, null);
-  assert.equal(programPerformance({ subScores: s, scale: 100 }), (80 + 50 + 100) / 3);
+check("Program Performance : Engagement 10, Execution 50, Likability 30, Edge 10 ; Commitment et Background a 0 %", () => {
+  const edge = { score: 3, ratedText: "x", ratedByUid: "staff", ratedDateISOString: NOW };
+  const s = sub({ profileCompleteness: 0.8, hackathons: [{ name: "H1", score: 70, weight: 1 }], shortlisters: 8, batchSize: 32, edge, hasExistingProject: true });
+  // engagement 80, execution 70, likability 50, edge 60, commitment 100 (pas compte)
+  assert.deepEqual([s.engagement, s.execution, s.likability, s.edge, s.commitment], [80, 70, 50, 60, 100]);
+  // (80 x 10 + 70 x 50 + 50 x 30 + 60 x 10) / 100 = 64
+  near(programPerformance({ subScores: s, scale: 100 }), 64);
+  // Sans donnee, un sous-score est retire : sans Execution ni Edge, (80 x 10 + 50 x 30) / 40.
+  const t = sub({ profileCompleteness: 0.8, shortlisters: 8, batchSize: 32, hasExistingProject: true });
+  near(programPerformance({ subScores: t, scale: 100 }), 57.5);
+  // Seulement des sous-scores a 0 % : pas de Program Performance.
+  assert.equal(programPerformance({ subScores: { commitment: 100, background: 90 }, scale: 100 }), null);
 });
 
 check("Outstanding : un sous-score et la Program Performance depassent 100", () => {
   const all5 = { execution: 5, founderSignal: 5, pedigree: 5, geography: 5 };
   const s = sub({ hackathons: [{ name: "H1", score: 120, weight: 1 }], background: { scores: all5, outstanding: true } });
-  // Ni signal, ni sous-score, ni Program Performance plafonnes.
+  // Ni signal, ni sous-score, ni Program Performance plafonnes (Background suivi : 120, pas compte).
   assert.equal(s.execution, 120);
   assert.equal(s.background, 120);
-  assert.ok(programPerformance({ subScores: s, scale: 100 }) > 100);
+  // (100 x 10 + 120 x 50) / 60
+  near(programPerformance({ subScores: s, scale: 100 }), 116.67);
 });
 
 // ---- Score startup ---------------------------------------------------------------------------
 
-check("startup : Team = Background moyen, Execution = celle de ses fondateurs, le reste sans donnee", () => {
+check("startup avant tout pitch : Execution = celle de ses fondateurs ; le Background moyen est suivi, pas compte", () => {
   const c = computeStartupScore({ founderBackgrounds: [78, 62], founderExecutions: [64, 80], weeklyTraction: null, pitches: [] });
-  assert.deepEqual(c.subScores, { market: null, team: 70, execution: 72, traction: null });
-  assert.equal(c.dataCompleteness, 0.5);
-  // Team 40, Execution 20 (Traction et Market retires) : (70 x 40 + 72 x 20) / 60
-  near(startupScore({ subScores: c.subScores, scale: 100 }), 70.67);
+  assert.deepEqual(c.subScores, { market: null, team: null, execution: 72, traction: null });
+  assert.deepEqual(c.signals.team.map((s) => [s.score, s.weight]), [[70, 0]]);
+  assert.equal(c.dataCompleteness, 0.25);
+  near(startupScore({ subScores: c.subScores, scale: 100 }), 72);
 });
 
-check("startup : Team 50 % Background, 50 % pitch ; Traction 50 / 50 ; Team 40, les autres 20", () => {
+check("startup : Team = famille Team du pitch ; Traction 50 / 50 ; Team 40, les autres 20", () => {
   // Un pitch dont les familles valent 60 / 80 / 90 (le calcul des familles : pitch.mjs).
-  const grid = { total: null, outstanding: false, families: { team: 60, speed: 80, market: 90 }, clearIdea: null };
+  const grid = { total: null, outstanding: false, families: { team: 60, speed: 80, market: 90 } };
   const c = computeStartupScore({ founderBackgrounds: [80], founderExecutions: [50], weeklyTraction: 40, pitches: [{ name: "Pitch Day #1", grid }] });
-  assert.deepEqual(c.subScores, { market: 90, team: 70, execution: 50, traction: 60 });
-  // 70 x 0,4 + 50 x 0,2 + 60 x 0,2 + 90 x 0,2 = 68
-  near(startupScore({ subScores: c.subScores, scale: 100 }), 68);
+  assert.deepEqual(c.subScores, { market: 90, team: 60, execution: 50, traction: 60 });
+  // 60 x 0,4 + 50 x 0,2 + 60 x 0,2 + 90 x 0,2 = 64
+  near(startupScore({ subScores: c.subScores, scale: 100 }), 64);
 });
 
 check("startup sans aucune donnee : null", () => {

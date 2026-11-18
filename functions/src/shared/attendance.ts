@@ -56,7 +56,7 @@ export function eventRoster<F extends AttendanceFounder>(
 }
 
 /**
- * Presence optionnelle (docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §1) : relevee, mais
+ * Presence optionnelle (docs/FONCTIONNALITES.md §1) : relevee, mais
  * ni la presence ni les formulaires de l'evenement ne comptent dans Engagement
  * (services/scores.ts). Les absents restent hors des formulaires et du tirage.
  */

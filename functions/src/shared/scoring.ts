@@ -1,7 +1,7 @@
 import { isAttendanceOptional } from "./attendance";
 import { BACKGROUND_CRITERIA, ratedBackgroundScore } from "./background";
+import { EDGE_MAX_NOTE, edgeScore } from "./edge";
 import { pitchMeans, PITCH_FAMILY_INFO, type PitchFamily, type PitchInput } from "./pitchGrid";
-import { normalizeToBest } from "./scoringRules";
 import {
   EXISTING_CO_FOUNDERS_LABELS,
   mean,
@@ -10,6 +10,7 @@ import {
   type DateISOString,
   type ExistingCoFounders,
   type FounderBackground,
+  type FounderEdgeRating,
   type FounderPillar,
   type Form,
   type LeaderboardRow,
@@ -20,26 +21,29 @@ import {
 } from "./types";
 
 // ----------------------------
-// Les scores d'un fondateur et d'une startup, sur 100 (docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §3)
+// Les scores d'un fondateur et d'une startup, sur 100 (docs/FONCTIONNALITES.md §3)
 // ----------------------------
 // Logique pure, lue par `services/scores.ts` qui rassemble les donnees du batch.
 // Poids en pourcentage de leur niveau (§3.1) ; « sans note, pas de poids » (§4.1) :
 // un signal ou un sous-score sans donnee est retire, et les autres se partagent son
-// poids en gardant leurs proportions. Pas de plafond : l'Outstanding mention (hackathon,
-// Background) fait passer un signal, un sous-score ou le score au-dessus de 100.
+// poids en gardant leurs proportions. Un signal a 0 % est calcule et montre (suivi), jamais
+// compte. Pas de plafond : l'Outstanding mention (hackathon, Background) fait passer un
+// signal, un sous-score ou le score au-dessus de 100.
 //
-// Program Performance (fondateur), cinq sous-scores a 20 % (moyenne : `programPerformance`) :
-//   Engagement   presence aux evenements OBLIGATOIRES passes 50 %, formulaires remplis a temps 30 %,
-//                completude du profil 20 %
-//   Execution    hackathons ou il etait present (moyenne des notes de son equipe, poids de
-//                l'evenement : H5 x4), peer ratings recus ((note - 1) x 25), milestones dues : 1/3 chacun
-//   Likability   fondateurs distincts qui l'ont shortliste (historique) ou lui ont donne 4 ou 5,
-//                rapportes au meilleur du batch (= 100)
-//   Commitment   Clear idea de sa startup (critere de la grille Pitch, sur 100) 50 %, projet existant 25 %,
-//                cofondateurs existants 25 %
-//   Background   la grille Background du staff (lot 2)
+// Program Performance (fondateur, `programPerformance` : poids FOUNDER_PILLAR_WEIGHTS, 18/11) :
+//   Engagement 10 %   presence aux evenements OBLIGATOIRES passes 50 %, formulaires remplis a temps 30 %,
+//                     completude du profil 20 %
+//   Execution 50 %    hackathons ou il etait present (moyenne des notes de son equipe, poids de
+//                     l'evenement : H5 x4), fiabilite recue au peer rating ((note - 1) x 25), milestones
+//                     dues : 1/3 chacun
+//   Likability 30 %   fondateurs distincts qui l'ont shortliste (historique) rapportes a la moitie du
+//                     batch, plafonne a 100, 50 % ; ressenti recu au peer rating ((note - 1) x 25) 50 %
+//   Edge 10 %         la note du staff sur son Edge (shared/edge.ts), de 0 a 5 -> sur 100
+//   Commitment 0 %    projet existant 50 %, cofondateurs existants 50 % (suivi)
+//   Background 0 %    la grille Background du staff (suivi)
 // Score startup (`startupScore` : Team 40, Execution 20, Traction 20, Market 20) :
-//   Team         Background moyen de ses fondateurs 50 %, famille Team de ses pitchs 50 %
+//   Team         famille Team de ses pitchs (Team 20, Edge complementarity 10, Market edges 10) ;
+//                Background moyen de ses fondateurs a 0 % (suivi)
 //   Execution    moyenne de l'Execution de ses fondateurs
 //   Traction     grille Weekly startup 50 % (lot 4), famille Speed of execution de ses pitchs 50 %
 //   Market       famille Market de ses pitchs
@@ -66,10 +70,14 @@ const num = (v: number) => `${roundTo(v, 1)}`;
 /** Peer rating de 1 a 5 -> sur 100 : 1 = 0, 3 = 50, 5 = 100. */
 export const peerRatingOn100 = (rating: number) => (rating - 1) * 25;
 
-/** Un peer rating (« How did you feel working with this person? ») qui compte dans Likability : 4 ou 5. */
-export const LIKABILITY_MIN_PEER_RATING = 4;
+/** Likability : combien de fondateurs l'ont shortliste pour faire 100 (la moitie du batch). */
+const shortlistersFor100 = (batchSize: number) => batchSize * 0.5;
 
-const CO_FOUNDER_SCORES: Record<ExistingCoFounders, number> = { in_batch: 100, outside_batch: 70, none: 0 };
+/** Fondateurs distincts qui l'ont shortliste, sur 100 : rapportes a la moitie du batch, plafonnes a 100. */
+export const shortlistersOn100 = (shortlisters: number, batchSize: number): number =>
+  batchSize > 0 ? Math.min(100, (shortlisters / shortlistersFor100(batchSize)) * 100) : 0;
+
+const CO_FOUNDER_SCORES: Record<ExistingCoFounders, number> = { in_batch: 100, outside_batch: 50, none: 0 };
 
 /** Le poids d'un hackathon dans le signal Hackathons : `hackathonWeight` de l'evenement, 1 par defaut. */
 export const hackathonWeightOf = (event: Pick<PioneersEvent, "hackathonWeight">): number =>
@@ -107,24 +115,20 @@ export function hackathonsByFounder(
 }
 
 /**
- * Likability : pour chaque fondateur, les fondateurs DISTINCTS du batch qui l'ont shortliste
- * un jour (`shortlisted` : qui chacun a shortliste, historique et listes actuelles) ou lui
- * ont donne 4 ou 5 au ressenti du peer rating (`likability`). Une meme personne compte une fois ; jamais soi-meme.
+ * Likability : pour chaque fondateur, les fondateurs DISTINCTS qui l'ont shortliste un jour
+ * (`shortlisted` : qui chacun a shortliste, historique et listes actuelles, deja filtre aux
+ * fondateurs du batch). Une meme personne compte une fois ; jamais soi-meme.
  */
-export function supportersOf(
-  founderIds: ReadonlySet<string>,
-  shortlisted: ReadonlyMap<string, ReadonlySet<string>>,
-  peerRatings: readonly { raterFounderId: string; rateeFounderId: string; likability: number | null }[],
-): Map<string, Set<string>> {
+export function shortlistersOf(shortlisted: ReadonlyMap<string, ReadonlySet<string>>): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
-  const add = (to: string, from: string) => {
-    if (from === to || !founderIds.has(from) || !founderIds.has(to)) return;
-    const set = out.get(to) ?? new Set<string>();
-    set.add(from);
-    out.set(to, set);
-  };
-  for (const [from, targets] of shortlisted) for (const to of targets) add(to, from);
-  for (const r of peerRatings) if ((r.likability ?? 0) >= LIKABILITY_MIN_PEER_RATING) add(r.rateeFounderId, r.raterFounderId);
+  for (const [from, targets] of shortlisted) {
+    for (const to of targets) {
+      if (to === from) continue;
+      const set = out.get(to) ?? new Set<string>();
+      set.add(from);
+      out.set(to, set);
+    }
+  }
   return out;
 }
 
@@ -242,11 +246,13 @@ export type FounderScoreInputs = {
   /** La fiabilite recue des coequipiers (peer rating `reliability`, 1-5). */
   peerReliability: number[];
   milestones: MilestoneInput[];
-  /** Fondateurs distincts qui l'ont shortliste un jour ou lui ont donne 4 ou 5, et le maximum du batch. */
-  supporters: number;
-  batchMaxSupporters: number;
-  /** Clear idea de sa startup, sur 100 (grille Pitch : `pitchMeans`) : `null` sans note. */
-  clearIdea: number | null;
+  /** Fondateurs distincts qui l'ont shortliste un jour, et la taille du batch (participants). */
+  shortlisters: number;
+  batchSize: number;
+  /** Le ressenti recu des coequipiers (peer rating `likability`, 1-5). */
+  peerLikability: number[];
+  /** La note du staff sur son Edge : `null` sans note. */
+  edge: FounderEdgeRating | null;
   hasExistingProject: boolean | null;
   hasExistingCoFounders: ExistingCoFounders | null;
   background: FounderBackground | null;
@@ -298,17 +304,21 @@ export function computeFounderScore(i: FounderScoreInputs): ComputedScore<Founde
   }
 
   const likability: ScoreSignal[] = [];
-  if (i.batchMaxSupporters > 0) {
-    likability.push(
-      sig(`Supporters (${i.supporters})`, `${i.supporters} founders shortlisted or rated 4+ (batch best ${i.batchMaxSupporters})`, normalizeToBest(i.supporters, i.batchMaxSupporters), 100),
-    );
+  if (i.batchSize > 0) {
+    likability.push(sig(`Shortlisted by (${i.shortlisters})`, `${i.shortlisters} founders, ${num(shortlistersFor100(i.batchSize))} for 100`, shortlistersOn100(i.shortlisters, i.batchSize), 50));
+  }
+  const feeling = mean(i.peerLikability);
+  if (feeling !== null) {
+    likability.push(sig(`Peer feeling (${i.peerLikability.length})`, `${feeling.toFixed(1)}/5 on average`, peerRatingOn100(feeling), 50));
   }
 
+  const edge: ScoreSignal[] = [];
+  if (i.edge) edge.push(sig("Edge", `${i.edge.score}/${EDGE_MAX_NOTE}`, edgeScore(i.edge) ?? 0, 100));
+
   const commitment: ScoreSignal[] = [];
-  if (i.clearIdea !== null) commitment.push(sig("Clear idea", `${num(i.clearIdea)} (startup's pitches)`, i.clearIdea, 50));
-  if (i.hasExistingProject !== null) commitment.push(yesNo("Existing project", i.hasExistingProject, 25));
+  if (i.hasExistingProject !== null) commitment.push(yesNo("Existing project", i.hasExistingProject, 50));
   if (i.hasExistingCoFounders !== null) {
-    commitment.push(sig("Existing co-founders", EXISTING_CO_FOUNDERS_LABELS[i.hasExistingCoFounders], CO_FOUNDER_SCORES[i.hasExistingCoFounders], 25));
+    commitment.push(sig("Existing co-founders", EXISTING_CO_FOUNDERS_LABELS[i.hasExistingCoFounders], CO_FOUNDER_SCORES[i.hasExistingCoFounders], 50));
   }
 
   // La note validee du staff seulement (shared/background.ts) : une proposition de Claude ne compte pas.
@@ -323,7 +333,7 @@ export function computeFounderScore(i: FounderScoreInputs): ComputedScore<Founde
     background.push(sig("Background grid", raw, note, 100));
   }
 
-  return finish<FounderPillar>({ engagement, execution, likability, commitment, background });
+  return finish<FounderPillar>({ engagement, execution, likability, edge, commitment, background });
 }
 
 // ---- Score startup --------------------------------------------------------------------
@@ -350,11 +360,12 @@ function pitchSignal(pitches: readonly PitchInput[], means: ReturnType<typeof pi
 }
 
 export function computeStartupScore(i: StartupScoreInputs): ComputedScore<StartupSubScore> {
+  // Team : la famille Team de ses pitchs ; le Background de ses fondateurs a 0 % (suivi, jamais compte).
   const team: ScoreSignal[] = [];
-  const bg = mean(i.founderBackgrounds);
-  if (bg !== null) team.push(sig(`Founders' Background (${i.founderBackgrounds.length})`, i.founderBackgrounds.map(num).join(" · "), bg, 50));
   const pitch = pitchMeans(i.pitches);
-  team.push(...pitchSignal(i.pitches, pitch, "team", 50));
+  team.push(...pitchSignal(i.pitches, pitch, "team", 100));
+  const bg = mean(i.founderBackgrounds);
+  if (bg !== null) team.push(sig(`Founders' Background (${i.founderBackgrounds.length})`, i.founderBackgrounds.map(num).join(" · "), bg, 0));
 
   const execution: ScoreSignal[] = [];
   const exec = mean(i.founderExecutions);

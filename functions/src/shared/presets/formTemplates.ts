@@ -97,7 +97,7 @@ export type FormTemplate = {
   /** La description, si elle depend de l'evenement (le jury d'un pitch) ; `description` sinon. */
   describe?: (ctx: TemplateContext) => string | null;
   /**
-   * Plus propose au staff (decision du 17/11, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §4.6) :
+   * Plus propose au staff (decision du 17/11, docs/FONCTIONNALITES.md §4.6) :
    * le modele reste lu par les formulaires deja crees, mais on n'en cree plus.
    */
   retired?: boolean;
@@ -249,7 +249,7 @@ export const FORM_TEMPLATES = {
     },
   }),
 
-  // Le H5 (docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.6) : trois formulaires d'equipe au lieu
+  // Le H5 (docs/FONCTIONNALITES.md §2.6) : trois formulaires d'equipe au lieu
   // d'une Submission, qui ecrivent la MEME soumission (`submissions/{teamId}`) a trois moments.
   // Comme `debrief` : une reponse par equipe, depuis son compte, tout coequipier l'envoie, le
   // dernier envoi compte. Dates de data/events.json (`formSettings`). Seul Final numbers en
@@ -437,7 +437,7 @@ export const FORM_TEMPLATES = {
     ],
   }),
 
-  // ---- Lot 4 : les formulaires hebdomadaires (docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.8, §2.9) ----
+  // ---- Lot 4 : les formulaires hebdomadaires (docs/FONCTIONNALITES.md §2.8, §2.9) ----
   // Le pack `weekly_update` (presets/eventTemplates.ts) de chaque entree « Weekly Update Form » de l'agenda
   // (decision du 18/11, shared/weeklyForms.ts) : depuis son compte, ouverts a son debut, echeance 24 h
   // apres, le jour dans le titre. Un formulaire par semaine : ses reponses vont dans la semaine ou il
@@ -605,7 +605,7 @@ export const FORM_TEMPLATES = {
     ],
   }),
 
-  // Lock my team (lot 2, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.10) : chacun dit s'il
+  // Lock my team (lot 2, docs/FONCTIONNALITES.md §2.10) : chacun dit s'il
   // verrouille une equipe pour le H5, avec qui et sous quel nom. Rattache au BATCH, pas a un
   // evenement : il s'adresse a tous les fondateurs, absents du debrief du H4 compris. Depuis
   // son compte ; on peut y repondre « non ». Le staff en tire les startups (Admin > Startups).

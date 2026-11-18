@@ -24,7 +24,7 @@ import { standardEventMetric } from "./standardMetrics";
 // UNE SEULE ECHELLE (brief du 11/11, SPECS §4.9) : pitch days, demos,
 // Selection Day, Pre-IC et IC ont la grille Pitch (lot 5, shared/pitchGrid.ts) :
 // les familles du Selection Day Spring 2026 (Team 40 / Speed of execution 40 /
-// Market 20) detaillees en neuf criteres de 0 a 5 avec leurs points, et leur
+// Market 20) detaillees en dix criteres de 0 a 5 avec leurs points, et leur
 // bareme (Outstanding du staff a 100). Le score d'une startup se suit ainsi dans
 // le temps. Un pack de pitch cree aussi le formulaire Pitch deck de la startup.
 //
@@ -79,7 +79,7 @@ const s = standardEventMetric;
 const pitch = { kind: "pitch", criteria: PITCH_RUBRIC, scoring: PITCH_SCORING } as const;
 
 /**
- * La grille par defaut d'un hackathon (regle du 17/11, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2) :
+ * La grille par defaut d'un hackathon (regle du 17/11, docs/FONCTIONNALITES.md §2) :
  * des criteres de 0 a 5 dont les points font 100, l'Outstanding mention seulement a 100 (bareme).
  * Un DEFAUT MINIMAL que le staff ajuste a chaque hackathon (Admin > Events > Leaderboard : criteres,
  * points, departages ; « Copy scoring from… ») : le critere principal est le chiffre que publie le

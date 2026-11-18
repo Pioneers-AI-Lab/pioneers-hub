@@ -1,7 +1,7 @@
 import { FORM_IDENTITY_CHECKS, type FormIdentityCheck, type FormKind } from "../types";
 
 // ----------------------------
-// Ce qui est encore propose au staff (decision du 17/11, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §4.6)
+// Ce qui est encore propose au staff (decision du 17/11, docs/FONCTIONNALITES.md §4.6)
 // ----------------------------
 // Rien n'est efface, on archive : ce qui est retire reste lu par ce qui le porte deja (formulaires,
 // reponses, documents), mais ne se cree plus : Admin > Forms > New et l'editeur de formulaire,

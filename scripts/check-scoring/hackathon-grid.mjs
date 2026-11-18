@@ -1,4 +1,4 @@
-// La grille d'un hackathon (decision du 17/11, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2) :
+// La grille d'un hackathon (decision du 17/11, docs/FONCTIONNALITES.md §2) :
 // criteres notes de 0 a 5, points sur 100, note absolue, Outstanding +20 seulement a 100,
 // retard = 0, departage. Logique pure : functions/lib/shared/scoringRules.js.
 import { createRequire } from "node:module";

@@ -1,5 +1,5 @@
 // ----------------------------
-// Conformite au document produit : docs/FONCTIONNALITES-SEMAINE-1-FUSION.md (17/11) et SPECS v2.8
+// Conformite au document produit : docs/FONCTIONNALITES.md (17/11) et SPECS v2.8
 // ----------------------------
 // Les tableaux du document sont ecrits ici en valeurs attendues, puis compares :
 //   A. au CODE : modules partages compiles (functions/lib/shared), data/events.json, une constante du front ;
@@ -246,8 +246,9 @@ const PITCH_DECK = [
 ];
 /** §2.11, grille Pitch : [cle, famille, points]. */
 const PITCH_GRID = [
-  ["teamStrength", "team", 25],
-  ["founderMarketFit", "team", 15],
+  ["teamStrength", "team", 20],
+  ["edgeComplementarity", "team", 10],
+  ["founderMarketFit", "team", 10],
   ["progress", "speed", 20],
   ["traction", "speed", 20],
   ["clearIdea", "market", 6],
@@ -272,6 +273,7 @@ const REQUIRED_PROFILE_FIELDS = [
   "person.whatsapp",
   "person.linkedinUrl",
   "founderDirectory.introduceYourself",
+  "founderDirectory.edge",
   "founder.hardSkills",
   "founder.industries",
   "founder.rolesICouldTake",
@@ -470,12 +472,12 @@ function codeChecks() {
 
   // ---- A6. La grille Pitch (§2.11) ----
   heading("A6 pitch grid");
-  expect("9 criteria: key, family, points", PITCH_GRID, m.pitch.PITCH_CRITERIA.map((c) => [c.key, c.family, c.points]));
+  expect("10 criteria: key, family, points", PITCH_GRID, m.pitch.PITCH_CRITERIA.map((c) => [c.key, c.family, c.points]));
   expect("families Team 40 / Speed of execution 40 / Market 20", { team: 40, speed: 40, market: 20 }, Object.fromEntries(Object.entries(m.pitch.PITCH_FAMILY_INFO).map(([k, f]) => [k, f.points])));
   expect("Pitch scoring points", PITCH_SCORING_VIEW, scoringView(m.pitch.PITCH_SCORING));
-  behaves("Pitch: Outstanding at 100 -> 120, Clear idea on 100", () => {
+  behaves("Pitch: Outstanding at 100 -> 120, on the grid and each family", () => {
     const g = m.pitch.pitchGrid(notes(PITCH_GRID, 5), true);
-    return [[120, 100], [g.total, g.clearIdea]];
+    return [[120, 120], [g.total, g.families.team]];
   });
 
   // ---- A7. Background, Weekly grids (§2.8, §2.9, §2.13) ----
@@ -506,9 +508,10 @@ function codeChecks() {
     hackathons: [],
     peerReliability: [],
     milestones: [],
-    supporters: 0,
-    batchMaxSupporters: 0,
-    clearIdea: null,
+    shortlisters: 0,
+    batchSize: 0,
+    peerLikability: [],
+    edge: null,
     hasExistingProject: null,
     hasExistingCoFounders: null,
     background: null,
@@ -518,47 +521,55 @@ function codeChecks() {
   /** Le poids de chaque signal, en % de son sous-score. */
   const shares = (signals = []) => signals.map((s) => roundTo((s.weight / sum(signals.map((x) => x.weight))) * 100, 1));
   behaves("peer rating on 100: (n - 1) x 25", () => [[0, 50, 100], [1, 3, 5].map(S.peerRatingOn100)]);
-  expect("Program Performance: 5 sub-scores", ["engagement", "execution", "likability", "commitment", "background"], [...m.score.SCALE_RULES[100].pillars]);
-  behaves("Program Performance: 20 % each", () => [20, m.score.programPerformance({ scale: 100, subScores: { engagement: 100, execution: 0, likability: 0, commitment: 0, background: 0 } })]);
+  expect("Program Performance: 6 sub-scores", ["engagement", "execution", "likability", "edge", "commitment", "background"], [...m.score.SCALE_RULES[100].pillars]);
+  expect(
+    "Program Performance weights: Engagement 10 / Execution 50 / Likability 30 / Edge 10 / Commitment 0 / Background 0",
+    { engagement: 10, execution: 50, likability: 30, edge: 10, commitment: 0, background: 0 },
+    m.score.SCALE_RULES[100].pillarWeights,
+  );
+  behaves("Program Performance: weighted mean (Commitment and Background not counted)", () => [
+    [10, 50, 30, 10],
+    ["engagement", "execution", "likability", "edge"].map((k) =>
+      m.score.programPerformance({ scale: 100, subScores: { engagement: 0, execution: 0, likability: 0, edge: 0, commitment: 100, background: 100, [k]: 100 } }),
+    ),
+  ]);
   const full = founder({
     attendance: { attended: 1, total: 1 },
     formsOnTime: { onTime: 1, expected: 1 },
     hackathons: [{ name: "H1", score: 80, weight: 1 }],
     peerReliability: [4],
     milestones: [{ key: "met", dueDateISOString: "2026-11-01T00:00:00.000Z", achieved: true }],
-    supporters: 1,
-    batchMaxSupporters: 1,
-    clearIdea: 50,
+    shortlisters: 1,
+    batchSize: 2,
+    peerLikability: [4],
+    edge: { score: 4, ratedText: "x", ratedByUid: "staff", ratedDateISOString: "2026-11-18T12:00:00.000Z" },
     hasExistingProject: true,
     hasExistingCoFounders: "none",
     background: { scores: { execution: 5, founderSignal: 5, pedigree: 5, geography: 5 }, outstanding: false },
   });
   expect("Engagement: attendance 50 / forms on time 30 / profile 20", [50, 30, 20], shares(full.signals.engagement));
   expect("Execution: hackathons, peer ratings, milestones 1/3 each", [33.3, 33.3, 33.3], shares(full.signals.execution));
-  expect("Likability: one signal, 100 %", [100], shares(full.signals.likability));
-  expect("Commitment: Clear idea 50 / existing project 25 / co-founders 25", [50, 25, 25], shares(full.signals.commitment));
+  expect("Likability: shortlists 50 / peer feeling 50", [50, 50], shares(full.signals.likability));
+  expect("Edge: the staff rating, 100 %, 0-5 on 100", [[100], 80], [shares(full.signals.edge), full.subScores.edge]);
+  expect("Commitment: existing project 50 / co-founders 50", [50, 50], shares(full.signals.commitment));
   expect("Background sub-score: the Background note, 100 %", [[100], 100], [shares(full.signals.background), full.subScores.background]);
-  behaves("Existing co-founders: in batch 100, outside 70, none 0", () => [[100, 70, 0], ["in_batch", "outside_batch", "none"].map((v) => founder({ hasExistingCoFounders: v }).subScores.commitment)]);
+  behaves("Existing co-founders: in batch 100, outside 50, none 0", () => [[100, 50, 0], ["in_batch", "outside_batch", "none"].map((v) => founder({ hasExistingCoFounders: v }).subScores.commitment)]);
   behaves("Existing project: 100 or 0", () => [[100, 0], [true, false].map((v) => founder({ hasExistingProject: v }).subScores.commitment)]);
-  behaves("Likability: best of the batch = 100", () => [50, founder({ supporters: 5, batchMaxSupporters: 10 }).subScores.likability]);
-  behaves("Likability: shortlist or peer likability 4-5, one person counts once", () => {
-    const ids = new Set(["a", "b", "c", "d"]);
-    const out = S.supportersOf(ids, new Map([["b", new Set(["a"])]]), [
-      { raterFounderId: "b", rateeFounderId: "a", likability: 5 },
-      { raterFounderId: "c", rateeFounderId: "a", likability: 4 },
-      { raterFounderId: "d", rateeFounderId: "a", likability: 3 },
-    ]);
+  behaves("Likability: shortlisters out of half the batch, capped at 100", () => [[50, 100, 100], [8, 16, 20].map((n) => founder({ shortlisters: n, batchSize: 32 }).subScores.likability)]);
+  behaves("Likability: peer feeling (n - 1) x 25, mean", () => [75, founder({ peerLikability: [5, 3] }).subScores.likability]);
+  behaves("Likability: a shortlister counts once, never oneself; a peer 5 is not a shortlist", () => {
+    const out = S.shortlistersOf(new Map([["b", new Set(["a"])], ["a", new Set(["a"])], ["c", new Set(["a"])]]));
     return [["b", "c"], [...(out.get("a") ?? [])].sort()];
   });
   behaves("Hackathons: H5 counts 4 times", () => [64, founder({ hackathons: [{ name: "H1", score: 80, weight: 1 }, { name: "H5", score: 60, weight: 4 }] }).subScores.execution]);
   behaves("no data, no weight: Execution null without data", () => [null, founder({}).subScores.execution]);
-  behaves("Clear idea of its startup's pitch feeds Commitment", () => [80, founder({ clearIdea: 80 }).subScores.commitment]);
+  behaves("Commitment without Clear idea (removed 18/11)", () => [[null, false], [founder({}).subScores.commitment, "clearIdea" in m.pitch.pitchMeans([])]]);
   expect("startup score: Team 40 / Execution 20 / Traction 20 / Market 20", { team: 40, execution: 20, traction: 20, market: 20 }, Object.fromEntries(m.score.STARTUP_WEIGHTING_100.map((c) => [c.parts.join("+"), c.weight])));
   const grid = m.pitch.pitchGrid(notes(PITCH_GRID, 4), false);
   const startup = S.computeStartupScore({ founderBackgrounds: [80], founderExecutions: [60], weeklyTraction: 70, pitches: [{ name: "P1", grid }] });
   expect(
-    "startup signals: Team 50/50, Execution 100, Traction 50/50, Market 100",
-    { team: [50, 50], execution: [100], traction: [50, 50], market: [100] },
+    "startup signals: Team 100 (+ Background tracked at 0), Execution 100, Traction 50/50, Market 100",
+    { team: [100, 0], execution: [100], traction: [50, 50], market: [100] },
     Object.fromEntries(["team", "execution", "traction", "market"].map((k) => [k, shares(startup.signals[k])])),
   );
   behaves("forms on time: never optional events, drafts, future deadlines (§4.1)", () => {
@@ -872,7 +883,7 @@ async function prodChecks() {
 
 // ---- Lancement -------------------------------------------------------------------------------
 
-console.log(`Doc conformity · docs/FONCTIONNALITES-SEMAINE-1-FUSION.md · batch ${BATCH_ID} · now ${NOW}`);
+console.log(`Doc conformity · docs/FONCTIONNALITES.md · batch ${BATCH_ID} · now ${NOW}`);
 if (!args.includes("--prod-only")) codeChecks();
 if (!args.includes("--code-only")) await prodChecks();
 console.log(`\n${counts.OK} OK · ${counts.FAIL} FAIL · ${counts.PENDING} PENDING`);

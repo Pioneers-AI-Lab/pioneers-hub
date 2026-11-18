@@ -1,4 +1,4 @@
-// Lock my team -> startups (lot 2, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.10) : une equipe
+// Lock my team -> startups (lot 2, docs/FONCTIONNALITES.md §2.10) : une equipe
 // n'est proposee que si ses reponses sont RECIPROQUES (chacun a dit oui et cite exactement les
 // autres) ; le reste est a verifier ; « non » = sans equipe. Puis la creation des startups.
 // Logique pure : functions/lib/shared/teamLocks.js.

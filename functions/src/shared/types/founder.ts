@@ -138,6 +138,12 @@ export type FounderDirectory = {
   /** @source SP26 « Introduce yourself » */
   introduceYourself: string | null;
   /**
+   * Son Edge (18/11, docs/FONCTIONNALITES.md §2.14) : son avantage intrinseque, hors marche, en texte
+   * libre, ecrit par lui (« Mon profil », obligatoire). Note par le staff : `private/internal.edge`.
+   * Absent sur un document d'avant le 18/11.
+   */
+  edge?: string | null;
+  /**
    * @source SP26 « Main education » : une entree par ecole ou diplome (decision
    * du 15/11). Un document pas encore migre (scripts/migrate-education-tags.mjs)
    * a encore un texte : `readDirectory` (ci-dessous) le decoupe a la lecture,
@@ -225,11 +231,24 @@ export type FounderInternal = {
   eloScore?: number | null;
   eloMatchesCount?: number;
   /**
-   * La grille Background du staff (lot 2, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §3.1) :
+   * La grille Background du staff (lot 2, docs/FONCTIONNALITES.md §3.1) :
    * le sous-score Background et le Team de sa startup. Absent ou `null` : pas encore
    * note, le sous-score est retire.
    */
   background?: FounderBackground | null;
+  /**
+   * La note du staff sur son Edge (shared/edge.ts) : le sous-score Edge. Absent ou `null` : pas
+   * encore note, le sous-score est retire.
+   */
+  edge?: FounderEdgeRating | null;
+};
+
+/** La note de l'Edge d'un fondateur : 0 a 5, et le texte note (un texte change depuis est a renoter). */
+export type FounderEdgeRating = {
+  score: number;
+  ratedText: string;
+  ratedByUid: string;
+  ratedDateISOString: DateISOString;
 };
 
 /** Les champs archives de `private/internal` (l'Elo, 17/11) : gardes en base, jamais rendus. */
@@ -301,7 +320,7 @@ export type FounderWeek = BatchScoped & {
   feelingForWeek: string | null;
   /** @source SP26 Goal « Anything specific to mention » */
   anythingSpecific: string | null;
-  // ---- Weekly update founder (lot 4, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.8) : absents des semaines d'avant ----
+  // ---- Weekly update founder (lot 4, docs/FONCTIONNALITES.md §2.8) : absents des semaines d'avant ----
   /** « What did you achieve? », face a l'objectif de la semaine precedente (`goalForWeek` de la semaine d'avant). */
   achieved?: string | null;
   /** Problem validation : messages envoyes dans la semaine. */

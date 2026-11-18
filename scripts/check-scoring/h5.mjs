@@ -1,4 +1,4 @@
-// Le H5 (lot 3, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.6 et §4.2) : trois formulaires d'equipe
+// Le H5 (lot 3, docs/FONCTIONNALITES.md §2.6 et §4.2) : trois formulaires d'equipe
 // (Plan, Snapshot, Final numbers) qui ecrivent la meme Submission ; seul Final numbers en retard la
 // rend « en retard » (0 point) ; les startups du batch sont des equipes fixes du tirage.
 // Logique pure : functions/lib/shared (eventForms, forms, fieldRegistry, teamGenerator) et le fichier

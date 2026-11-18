@@ -4,7 +4,7 @@ import { ALREADY_EXISTS, shortlistRecordsToCreate } from "../shared/shortlistHis
 import { readConnections, type Founder, type FounderConnections } from "../shared/types";
 
 // ----------------------------
-// services - l'historique des shortlists (Likability, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §3.1)
+// services - l'historique des shortlists (Likability, docs/FONCTIONNALITES.md §3.1)
 // ----------------------------
 // Le declencheur `onConnectionsWritten` (founders/{id}/private/connections) cree un
 // enregistrement `shortlistHistory/{founderId}_{targetId}` pour chaque fondateur de la

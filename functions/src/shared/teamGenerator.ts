@@ -55,7 +55,7 @@ type StartupTeam = { id: string; name: string; memberIds: readonly string[] };
 
 /**
  * Les startups qui sont des equipes fixes d'un tirage (`EventMatching.lockedTeamsFromStartups`,
- * H5 : docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §4.2) : chacune avec ses fondateurs qui
+ * H5 : docs/FONCTIONNALITES.md §4.2) : chacune avec ses fondateurs qui
  * participent, si elle en a au moins deux ; un fondateur ne compte que dans la premiere qui le
  * cite. `skipped` : celles qui n'ont pas deux fondateurs presents (eux sont tires avec les autres).
  */

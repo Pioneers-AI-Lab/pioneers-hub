@@ -1,7 +1,7 @@
 // ----------------------------
 // Inventaire en LECTURE SEULE d'un batch reel : evenements a venir, leurs formulaires
 // (questions, identite, dates, statut, version publiee), tirages et baremes.
-// Sert a comparer la prod a docs/FONCTIONNALITES-SEMAINE-1-FUSION.md (17/11).
+// Sert a comparer la prod a docs/FONCTIONNALITES.md (17/11).
 // node scripts/audit-fa26.mjs [batchId] [--from YYYY-MM-DD] > inventaire.json
 // ----------------------------
 import { initializeApp, applicationDefault } from "firebase-admin/app";

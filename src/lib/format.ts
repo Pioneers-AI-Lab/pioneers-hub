@@ -106,11 +106,17 @@ export const formatScore = (v: number | null | undefined, scale: ScoreScale) =>
 export const scoreFill = (v: number | null | undefined, scale: ScoreScale) => Math.min(100, ((v ?? 0) / scale) * 100);
 
 /**
- * D'ou vient un sous-score, en une ligne : « Hackathons (3): 74 · Peer ratings (4): 63 ».
+ * D'ou vient un sous-score, en une ligne : « Hackathons (3): 74 · Peer ratings (4): 63 ». Un signal a
+ * 0 % (suivi : Background d'une startup) est dit « not counted ».
  * Seulement sur 100 (les signaux importes de Spring 2026 n'ont pas ces libelles) ; `undefined` sans signal.
  */
-export const scoreSourceLine = (signals: readonly { label: string; score: number }[] | undefined, scale: ScoreScale) =>
-  scale === 100 && signals?.length ? signals.map((s) => `${s.label}: ${formatScore(s.score, scale)}`).join(" · ") : undefined;
+export const scoreSourceLine = (signals: readonly { label: string; score: number; weight: number }[] | undefined, scale: ScoreScale) =>
+  scale === 100 && signals?.length
+    ? signals.map((s) => `${s.label}: ${formatScore(s.score, scale)}${s.weight === 0 ? " (not counted)" : ""}`).join(" · ")
+    : undefined;
+
+/** Les notes d'une grille du staff, de 0 a `max`, pour un SegmentedControl (`"0"` ... `"5"`). */
+export const noteOptions = (max: number) => Array.from({ length: max + 1 }, (_, i) => String(i));
 
 /** Un oui / non affichable : `Yes`, `No`, `null` sans reponse (champ masque). */
 export const yesNoLabel = (v: boolean | null | undefined) => (v === true ? "Yes" : v === false ? "No" : null);

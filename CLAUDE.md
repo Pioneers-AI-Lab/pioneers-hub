@@ -38,7 +38,7 @@ node scripts/migrate-drop-public-consent.mjs [--prod]   # retire `founders.publi
 node scripts/set-photo.mjs <founderId> <image> [--prod]   # photo d'un fondateur deposee par le staff, comme « Mon profil » (photo-*.jpg + vignette), a blanc sans --prod ; Rida Taleb le 16/11
 node scripts/import-events.mjs "Week 1" [--prod]   # evenements de data/events.json ET leurs formulaires (a blanc sans --prod, n'ecrase jamais)
 node scripts/sync-events.mjs "Week 1" [--prod] [--only cle1,cle2] [--forms jury,debrief]   # MET A JOUR les evenements sur data/events.json (agenda, bareme, matching sans equipes), recree les formulaires sans reponse, archive `archived` ; `--only` : ces evenements seulement (semaine en cours) ; `--forms` : seulement les formulaires de ces modeles (id `<evenement>-<modele>`)
-node scripts/audit-fa26.mjs [batchId] [--from YYYY-MM-DD] > inventaire.json   # inventaire en LECTURE SEULE de la prod : evenements a venir, formulaires (questions, identite, dates, reponses), tirages, baremes ; pour comparer a docs/FONCTIONNALITES-SEMAINE-1-FUSION.md
+node scripts/audit-fa26.mjs [batchId] [--from YYYY-MM-DD] > inventaire.json   # inventaire en LECTURE SEULE de la prod : evenements a venir, formulaires (questions, identite, dates, reponses), tirages, baremes ; pour comparer a docs/FONCTIONNALITES.md
 npm run check:scoring # regles de calcul pures (grille du jury sur 100, Outstanding, tirage par shortlist / met) : chaque suite de scripts/check-scoring/, cas ecrits a la main (harnais scripts/lib/check.mjs)
 node scripts/migrate-standard-forms.mjs <batchId> [--prod]   # modele standard : anciens metrics/criteria/picks -> formulaires (a blanc sans --prod)
 node scripts/migrate-education-tags.mjs <batchId|--all> [--prod]   # `founderDirectory.education` texte -> liste (separateurs `;` et ` · `, shared/text.ts#splitTextList), a blanc sans --prod
@@ -68,12 +68,18 @@ puis `firebase emulators:exec --config .firebase-check.json ...` ; check-rules a
 Scores (SPECS §5.5) : `services/scores.ts` (formules pures `shared/scoring.ts`, bareme `shared/scoringRules.ts`) ecrit `scores`,
 `scoreSignals`, `founderStats` et `batchStats` (`shared/batchStats.ts`, accueil du batch) ; jamais pour un batch
 `settings.scoresSource: "imported"` (spring-2026). Echelle (17/11) : un score du Hub est sur 100 (`scale: 100`,
-piliers `FOUNDER_PILLARS` dont Background, Outstanding jusqu'a 120) ; un score sans `scale` est sur 10 (Spring 2026) :
+piliers `FOUNDER_PILLARS`, Outstanding jusqu'a 120) ; un score sans `scale` est sur 10 (Spring 2026) :
 TOUJOURS lire `scoreScaleOf` / `scaleRulesOf` (types/score.ts) et afficher par `formatScore` (lib/format.ts).
 Evenement : `attendanceOptional` (presence relevee, mais ni elle ni ses formulaires ne comptent dans Engagement ;
 Admin > Events > Attendance ou data/events.json) et `hackathonWeight` (poids dans Hackathons d'Execution, absent = 1 ; le H5 = 4).
-Likability lit `shortlistHistory/{founderId}_{targetId}` (chaque fondateur shortliste AU MOINS UNE FOIS, ajout seul par le
-declencheur `onConnectionsWritten`, rattrapage `backfill-shortlist-history.mjs`). Milestones d'Execution : dues seulement
+Poids de la Program Performance (18/11, `FOUNDER_PILLAR_WEIGHTS`, lire `scaleRulesOf(score).pillarWeights`) : Engagement 10,
+Execution 50, Likability 30, Edge 10 ; Commitment (projet 50 / cofondateurs 50) et Background a 0 % : calcules, montres au staff
+« not counted », jamais comptes (un signal a 0 % de meme : Background du Team d'une startup). Edge : texte du fondateur
+`founderDirectory.edge` (obligatoire) note 0-5 par le staff (`private/internal.edge` avec `ratedText` : texte change = « To rate »,
+`shared/edge.ts`, Admin > Edge, fiche du fondateur, action `rate_edge`, regle `edgeOk`).
+Likability : shortlists recues (`shortlistHistory/{founderId}_{targetId}`, chaque fondateur shortliste AU MOINS UNE FOIS, ajout seul par le
+declencheur `onConnectionsWritten`, rattrapage `backfill-shortlist-history.mjs`) rapportees a la moitie du batch (plafond 100) 50 %,
+ressenti moyen du peer rating 50 %. Milestones d'Execution : dues seulement
 apres leur echeance `batch.settings.scoreMilestoneDueDates` (shortlistDone, met, teamedUp, problemValidated, weeklyGoalFrom ;
 `set-milestone-dates.mjs`) ; Weekly goal et Problem validated viennent de `founderReviews`, la Traction de la startup de
 `startupReviews`. Formulaires hebdomadaires (decision du 18/11 : le Hub suit l'agenda, shared/weeklyForms.ts) : la synchro de
@@ -84,12 +90,13 @@ debut, echeance 24 h, le jour dans le titre ; deplaces ou fermes avec elle. Inte
 (`withoutAttendance`, `attendance.ts#tracksAttendance`) : pour tout le batch, aucun absent, hors presence d'Engagement,
 comptes dans Forms on time. `previousGoal` = l'objectif du Weekly update founder PRECEDENT du batch. Callables : `call()` (lib/firebase.ts) retire les cles `undefined`
 (le SDK les enverrait en `null`, qu'un schema zod `.optional()` refuse).
-Grille Pitch (lot 5, `shared/pitchGrid.ts`) : neuf criteres de 0 a 5 (`evaluation.scores.<cle>`, points 25/15 | 20/20 | 6/5/4/3/2)
+Grille Pitch (lot 5, `shared/pitchGrid.ts`) : dix criteres de 0 a 5 (`evaluation.scores.<cle>`, points 20/10/10 | 20/20 | 6/5/4/3/2 ;
+famille Team au 18/11 : teamStrength, edgeComplementarity, founderMarketFit = Market edges)
 en trois familles Team 40 / Speed of execution 40 / Market 20 (anciennes cles SP26 sur 5 : `legacyPitchScores`), puis
 `evaluation.overallScore`, `decision` (etapes), `wouldInvest` et `betLikelihood` (avant l'IC). Les modeles de pitch
 (`pitch_day`... `ic`) creent le Pitch deck (`pitch_deck`, startup, 48 h avant -> la veille) et le jury, et posent le bareme
 `PITCH_SCORING` (Outstanding du staff a 100 sur la Submission de la startup, comme un hackathon ; pas dans l'Execution).
-Score startup : familles des pitchs passes (moyenne des jures par critere, puis des pitchs), publies ou non ; Clear idea -> Commitment.
+Score startup : familles des pitchs passes (moyenne des jures par critere, puis des pitchs), publies ou non ; Team = famille Team.
 Un pitch venu de l'agenda : Admin > Events > l'evenement, template « Pitch day » (formulaires + bareme) et ses startups (`startupIds` = cibles du jury).
 Un seul `next dev` par dossier (Next 16) : arreter `dev:emu` avant `dev`, et inversement. Pour
 verifier un build a cote d'un `next dev` : `NEXT_DIST_DIR=.next-emu next build` puis
@@ -174,7 +181,7 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   `eventMetrics` les relisent dans ses formulaires. Stockage type inchange (submissions, peerRatings,
   evaluations, picks). Formulaires d'un evenement crees par `shared/eventForms.ts` (import, migration) ou depuis
   sa page d'admin (modeles `debrief`, `peer_rating`, `jury`, `week_retro`, `pitch_deck`...).
-- **Retire le 17/11, archive** (lot 6, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §4.6 ; rien n'est efface) :
+- **Retire le 17/11, archive** (lot 6, docs/FONCTIONNALITES.md §4.6 ; rien n'est efface) :
   `shared/presets/offered.ts` dit ce qui ne se cree plus et reste lu (`isOffered(retire, valeur, valeur enregistree)`).
   Modeles `retired` (Picks, Founder introductions, Exit form, Thursday update `weekly_update`, inscriptions Selection
   Day / Pre-IC remplacees par le Pitch deck...) ; modeles d'evenement retires (`edge_drill`, `customer_discovery`,
@@ -416,7 +423,8 @@ d'espacement (12 px entre cartes soeurs, partout), surface `.card`, une couleur 
   dependent du role (fondateur : To do, Me). Aucun onglet staff : TOUS les outils du staff sont dans
   `/admin` (decision du 13/11) : Access (comptes), Founder profiles, Events, Forms, Tasks, Import founders, Batch settings,
   et (17/11) Startups (reponses a Lock my team, `teamLocks` -> startups creees en un lot, shared/teamLocks.ts),
-  Background (grille du staff dans `private/internal.background`, proposition de Claude pre-remplie), Reviews (revue
+  Background (grille du staff dans `private/internal.background`, proposition de Claude pre-remplie), Edge (18/11 : note 0-5
+  de l'edge ecrit par chaque fondateur, `private/internal.edge`), Reviews (revue
   des Weekly updates par semaine : `founderReviews` oui / non, `startupReviews` Traction et Progress sur 5).
   Onglets : Home, Founders, Calendar (+ To do, Me). Pas de titre de page sous un onglet (16/11, place verticale) :
   nom et dates du batch dans la ligne du haut de `BatchShell` (dates masquees sur mobile) ; compteur d'une liste dans sa recherche

@@ -240,7 +240,7 @@ const call = async (key, name, args) => {
   );
   t = await call(key, "pioneers_create_event", { batchId: "fall-2026", templateKey: "pitch_day", name: "Pitch day 1", startDateISOString: "2026-11-27T14:00:00+01:00", status: "draft" });
   check(!t.isError && t.data.preview.event.scoringCriteria?.length > 0, "a model copies its scoring grid", t.data);
-  // La grille Pitch (17/11) : neuf criteres de 0 a 5 dont les points font 100, sur le bareme et sur le jury.
+  // La grille Pitch (17/11, famille Team en trois criteres le 18/11) : dix criteres de 0 a 5 dont les points font 100, sur le bareme et sur le jury.
   t = await call(key, "pioneers_create_event", { planId: t.data.planId });
   {
     const pitchId = t.data?.result?.eventId;
@@ -249,8 +249,8 @@ const call = async (key, name, args) => {
     const criteria = (jury?.questions ?? []).filter((q) => q.id.startsWith("criterion_"));
     const points = (pitchEvent?.scoring?.items ?? []).map((i) => i.maxPoints ?? 0);
     check(
-      points.length === 9 && points.reduce((a, b) => a + b, 0) === 100 && criteria.length === 9 && criteria.reduce((a, q) => a + q.weight, 0) === 100 && criteria.every((q) => q.scale?.min === 0 && q.scale?.max === 5),
-      "the Pitch pack: 9 criteria from 0 to 5, points summing to 100 (scoring and jury)",
+      points.length === 10 && points.reduce((a, b) => a + b, 0) === 100 && criteria.length === 10 && criteria.reduce((a, q) => a + q.weight, 0) === 100 && criteria.every((q) => q.scale?.min === 0 && q.scale?.max === 5),
+      "the Pitch pack: 10 criteria from 0 to 5, points summing to 100 (scoring and jury)",
       { points, criteria: criteria.map((q) => [q.id, q.weight, q.scale]) },
     );
   }
@@ -583,6 +583,16 @@ const call = async (key, name, args) => {
   check((await db.doc("startupReviews/lumen_2026-11-16").get()).get("scores")?.traction === 4, "review_startup_update writes the review", a.applied?.data);
   a = await run("rate_background", { founderId: "ben-sample", scores: { execution: 4, founderSignal: 3, pedigree: 3, geography: 2 } });
   check((await db.doc("founders/ben-sample/private/internal").get()).get("background")?.scores?.execution === 4, "rate_background writes the staff rating", a.applied?.data);
+  a = await run("rate_edge", { founderId: "ben-sample", score: 4 });
+  {
+    const edge = (await db.doc("founders/ben-sample/private/internal").get()).get("edge");
+    check(edge?.score === 4 && edge.ratedText === "Ships fast and never gives up.", "rate_edge writes the staff rating with the rated text", a.applied?.data);
+  }
+  t = await call(key, "pioneers_run", { action: "rate_edge", args: { founderId: "ben-sample", score: 6 } });
+  check(t.isError, "rate_edge refuses a score above 5", t.data);
+  await db.doc("founders/chloe-demo/private/directory").set({ edge: null }, { merge: true });
+  t = await call(key, "pioneers_run", { action: "rate_edge", args: { founderId: "chloe-demo", score: 3 } });
+  check(t.isError && /edge_missing/.test(t.data), "rate_edge refuses a founder without an edge", t.data);
   a = await run("create_startups", { batchId: "fall-2026", startups: [{ name: "Check Labs", memberIds: ["chloe-demo", "dan-placeholder"] }] });
   const newStartupId = a.applied?.data?.result?.startupIds?.[0];
   check(newStartupId && (await db.doc("founders/chloe-demo").get()).get("startupId") === newStartupId, "create_startups creates the startup and links its members", a.applied?.data);

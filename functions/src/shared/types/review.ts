@@ -1,7 +1,7 @@
 import type { BatchScoped, DateISOString, DayString } from "./common";
 
 // ----------------------------
-// La file de revue des Weekly updates (lot 4, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.8, §2.9)
+// La file de revue des Weekly updates (lot 4, docs/FONCTIONNALITES.md §2.8, §2.9)
 // ----------------------------
 //   founderReviews/{founderId}_{weekStart}   FounderReview   staff + investors IC (ecrit par le staff)
 //   startupReviews/{startupId}_{weekStart}   StartupReview   staff + investors IC (ecrit par le staff)

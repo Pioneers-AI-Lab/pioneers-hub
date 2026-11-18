@@ -303,7 +303,7 @@ function JurySection({ juryForm }: { juryForm: WithId<Form> }) {
 
 /**
  * Les choix prives de l'evenement, ARCHIVES : les picks sont retires le 17/11 (la Shortlist et Lock my
- * team les remplacent, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §4.6), et leurs formulaires archives.
+ * team les remplacent, docs/FONCTIONNALITES.md §4.6), et leurs formulaires archives.
  * Rien n'est efface : le staff relit ici ceux deja donnes (Founder introductions), et les choix reciproques.
  */
 function PicksSection() {

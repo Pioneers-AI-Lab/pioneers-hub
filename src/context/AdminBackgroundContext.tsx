@@ -1,23 +1,24 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { isBatchParticipant, type Founder, type FounderBackground, type FounderDirectory, type WithId } from "@shared/types";
+import { isBatchParticipant, type Founder, type FounderBackground, type FounderDirectory, type FounderEdgeRating, type WithId } from "@shared/types";
 import { refs } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
 import { useDocsListener } from "@/hooks/useFirestoreListener";
 import { useAdmin } from "@/context/AdminContext";
 
 // ----------------------------
-// Admin > Background : la grille Background des fondateurs du batch de travail
+// Admin > Background et Admin > Edge : les notes du staff sur les fondateurs du batch de travail
 // ----------------------------
-// Monte par admin/background/layout.tsx. Pour chaque participant du batch : son
-// annuaire (`private/directory`, les faits du profil a noter) et sa note
-// (`private/internal.background`, staff + IC), un document par fondateur.
+// Monte par admin/background/layout.tsx et admin/edge/layout.tsx. Pour chaque participant du
+// batch : son annuaire (`private/directory`, les faits du profil et son Edge) et ses notes
+// (`private/internal.background` et `.edge`, staff + IC), un document par fondateur.
 
 export type BackgroundRow = {
   founder: WithId<Founder>;
   directory: FounderDirectory | null;
   background: FounderBackground | null;
+  edge: FounderEdgeRating | null;
 };
 
 type AdminBackgroundValue = {
@@ -41,6 +42,7 @@ export function AdminBackgroundProvider({ children }: { children: ReactNode }) {
       founder,
       directory: directories.data.get(founder.id) ?? null,
       background: internals.data.get(founder.id)?.background ?? null,
+      edge: internals.data.get(founder.id)?.edge ?? null,
     }));
     const byId = new Map(rows.map((r) => [r.founder.id, r]));
     return {

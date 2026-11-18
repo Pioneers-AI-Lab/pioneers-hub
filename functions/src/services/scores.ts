@@ -8,7 +8,7 @@ import { countRequiredFields, listMissingFields } from "../shared/fieldRegistry"
 import { formAudience } from "../shared/formRules";
 import { juryCriteria } from "../shared/forms";
 import { ratedBackgroundScore } from "../shared/background";
-import { isPitchRubric, pitchGrid, pitchJuryMeans, pitchMeans, type PitchInput } from "../shared/pitchGrid";
+import { isPitchRubric, pitchGrid, pitchJuryMeans, type PitchInput } from "../shared/pitchGrid";
 import {
   computeFounderScore,
   computeStartupScore,
@@ -16,7 +16,7 @@ import {
   founderMilestones,
   hackathonsByFounder,
   reciprocalMetCount,
-  supportersOf,
+  shortlistersOf,
   type FounderScoreInputs,
 } from "../shared/scoring";
 import { countsInExecution } from "../shared/scoringRules";
@@ -61,7 +61,7 @@ import {
 // Tout le batch d'un coup : Likability se rapporte au meilleur du batch, Met a sa
 // taille. Trois declencheurs : chaque nuit (`nightlyScores`), a la publication d'un
 // classement (`publishEventRanking`), et le bouton du staff (`recomputeBatchScores`).
-// Formules (sur 100, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §3) : shared/scoring.ts ;
+// Formules (sur 100, docs/FONCTIONNALITES.md §3) : shared/scoring.ts ;
 // ici, les entrees. Les scores ecrits portent `scale: 100`.
 
 const db = () => getFirestore();
@@ -238,17 +238,15 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
   }
   const teammates = countMap();
   for (const members of workTeams.values()) for (const a of members) for (const b of members) if (a !== b) addTo(teammates, a, b);
-  // Peer rating : la fiabilite compte dans Execution, le ressenti (4 ou 5) dans Likability.
+  // Peer rating : la fiabilite compte dans Execution, le ressenti (moyenne) dans Likability.
   const reliability = new Map<string, number[]>();
   const likability = new Map<string, number[]>();
   for (const r of peerRatings) {
     if (r.reliability !== null) pushTo(reliability, r.rateeFounderId, r.reliability);
     if (r.likability !== null) pushTo(likability, r.rateeFounderId, r.likability);
   }
-  // Likability : qui l'a shortliste un jour, ou lui a donne 4 ou 5 au ressenti (une personne compte une fois).
-  const supporters = supportersOf(founderIds, shortlisted, peerRatings);
-
-  const batchMaxSupporters = Math.max(0, ...founders.map((f) => supporters.get(f.id)?.size ?? 0));
+  // Likability : qui l'a shortliste un jour (une personne compte une fois).
+  const shortlisters = shortlistersOf(shortlisted);
   const requiredFields = countRequiredFields("founder");
   // Fondateurs du batch dans chaque startup (Teamed up).
   const startupFounderCount = new Map(startups.map((s) => [s.id, s.memberIds.filter((id) => founderIds.has(id)).length]));
@@ -268,7 +266,6 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
     for (const e of evaluations) if (e.targetType === "startup") pushTo(byStartup, e.targetId, e);
     for (const [startupId, evals] of byStartup) pushTo(pitchesOf, startupId, { name: event.name, grid: pitchGrid(pitchJuryMeans(evals), outstandingIds.has(startupId)) });
   }
-  const clearIdeaOf = new Map([...pitchesOf].map(([startupId, pitches]) => [startupId, pitchMeans(pitches).clearIdea]));
 
   const write = db().bulkWriter();
   const scoped = { programId: batch.programId, batchId };
@@ -309,10 +306,10 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
         problemValidated: problemValidatedOf(reviews),
         weeklyGoal: weeklyGoalScore(reviews),
       }),
-      supporters: supporters.get(f.id)?.size ?? 0,
-      batchMaxSupporters,
-      // Clear idea de sa startup : le critere de ses pitchs, sur 100.
-      clearIdea: f.startupId ? (clearIdeaOf.get(f.startupId) ?? null) : null,
+      shortlisters: shortlisters.get(f.id)?.size ?? 0,
+      batchSize: founders.length,
+      peerLikability: likabilityRatings,
+      edge: internalOf.get(f.id)?.edge ?? null,
       hasExistingProject: directory?.hasExistingProject ?? null,
       hasExistingCoFounders: directory?.hasExistingCoFounders ?? null,
       background: internalOf.get(f.id)?.background ?? null,

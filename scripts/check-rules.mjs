@@ -177,6 +177,9 @@ console.log("founder (ada, member of lumen)");
   await expectOk("edit her own introduction", () =>
     setDoc(doc(db, "founders/ada-example/private/directory"), { introduceYourself: "Hello" }, { merge: true }),
   );
+  await expectOk("write her own edge", () =>
+    setDoc(doc(db, "founders/ada-example/private/directory"), { edge: "Ships fast and never gives up." }, { merge: true }),
+  );
   await expectOk("set her own repeat founder answer", () =>
     setDoc(doc(db, "founders/ada-example/private/directory"), { repeatFounder: true }, { merge: true }),
   );
@@ -1412,6 +1415,7 @@ console.log("lock my team (form -> teamLocks), startups, background grid");
   const { deriveAttachments } = req("../functions/lib/shared/formRules.js");
   const { startupCreationWrites } = req("../functions/lib/shared/teamLocks.js");
   const { backgroundRatingWrite } = req("../functions/lib/shared/background.js");
+  const { edgeRatingWrite } = req("../functions/lib/shared/edge.js");
   const template = FORM_TEMPLATES.lock_my_team;
   const FORM = "check-lock-my-team";
   const stamp = new Date().toISOString();
@@ -1462,6 +1466,7 @@ console.log("lock my team (form -> teamLocks), startups, background grid");
     setDoc(doc(ada.db, "startups/check-founder-made"), { programId: "accelerator", batchId: "fall-2026", name: "Mine", memberIds: ["ada-example"], archivedDateISOString: null }),
   );
   await expectDenied("founder writes her Background", () => setDoc(doc(ada.db, "founders/ada-example/private/internal"), { background: { scores: { execution: 5 } } }, { merge: true }));
+  await expectDenied("founder rates her own edge", () => setDoc(doc(ada.db, "founders/ada-example/private/internal"), { edge: { score: 5, ratedText: "x" } }, { merge: true }));
   await deleteApp(ada.app);
 
   const pub = await clientAs(null);
@@ -1525,6 +1530,15 @@ console.log("lock my team (form -> teamLocks), startups, background grid");
     const b = (await adb.doc("founders/ben-sample/private/internal").get()).data()?.background;
     if (b?.scores.execution !== 4 || b.outstanding !== false || !b.proposed || b.ratedByUid !== "staff-1") throw new Error(JSON.stringify(b));
   });
+  await expectOk("staff rates an edge (0 to 5, with the rated text), the Background stays", async () => {
+    const w = edgeRatingWrite("ben-sample", { score: 4, ratedText: "Ships fast." }, "staff-1", stamp);
+    await setDoc(doc(staff.db, w.path), w.data, { merge: true });
+    const d = (await adb.doc("founders/ben-sample/private/internal").get()).data();
+    if (d?.edge?.score !== 4 || d.edge.ratedText !== "Ships fast." || d.background?.scores?.execution !== 4) throw new Error(JSON.stringify(d));
+  });
+  await expectDenied("staff rates an edge above 5", () => setDoc(doc(staff.db, "founders/ben-sample/private/internal"), { edge: { score: 6, ratedText: "Ships fast." } }, { merge: true }));
+  await expectDenied("staff rates an edge with a half point", () => setDoc(doc(staff.db, "founders/ben-sample/private/internal"), { edge: { score: 2.5, ratedText: "Ships fast." } }, { merge: true }));
+  await expectDenied("staff rates an edge without its text", () => setDoc(doc(staff.db, "founders/ben-sample/private/internal"), { edge: { score: 3, ratedText: "" } }, { merge: true }));
   await deleteApp(staff.app);
   const ic2 = await clientAs("ic-1");
   await expectOk("IC investor reads a Background", () => read(doc(ic2.db, "founders/ben-sample/private/internal")));
@@ -1658,7 +1672,7 @@ console.log("weekly updates (founder, startup) and their review queue");
 
 // ==== LOT 5 (debut) : Pitch deck et grille Pitch ======================================
 // Le pack d'un pitch (shared/presets/eventTemplates.ts) : le Pitch deck de la startup (depuis son compte,
-// « fait » pour toute la startup, ecrit dans sa fiche) et le jury sur la grille Pitch (neuf criteres, puis
+// « fait » pour toute la startup, ecrit dans sa fiche) et le jury sur la grille Pitch (dix criteres, puis
 // les questions d'apres la grille), par le lien partage ; le jure lit le Pitch deck de la startup.
 console.log("pitch deck and pitch grid (lot 5)");
 {
@@ -1714,7 +1728,7 @@ console.log("pitch deck and pitch grid (lot 5)");
     const brief = (await publicForm(pub.functions, JURY, { key, respondent: PAT })).juryBrief;
     must(brief?.source === "pitch_deck" && brief.submissions.lumen?.answers.some((a) => a.urls.join() === "https://deck.example/lumen"), JSON.stringify(brief));
   });
-  await expectOk("a juror scores the nine criteria, then the questions after the grid", async () => {
+  await expectOk("a juror scores the ten criteria, then the questions after the grid", async () => {
     const criteria = Object.fromEntries(PITCH_CRITERIA.map((c) => [`criterion_${c.key}@lumen`, 5]));
     await submitForm(pub.functions, JURY, { ...criteria, "overall@lumen": 4, "wouldInvest@lumen": "Yes", "betLikelihood@lumen": 3, "comment@lumen": "Strong." }, { key, respondent: PAT });
     const e = (await adb.collection(`events/${EVENT}/evaluations`).get()).docs[0]?.data();

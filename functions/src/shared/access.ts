@@ -169,6 +169,7 @@ export const FOUNDER_SELF_EDITABLE = {
     "nationality",
     "country",
     "introduceYourself",
+    "edge",
     "education",
     "degree",
     "fieldOfStudy",

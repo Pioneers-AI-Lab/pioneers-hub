@@ -29,7 +29,7 @@ import {
   setTeamResults,
   waiveLate,
 } from "./admin/results";
-import { createStartups, rateBackground, reviewFounder, reviewStartup, setAttendanceOptional } from "./admin/reviews";
+import { createStartups, rateBackground, rateEdge, reviewFounder, reviewStartup, setAttendanceOptional } from "./admin/reviews";
 import { drawTeams, editTeams, publishTeams, setMatching } from "./admin/teams";
 import { scoreJury } from "./admin/jury";
 
@@ -75,6 +75,7 @@ const ACTION_LIST: Described[] = [
   { op: reviewFounder, description: "Review a founder's Weekly update (goal ambitious, reached, problem validated)." },
   { op: reviewStartup, description: "Review a startup's Weekly update (Traction and Progress grid)." },
   { op: rateBackground, description: "Rate a founder's Background (the staff rating next to Claude's proposal)." },
+  { op: rateEdge, description: "Rate a founder's edge from 0 to 5 (the text they wrote in their profile)." },
   { op: createStartups, description: "Create the confirmed startups of a batch (from Lock my team): startups, members, team history." },
   { op: createProgram, description: "Create a program." },
   { op: createBatch, description: "Create a batch in a program (upcoming, with its milestones)." },

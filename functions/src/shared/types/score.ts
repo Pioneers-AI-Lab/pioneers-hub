@@ -9,14 +9,19 @@ import { weightedMean, type BatchScoped, type DateISOString, type TargetKind } f
 // les investors portfolio ne lisent pas : la fonction les lit avec le SDK
 // admin et n'expose ici que le resultat et des signaux non sensibles.
 // Echelle (`scale`) : sur 100 pour un score calcule par le Hub depuis le 17/11
-// (docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §3) ; sur 10 pour les scores importes
+// (docs/FONCTIONNALITES.md §3) ; sur 10 pour les scores importes
 // de Spring 2026 et ceux d'avant (champ absent). Un sous-score sans donnee vaut
 // `null` : il est retire, et les autres se partagent son poids. Sur 100, un
 // sous-score peut depasser 100 (Outstanding mention : pas de plafond).
 
-/** Les cinq sous-scores de la Program Performance (sur 100) : Background remplace Achievements et l'Elo. */
-export const FOUNDER_PILLARS = ["engagement", "execution", "likability", "commitment", "background"] as const;
+/**
+ * Les sous-scores d'un fondateur sur 100 (docs/FONCTIONNALITES.md §3.1, 18/11) et leur poids dans la
+ * Program Performance : Engagement 10, Execution 50, Likability 30, Edge 10. Commitment et Background
+ * sont calcules et montres au staff pour le suivi, a 0 % : ils ne comptent pas.
+ */
+export const FOUNDER_PILLARS = ["engagement", "execution", "likability", "edge", "commitment", "background"] as const;
 export type FounderPillar = (typeof FOUNDER_PILLARS)[number];
+export const FOUNDER_PILLAR_WEIGHTS: Record<FounderPillar, number> = { engagement: 10, execution: 50, likability: 30, edge: 10, commitment: 0, background: 0 };
 
 /** Les piliers d'un score sur 10 (Spring 2026, importe ; fa26 avant le 17/11). */
 export const LEGACY_FOUNDER_PILLARS = ["engagement", "execution", "likability", "commitment", "achievements"] as const;
@@ -47,7 +52,7 @@ export type ScoreSignal = {
 export type FounderScore = BatchScoped & {
   targetType: "founder";
   targetId: string;
-  /** Les cinq sous-scores de son echelle : `FOUNDER_PILLARS` sur 100, `LEGACY_FOUNDER_PILLARS` sur 10. */
+  /** Les sous-scores de son echelle : `FOUNDER_PILLARS` sur 100, `LEGACY_FOUNDER_PILLARS` sur 10. */
   subScores: Partial<Record<FounderPillarKey, number | null>>;
   /** Absent : 10 (avant le 17/11, Spring 2026). */
   scale?: ScoreScale;
@@ -92,7 +97,7 @@ export type WeightingComponent = {
 };
 
 /**
- * Ponderation du score startup sur 100 (docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §3.1) :
+ * Ponderation du score startup sur 100 (docs/FONCTIONNALITES.md §3.1) :
  * Team 40 %, Execution 20 %, Traction 20 %, Market 20 %, A PLAT : un sous-score sans
  * donnee est retire et les autres gardent leurs proportions. Execution et Traction
  * forment ensemble le Speed of execution (40 %) de la grille Pitch.
@@ -115,22 +120,49 @@ export const STARTUP_WEIGHTING: WeightingComponent[] = [
   { label: "Market", weight: 20, parts: ["market"] },
 ];
 
-/** Ce qui change avec l'echelle d'un score : piliers du fondateur, ponderation startup, regle affichee. */
+/** Ce qui change avec l'echelle d'un score : piliers du fondateur et leurs poids, ponderation startup, regle affichee. */
 export type ScaleRules = {
   pillars: readonly FounderPillarKey[];
+  /** Le poids de chaque pilier dans la Program Performance (0 : suivi, pas compte). */
+  pillarWeights: Partial<Record<FounderPillarKey, number>>;
   startupWeighting: WeightingComponent[];
   /** La regle de la Program Performance en clair. */
   performanceHint: string;
 };
 
+const PILLAR_NAMES: Record<FounderPillarKey, string> = {
+  engagement: "Engagement",
+  execution: "Execution",
+  likability: "Likability",
+  edge: "Edge",
+  commitment: "Commitment",
+  background: "Background",
+  achievements: "Achievements",
+};
+
+/** La regle de la Program Performance en clair, tiree des poids : « Engagement 10%, ... ; X and Y are tracked, not counted. » */
+const performanceHintOf = (pillars: readonly FounderPillarKey[], weights: Partial<Record<FounderPillarKey, number>>, extra: string) => {
+  const counted = pillars.filter((p) => (weights[p] ?? 0) > 0).map((p) => `${PILLAR_NAMES[p]} ${weights[p]}%`);
+  const tracked = pillars.filter((p) => !(weights[p] ?? 0)).map((p) => PILLAR_NAMES[p]);
+  return [`${counted.join(", ")}.`, tracked.length ? `${tracked.join(" and ")}: tracked, not counted.` : "", extra].filter(Boolean).join(" ");
+};
+
+const LEGACY_PILLAR_WEIGHTS = Object.fromEntries(LEGACY_FOUNDER_PILLARS.map((p) => [p, 20]));
+
 /** LA table des echelles : le seul endroit ou 10 et 100 different. */
 export const SCALE_RULES: Record<ScoreScale, ScaleRules> = {
   100: {
     pillars: FOUNDER_PILLARS,
+    pillarWeights: FOUNDER_PILLAR_WEIGHTS,
     startupWeighting: STARTUP_WEIGHTING_100,
-    performanceHint: "Average of the five sub-scores, 20% each. Above 100 with an Outstanding mention.",
+    performanceHint: performanceHintOf(FOUNDER_PILLARS, FOUNDER_PILLAR_WEIGHTS, "Above 100 with an Outstanding mention."),
   },
-  10: { pillars: LEGACY_FOUNDER_PILLARS, startupWeighting: STARTUP_WEIGHTING, performanceHint: "Average of the five pillars." },
+  10: {
+    pillars: LEGACY_FOUNDER_PILLARS,
+    pillarWeights: LEGACY_PILLAR_WEIGHTS,
+    startupWeighting: STARTUP_WEIGHTING,
+    performanceHint: performanceHintOf(LEGACY_FOUNDER_PILLARS, LEGACY_PILLAR_WEIGHTS, ""),
+  },
 };
 
 /** Les regles de l'echelle d'un score (absente = 10). */
@@ -142,9 +174,20 @@ export const startupWeightingHint = (score: { scale?: ScoreScale } | null | unde
     .startupWeighting.map((c) => `${c.label} ${c.weight}`)
     .join(", ");
 
-/** Program Performance : moyenne des piliers presents de son echelle, a poids egal (20 % chacun) ; `null` si aucun. */
-export const programPerformance = (score: Pick<FounderScore, "subScores" | "scale">): number | null =>
-  weightedMean(scaleRulesOf(score).pillars.map((pillar) => [score.subScores[pillar] ?? null, 1] as const));
+/** Le nom affiche d'un pilier. */
+export const pillarName = (pillar: FounderPillarKey) => PILLAR_NAMES[pillar];
+
+/** Le poids d'un pilier dans la Program Performance de son echelle (0 : suivi, pas compte). */
+export const pillarWeightOf = (rules: ScaleRules, pillar: FounderPillarKey): number => rules.pillarWeights[pillar] ?? 0;
+
+/**
+ * Program Performance : moyenne des piliers presents de son echelle, avec leurs poids (sur 100 :
+ * 10 / 50 / 30 / 10 ; sur 10 : 20 % chacun) ; un pilier sans donnee est retire. `null` si aucun.
+ */
+export const programPerformance = (score: Pick<FounderScore, "subScores" | "scale">): number | null => {
+  const rules = scaleRulesOf(score);
+  return weightedMean(rules.pillars.map((pillar) => [score.subScores[pillar] ?? null, pillarWeightOf(rules, pillar)] as const));
+};
 
 /**
  * Score startup, selon son echelle. Une composante vaut la moyenne de ses

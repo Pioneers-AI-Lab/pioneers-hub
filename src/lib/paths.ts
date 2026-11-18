@@ -86,6 +86,7 @@ export const paths = {
   /** La grille Background des fondateurs du batch. */
   adminBackground: () => "/admin/background",
   adminBackgroundFounder: (founderId: string) => `/admin/background/${founderId}`,
+  adminEdge: () => "/admin/edge",
   /** Admin > Reviews (lot 4) : la file de revue des Weekly updates, par semaine (lundi `YYYY-MM-DD`). */
   adminReviews: () => "/admin/reviews",
   adminReviewsWeek: (week: string) => `/admin/reviews/${week}`,

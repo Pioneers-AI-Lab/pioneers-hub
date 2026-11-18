@@ -1,11 +1,11 @@
-import { isNote } from "./background";
+import { isNote, isWholeNote } from "./background";
 import { shiftWeek } from "./dates";
 import { RuleError, setWrite, type DocWrite } from "./docWrites";
 import { reachesMax, withOutstanding } from "./scoringRules";
 import { mean, roundTo, weightedMean, type FounderReview, type StartupReview, type StartupReviewCriterion } from "./types";
 
 // ----------------------------
-// La revue des Weekly updates (lot 4, docs/FONCTIONNALITES-SEMAINE-1-FUSION.md §2.8, §2.9, §3.2)
+// La revue des Weekly updates (lot 4, docs/FONCTIONNALITES.md §2.8, §2.9, §3.2)
 // ----------------------------
 // Admin > Reviews : pour une semaine, le staff revoit chaque Weekly update founder (grille oui / non)
 // et chaque Weekly update startup (Traction 60, Progress 40, Outstanding +20 seulement a 100),
@@ -92,7 +92,7 @@ export function startupReviewProblems(scores: StartupReviewScores, outstanding: 
   const problems: string[] = [];
   for (const c of STARTUP_REVIEW_CRITERIA) {
     const v = scores[c.key];
-    if (!isNote(v) || !Number.isInteger(v) || v < 0 || v > WEEKLY_REVIEW_MAX_NOTE) problems.push(`${c.label}: a score from 0 to ${WEEKLY_REVIEW_MAX_NOTE}.`);
+    if (!isWholeNote(v, WEEKLY_REVIEW_MAX_NOTE)) problems.push(`${c.label}: a score from 0 to ${WEEKLY_REVIEW_MAX_NOTE}.`);
   }
   if (problems.length === 0 && outstanding && !canStartupReviewBeOutstanding(scores)) {
     problems.push("The Outstanding mention is only given at 100.");
