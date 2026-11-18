@@ -70,16 +70,6 @@ export function notifySendError(err: unknown, title: string, reload: () => void)
 /** « 1 new question », « 2 new questions » (questions ajoutees depuis la reponse du fondateur). */
 export const newQuestionsLabel = (n: number) => `${n} new ${n === 1 ? "question" : "questions"}`;
 
-/**
- * Les valeurs d'une feuille changent-elles ce qui est enregistre (`prefill`) ?
- * Meme nettoyage que l'envoi (`toAnswers`) ; `keys` : les cles a comparer.
- */
-export function changesSaved(drafts: Drafts, prefill: PublicForm["prefill"], keys: readonly string[], typeOf: (key: string) => PublicFormQuestion["type"] | undefined): boolean {
-  const now = toAnswers(drafts, typeOf);
-  const saved = toAnswers(draftsFromPrefill(prefill), typeOf);
-  return keys.some((key) => JSON.stringify(now[key] ?? null) !== JSON.stringify(saved[key] ?? null));
-}
-
 /** Sous une question dont la valeur prerempliee attend la validation du staff (`pendingAnswerKeys`). */
 export const PENDING_NOTE = "Waiting for the Pioneers team's approval: this is the answer you sent.";
 

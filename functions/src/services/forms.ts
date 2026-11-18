@@ -30,7 +30,7 @@ import {
   type RespondentInput,
 } from "../shared/callables";
 import { juryTargetOf } from "../shared/events";
-import { activeQuestions, answerKey, formSetsSubmissionLate, isJuryForm, isPerTarget, isProvenIdentity, needsAccount, parseAnswerKey, scopeOf, submissionLateDeadline } from "../shared/types";
+import { activeQuestions, answerKey, isJuryForm, isPerTarget, isProvenIdentity, needsAccount, parseAnswerKey, scopeOf, submissionLateDeadline } from "../shared/types";
 import type {
   Attendance,
   Batch,
@@ -532,7 +532,6 @@ export async function getPublicForm(uid: string | null, req: Partial<CallableReq
     batchName: (batchSnap.data() as Batch | undefined)?.name ?? "",
     identityCheck: form.identityCheck,
     deadlineDateISOString: form.deadlineDateISOString,
-    setsSubmissionLate: formSetsSubmissionLate(form),
     state,
     questions: publicQuestions,
     respondents: jury ? judgeChoices(jury.names) : asksFounderName ? founders : [],

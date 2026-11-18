@@ -43,7 +43,7 @@ export default function AdminTeamResultsPage() {
       ) : (
         <Empty>The event has not started yet. Results open once it does.</Empty>
       )}
-      {submission && <TeamSubmission eventId={event.id} teamId={team.id} submission={submission} />}
+      {submission && <TeamSubmission submission={submission} />}
     </>
   );
 }

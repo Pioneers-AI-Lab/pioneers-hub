@@ -55,7 +55,7 @@ check("familles sur 100 d'apres les points de leurs criteres ; note de la grille
 
 check("la grille du jury et le bareme du leaderboard donnent la meme note", () => {
   const means = { teamStrength: 4, edgeComplementarity: 3, founderMarketFit: 2, progress: 5, traction: 3, clearIdea: 1, market: 1, competition: 1, highPotential: 1, businessModel: 1 };
-  const [row] = scoreTeams(PITCH_SCORING, PITCH_RUBRIC, [{ id: "s", metrics: {}, juryMeans: means, late: false, zeroedItemKeys: [], outstanding: false }]);
+  const [row] = scoreTeams(PITCH_SCORING, PITCH_RUBRIC, [{ id: "s", metrics: {}, juryMeans: means, zeroedItemKeys: [], outstanding: false }]);
   near(row.normalized, pitchGrid(means, false).total);
 });
 

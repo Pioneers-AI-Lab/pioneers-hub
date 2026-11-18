@@ -552,8 +552,6 @@ const call = async (key, name, args) => {
   a = await run("set_team_results", { eventId: "demo-hackathon-1", teamId: "team-a", metrics: { callsMade: 12 }, proofUrls: ["drive.google.com/x"] });
   const subA = (await db.doc("events/demo-hackathon-1/submissions/team-a").get()).data();
   check(subA?.metrics?.callsMade === 12 && subA.recordedSource === "staff" && subA.proofUrls[0] === "https://drive.google.com/x" && !("id" in subA), "set_team_results writes a staff correction", subA);
-  t = await call(key, "pioneers_run", { action: "waive_late", args: { eventId: "demo-hackathon-1", teamId: "team-a", waived: true } });
-  check(t.isError && /not_late/.test(t.data), "waive_late needs a late Submission", t.data);
   t = await call(key, "pioneers_run", { action: "set_outstanding", args: { eventId: "demo-hackathon-1", teamId: "team-a", outstanding: true } });
   check(t.isError && /not_eligible/.test(t.data), "the Outstanding mention needs the grid's maximum", t.data);
 

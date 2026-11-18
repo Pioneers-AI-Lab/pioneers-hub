@@ -61,7 +61,7 @@ export type JuryAnswer = { label: string; text: string | null; urls: string[] };
 /** La Submission d'une equipe notee, lue par le jure (SPECS §2.0 : information libre, la grille fait la note). */
 export type JurySubmission = {
   driveFolderUrl: string | null;
-  /** Envoyee apres l'echeance, sans exception du staff (`isLateUnwaived`) : elle vaut 0. */
+  /** Envoyee apres l'echeance (`Submission.late`). */
   late: boolean;
   /** Les questions repondues, dans l'ordre du formulaire, sans les chiffres ni le dossier Drive. */
   answers: JuryAnswer[];
@@ -115,8 +115,6 @@ export type PublicForm = {
   batchName: string;
   identityCheck: FormIdentityCheck;
   deadlineDateISOString: string | null;
-  /** Un envoi apres l'echeance rend la Submission de l'equipe en retard (0 point) : la page le dit avant (`Form.setsSubmissionLate`). */
-  setsSubmissionLate: boolean;
   /** `draft` : seul le staff le voit, pour le relire ; il ne prend pas de reponse. */
   state: "open" | "not_open_yet" | "closed" | "draft";
   questions: PublicFormQuestion[];

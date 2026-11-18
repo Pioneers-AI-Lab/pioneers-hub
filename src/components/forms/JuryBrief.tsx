@@ -69,7 +69,7 @@ export function JuryBrief({ brief, targets, targetId }: { brief: Brief; targets:
       {/* 2. Ses reponses */}
       {submission?.late && (
         <Text size="sm" c="orange">
-          Sent after the deadline: it scores 0.
+          Sent after the deadline.
         </Text>
       )}
       {submission?.driveFolderUrl ? (

@@ -30,10 +30,9 @@ const db = () => getFirestore();
 export async function onSubmissionChange(eventId: string, teamId: string, before: Submission | null, after: Submission | null): Promise<void> {
   const changed = Object.entries(after?.metrics ?? {}).filter(([metric, value]) => typeof value === "number" && before?.metrics?.[metric] !== value);
   const metricsRemoved = Object.keys(before?.metrics ?? {}).some((metric) => after?.metrics?.[metric] === undefined);
-  // Le bareme lit aussi le retard, son exception, l'Outstanding mention et les elements mis a 0 par le staff.
+  // Le leaderboard lit aussi le retard (affiche), l'Outstanding mention et les elements mis a 0 par le staff.
   const scoringInputsChanged =
     before?.late !== after?.late ||
-    before?.lateWaived !== after?.lateWaived ||
     before?.outstanding !== after?.outstanding ||
     !sameIds(before?.zeroedItemKeys, after?.zeroedItemKeys);
   if (changed.length === 0 && !metricsRemoved && !scoringInputsChanged && before?.submittedDateISOString === after?.submittedDateISOString) return;

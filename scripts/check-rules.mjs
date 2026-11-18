@@ -696,17 +696,13 @@ console.log("scoring: former points per unit, late submission, former proof chec
     if (ev?.scoring?.items.map((i) => i.key).join() !== "meetingsBooked,callsMade" || ev.rankingMetricKey !== null) throw new Error(JSON.stringify(ev?.scoring));
   });
   const publish = (fns, on) => httpsCallable(fns, "publishEventRanking")({ eventId: EVENT, publish: on });
-  await expectOk("staff publishes the ranking: a late submission scores 0", async () => {
+  // Regle du 0 retiree le 18/11 : la Submission en retard est marquee, et ses points comptent.
+  await expectOk("staff publishes the ranking: a late submission is marked and counts", async () => {
     await publish(staff.functions, true);
-    const b = await board();
-    const row = b?.rows.find((r) => r.targetId === "team-a");
-    if (b?.published !== true || row?.late !== true || row.total !== 0) throw new Error(JSON.stringify(row));
-  });
-  await expectOk("staff waives the late submission: the points count", async () => {
-    await updateDoc(doc(staff.db, `events/${EVENT}/submissions/team-a`), { lateWaived: true });
+    if ((await board())?.published !== true) throw new Error("not published");
     return waitFor(async () => {
       const row = await teamA();
-      if (row?.total !== 160 || row.points.meetingsBooked !== 120 || row.normalized !== 100) throw new Error(JSON.stringify(row));
+      if (row?.late !== true || row.total !== 160 || row.points.meetingsBooked !== 120 || row.normalized !== 100) throw new Error(JSON.stringify(row));
       return `${row.total} pts`;
     });
   });
@@ -824,7 +820,7 @@ console.log("jury (form, shared link)");
   });
   await expectOk("the judge reads the submissions of the teams they score, never their own team's", async () => {
     const at = new Date().toISOString();
-    const sub = (teamId, extra) => adb.doc(`events/${EVENT}/submissions/${teamId}`).set({ teamId, late: false, lateWaived: false, submittedDateISOString: at, ...extra });
+    const sub = (teamId, extra) => adb.doc(`events/${EVENT}/submissions/${teamId}`).set({ teamId, late: false, submittedDateISOString: at, ...extra });
     await sub("team-d", { notes: "Demo notes", proofUrls: ["https://proof.example/d"], driveFolderUrl: "https://drive.example/d", metrics: { conversationsDone: 7 }, late: true });
     await sub("team-c", { metrics: { conversationsDone: 3 } });
     if ((await sheet(null)).juryBrief !== null) throw new Error("a brief before the judge is chosen");

@@ -6,7 +6,7 @@ import { Button, CopyButton, Group, Stack, Text } from "@mantine/core";
 import { FORM_TEMPLATES, isOfferedTemplate, type FormTemplate, type FormTemplateKey } from "@shared/presets/formTemplates";
 import { isWorkTeamEvent } from "@shared/events";
 import { formState } from "@shared/forms";
-import { EVALUATION_DECISION_LABELS, isLateUnwaived, isPickable, type Evaluation, type Form, type WithId } from "@shared/types";
+import { EVALUATION_DECISION_LABELS, isPickable, type Evaluation, type Form, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminEvent } from "@/context/AdminEventContext";
 import { useAction } from "@/hooks/useAction";
@@ -133,13 +133,13 @@ function ResultsSection() {
               .filter((m) => values[m.key] !== undefined)
               .map((m) => `${metricValue(m, values[m.key])} ${m.label.toLowerCase()}`)
               .join(" · ");
-            const late = isLateUnwaived(submissionsByTeamId.get(t.id));
+            const late = submissionsByTeamId.get(t.id)?.late === true;
             return (
               <LinkRow
                 key={t.id}
                 href={paths.adminEventTeam(event.id, t.id)}
                 title={t.name}
-                subtitle={[late ? "Late: scores 0" : null, summary || "No results yet"].filter(Boolean).join(" · ")}
+                subtitle={[late ? "Late" : null, summary || "No results yet"].filter(Boolean).join(" · ")}
               />
             );
           })}

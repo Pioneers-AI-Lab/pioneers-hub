@@ -1,17 +1,17 @@
 // La grille d'un hackathon (decision du 17/11, docs/FONCTIONNALITES.md §2) :
 // criteres notes de 0 a 5, points sur 100, note absolue, Outstanding +20 seulement a 100,
-// retard = 0, departage. Logique pure : functions/lib/shared/scoringRules.js.
+// une Submission en retard compte (18/11), departage. Logique pure : functions/lib/shared/scoringRules.js.
 import { createRequire } from "node:module";
 import assert from "node:assert/strict";
 import { check } from "../lib/check.mjs";
 
 const require = createRequire(import.meta.url);
-const { scoreTeams, compareTeamPoints, scoringMaxTotal, scoringFrom, newLegacyItemProblems } = require("../../functions/lib/shared/scoringRules.js");
+const { scoreTeams, scoredTeamOf, compareTeamPoints, scoringMaxTotal, scoringFrom, newLegacyItemProblems } = require("../../functions/lib/shared/scoringRules.js");
 
 
 const crit = (key, points) => ({ key, label: key, min: 0, max: 5, weight: points ?? 1 });
 const item = (key, points, tieBreakOnly = false) => ({ label: key, mode: "criterion", sourceKey: key, ...(points ? { maxPoints: points } : {}), ...(tieBreakOnly ? { tieBreakOnly } : {}) });
-const team = (id, juryMeans, extra = {}) => ({ id, metrics: {}, juryMeans, late: false, zeroedItemKeys: [], outstanding: false, ...extra });
+const team = (id, juryMeans, extra = {}) => ({ id, metrics: {}, juryMeans, zeroedItemKeys: [], outstanding: false, ...extra });
 
 // Une grille d'exemple de 100 points (l'ancien H1 du 17/11), fixe : elle teste les regles, pas le planning
 // (la conformite des grilles FA26 a la doc : scripts/check-doc-conformity.mjs).
@@ -56,11 +56,12 @@ check("Outstanding : proposee seulement a une equipe au maximum, mention donnee 
   assert.equal(below.outstandingEligible, false);
 });
 
-check("une Submission en retard vaut 0", () => {
-  const [a] = scoreTeams(h1, h1Criteria, [team("a", all5, { late: true, outstanding: true })]);
-  assert.equal(a.normalized, 0);
-  assert.equal(a.outstanding, false);
-  assert.equal(a.outstandingEligible, false);
+check("une Submission en retard compte (regle du 0 retiree le 18/11)", () => {
+  const keys = h1Criteria.map((c) => c.key);
+  const late = scoredTeamOf("a", { metrics: {}, late: true, zeroedItemKeys: [], outstanding: true }, [{ scores: all5 }], keys);
+  const [a] = scoreTeams(h1, h1Criteria, [late]);
+  assert.equal(a.normalized, 120);
+  assert.equal(a.outstanding, true);
 });
 
 check("un critere sans note rapporte 0 (pas de jure)", () => {

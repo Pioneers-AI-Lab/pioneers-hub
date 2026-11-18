@@ -6,13 +6,13 @@ import { formatScore, metricValue } from "@/lib/format";
  * Le texte d'une ligne de classement, le meme partout (page Leaderboard du batch,
  * Admin > Events) : la valeur a droite (note sur 100, metrique ou note sur 10) et la
  * ligne du dessous. Bareme (decision du 17/11) : la note sur 100, 120 avec
- * l'Outstanding mention ; dessous « Outstanding mention », « Late submission: 0 »,
+ * l'Outstanding mention ; dessous « Late submission » (une information), « Outstanding mention »,
  * puis `notes` (ce que l'appelant sait en plus) et le departage a egalite de total.
  */
 export function rankedRowText(board: Pick<Leaderboard, "metric" | "scoring" | "rows">, row: LeaderboardRow, notes: readonly string[] = []) {
   if (board.scoring && row.total !== undefined) {
     const tieBreak = tieBreakNote(board.scoring, row, board.rows);
-    const status = row.late ? ["Late submission: 0"] : row.outstanding ? [`Outstanding mention (+${OUTSTANDING_BONUS_POINTS})`] : [];
+    const status = [row.late && "Late submission", row.outstanding && `Outstanding mention (+${OUTSTANDING_BONUS_POINTS})`].filter(Boolean);
     return {
       value: `${Math.round(row.normalized ?? 0)} / 100`,
       subtitle: [...status, ...notes, ...(tieBreak ? [tieBreak] : [])].join(" · "),

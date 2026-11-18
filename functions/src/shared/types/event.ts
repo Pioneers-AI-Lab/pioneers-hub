@@ -371,12 +371,11 @@ export type Submission = {
   driveFolderUrl: string | null;
   submittedDateISOString: DateISOString | null;
   /**
-   * Dernier envoi par le formulaire APRES son echeance (SPECS §4.2) : le bareme
-   * lui donne 0, sauf si le staff leve le retard (`lateWaived`). Seul un envoi
-   * par formulaire le recalcule ; une correction du staff le laisse.
+   * Dernier envoi par le formulaire APRES son echeance (SPECS §4.2) : une information
+   * pour le staff et le jury, sans effet sur les points (regle du 0 retiree le 18/11).
+   * Seul un envoi par formulaire le recalcule ; une correction du staff le laisse.
    */
   late: boolean;
-  lateWaived: boolean;
   /** Elements du bareme mis a 0 par le staff (une fausse preuve), par cle d'element. Plus pose depuis le 17/11 (le jury juge les preuves) : lu pour l'historique. */
   zeroedItemKeys: string[];
   /**
@@ -401,11 +400,8 @@ export const submissionStamp = (uid: string, source: "self_reported" | "staff", 
   ...(deadline !== undefined ? { late: deadline !== null && now > deadline } : {}),
 });
 
-/** L'equipe a vraiment envoye sa Submission (un document cree par le staff seul, mention ou retard leve, n'en est pas une). */
+/** L'equipe a vraiment envoye sa Submission (un document cree par le staff seul, pour la mention, n'en est pas une). */
 export const hasSubmitted = (s: Pick<Submission, "submittedDateISOString"> | null | undefined): boolean => Boolean(s?.submittedDateISOString);
-
-/** Envoyee apres l'echeance et sans exception du staff : le bareme lui donne 0. */
-export const isLateUnwaived = (s: Pick<Submission, "late" | "lateWaived"> | null | undefined): boolean => s?.late === true && s.lateWaived !== true;
 
 /** Une soumission vide : la base de tout ecrivain (Debrief, staff, API, via le registre). */
 export const emptySubmission = (teamId: string): Submission => ({
@@ -427,7 +423,6 @@ export const emptySubmission = (teamId: string): Submission => ({
   driveFolderUrl: null,
   submittedDateISOString: null,
   late: false,
-  lateWaived: false,
   zeroedItemKeys: [],
   outstanding: false,
   recordedByUid: null,
@@ -560,7 +555,7 @@ export type LeaderboardRow = {
   rankDelta: number | null;
   criteriaScores: Record<string, number>;
   evaluationsCount: number;
-  /** Bareme : les points de chaque element, leur total, et la soumission en retard (0). */
+  /** Bareme : les points de chaque element, leur total, et la soumission en retard (pour information : elle compte, 18/11). */
   points?: Record<string, number>;
   total?: number;
   late?: boolean;

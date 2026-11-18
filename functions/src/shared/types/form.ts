@@ -291,9 +291,10 @@ export type Form = BatchScoped &
     opensDateISOString: DateISOString | null;
     deadlineDateISOString: DateISOString | null;
     /**
-     * `false` : un envoi apres son echeance ne rend pas la Submission de l'equipe « en retard »
-     * (Plan et Snapshot du H5 : seul Final numbers vaut 0 en retard ; le retard d'un formulaire
-     * compte toujours dans « Forms on time »). Absent ou `true` : il la rend en retard (H1 a H4).
+     * `false` : un envoi apres son echeance ne marque pas la Submission de l'equipe « en retard »
+     * (Plan et Snapshot du H5 : seul Final numbers la marque ; le retard d'un formulaire compte
+     * toujours dans « Forms on time »). Absent ou `true` : il la marque (H1 a H4). Le retard de la
+     * Submission est une information : elle compte (regle du 0 retiree le 18/11).
      * Copie du modele a la creation (`FormTemplate.setsSubmissionLate`).
      */
     setsSubmissionLate?: boolean;

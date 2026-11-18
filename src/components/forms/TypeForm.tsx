@@ -14,10 +14,8 @@ import { paths } from "@/lib/paths";
 import { usePublicForm } from "@/context/PublicFormContext";
 import { markAnonymousFormDone } from "@/hooks/useAnonymousFormsDone";
 import { AppLogo } from "@/components/chrome/AppLogo";
-import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import {
   PENDING_NOTE,
-  changesSaved,
   draftsFromPrefill,
   formNotes,
   newSubmissionId,
@@ -138,8 +136,6 @@ export function TypeForm({ form }: { form: PublicForm }) {
   const [status, setStatus] = useState<FormResponseStatus | null>(null);
   const [submissionId] = useState(newSubmissionId);
   const [version, setVersion] = useState(form.version);
-  /** Un envoi d'equipe apres l'echeance attend la confirmation du retard (il vaudra 0). */
-  const [isConfirmingLate, setConfirmingLate] = useState(false);
 
   // Relu sur une nouvelle version (envoi refuse, `FORM_UPDATED`) : a la premiere question a completer,
   // sinon a la derniere (une question retiree raccourcit le parcours).
@@ -197,12 +193,7 @@ export function TypeForm({ form }: { form: PublicForm }) {
     setError(null);
   }
 
-  async function submit(current: Drafts, who: string | null, lateConfirmed = false) {
-    // Apres l'echeance, des valeurs de l'equipe changees : l'envoi sera en retard (si ce formulaire en decide).
-    const deadline = form.deadlineDateISOString;
-    const isLate = form.setsSubmissionLate && deadline !== null && new Date().toISOString() > deadline;
-    if (!lateConfirmed && isLate && changesSaved(current, form.prefill, teamKeys, typeOf)) return setConfirmingLate(true);
-    setConfirmingLate(false);
+  async function submit(current: Drafts, who: string | null) {
     setIsSending(true);
     try {
       const { data } = await call("submitFormResponse")({
@@ -536,23 +527,6 @@ export function TypeForm({ form }: { form: PublicForm }) {
           Back
         </Button>
       </footer>
-
-      <ResponsiveDialog opened={isConfirmingLate} onClose={() => setConfirmingLate(false)} title="Save after the deadline?">
-        <Stack>
-          <Text size="sm">
-            The deadline passed{form.deadlineDateISOString ? ` (${formatDateTime(form.deadlineDateISOString)})` : ""}. If you save these changes, your
-            team&apos;s submission is marked late and scores 0 points, unless the Pioneers team makes an exception.
-          </Text>
-          <Group justify="flex-end">
-            <Button variant="default" size="md" onClick={() => setConfirmingLate(false)}>
-              Keep it as it is
-            </Button>
-            <Button color="red" size="md" loading={isSending} onClick={() => void submit(drafts, respondent, true)}>
-              Save anyway
-            </Button>
-          </Group>
-        </Stack>
-      </ResponsiveDialog>
     </div>
   );
 }

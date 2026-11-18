@@ -6,7 +6,7 @@ import { emptySubmission, submissionStamp, type Submission } from "../types";
 // Les resultats d'une equipe, corriges par le staff (SPECS §4.2)
 // ----------------------------
 // En logique pure (shared/docWrites.ts) : Admin > Events > une equipe
-// (lib/resultsAdmin.ts) et l'API (`set_team_results`, `waive_late`,
+// (lib/resultsAdmin.ts) et l'API (`set_team_results`,
 // `set_outstanding`). Le declencheur `onSubmissionWritten` en tire les releves de
 // metriques (source `staff`) et recalcule le leaderboard, comme pour le Debrief.
 
@@ -23,15 +23,9 @@ export function teamResultsWrite(eventId: string, teamId: string, current: (Subm
 }
 
 /**
- * Lever (ou remettre) le retard d'une soumission : sinon le bareme lui donne 0.
- * Ni l'heure d'envoi ni la source des releves ne changent.
- */
-export const lateWaivedWrite = (eventId: string, teamId: string, lateWaived: boolean): DocWrite => mergeWrite(docPaths.submission(eventId, teamId), { lateWaived });
-
-/**
  * L'Outstanding mention d'une equipe (decision du 17/11) : seulement une equipe
  * qui a le maximum de la grille (`outstandingEligible` du leaderboard). Elle vit
- * sur la soumission, comme l'exception de retard ; une equipe notee par le jury
+ * sur la soumission ; une equipe notee par le jury
  * sans avoir rien envoye recoit une soumission vide (ni heure d'envoi, ni metrique).
  */
 export function outstandingWrite(eventId: string, teamId: string, outstanding: boolean, team: { hasSubmission: boolean; eligible: boolean }): DocWrite {

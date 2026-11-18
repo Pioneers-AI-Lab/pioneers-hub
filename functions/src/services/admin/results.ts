@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { lateWaivedWrite, outstandingWrite, teamResultsWrite } from "../../shared/admin/results";
+import { outstandingWrite, teamResultsWrite } from "../../shared/admin/results";
 import { COL, docPaths, eventCollectionPaths } from "../../shared/collections";
 import { FAMILY_KEY } from "../../shared/fieldRegistry";
 import type { Evaluation, EventTeam, FormResponse, Leaderboard, PioneersEvent, Submission } from "../../shared/types";
@@ -63,19 +63,6 @@ export const setTeamResults: Operation<typeof SetTeamResultsInput> = {
       { eventId, teamId },
       Object.keys(changes).length > 0,
     );
-  },
-};
-
-export const WaiveLateInput = z.object({ ...teamTarget, waived: z.boolean().describe("true: the late Submission counts (otherwise the grid gives it 0).") }).strict();
-
-export const waiveLate: Operation<typeof WaiveLateInput> = {
-  name: "waive_late",
-  input: WaiveLateInput,
-  allowed: staffOnly,
-  async plan(tx, _caller, { eventId, teamId, waived }) {
-    const { event, team, submission } = await teamOf(tx, eventId, teamId);
-    if (!submission?.late) throw badRequest("not_late", `${team.name}'s Submission was not late.`, "teamId");
-    return writePlan({ event: event.name, team: team.name, waived }, [lateWaivedWrite(eventId, teamId, waived)], { eventId, teamId }, (submission.lateWaived === true) !== waived);
   },
 };
 

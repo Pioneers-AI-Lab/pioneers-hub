@@ -1,5 +1,4 @@
 import {
-  isLateUnwaived,
   mean,
   roundTo,
   weightedMean,
@@ -21,8 +20,7 @@ import {
 // element du bareme : la moyenne des jures sur un critere note de 0 a 5, ramenee
 // a ses points (le modele du 17/11 : la grille du jury fait 100 points), ou, pour
 // les anciens baremes, par unite d'une metrique ou en proportion de la meilleure
-// equipe. Une soumission en retard (sans exception du staff) vaut 0, comme un
-// element mis a 0 (ancienne verification des preuves).
+// equipe. Un element mis a 0 (ancienne verification des preuves) vaut 0.
 //
 // La note sur 100 (`normalized`) est ABSOLUE (decision du 17/11) : le total
 // ramene au maximum de la grille, sans la ramener a la meilleure equipe. Une
@@ -37,8 +35,6 @@ export type ScoredTeam = {
   metrics: Record<string, number>;
   /** La moyenne des jures par critere, sur l'echelle du critere. */
   juryMeans: Record<string, number>;
-  /** En retard et sans exception : tout vaut 0. */
-  late: boolean;
   zeroedItemKeys: readonly string[];
   /** L'Outstanding mention posee par le staff ; elle ne compte qu'au maximum de la grille. */
   outstanding: boolean;
@@ -99,20 +95,19 @@ export function juryMeansOf(evaluations: readonly Pick<Evaluation, "scores">[], 
 }
 
 /**
- * Ce que le bareme lit d'une cible : les metriques, le retard, les elements mis a 0 et
+ * Ce que le bareme lit d'une cible : les metriques, les elements mis a 0 et
  * la mention de sa Submission, et la moyenne de ses jures. LA meme entree pour le
  * leaderboard (services/leaderboards.ts) et la table de `score_jury` (shared/admin/jury.ts).
  */
 export const scoredTeamOf = (
   id: string,
-  submission: Pick<Submission, "metrics" | "late" | "lateWaived" | "zeroedItemKeys" | "outstanding"> | null | undefined,
+  submission: Pick<Submission, "metrics" | "zeroedItemKeys" | "outstanding"> | null | undefined,
   evaluations: readonly Pick<Evaluation, "scores">[],
   criteriaKeys: readonly string[],
 ): ScoredTeam => ({
   id,
   metrics: submission?.metrics ?? {},
   juryMeans: juryMeansOf(evaluations, criteriaKeys),
-  late: isLateUnwaived(submission),
   zeroedItemKeys: submission?.zeroedItemKeys ?? [],
   outstanding: submission?.outstanding === true,
 });
@@ -143,7 +138,7 @@ function rawPoints(item: ScoringItem, team: ScoredTeam, criteria: ReadonlyMap<st
 /** Les points de chaque equipe, leur total et le score normalise. */
 export function scoreTeams(scoring: EventScoring, criteria: readonly Criterion[], teams: readonly ScoredTeam[]): TeamPoints[] {
   const criteriaByKey = new Map(criteria.map((c) => [c.key, c]));
-  const counts = (team: ScoredTeam, item: ScoringItem) => !team.late && !team.zeroedItemKeys.includes(item.key);
+  const counts = (team: ScoredTeam, item: ScoringItem) => !team.zeroedItemKeys.includes(item.key);
   const raw = teams.map((team) => ({
     team,
     raw: Object.fromEntries(scoring.items.map((item) => [item.key, counts(team, item) ? rawPoints(item, team, criteriaByKey) : 0])),

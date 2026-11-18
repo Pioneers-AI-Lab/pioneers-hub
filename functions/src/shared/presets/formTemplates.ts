@@ -86,8 +86,9 @@ export type FormTemplate = {
   /** Un formulaire par occurrence : son titre porte le jour de l'evenement (« Weekly update · 3 Dec »). */
   datedTitle?: boolean;
   /**
-   * Il ecrit la Submission de l'equipe : `true`, un envoi apres son echeance la rend « en retard »
-   * (elle vaut 0) ; `false`, ce retard ne compte que dans « Forms on time » (Plan et Snapshot du H5).
+   * Il ecrit la Submission de l'equipe : `true`, un envoi apres son echeance la marque « en retard »
+   * (une information, elle compte depuis le 18/11) ; `false`, ce retard ne compte que dans
+   * « Forms on time » (Plan et Snapshot du H5).
    * Recopie sur le formulaire (`Form.setsSubmissionLate`, absent = `true`).
    */
   setsSubmissionLate?: boolean;
@@ -224,13 +225,13 @@ export const FORM_TEMPLATES = {
   // une par equipe. Le team lead s'assure qu'elle part avant l'echeance ; tout
   // coequipier peut l'envoyer. Connexion obligatoire : l'equipe est celle du
   // repondant. Le dernier envoi compte ; apres l'echeance, il est marque « en
-  // retard » (la page le dit avant d'enregistrer).
+  // retard » (une information pour le staff et le jury : il compte, 18/11).
   debrief: template({
     label: "Hackathon submission",
     kind: "debrief",
     title: "Submission",
     description:
-      "One per team. Your team lead makes sure it is sent before the deadline; any teammate can send it, and the last save counts. A submission saved after the deadline scores 0.",
+      "One per team. Your team lead makes sure it is sent before the deadline; any teammate can send it, and the last save counts.",
     identityCheck: "account",
     needsEvent: true,
     needsWorkTeams: true,
@@ -253,8 +254,8 @@ export const FORM_TEMPLATES = {
   // d'une Submission, qui ecrivent la MEME soumission (`submissions/{teamId}`) a trois moments.
   // Comme `debrief` : une reponse par equipe, depuis son compte, tout coequipier l'envoie, le
   // dernier envoi compte. Dates de data/events.json (`formSettings`). Seul Final numbers en
-  // retard vaut 0 (`setsSubmissionLate`) ; Plan et Snapshot en retard ne comptent que dans
-  // « Forms on time ».
+  // retard marque la Submission « en retard » (`setsSubmissionLate`, une information) ; Plan et
+  // Snapshot en retard ne comptent que dans « Forms on time ».
   h5_plan: h5TeamForm({
     label: "H5 plan",
     title: "Plan H5",
@@ -287,7 +288,7 @@ export const FORM_TEMPLATES = {
   h5_final: h5TeamForm({
     label: "H5 final numbers",
     title: "Final numbers H5",
-    description: `One per team: your numbers when sales stop counting. ${H5_ANY_TEAMMATE} Final numbers saved after the deadline score 0.`,
+    description: `One per team: your numbers when sales stop counting. ${H5_ANY_TEAMMATE}`,
     setsSubmissionLate: true,
     questions: [],
     // Les metriques de l'evenement (`submission.metrics.<cle>`), puis le dossier Drive des preuves.

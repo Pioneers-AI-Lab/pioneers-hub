@@ -200,7 +200,7 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   le retire de ce que rend l'API.
   H5 (17/11) : pas de `debrief` mais trois formulaires d'equipe sur la MEME Submission (`h5_plan`, `h5_snapshot`,
   `h5_final`, data/events.json `withoutForms` / `forms`) ; seul un formulaire `setsSubmissionLate` (Final numbers,
-  Submissions H1 a H4 ; absent = oui) rend la Submission en retard (0 point). Tirage `matching.lockedTeamsFromStartups` :
+  Submissions H1 a H4 ; absent = oui) marque la Submission en retard (une information : elle compte, regle du 0 retiree le 18/11). Tirage `matching.lockedTeamsFromStartups` :
   les startups du batch (deux fondateurs presents au moins) sont des equipes verrouillees, les autres sont tires.
 - **Formulaires publics** (`/forms/[formId]`, une question par ecran : `components/forms/TypeForm` ; formulaire a
   portee : `components/forms/FormSheet`, une page) : callables `getPublicForm` (noms du batch en nom court ; avec
@@ -272,7 +272,7 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   puis `recompute_scores`). Tirage : `draw_teams` est REJOUABLE (`seed`, aleatoire `shared/admin/teams.ts#seededRandom`) : l'apercu montre ce que la confirmation ecrit ; il lit les `private/connections` comme TeamGenerator et n'en rend que des comptes. Plans et cles d'idempotence stockent entree, apercu et resultat en JSON (Firestore refuse un tableau de tableaux) ; l'audit aussi (`storable`). `list actions` : noms et descriptions ; arguments d'une action avec `search`.
 - **Guide de l'agent** : outil `pioneers_guide` (`mcp/guide.ts`, staff) : modele, evenements, formulaires, scores,
   vie privee, recettes de correction. En anglais, aucun chiffre ; a tenir a jour avec les actions.
-- Catalogue MCP : 9 outils pour le staff (~3 600 jetons ; 42 actions derriere `pioneers_run`), 4 pour un fondateur, 3 pour un investor. Une capacite de
+- Catalogue MCP : 9 outils pour le staff (~3 600 jetons ; 41 actions derriere `pioneers_run`), 4 pour un fondateur, 3 pour un investor. Une capacite de
   plus = un type d'objet dans `list` / `get` ou une action de `pioneers_run`, jamais un nouvel outil. Pas de valeur
   chiffree dans `mcp/instructions.ts`.
 - `MCP-Protocol-Version` inconnu : retire avant le transport (panne totale vecue chez Trippple).

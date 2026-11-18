@@ -7,7 +7,7 @@ import { enumOptions, getFieldDef, isEmptyValue, parseDbField, resolveDocPath, t
 import { asksDriveFolder, eventMetrics, juryBlockForms, juryCriterionMetrics, type FieldQuestion } from "../shared/forms";
 import { isBlankAnswer } from "../shared/juryBrief";
 import { nameKey, normalizeHttpUrl } from "../shared/text";
-import { hasSubmitted, isLateUnwaived } from "../shared/types";
+import { hasSubmitted } from "../shared/types";
 import type { Evaluation, Form, Founder, JuryLink, PioneersEvent, Submission } from "../shared/types";
 import { sha256 } from "../api/crypto";
 import { staffNames as loadStaffNames } from "./accounts";
@@ -196,7 +196,7 @@ export async function loadJuryBrief(eventId: string, targetIds: string[], target
     if (!sent && !(source === "pitch_deck" && answers.length > 0)) continue;
     submissions[id] = {
       driveFolderUrl: sent && s.driveFolderUrl ? normalizeHttpUrl(s.driveFolderUrl) : null,
-      late: sent && isLateUnwaived(s),
+      late: sent && s?.late === true,
       answers,
       metrics: sent ? Object.fromEntries(metrics.flatMap((m) => (typeof s.metrics?.[m.key] === "number" ? [[m.key, s.metrics[m.key]] as const] : []))) : {},
     };

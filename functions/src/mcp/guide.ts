@@ -68,10 +68,10 @@ Objects are archived (\`archivedDateISOString\`) and can be restored. An archive
 - **A matching** (none or one): \`matching.mode\` is \`challenge\` (work teams, each with a leader) or \`matching\` (tables to meet people), with \`matching.size\`. One draw per event: a moment that needs two draws is two events.
 - **Drawn groups** live in \`events/{id}/teams\`. Publishing a draft draw makes teams visible and writes the dated \`memberships\`; until then the matching can change mode or be removed. A published draw is only retouched (swap, move, change a leader, add a latecomer, remove an absentee), with stable team ids: no redraw, no unpublishing. Drawing, publishing and retouching: Admin for now.
 - **Forms** attached by \`eventId\` carry every input of the event (see \`forms\`):
-  - Submission / Debrief (\`debrief\`): one shared answer per team, in \`events/{id}/submissions/{teamId}\`: team metrics \`submission.metrics.<key>\`, texts, Drive folder. Sent after the deadline, it is marked \`late\`.
+  - Submission / Debrief (\`debrief\`): one shared answer per team, in \`events/{id}/submissions/{teamId}\`: team metrics \`submission.metrics.<key>\`, texts, Drive folder. Sent after the deadline, it is marked \`late\`: information only, it still counts.
   - Peer rating (\`peer_feedback\`): one private answer per teammate (\`peerRating.*\`).
   - Jury (\`jury\`): one answer per scored team, or per startup of the event when there is no matching: \`evaluation.scores.<key>\`. Each criterion is scored 0 to 5 and its points are on its question. Closing the jury form locks the scores.
-  - Hackathon 5 has three team forms (plan, snapshot, final numbers) feeding ONE submission per team; only a late final numbers form makes it late (0 point).
+  - Hackathon 5 has three team forms (plan, snapshot, final numbers) feeding ONE submission per team; only a late final numbers form marks it late.
   - Pitch deck (\`pitch_deck\`): one answer per startup before each pitch (deck, one-liner, problem, customer, solution, why now), any co-founder sends it.
   - Weekly update founder and weekly update startup: created on each agenda entry "Weekly Update Form" (see \`forms\`).
   - Week retro (attached to the retro), and Program end and Lock my team (batch forms, no event).
@@ -153,7 +153,7 @@ The formulas are decided and fixed in the specification; do not recompute a scor
 2. Correct that input with the tool that owns it.
 3. Recompute (\`recompute_scores\`), or let the nightly run do it, then check again.
 
-Inputs and their tool: attendance \`mark_attendance\`; team results \`set_team_results\`, \`waive_late\`, \`set_outstanding\`; a jury score entered by mistake \`delete_jury_score\`; the scoring grid and ranking \`set_event_scoring\`, \`set_ranking_metric\`, \`publish_ranking\`; the Background grid \`rate_background\`; a founder's edge \`rate_edge\` (after they changed it, rate it again); weekly update reviews \`review_founder_update\`, \`review_startup_update\`. Never changeable here: peer ratings (only their form writes them), shortlists and "met" (the founder alone). Peer ratings, shortlists and "met" marks stay private: they reach scores, never one by one.`,
+Inputs and their tool: attendance \`mark_attendance\`; team results \`set_team_results\`, \`set_outstanding\`; a jury score entered by mistake \`delete_jury_score\`; the scoring grid and ranking \`set_event_scoring\`, \`set_ranking_metric\`, \`publish_ranking\`; the Background grid \`rate_background\`; a founder's edge \`rate_edge\` (after they changed it, rate it again); weekly update reviews \`review_founder_update\`, \`review_startup_update\`. Never changeable here: peer ratings (only their form writes them), shortlists and "met" (the founder alone). Peer ratings, shortlists and "met" marks stay private: they reach scores, never one by one.`,
   },
   privacy: {
     title: "Privacy and what the API never touches",
@@ -196,7 +196,7 @@ Each document has its audience (see \`model\`). Do not copy a value from a restr
 2. Read the metric keys in the event's Submission form (\`pioneers_get\` form: questions writing \`submission.metrics.<key>\`).
 3. \`pioneers_run\` \`set_team_results\` (metrics, product link, proofs, notes). It is recorded as a staff correction and does not change the \`late\` flag. The leaderboard recomputes by itself.
 4. If the ranking is already published, \`recompute_scores\` so founder scores follow.
-5. A late Submission that should count: \`waive_late\`. The outstanding mention (only for a team with the grid's maximum, see the event's \`leaderboard\`): \`set_outstanding\`. A jury score entered by mistake: \`delete_jury_score\`. Then \`publish_ranking\` when the staff is ready.
+5. The outstanding mention (only for a team with the grid's maximum, see the event's \`leaderboard\`): \`set_outstanding\`. A jury score entered by mistake: \`delete_jury_score\`. Then \`publish_ranking\` when the staff is ready.
 
 ## Draw, publish or retouch an event's groups
 1. \`pioneers_get\` the event: its \`matching\` (none: \`set_matching\`), its teams (draft or published) and attendance (absentees are never drawn).
@@ -210,7 +210,7 @@ Each document has its audience (see \`model\`). Do not copy a value from a restr
 3. Read EVERY target before scoring any: open each Drive folder and proof link (with the Google Drive tools), compare the numbers across teams, check that a figure is backed by evidence. A criterion such as "5 = the best team" is relative.
 4. Score each criterion with a whole number on its scale, and write one or two sentences per criterion (\`rationale\`): what you checked, what is missing. If evidence is missing, say so and score what is proven.
 5. \`pioneers_run\` \`score_jury\` once with all the targets. Show the WHOLE table of the preview (scores, your points, rank, projected total with the other jurors, teams not scored) and let the user correct before confirming. Each score is the user's own staff score: one vote, like a juror.
-6. Late Submissions count 0 unless waived (\`waive_late\`); the Outstanding mention and the ranking's publication are separate, the user's decisions.
+6. The Outstanding mention and the ranking's publication are separate, the user's decisions.
 
 ## A founder was marked absent by mistake
 1. \`pioneers_get\` the event: the founder's mark, and whether its teams are published.

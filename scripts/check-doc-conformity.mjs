@@ -355,7 +355,7 @@ function codeChecks() {
   }
   const h5 = fileEvent(HACKATHON_KEYS[5]);
   for (const key of Object.keys(H5_FORMS)) expectQuestions(`${key} questions (§2.6)`, H5_FORMS[key], tq(key, ctxOf(h5)));
-  expect("H5: only Final numbers late scores 0 (setsSubmissionLate)", { h5_plan: false, h5_snapshot: false, h5_final: true, debrief: true }, Object.fromEntries(["h5_plan", "h5_snapshot", "h5_final", "debrief"].map((k) => [k, FORM_TEMPLATES[k].setsSubmissionLate])));
+  expect("H5: only Final numbers marks the Submission late (setsSubmissionLate)", { h5_plan: false, h5_snapshot: false, h5_final: true, debrief: true }, Object.fromEntries(["h5_plan", "h5_snapshot", "h5_final", "debrief"].map((k) => [k, FORM_TEMPLATES[k].setsSubmissionLate])));
   const retro = fileEvent("fa26-week-1-retro");
   expectQuestions("week_retro questions (§2.7)", retroQuestions(retro.sessions.length), tq("week_retro", ctxOf(retro)));
   for (const [key, specs] of Object.entries(WEEKLY_FORMS)) expectQuestions(`${key} questions (§2.8, §2.9)`, specs, tq(key));
@@ -453,7 +453,7 @@ function codeChecks() {
   expect("H5 counts 4 times in Execution (events.json hackathonWeight)", [4, 1], [m.scoring.hackathonWeightOf(h5), m.scoring.hackathonWeightOf(fileEvent(HACKATHON_KEYS[1]))]);
   expect("H5 draw: Lock my team startups kept as teams (§4.2)", true, h5.matching?.lockedTeamsFromStartups === true);
   const h1 = fileEvent(HACKATHON_KEYS[1]);
-  const team = (id, juryMeans, extra = {}) => ({ id, metrics: {}, juryMeans, late: false, zeroedItemKeys: [], outstanding: false, ...extra });
+  const team = (id, juryMeans, extra = {}) => ({ id, metrics: {}, juryMeans, zeroedItemKeys: [], outstanding: false, ...extra });
   const scoreH1 = (...teams) => m.rules.scoreTeams(h1.scoring, h1.criteria, teams);
   behaves("grid: 4/5 on a 30-point criterion gives 24 (§2.0)", () => [24, scoreH1(team("a", { evidence: 4 }))[0].points.evidence]);
   behaves("grid: absolute note, not brought back to the best team", () => [50, scoreH1(team("a", notes(GRIDS[1], 2.5)))[0].normalized]);
@@ -463,7 +463,7 @@ function codeChecks() {
   });
   expect("Outstanding bonus constant", 20, m.rules.OUTSTANDING_BONUS_POINTS);
   behaves("several jurors: mean criterion by criterion", () => [{ evidence: 3 }, m.rules.juryMeansOf([{ scores: { evidence: 4 } }, { scores: { evidence: 2 } }], ["evidence"])]);
-  behaves("late Submission scores 0", () => [0, scoreH1(team("a", notes(GRIDS[1], 5), { late: true }))[0].total]);
+  behaves("late Submission counts (0 rule removed 18/11)", () => [scoreH1(team("a", notes(GRIDS[1], 5)))[0].total, scoreH1(m.rules.scoredTeamOf("a", { metrics: {}, late: true, zeroedItemKeys: [] }, [{ scores: notes(GRIDS[1], 5) }], Object.keys(notes(GRIDS[1], 5))))[0].total]);
   behaves("tie-break criterion gives 0 point but breaks ties (H4)", () => {
     const e = fileEvent(HACKATHON_KEYS[4]);
     const [a, b] = m.rules.scoreTeams(e.scoring, e.criteria, [team("a", { ...notes(GRIDS[4], 5), closedWon: 0 }), team("b", { ...notes(GRIDS[4], 5), loisSigned: 3 })]);

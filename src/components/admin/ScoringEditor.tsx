@@ -83,7 +83,7 @@ export function LeaderboardSection() {
     ? "What ranks the teams: the jury's scores, or one number of the submission. Or give points to several variables."
     : isPublished
       ? "A change recomputes it."
-      : "Founders see the ranking once you publish it. A late submission scores 0.";
+      : "Founders see the ranking once you publish it.";
 
   return (
     <Section title={scoring ? `Leaderboard · ${total === null ? "open total" : `out of ${total}`}` : "Leaderboard"} hint={hint} help={help}>

@@ -1,4 +1,4 @@
-import { lateWaivedWrite, outstandingWrite, teamResultsWrite, type TeamResultsPatch } from "@shared/admin/results";
+import { outstandingWrite, teamResultsWrite, type TeamResultsPatch } from "@shared/admin/results";
 import type { Submission, WithId } from "@shared/types";
 import { commitWrites } from "@/lib/firestore/write";
 
@@ -12,8 +12,6 @@ const now = () => new Date().toISOString();
 
 export const saveTeamResults = (eventId: string, teamId: string, current: WithId<Submission> | null, patch: TeamResultsPatch, staffUid: string) =>
   commitWrites([teamResultsWrite(eventId, teamId, current, patch, staffUid, now())]);
-
-export const setLateWaived = (eventId: string, teamId: string, lateWaived: boolean) => commitWrites([lateWaivedWrite(eventId, teamId, lateWaived)]);
 
 /** `eligible` : la ligne du leaderboard a le maximum de la grille (`outstandingEligible`). */
 export const setTeamOutstanding = (eventId: string, teamId: string, outstanding: boolean, team: { hasSubmission: boolean; eligible: boolean }) =>

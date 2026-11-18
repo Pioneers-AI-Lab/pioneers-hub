@@ -34,8 +34,8 @@ import { loadEvent, scoredTargets } from "./events";
 // question) ; les metriques, celles de son Debrief.
 //
 // Le bareme de l'evenement (`scoring`, SPECS §4.2, decision du 13/11) classe
-// d'abord : points par element (metriques et criteres du jury), 0 pour une
-// soumission en retard ou un element mis a 0, puis les departages. Sinon, deux
+// d'abord : points par element (metriques et criteres du jury), 0 pour un
+// element mis a 0, puis les departages. Sinon, deux
 // classements au choix (`rankingMetricKey`) :
 //   - les notes du jury (par defaut) : pour chaque evaluation, la moyenne
 //     ponderee des criteres ramenes sur 10 ; puis la moyenne entre evaluations.
@@ -125,7 +125,7 @@ export async function recomputeLeaderboard(eventId: string): Promise<void> {
           evaluationsCount: evaluationsOf.get(p.id)?.length ?? 0,
           points: p.points,
           total: p.total,
-          late: team.late,
+          late: submissionOf.get(p.id)?.late === true,
           normalized: p.normalized,
           outstanding: p.outstanding,
           outstandingEligible: p.outstandingEligible,

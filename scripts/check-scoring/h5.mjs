@@ -1,6 +1,6 @@
 // Le H5 (lot 3, docs/FONCTIONNALITES.md §2.6 et §4.2) : trois formulaires d'equipe
 // (Plan, Snapshot, Final numbers) qui ecrivent la meme Submission ; seul Final numbers en retard la
-// rend « en retard » (0 point) ; les startups du batch sont des equipes fixes du tirage.
+// marque « en retard » (une information, sans effet sur les points) ; les startups du batch sont des equipes fixes du tirage.
 // Logique pure : functions/lib/shared (eventForms, forms, fieldRegistry, teamGenerator) et le fichier
 // data/events.json lu comme par scripts/sync-events.mjs.
 import { createRequire } from "node:module";

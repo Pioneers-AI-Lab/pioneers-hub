@@ -27,7 +27,6 @@ import {
   setOutstanding,
   setRankingMetric,
   setTeamResults,
-  waiveLate,
 } from "./admin/results";
 import { createStartups, rateBackground, rateEdge, reviewFounder, reviewStartup, setAttendanceOptional } from "./admin/reviews";
 import { drawTeams, editTeams, publishTeams, setMatching } from "./admin/teams";
@@ -63,7 +62,6 @@ const ACTION_LIST: Described[] = [
   { op: publishTeams, description: "Publish the drafted groups: founders see their group, team histories are recorded." },
   { op: editTeams, description: "Change groups (draft or published): swap, move, late arrival, leader, new group. Published group ids stay." },
   { op: setTeamResults, description: "Correct a team's results (metrics, product link, proofs, notes), as a staff correction." },
-  { op: waiveLate, description: "Count (or not) a team's late Submission." },
   { op: setOutstanding, description: "Give (or remove) the Outstanding mention to a team with the grid's maximum." },
   { op: scoreJury, description: "Score every team or startup of a jury form at once, as YOUR staff score, with a justification per criterion (read `pioneers_get` `jury_sheet` first)." },
   { op: deleteJuryScore, description: "Delete a jury score entered by mistake (kept in the audit log)." },
