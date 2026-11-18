@@ -1,5 +1,6 @@
 import { PITCH_STAGES } from "./event";
 import type { Archivable, DateISOString, DayString, Timestamps } from "./common";
+import type { FounderPillarKey, StartupSubScore } from "./score";
 
 // ----------------------------
 // batches/{batchId}
@@ -34,12 +35,22 @@ export type LeaderboardVisibility = "visible" | "hidden";
 export const BATCH_AUDIENCES = ["none", "staff", "founders"] as const;
 export type BatchAudience = (typeof BATCH_AUDIENCES)[number];
 
+/**
+ * Qui voit chaque sous-score (18/11), dans le bloc des scores (`scoresVisibility` decide du bloc ;
+ * le score global reste). Un sous-score absent suit `scoresVisibility`.
+ */
+export type SubScoreKeys = { founder: FounderPillarKey; startup: StartupSubScore };
+/** `null` (ou absent) : le sous-score suit les scores. Ecrit en entier (`fullSubScores`) : une ecriture en `merge` garde sinon une cle retiree. */
+export type SubScoreVisibility = { [T in keyof SubScoreKeys]?: Partial<Record<SubScoreKeys[T], BatchAudience | null>> };
+
 export type BatchSettings = {
   leaderboardVisibility: LeaderboardVisibility;
   /** L'onglet Startups et la tuile de l'accueil. Absent : `none` (les startups naissent le 25/11). */
   startupsVisibility?: BatchAudience;
   /** Les scores (Program Performance, score des startups) et leurs signaux. Absent : `staff`. */
   scoresVisibility?: BatchAudience;
+  /** Chaque sous-score, dans ce bloc. Absent (ou un sous-score absent) : comme `scoresVisibility`. */
+  subScoreVisibility?: SubScoreVisibility;
   /** Channel general du batch (`#fall26-general`), cible des annonces. */
   slackChannelId: string | null;
   /**

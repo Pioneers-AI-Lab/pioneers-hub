@@ -177,6 +177,11 @@ export const startupWeightingHint = (score: { scale?: ScoreScale } | null | unde
 /** Le nom affiche d'un pilier. */
 export const pillarName = (pillar: FounderPillarKey) => PILLAR_NAMES[pillar];
 
+const STARTUP_SUBSCORE_NAMES: Record<StartupSubScore, string> = { market: "Market", team: "Team", execution: "Execution", traction: "Traction" };
+
+/** Le nom affiche d'un sous-score de startup. */
+export const startupSubScoreName = (key: StartupSubScore) => STARTUP_SUBSCORE_NAMES[key];
+
 /** Le poids d'un pilier dans la Program Performance de son echelle (0 : suivi, pas compte). */
 export const pillarWeightOf = (rules: ScaleRules, pillar: FounderPillarKey): number => rules.pillarWeights[pillar] ?? 0;
 

@@ -1,4 +1,5 @@
-import type { BatchAudience, BatchSettings, Founder, FounderDirectory, FounderProfile, InvestorAccess, PioneersEvent, Person, Startup, User, UserRole } from "./types";
+import type { BatchAudience, BatchSettings, Founder, FounderDirectory, FounderProfile, InvestorAccess, PioneersEvent, Person, Startup, SubScoreKeys, SubScoreVisibility, User, UserRole } from "./types";
+import { FOUNDER_PILLARS, STARTUP_SUBSCORES } from "./types/score";
 
 // ----------------------------
 // Qui voit quoi : la regle, en logique pure (SPECS §6.2)
@@ -110,6 +111,53 @@ export const canSeeStartupsTab = (role: BatchRole, settings: Pick<BatchSettings,
 /** Les scores et leurs signaux (`settings.scoresVisibility`). */
 export const canSeeScores = (role: BatchRole, settings: Pick<BatchSettings, "scoresVisibility">): boolean =>
   canSeeAudience(role, batchAudiencesOf(settings).scores);
+
+/**
+ * Un sous-score (Edge d'un fondateur, Team d'une startup...) : dans le bloc des scores seulement
+ * (`scoresVisibility`, le premier interrupteur), puis son reglage (`subScoreVisibility`) ; sans
+ * reglage, il suit les scores.
+ */
+export const canSeeSubScore = <T extends keyof SubScoreKeys>(
+  role: BatchRole,
+  settings: Pick<BatchSettings, "scoresVisibility" | "subScoreVisibility">,
+  target: T,
+  key: SubScoreKeys[T],
+): boolean => canSeeScores(role, settings) && canSeeAudience(role, settings.subScoreVisibility?.[target]?.[key] ?? batchAudiencesOf(settings).scores);
+
+/**
+ * Le reglage d'un sous-score change (`null` : retour au reglage des scores), sous une forme canonique
+ * (cles triees, sans liste vide) : l'Admin et `update_batch` ecrivent la meme chose.
+ */
+export function withSubScoreAudience<T extends keyof SubScoreKeys>(
+  visibility: SubScoreVisibility,
+  target: T,
+  key: SubScoreKeys[T],
+  audience: BatchAudience | null,
+): SubScoreVisibility {
+  // TypeScript ne relie pas `visibility[target]` a `SubScoreKeys[T]` (type indexe generique).
+  const own = { ...visibility[target] } as Partial<Record<SubScoreKeys[T], BatchAudience | null>>;
+  if (audience) own[key] = audience;
+  else delete own[key];
+  return canonicalSubScores({ ...visibility, [target]: own });
+}
+
+/** Cles triees, sans `null` ni liste vide : deux reglages identiques s'ecrivent pareil. */
+export const canonicalSubScores = (visibility: SubScoreVisibility | undefined): SubScoreVisibility =>
+  Object.fromEntries(
+    Object.entries(visibility ?? {})
+      .map(([target, own]) => [target, Object.fromEntries(Object.entries(own ?? {}).filter(([, a]) => a).sort(([a], [b]) => a.localeCompare(b)))] as const)
+      .filter(([, own]) => Object.keys(own).length > 0)
+      .sort(([a], [b]) => a.localeCompare(b)),
+  );
+
+/**
+ * La forme a ECRIRE : chaque sous-score de l'echelle sur 100, `null` pour « suit les scores ». Les
+ * ecritures du batch sont en `merge` (cartes fusionnees) : une cle absente garderait l'ancienne valeur.
+ */
+export const fullSubScores = (visibility: SubScoreVisibility | undefined): SubScoreVisibility => ({
+  founder: Object.fromEntries(FOUNDER_PILLARS.map((p) => [p, visibility?.founder?.[p] ?? null])),
+  startup: Object.fromEntries(STARTUP_SUBSCORES.map((k) => [k, visibility?.startup?.[k] ?? null])),
+});
 
 /**
  * Le detail d'un score (decision du 18/11) : poids des sous-scores, donnee brute des signaux, mention

@@ -18,6 +18,7 @@ import {
   unlinkFounderWrites,
   type TaskDraft,
 } from "../../shared/admin/batch";
+import { canonicalSubScores, fullSubScores, withSubScoreAudience } from "../../shared/access";
 import { eventRoster } from "../../shared/attendance";
 import { COMING_UP_DAYS, TASK_CHECK_RULES } from "../../shared/tasks";
 import { COL, docPaths, eventCollectionPaths } from "../../shared/collections";
@@ -26,15 +27,20 @@ import {
   ATTENDANCE_STATUSES,
   BATCH_AUDIENCES,
   BATCH_MILESTONE_KEYS,
+  FOUNDER_PILLARS,
+  STARTUP_SUBSCORES,
   TASK_CHECKS,
   type Attendance,
   type Batch,
+  type BatchSettings,
   type BatchTask,
   type ClosedList,
   type Founder,
   type Person,
   type PioneersEvent,
+  type FounderPillar,
   type Program,
+  type StartupSubScore,
   type User,
 } from "../../shared/types";
 import { badRequest, conflict, notFound } from "../../api/errors";
@@ -282,6 +288,16 @@ export const UpdateBatchInput = z
     leaderboardVisibility: z.enum(["visible", "hidden"]).optional().describe("Whether founders see the batch leaderboard."),
     startupsVisibility: z.enum(BATCH_AUDIENCES).optional().describe("Who sees the Startups tab: none, staff (with investors) or founders (everyone in the batch)."),
     scoresVisibility: z.enum(BATCH_AUDIENCES).optional().describe("Who sees the performance scores and their signals: none, staff (with investors) or founders."),
+    subScoreVisibility: z
+      .object({
+        founder: z.partialRecord(z.enum(FOUNDER_PILLARS), z.enum(BATCH_AUDIENCES).nullable()).optional(),
+        startup: z.partialRecord(z.enum(STARTUP_SUBSCORES), z.enum(BATCH_AUDIENCES).nullable()).optional(),
+      })
+      .strict()
+      .optional()
+      .describe(
+        `Who sees each sub-score inside the scores (founder: ${FOUNDER_PILLARS.join(", ")}; startup: ${STARTUP_SUBSCORES.join(", ")}): none, staff or founders, never wider than the scores; null: back to the scores setting. Others stay.`,
+      ),
     googleCalendarId: z.string().trim().min(1).nullable().optional().describe("Link the batch to a Google Calendar (its events then come from it); null unlinks."),
   })
   .strict();
@@ -290,14 +306,22 @@ export const updateBatch: Operation<typeof UpdateBatchInput> = {
   name: "update_batch",
   input: UpdateBatchInput,
   allowed: staffOnly,
-  async plan(tx, _caller, { batchId, milestones, leaderboardVisibility, startupsVisibility, scoresVisibility, googleCalendarId, ...given }) {
+  async plan(tx, _caller, { batchId, milestones, leaderboardVisibility, startupsVisibility, scoresVisibility, subScoreVisibility, googleCalendarId, ...given }) {
     const batch = await mustRead<Batch>(tx, docPaths.batch(batchId), "batch", "batchId");
     const patch: Partial<Batch> = { ...given };
     if (milestones) {
       const dayOf = new Map(milestones.map((m) => [m.key, m.dayString]));
       patch.milestones = batch.milestones.map((m) => (dayOf.has(m.key) ? { ...m, dayString: dayOf.get(m.key)! } : m));
     }
-    const settings = Object.fromEntries(Object.entries({ leaderboardVisibility, startupsVisibility, scoresVisibility, googleCalendarId }).filter(([, v]) => v !== undefined));
+    const settings: Partial<BatchSettings> = Object.fromEntries(
+      Object.entries({ leaderboardVisibility, startupsVisibility, scoresVisibility, googleCalendarId }).filter(([, v]) => v !== undefined),
+    );
+    if (subScoreVisibility) {
+      let next = canonicalSubScores(batch.settings.subScoreVisibility);
+      for (const [key, audience] of Object.entries(subScoreVisibility.founder ?? {})) next = withSubScoreAudience(next, "founder", key as FounderPillar, audience ?? null);
+      for (const [key, audience] of Object.entries(subScoreVisibility.startup ?? {})) next = withSubScoreAudience(next, "startup", key as StartupSubScore, audience ?? null);
+      settings.subScoreVisibility = fullSubScores(next);
+    }
     if (Object.keys(settings).length) patch.settings = { ...batch.settings, ...settings };
     const start = patch.startDayString ?? batch.startDayString;
     const end = patch.endDayString !== undefined ? patch.endDayString : batch.endDayString;

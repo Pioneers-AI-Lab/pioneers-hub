@@ -9,11 +9,11 @@ import {
   scoreScaleOf,
   startupWeightingHint,
   STARTUP_SUBSCORES,
+  startupSubScoreName,
   type Checkin,
   type MetricKey,
-  type StartupSubScore,
 } from "@shared/types";
-import { canSeeScoreDetails } from "@shared/access";
+import { canSeeScoreDetails, canSeeSubScore } from "@shared/access";
 import { criterionLabel } from "@shared/presets/eventTemplates";
 import {
   isPitchGrid,
@@ -53,17 +53,11 @@ import { ScoreRadar } from "@/components/charts/ScoreRadar";
 // marche. Chaque bloc ne s'affiche que si le role a lu ses donnees
 // (StartupContext, CohortContext).
 
-const SUBSCORE_LABEL: Record<StartupSubScore, string> = {
-  market: "Market",
-  team: "Team",
-  execution: "Execution",
-  traction: "Traction",
-};
 
 /** Le score (sur 100, ou sur 10 pour Spring 2026) et ses quatre sous-scores, chacun avec sa source. */
 export function StartupScoreSection() {
   const { startup, signals } = useStartup();
-  const { role } = useBatch();
+  const { role, batch } = useBatch();
   const detailed = canSeeScoreDetails(role);
   const { startupScores, startupScoreOf } = useCohort();
   const score = startupScores.get(startup.id);
@@ -74,12 +68,12 @@ export function StartupScoreSection() {
     <Section title="Score" hint={`Data completeness ${percent(score.dataCompleteness)}.`}>
       <ScoreHeadline label="Overall" value={startupScoreOf(startup.id)} scale={scale} hint={detailed ? startupWeightingHint(score) : undefined} />
       <Stack gap="md" mt="xs">
-        {STARTUP_SUBSCORES.map((key) => {
+        {STARTUP_SUBSCORES.filter((key) => canSeeSubScore(role, batch.settings, "startup", key)).map((key) => {
           const list = signals?.signals[key] ?? [];
           return (
             <ScoreBar
               key={key}
-              label={SUBSCORE_LABEL[key]}
+              label={startupSubScoreName(key)}
               value={score.subScores[key]}
               scale={scale}
               detail={list.length > 0 && <ScoreSignalList signals={list} scale={scale} detailed={detailed} />}

@@ -48,7 +48,7 @@ Firestore allows or denies a WHOLE document, never a field, so each entity is sp
 - \`founders/{id}\`: public card. \`private/directory\`: the Profile Book (batch, staff, investors). \`private/profile\`: age, birth date and the like (the founder, staff, IC). \`private/connections\`: the founder's shortlist and "met" (written by the founder alone). \`private/internal\`: staff appraisal (staff, IC).
 - \`startups/{id}\`: public card. \`private/profile\`: members, staff, investors. \`private/internal\`: staff assessment (staff, IC).
 - \`checkins\` (weekly updates), \`kpiSeries\`, \`metricSnapshots\`: members, staff, investors. \`founderWeeks\`: the founder, staff, IC. \`founderStats\`, \`notes\`: staff, IC.
-- \`scores\`: staff and investors. \`scoreSignals\` (detail, with staff appraisals): staff, IC.
+- \`scores\` and \`scoreSignals\`: open data; the app shows them by the batch settings \`settings.scoresVisibility\` (the scores block) and \`settings.subScoreVisibility\` (each sub-score inside it: none, staff or founders, default = the scores block). When you show scores to someone, respect both: never give a founder a sub-score the batch hides from founders.
 - \`teamLocks/{founderId}\` (Lock my team): the founder and staff.
 - \`formResponses\`, \`events/*/peerRatings\`, \`founderReviews\` and \`startupReviews\` (weekly update reviews), \`shortlistHistory\`, \`events/*/judges\`, \`auditLogs\`, \`apiKeys\`: staff only.
 

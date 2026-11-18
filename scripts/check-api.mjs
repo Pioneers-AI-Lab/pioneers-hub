@@ -467,6 +467,17 @@ const call = async (key, name, args) => {
   a = await run("update_batch", { batchId: "spring-2028", milestones: [{ key: "demo_day", dayString: "2028-05-28" }], leaderboardVisibility: "hidden" });
   const b = (await db.doc("batches/spring-2028").get()).data();
   check(b?.milestones.find((m) => m.key === "demo_day")?.dayString === "2028-05-28" && b.settings.leaderboardVisibility === "hidden" && b.milestones.length === 5, "update_batch sets a milestone and a setting", b);
+  a = await run("update_batch", { batchId: "spring-2028", subScoreVisibility: { founder: { edge: "staff", commitment: "none" } } });
+  a = await run("update_batch", { batchId: "spring-2028", subScoreVisibility: { founder: { commitment: null }, startup: { market: "founders" } } });
+  // Ecrit en entier (null : suit les scores), pour qu'une ecriture en merge retire bien un reglage.
+  const subScores = (await db.doc("batches/spring-2028").get()).data()?.settings.subScoreVisibility;
+  const set = (own) => Object.fromEntries(Object.entries(own ?? {}).filter(([, a]) => a !== null));
+  check(
+    JSON.stringify({ founder: set(subScores?.founder), startup: set(subScores?.startup) }) === JSON.stringify({ founder: { edge: "staff" }, startup: { market: "founders" } }) &&
+      subScores?.founder?.commitment === null,
+    "update_batch sets each sub-score's audience, null goes back to the scores setting",
+    subScores,
+  );
   a = await run("add_list_values", { list: "industries", values: ["Quantum check"] });
   check(a.applied?.data?.result?.added?.[0] === "Quantum check", "add_list_values adds a new value", a.applied?.data);
   t = await call(key, "pioneers_run", { action: "add_list_values", args: { list: "industries", values: ["quantum CHECK"] } });

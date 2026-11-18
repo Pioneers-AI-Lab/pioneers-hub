@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Box, Group, Stack, Text, UnstyledButton } from "@mantine/core";
-import { canSeeScoreDetails } from "@shared/access";
+import { canSeeScoreDetails, canSeeSubScore } from "@shared/access";
 import { isWorkTeamEvent } from "@shared/events";
 import {
   COMMITMENT_STATUS_LABELS,
@@ -60,15 +60,17 @@ const PILLAR_SHORT: Record<FounderPillarKey, string> = {
  */
 export function FounderPerformance() {
   const { founder, signals } = useFounder();
-  const { role } = useBatch();
+  const { role, batch } = useBatch();
   const detailed = canSeeScoreDetails(role);
   const { founderScores, founderPerformance } = useCohort();
   const score = founderScores.get(founder.id);
   if (!score) return null;
   const scale = scoreScaleOf(score);
   const rules = scaleRulesOf(score);
-  const { pillars, performanceHint } = rules;
-  const totalWeight = pillars.reduce((sum, p) => sum + pillarWeightOf(rules, p), 0) || 1;
+  const { performanceHint } = rules;
+  // Les sous-scores que le role voit (Admin > Batch settings) ; le score global reste.
+  const pillars = rules.pillars.filter((p) => canSeeSubScore(role, batch.settings, "founder", p));
+  const totalWeight = rules.pillars.reduce((sum, p) => sum + pillarWeightOf(rules, p), 0) || 1;
   const valueOf = (p: FounderPillarKey) => score.subScores[p] ?? null;
 
   return (

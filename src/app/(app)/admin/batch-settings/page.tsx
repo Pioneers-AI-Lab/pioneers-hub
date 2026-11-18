@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Box, Button, Group, SegmentedControl, Stack, Text, TextInput } from "@mantine/core";
+import { Box, Button, Group, Input, SegmentedControl, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { batchAudiencesOf } from "@shared/access";
+import { batchAudiencesOf, canonicalSubScores, fullSubScores, withSubScoreAudience } from "@shared/access";
 import { isSlackChannelId, isSlackTeamId, normalizeSlackId } from "@shared/slackLinks";
-import type { Batch, BatchAudience, BatchStatus, LeaderboardVisibility, WithId } from "@shared/types";
+import { FOUNDER_PILLARS, pillarName, STARTUP_SUBSCORES, startupSubScoreName } from "@shared/types";
+import type { Batch, BatchAudience, BatchStatus, LeaderboardVisibility, SubScoreKeys, SubScoreVisibility, WithId } from "@shared/types";
 import { calendarIdOf } from "@shared/calendarSync";
 import type { CalendarSyncResult } from "@shared/types";
 import { joinList } from "@/lib/format";
@@ -52,8 +53,57 @@ const AUDIENCE_OPTIONS: { value: BatchAudience; label: string }[] = [
 ];
 
 /** Qui voit une partie du batch (types/batch.ts#BatchAudience). */
-function AudienceControl({ value, onChange }: { value: BatchAudience; onChange: (v: BatchAudience) => void }) {
-  return <SegmentedControl fullWidth value={value} onChange={(v) => onChange(v as BatchAudience)} data={AUDIENCE_OPTIONS} />;
+function AudienceControl<V extends string = BatchAudience>({
+  value,
+  onChange,
+  data = AUDIENCE_OPTIONS as { value: V; label: string }[],
+  label,
+}: {
+  value: V;
+  onChange: (v: V) => void;
+  data?: { value: V; label: string }[];
+  /** Sous un libelle de champ (sous-scores) : nom accessible et ecart du theme. */
+  label?: string;
+}) {
+  return (
+    <SegmentedControl
+      fullWidth
+      mt={label ? "calc(var(--mantine-spacing-xs) / 2)" : undefined}
+      aria-label={label}
+      value={value}
+      onChange={(v) => onChange(v as V)}
+      data={data}
+    />
+  );
+}
+
+/**
+ * Qui voit chaque sous-score, dans le bloc des scores. « Default » : il suit « Performance scores »
+ * (`scores`) ; un choix explicite reste, meme egal (monter les scores ne le change pas).
+ */
+function SubScoresControl({ scores, value, onChange }: { scores: BatchAudience; value: SubScoreVisibility; onChange: (v: SubScoreVisibility) => void }) {
+  const options: { value: BatchAudience | "default"; label: string }[] = [
+    { value: "default", label: `Default · ${AUDIENCE_OPTIONS.find((o) => o.value === scores)!.label}` },
+    ...AUDIENCE_OPTIONS,
+  ];
+  const row = <T extends keyof SubScoreKeys>(target: T, key: SubScoreKeys[T], label: string) => (
+    <Input.Wrapper key={`${target}-${key}`} labelElement="div" label={label}>
+      <AudienceControl
+        label={label}
+        data={options}
+        value={value[target]?.[key] ?? "default"}
+        onChange={(v) => onChange(withSubScoreAudience(value, target, key, v === "default" ? null : v))}
+      />
+    </Input.Wrapper>
+  );
+  return (
+    <Stack gap="lg">
+      <Text fw={600}>Founders · Program performance</Text>
+      {FOUNDER_PILLARS.map((p) => row("founder", p, pillarName(p)))}
+      <Text fw={600}>Startups · Score</Text>
+      {STARTUP_SUBSCORES.map((k) => row("startup", k, startupSubScoreName(k)))}
+    </Stack>
+  );
 }
 
 /** `children` : ce qui s'affiche sous les reglages, avant la barre d'enregistrement. */
@@ -63,6 +113,7 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
   const audiences = batchAudiencesOf(batch.settings);
   const [startupsVisibility, setStartupsVisibility] = useState<BatchAudience>(audiences.startups);
   const [scoresVisibility, setScoresVisibility] = useState<BatchAudience>(audiences.scores);
+  const [subScoreVisibility, setSubScoreVisibility] = useState<SubScoreVisibility>(() => canonicalSubScores(batch.settings.subScoreVisibility));
   const [endDay, setEndDay] = useState(batch.endDayString ?? "");
   const [milestones, setMilestones] = useState(batch.milestones);
   const [slackTeamId, setSlackTeamId] = useState(batch.settings.slackTeamId ?? "");
@@ -80,6 +131,7 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
     visibility !== batch.settings.leaderboardVisibility ||
     startupsVisibility !== audiences.startups ||
     scoresVisibility !== audiences.scores ||
+    JSON.stringify(subScoreVisibility) !== JSON.stringify(canonicalSubScores(batch.settings.subScoreVisibility)) ||
     (endDay || null) !== batch.endDayString ||
     JSON.stringify(milestones) !== JSON.stringify(batch.milestones) ||
     teamId !== (batch.settings.slackTeamId ?? null) ||
@@ -93,7 +145,7 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
         status,
         endDayString: endDay || null,
         milestones,
-        settings: { ...batch.settings, leaderboardVisibility: visibility, startupsVisibility, scoresVisibility, slackTeamId: teamId, slackChannelId: channelId, googleCalendarId: calendarId },
+        settings: { ...batch.settings, leaderboardVisibility: visibility, startupsVisibility, scoresVisibility, subScoreVisibility: fullSubScores(subScoreVisibility), slackTeamId: teamId, slackChannelId: channelId, googleCalendarId: calendarId },
       });
       notifications.show({ message: "Settings saved" });
     } catch (err) {
@@ -139,6 +191,13 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
         help="Program Performance, startup scores and what explains them, on the cards, the lists and the batch home. Staff includes investors."
       >
         <AudienceControl value={scoresVisibility} onChange={setScoresVisibility} />
+      </Section>
+
+      <Section
+        title="Sub-scores"
+        help="Who sees each sub-score inside the performance scores (radar and breakdown of a founder card, bars of a startup card). Default follows Performance scores; a sub-score never shows wider than the performance scores, and the overall score stays. Startup Execution and Team are built from the founders’ Execution and Background. Staff includes investors."
+      >
+        <SubScoresControl scores={scoresVisibility} value={subScoreVisibility} onChange={setSubScoreVisibility} />
       </Section>
 
       <Section
