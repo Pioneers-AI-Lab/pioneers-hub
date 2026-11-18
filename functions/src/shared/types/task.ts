@@ -33,7 +33,7 @@ export type BatchTask = BatchScoped &
     check?: TaskCheck | null;
   };
 
-/** `shortlist` : au moins `SHORTLIST_DONE_MIN` fondateurs dans sa shortlist (la milestone Shortlist done). */
+/** `shortlist` : au moins `SHORTLIST_TASK_MIN` (5) autres fondateurs du batch dans sa shortlist (shared/tasks.ts). */
 export const TASK_CHECKS = ["shortlist"] as const;
 export type TaskCheck = (typeof TASK_CHECKS)[number];
 

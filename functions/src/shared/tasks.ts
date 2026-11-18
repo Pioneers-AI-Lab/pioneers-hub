@@ -1,4 +1,3 @@
-import { isShortlistDone, SHORTLIST_DONE_MIN } from "./scoring";
 import type { BatchTask, TaskCheck } from "./types";
 
 // ----------------------------
@@ -18,12 +17,20 @@ export function todoWindow(opensDateISOString: string | null | undefined, nowISO
   return Date.parse(opensDateISOString) - Date.parse(nowISO) <= COMING_UP_DAYS * DAY_MS ? "coming_up" : null;
 }
 
+/**
+ * La tache shortlist est faite a partir de 5 autres fondateurs du batch dans sa shortlist
+ * (decision du 18/11). A ne pas confondre avec la milestone Shortlist done du score
+ * (`SHORTLIST_DONE_MIN`, services/scores.ts), qui reste a 3.
+ */
+export const SHORTLIST_TASK_MIN = 5;
+const isShortlistTaskDone = (shortlistedCount: number) => shortlistedCount >= SHORTLIST_TASK_MIN;
+
 /** Ce que l'app lit d'un fondateur pour une tache verifiee. */
 export type TaskCheckFacts = { shortlistedCount: number };
 
 /** Chaque verification : son libelle (Admin > Tasks) et sa regle. */
 export const TASK_CHECK_RULES: Record<TaskCheck, { label: string; isDone: (facts: TaskCheckFacts) => boolean }> = {
-  shortlist: { label: `${SHORTLIST_DONE_MIN}+ founders in the shortlist`, isDone: (f) => isShortlistDone(f.shortlistedCount) },
+  shortlist: { label: `${SHORTLIST_TASK_MIN}+ founders in the shortlist`, isDone: (f) => isShortlistTaskDone(f.shortlistedCount) },
 };
 
 /** Faite : la verification de l'app (`check`), sinon la coche du fondateur. */
@@ -32,18 +39,18 @@ export const isTaskDone = (task: Pick<BatchTask, "check">, ticked: boolean, fact
 
 /**
  * Les autres fondateurs du batch dans sa shortlist ACTUELLE (le filtre de la milestone
- * Shortlist done, services/scores.ts). La milestone compte aussi l'historique
- * (`shortlistHistory`, staff seulement) : retirer quelqu'un de sa shortlist peut
+ * Shortlist done, services/scores.ts ; la milestone compte aussi l'historique,
+ * `shortlistHistory`, staff seulement) : retirer quelqu'un de sa shortlist peut
  * defaire la tache, jamais la milestone.
  */
 export const shortlistedCountOf = (founderId: string, shortlistedIds: readonly string[], batchFounderIds: { has(id: string): boolean }): number =>
   new Set(shortlistedIds.filter((id) => id !== founderId && batchFounderIds.has(id))).size;
 
 /**
- * L'ajout de `targetId` amene la shortlist au minimum (compte de `shortlistedCountOf`,
+ * L'ajout de `targetId` amene la shortlist a `SHORTLIST_TASK_MIN` (compte de `shortlistedCountOf`,
  * celui de la tache) : il pose `shortlistDoneDateISOString`, la date du To do.
  */
 export function reachesShortlistDone(founderId: string, shortlistedIds: readonly string[], targetId: string, batchFounderIds: { has(id: string): boolean }): boolean {
   const before = shortlistedCountOf(founderId, shortlistedIds, batchFounderIds);
-  return !isShortlistDone(before) && isShortlistDone(shortlistedCountOf(founderId, [...shortlistedIds, targetId], batchFounderIds));
+  return !isShortlistTaskDone(before) && isShortlistTaskDone(shortlistedCountOf(founderId, [...shortlistedIds, targetId], batchFounderIds));
 }

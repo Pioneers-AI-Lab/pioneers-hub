@@ -103,7 +103,7 @@ export async function saveUserPreferences(uid: string, preferences: Partial<User
  * Coche ou decoche `targetFounderId` dans une liste (shortlist ou rencontres)
  * du fondateur `ownerFounderId` (le visiteur : lui seul l'ecrit, firestore.rules).
  * Fusion : la premiere coche cree le document avec sa seule liste.
- * `reachesShortlistDone` : cet ajout amene la shortlist a `SHORTLIST_DONE_MIN`,
+ * `reachesShortlistDone` : cet ajout amene la shortlist a `SHORTLIST_TASK_MIN`,
  * la date de la tache shortlist du To do (`shortlistDoneDateISOString`).
  */
 export async function setFounderConnection(

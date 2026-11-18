@@ -18,7 +18,7 @@ export type FounderConnections = {
   /** Fondateurs du MEME batch qu'il dit avoir rencontres (jamais lui-meme). Absent = vide. */
   metFounderIds?: string[];
   updatedDateISOString: DateISOString;
-  /** Quand la shortlist a atteint `SHORTLIST_DONE_MIN` (ecrit par l'ajout qui l'y amene) : la tache shortlist du To do est faite ce jour-la. Absent des plus anciennes. */
+  /** Quand la shortlist a atteint `SHORTLIST_TASK_MIN` (5, shared/tasks.ts ; ecrit par l'ajout qui l'y amene) : la tache shortlist du To do est faite ce jour-la. Absent des plus anciennes. */
   shortlistDoneDateISOString?: DateISOString;
 };
 

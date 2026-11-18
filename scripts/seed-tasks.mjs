@@ -12,7 +12,7 @@
 //   - « Update your LinkedIn: Founder in Residence at Pioneers » : son profil LinkedIn ;
 //   - « Finish your co-founder shortlist » : l'annuaire Founders de l'app (meme
 //     chemin que lib/paths.ts#founders), verifiee par l'app (`check: "shortlist"`,
-//     18/11 : faite avec 3 fondateurs shortlistes, sans coche).
+//     18/11 : faite avec 5 fondateurs shortlistes, sans coche).
 // Ids `{batchId}_{cle}` (docIds.starterTask) : rejouable, une tache deja en base
 // n'est JAMAIS ecrasee (le staff a pu la modifier ou l'archiver). Les nouvelles se
 // rangent apres les taches existantes.
