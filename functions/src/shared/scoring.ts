@@ -166,6 +166,7 @@ export const reciprocalMetCount = (founderId: string, metOf: ReadonlyMap<string,
 
 /** Shortlist done : au moins 3 fondateurs shortlistes (historique compris). */
 export const SHORTLIST_DONE_MIN = 3;
+export const isShortlistDone = (shortlistedCount: number) => shortlistedCount >= SHORTLIST_DONE_MIN;
 /** Met : au moins 50 % des autres fondateurs du batch en « Met » reciproque. */
 export const MET_SHARE_MIN = 0.5;
 
@@ -217,7 +218,7 @@ export function founderMilestones(dueDates: ScoreMilestoneDueDates | null | unde
     weekly_goal: facts.weeklyGoal,
     teamed_up: facts.startupFounderCount >= 2,
     problem_validated: facts.problemValidated,
-    shortlist_done: facts.shortlistedCount >= SHORTLIST_DONE_MIN,
+    shortlist_done: isShortlistDone(facts.shortlistedCount),
     met: facts.batchSize > 1 && facts.reciprocalMetCount >= MET_SHARE_MIN * (facts.batchSize - 1),
   };
   return MILESTONES.flatMap((key) => {

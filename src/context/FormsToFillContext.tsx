@@ -17,7 +17,9 @@ import { useFounder } from "@/context/FounderContext";
 // ----------------------------
 // Monte sous MeGate (le fondateur est rattache, `useFounder()` est le sien) :
 // (mine)/layout.tsx (« To do » et « Me »). Un formulaire est « a remplir » s'il est :
-//   - ouvert (`formState`, la regle de submitFormResponse) et non archive ;
+//   - ouvert (`formState`, la regle de submitFormResponse) et non archive, ou publie
+//     et pas encore ouvert (`useTodoItems` n'en garde que ce qui ouvre sous 7 jours :
+//     « Coming up » du To do, 18/11) ;
 //   - destine au fondateur (`formConcernsFounder` : le batch, ou l'audience de
 //     son evenement : invites, equipes, jamais un absent ; un evenement en
 //     brouillon ou a audience restreinte en decide aussi, d'ou `allEventsById`) ;
@@ -34,11 +36,11 @@ import { useFounder } from "@/context/FounderContext";
 // Une question ajoutee depuis sa reponse (`questionsAddedSince`) est signalee ;
 // obligatoire, elle rend le formulaire de nouveau « a faire ».
 
-/** `newQuestions` : questions ajoutees depuis sa reponse. */
-export type FormToFill = { form: WithId<Form>; done: boolean; eventName: string | null; newQuestions: number };
+/** `newQuestions` : questions ajoutees depuis sa reponse ; `doneDateISOString` : sa derniere reponse, si le formulaire est fait. */
+export type FormToFill = { form: WithId<Form>; done: boolean; doneDateISOString: string | null; eventName: string | null; newQuestions: number };
 
 type FormsToFillValue = {
-  /** A remplir (puis les remplis encore modifiables), echeance la plus proche d'abord, sans echeance a la fin. */
+  /** A remplir, les remplis encore modifiables et ceux pas encore ouverts (ranges par `useTodoItems`). */
   items: FormToFill[];
   isLoading: boolean;
 };
@@ -60,7 +62,8 @@ export function FormsToFillProvider({ children }: { children: ReactNode }) {
     const teamEventIds = new Set(teamMemberships.map((m) => m.eventId));
     const attendanceByEventId = new Map(attendance.map((a) => [a.parentId, a]));
     const items = forms.data.flatMap((f): FormToFill[] => {
-      if (f.archivedDateISOString !== null || formState(f, nowISO) !== "open") return [];
+      const state = formState(f, nowISO);
+      if (f.archivedDateISOString !== null || (state !== "open" && state !== "not_open_yet")) return [];
       const completion = completionOf.get(f.id);
       const added = questionsAddedSince(f, completion);
       const isDone = isFormStillDone(f, completion, f.identityCheck === "anonymous" ? anonymousDone.has(f.id) : completion !== undefined);
@@ -68,11 +71,11 @@ export function FormsToFillProvider({ children }: { children: ReactNode }) {
       const event = f.eventId ? (allEventsById.get(f.eventId) ?? null) : null;
       const isTeamMember = f.eventId !== null && teamEventIds.has(f.eventId);
       if (!formConcernsFounder(f, founder, event, isTeamMember, f.eventId ? attendanceByEventId.get(f.eventId) : undefined)) return [];
-      return [{ form: f, done: isDone, eventName: event?.name ?? null, newQuestions: added.length }];
+      const doneDateISOString = isDone ? (completion?.completedDateISOString ?? null) : null;
+      return [{ form: f, done: isDone, doneDateISOString, eventName: event?.name ?? null, newQuestions: added.length }];
     });
-    const due = (i: FormToFill) => i.form.deadlineDateISOString ?? "9";
     return {
-      items: items.sort((a, b) => Number(a.done) - Number(b.done) || due(a).localeCompare(due(b))),
+      items,
       isLoading: forms.isLoading || completions.isLoading || isEventsLoading,
     };
   }, [forms.data, forms.isLoading, completions.data, completions.isLoading, allEventsById, isEventsLoading, anonymousDone, teamMemberships, attendance, founder]);

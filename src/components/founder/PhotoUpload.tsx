@@ -5,6 +5,7 @@ import { Button, CloseButton, FileButton, Group, Paper, Stack, Text } from "@man
 import { useFounder } from "@/context/FounderContext";
 import { useAction } from "@/hooks/useAction";
 import { preparePhoto, PHOTO_MIN_SIDE } from "@/lib/photo";
+import { completesProfile } from "@/lib/completeness";
 import { removeProfilePhoto, saveProfilePhoto } from "@/lib/profile";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { FounderCover } from "./FounderCover";
@@ -17,7 +18,7 @@ import { FounderCover } from "./FounderCover";
  * `disabled` : le compte n'est pas rattache a sa personne (la vignette vit dans `people`).
  */
 export function PhotoUpload({ disabled }: { disabled: boolean }) {
-  const { founder } = useFounder();
+  const { founder, directory, profile } = useFounder();
   const uploading = useAction();
   const removing = useAction();
   const [isConfirming, setConfirming] = useState(false);
@@ -25,7 +26,10 @@ export function PhotoUpload({ disabled }: { disabled: boolean }) {
   const isBusy = uploading.isBusy || removing.isBusy;
 
   const upload = (file: File | null) => {
-    if (file) void uploading.run(async () => saveProfilePhoto(founder, await preparePhoto(file)), "Photo updated");
+    if (!file) return;
+    // La photo, dernier champ obligatoire : la date de « Complete your profile » au To do.
+    const completes = completesProfile([founder, directory, profile], [{ ...founder, coverPhotoUrl: "photo" }, directory, profile]);
+    void uploading.run(async () => saveProfilePhoto(founder, await preparePhoto(file), completes), "Photo updated");
   };
   const remove = () => void removing.run(() => removeProfilePhoto(founder), "Photo removed").then(() => setConfirming(false));
 

@@ -5,7 +5,7 @@ import { ActionIcon, Button, type ActionIconProps, type ButtonProps } from "@man
 import { notifyError } from "@/lib/errors";
 
 /**
- * Bouton bascule (Shortlist / Met, Mark done / Done) : allume en variante `light`,
+ * Bouton bascule (Shortlist / Met, reglages du staff) : allume en variante `light`,
  * eteint en `default`, etat lu par `aria-pressed`. `onToggle` ecrit l'etat inverse ;
  * l'ecran suit l'ecriture locale de Firestore, un refus revient en notification.
  * `disabled` : en attente de l'etat (document pas encore lu).
@@ -23,17 +23,20 @@ export function ToggleButton({
  * l'annuaire) : allumee en `filled` (une icone a moins de surface qu'un bouton
  * texte pour se distinguer), eteinte en `default`. `label` : son nom accessible
  * (pas d'infobulle). Posee sur une photo (`.card-overlay`), eteinte, fond translucide.
+ * `bare` : sans fond, l'icone porte seule l'etat (le cercle d'une tache du To do).
  */
 export function ToggleIcon({
   on,
   onToggle,
   label,
+  bare = false,
   children,
   ...props
 }: Omit<ActionIconProps, "variant" | "children"> & {
   on: boolean;
   onToggle: (next: boolean) => Promise<unknown>;
   label: string;
+  bare?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -41,7 +44,7 @@ export function ToggleIcon({
       size={40}
       radius="xl"
       {...props}
-      variant={on ? "filled" : "default"}
+      variant={bare ? "subtle" : on ? "filled" : "default"}
       aria-label={label}
       aria-pressed={on}
       onClick={() => void onToggle(!on).catch(notifyError)}

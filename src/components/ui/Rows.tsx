@@ -52,13 +52,13 @@ function RowText({ title, subtitle, wrap = false }: Pick<RowProps, "title" | "su
   );
 }
 
-/** `trailing` : l'icone de bout de ligne (navigation, depliage), apres la valeur. */
-function RowBody({ title, subtitle, meta, avatar, leading, trailing }: RowProps & { trailing?: ReactNode }) {
+/** `trailing` : l'icone de bout de ligne (navigation, depliage), apres la valeur ; `wrap` : texte entier (`RowText`). */
+function RowBody({ title, subtitle, meta, avatar, leading, trailing, wrap }: RowProps & { trailing?: ReactNode; wrap?: boolean }) {
   return (
     <>
       <RowLeading avatar={avatar} leading={leading} />
       <Box style={{ flex: 1, minWidth: 0 }}>
-        <RowText title={title} subtitle={subtitle} />
+        <RowText title={title} subtitle={subtitle} wrap={wrap} />
       </Box>
       {meta !== undefined && meta !== null && (
         <Box style={{ flexShrink: 0, textAlign: "right" }}>
@@ -89,10 +89,11 @@ function ExternalArrow() {
   return <IconArrowUpRight {...TRAILING_ICON} />;
 }
 
-/** Corps d'un `LinkRow` a action : le lien prend toute la place a gauche du bouton. */
+/** Corps d'une ligne a action (`LinkRow`, `ActionRow`) : le lien prend toute la place a gauche du bouton. */
 const LINK_ROW_BODY_STYLE = {
   flex: 1,
   minWidth: 0,
+  minHeight: 40,
   alignSelf: "stretch",
   display: "flex",
   alignItems: "center",
@@ -171,44 +172,26 @@ export function ButtonRow({
 }
 
 /** Le corps d'une `ActionRow` : toute la hauteur tactile de la ligne (40 px au moins). */
-const ACTION_ROW_BODY_STYLE = {
-  flex: 1,
-  minWidth: 0,
-  minHeight: 40,
-  display: "flex",
-  flexDirection: "column",
-  justifyContent: "center",
-  color: "inherit",
-  textDecoration: "none",
-} as const;
-
 /**
- * Ligne dont le corps ouvre `href` (page de l'app par `Link`, autre site dans un
- * nouvel onglet ; `null` : pas de lien) et qui porte une action a droite, HORS du
- * lien (un bouton dans un lien n'est pas valide).
+ * Ligne dont le corps ouvre `href` (page de l'app par `Link` avec `>`, autre site dans
+ * un nouvel onglet avec `↗` ; `null` : pas de lien) et qui porte une action a droite,
+ * HORS du lien (un bouton dans un lien n'est pas valide). L'action reste au bord :
+ * les actions de lignes voisines s'alignent, avec ou sans icone de lien.
  */
-export function ActionRow({
-  href,
-  action,
-  title,
-  subtitle,
-  avatar,
-  leading,
-}: Omit<RowProps, "meta"> & { href: string | null; action: ReactNode }) {
-  // Une ligne d'action (tache a cocher) se lit en entier : le bouton a droite ne tronque rien.
-  const text = <RowText title={title} subtitle={subtitle} wrap />;
+export function ActionRow({ href, action, ...props }: Omit<RowProps, "meta"> & { href: string | null; action: ReactNode }) {
+  // Une ligne d'action (tache a cocher) se lit en entier : l'action a droite ne tronque rien.
+  const body = (trailing?: ReactNode) => <RowBody {...props} wrap trailing={trailing} />;
   return (
     <div className="row">
-      <RowLeading avatar={avatar} leading={leading} />
       {href === null ? (
-        <Box style={ACTION_ROW_BODY_STYLE}>{text}</Box>
+        <Box style={LINK_ROW_BODY_STYLE}>{body()}</Box>
       ) : isAppPath(href) ? (
-        <Link href={href} style={ACTION_ROW_BODY_STYLE}>
-          {text}
+        <Link href={href} className="row-link" style={LINK_ROW_BODY_STYLE}>
+          {body(<NavChevron />)}
         </Link>
       ) : (
-        <a href={href} target="_blank" rel="noreferrer" style={ACTION_ROW_BODY_STYLE}>
-          {text}
+        <a href={href} target="_blank" rel="noreferrer" className="row-link" style={LINK_ROW_BODY_STYLE}>
+          {body(<ExternalArrow />)}
         </a>
       )}
       <Box style={{ flexShrink: 0 }}>{action}</Box>

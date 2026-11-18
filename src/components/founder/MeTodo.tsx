@@ -4,7 +4,7 @@ import { useBatch } from "@/context/BatchContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useTodoItems } from "@/hooks/useTodoItems";
 import { paths } from "@/lib/paths";
-import { ChecklistRow, FormRow } from "@/components/todo/TodoRows";
+import { TodoRow } from "@/components/todo/TodoRows";
 import { LinkRow, RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 
@@ -16,19 +16,13 @@ import { Empty, Section } from "@/components/ui/Section";
 
 const TODO_LIMIT = 5;
 
-/**
- * Resume de « To do » (seulement ce qui reste a faire : formulaires, puis
- * elements de la checklist), puis le lien vers la page complete.
- */
+/** Resume de « To do » (seulement ce qui est ouvert et reste a faire, par echeance), puis le lien vers la page complete. */
 export function MeTodo() {
   const { program } = useProgram();
   const { batch } = useBatch();
-  const { forms, debriefs, checklist, isLoading } = useTodoItems();
+  const { toDo, isLoading } = useTodoItems();
 
-  const rows = [
-    ...[...debriefs, ...forms].filter((i) => !i.done).map((i) => <FormRow key={i.form.id} item={i} />),
-    ...checklist.filter((c) => !c.done).map((c) => <ChecklistRow key={c.id} item={c} />),
-  ];
+  const rows = toDo.filter((i) => !i.done).map((i) => <TodoRow key={i.id} item={i} />);
   if (isLoading) return null;
   const more = rows.length - TODO_LIMIT;
 

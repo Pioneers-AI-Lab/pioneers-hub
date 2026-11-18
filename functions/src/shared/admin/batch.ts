@@ -1,7 +1,7 @@
 import { docPaths } from "../collections";
 import { deleteWrite, mergeWrite, RuleError, setWrite, type DocWrite } from "../docWrites";
 import { isAppPath, normalizeHttpUrl, slugify } from "../text";
-import { BATCH_MILESTONE_KEYS, type AttendanceStatus, type Batch, type BatchTask, type ClosedList, type Founder, type Person, type Program } from "../types";
+import { BATCH_MILESTONE_KEYS, type AttendanceStatus, type Batch, type BatchTask, type ClosedList, type Founder, type Person, type Program, type TaskCheck } from "../types";
 
 // ----------------------------
 // Admin : programmes, batchs, listes fermees, taches du To do, presence, rattachements
@@ -72,7 +72,26 @@ export function listValuesWrite(key: ExtensibleList, current: ClosedList | undef
 // Retirer une tache l'archive ; les coches des fondateurs restent.
 
 /** Ce que le staff regle sur une tache. */
-export type TaskDraft = Pick<BatchTask, "title" | "description" | "linkUrl">;
+export type TaskDraft = Pick<BatchTask, "title" | "description" | "linkUrl"> & {
+  opensDateISOString: string | null;
+  deadlineDateISOString: string | null;
+  check: TaskCheck | null;
+};
+
+/** Les reglages d'une tache, champs absents (taches d'avant le 18/11) a `null`. */
+export const taskDraftOf = (task: BatchTask): TaskDraft => ({
+  title: task.title,
+  description: task.description,
+  linkUrl: task.linkUrl,
+  opensDateISOString: task.opensDateISOString ?? null,
+  deadlineDateISOString: task.deadlineDateISOString ?? null,
+  check: task.check ?? null,
+});
+
+/** Une echeance avant l'ouverture se refuse (Admin > Tasks, `create_task`, `update_task`). */
+export const taskScheduleProblem = (t: Pick<TaskDraft, "opensDateISOString" | "deadlineDateISOString">): string | null =>
+  t.opensDateISOString && t.deadlineDateISOString && t.deadlineDateISOString <= t.opensDateISOString ? "The deadline must come after the opening." : null;
+
 
 /**
  * Le lien saisi : un chemin de l'app (`/programs/…`) tel quel, sinon une adresse

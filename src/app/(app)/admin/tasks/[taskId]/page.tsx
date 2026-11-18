@@ -50,7 +50,7 @@ export default function AdminTaskPage() {
   return (
     <>
       <PageHeader back={{ href: paths.adminTasks(), label: "Tasks" }} title={task.title} subtitle={task.description ?? undefined} />
-      <Section title="Progress" help="Founders who ticked it, among the founders of the batch.">
+      <Section title="Progress" help={task.check ? "Checked by the app, among the founders of the batch." : "Founders who ticked it, among the founders of the batch."}>
         <CompletionProgress
           doneNames={progress.done.map(nameOf)}
           missingNames={progress.missing.map(nameOf)}

@@ -12,16 +12,21 @@ import {
   newTask,
   parseTaskLink,
   slugify,
+  taskDraftOf,
   taskOrderWrites,
+  taskScheduleProblem,
   unlinkFounderWrites,
+  type TaskDraft,
 } from "../../shared/admin/batch";
 import { eventRoster } from "../../shared/attendance";
+import { COMING_UP_DAYS, TASK_CHECK_RULES } from "../../shared/tasks";
 import { COL, docPaths, eventCollectionPaths } from "../../shared/collections";
 import { archiveWrite, createWrite, isArchivedAs, mergeWrite } from "../../shared/docWrites";
 import {
   ATTENDANCE_STATUSES,
   BATCH_AUDIENCES,
   BATCH_MILESTONE_KEYS,
+  TASK_CHECKS,
   type Attendance,
   type Batch,
   type BatchTask,
@@ -34,7 +39,7 @@ import {
 } from "../../shared/types";
 import { badRequest, conflict, notFound } from "../../api/errors";
 import type { Operation } from "../operations";
-import { dayString } from "../schemas";
+import { dayString, isoDateTime } from "../schemas";
 import { changesOf, mustRead, newDocId, readDoc, readWhere, stamped, staffOnly, writePlan } from "./writes";
 
 // ----------------------------
@@ -60,11 +65,33 @@ function linkOf(value: string | null | undefined): string | null | undefined {
   return link;
 }
 
+/** Ouverture, echeance et verification : les memes champs a la creation et a la modification. */
+const taskSchedule = {
+  opensDateISOString: isoDateTime.nullable().optional().describe(`When it opens in the To do (${COMING_UP_DAYS} days before: Coming up). null: open now.`),
+  deadlineDateISOString: isoDateTime.nullable().optional().describe("Due date. null: no deadline."),
+  check: z
+    .enum(TASK_CHECKS)
+    .nullable()
+    .optional()
+    .describe(`Checked by the app instead of a founder's tick. \`shortlist\`: done with ${TASK_CHECK_RULES.shortlist.label}. null: the founder ticks it.`),
+};
+
+function checkSchedule(t: Pick<TaskDraft, "opensDateISOString" | "deadlineDateISOString">) {
+  const problem = taskScheduleProblem(t);
+  if (problem) throw badRequest("invalid_schedule", problem, "deadlineDateISOString");
+}
+
 const activeTasksOf = async (tx: FirebaseFirestore.Transaction, batchId: string) =>
   (await readWhere<BatchTask>(tx, COL.batchTasks, "batchId", batchId)).filter((t) => t.archivedDateISOString === null).sort((a, b) => a.order - b.order);
 
 export const CreateTaskInput = z
-  .object({ batchId: z.string().min(1), title: z.string().trim().min(1).max(200), description: z.string().trim().max(2000).nullable().optional(), linkUrl: taskLink })
+  .object({
+    batchId: z.string().min(1),
+    title: z.string().trim().min(1).max(200),
+    description: z.string().trim().max(2000).nullable().optional(),
+    linkUrl: taskLink,
+    ...taskSchedule,
+  })
   .strict();
 
 export const createTask: Operation<typeof CreateTaskInput> = {
@@ -73,10 +100,19 @@ export const createTask: Operation<typeof CreateTaskInput> = {
   allowed: staffOnly,
   async plan(tx, _caller, input) {
     const [batch, tasks] = await Promise.all([mustRead<Batch>(tx, docPaths.batch(input.batchId), "batch", "batchId"), activeTasksOf(tx, input.batchId)]);
-    const task = newTask(batch, { title: input.title, description: input.description ?? null, linkUrl: linkOf(input.linkUrl) ?? null }, tasks);
+    const draft: TaskDraft = {
+      title: input.title,
+      description: input.description ?? null,
+      linkUrl: linkOf(input.linkUrl) ?? null,
+      opensDateISOString: input.opensDateISOString ?? null,
+      deadlineDateISOString: input.deadlineDateISOString ?? null,
+      check: input.check ?? null,
+    };
+    checkSchedule(draft);
+    const task = newTask(batch, draft, tasks);
     const id = newDocId(COL.batchTasks);
     return writePlan(
-      { batch: batch.name, task: { title: task.title, description: task.description, linkUrl: task.linkUrl, position: tasks.length + 1 } },
+      { batch: batch.name, task: { ...draft, position: tasks.length + 1 } },
       [createWrite(docPaths.batchTask(id), stamped(task, new Date().toISOString()))],
       { taskId: id },
     );
@@ -84,7 +120,13 @@ export const createTask: Operation<typeof CreateTaskInput> = {
 };
 
 export const UpdateTaskInput = z
-  .object({ taskId: z.string().min(1), title: z.string().trim().min(1).max(200).optional(), description: z.string().trim().max(2000).nullable().optional(), linkUrl: taskLink })
+  .object({
+    taskId: z.string().min(1),
+    title: z.string().trim().min(1).max(200).optional(),
+    description: z.string().trim().max(2000).nullable().optional(),
+    linkUrl: taskLink,
+    ...taskSchedule,
+  })
   .strict();
 
 export const updateTask: Operation<typeof UpdateTaskInput> = {
@@ -94,6 +136,7 @@ export const updateTask: Operation<typeof UpdateTaskInput> = {
   async plan(tx, _caller, { taskId, ...given }) {
     const task = await mustRead<BatchTask>(tx, docPaths.batchTask(taskId), "task", "taskId");
     const patch = { ...given, ...(given.linkUrl !== undefined ? { linkUrl: linkOf(given.linkUrl) } : {}) };
+    checkSchedule({ ...taskDraftOf(task), ...patch });
     const changes = changesOf(task, patch);
     return writePlan(
       { task: task.title, changes },

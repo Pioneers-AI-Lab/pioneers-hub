@@ -21,6 +21,8 @@ type MyConnectionsValue = {
   founderId: string | null;
   shortlisted: ReadonlySet<string>;
   met: ReadonlySet<string>;
+  /** Quand sa shortlist a atteint le minimum (la tache shortlist du To do est faite ce jour-la) ; `null` sinon. */
+  shortlistDoneDateISOString: string | null;
   isLoading: boolean;
 };
 
@@ -34,7 +36,13 @@ export function MyConnectionsProvider({ children }: { children: ReactNode }) {
   const value = useMemo<MyConnectionsValue>(
     () => {
       const { shortlistedFounderIds, metFounderIds } = readConnections(doc.data);
-      return { founderId: viewerFounderId, shortlisted: new Set(shortlistedFounderIds), met: new Set(metFounderIds), isLoading: doc.isLoading };
+      return {
+        founderId: viewerFounderId,
+        shortlisted: new Set(shortlistedFounderIds),
+        met: new Set(metFounderIds),
+        shortlistDoneDateISOString: doc.data?.shortlistDoneDateISOString ?? null,
+        isLoading: doc.isLoading,
+      };
     },
     [viewerFounderId, doc.data, doc.isLoading],
   );

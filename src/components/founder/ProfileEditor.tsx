@@ -25,7 +25,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useBatch } from "@/context/BatchContext";
 import { useFounder } from "@/context/FounderContext";
 import { useLists } from "@/context/ListsContext";
-import { isRequiredProfileField } from "@/lib/completeness";
+import { completesProfile, isRequiredProfileField } from "@/lib/completeness";
 import { saveMyProfile, type MyProfilePatch, type StaffPatch } from "@/lib/profile";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PhotoUpload } from "./PhotoUpload";
@@ -65,7 +65,7 @@ const COPY = {
 
 type Draft = {
   founder: Required<MyProfilePatch["founder"]>;
-  directory: Required<MyProfilePatch["directory"]>;
+  directory: Required<Omit<MyProfilePatch["directory"], "profileCompletedDateISOString">>;
   profile: Required<MyProfilePatch["profile"]>;
   /** Staff seulement (section « Staff only »), ecrits par `saveMyProfile`. */
   staff: Required<StaffPatch>;
@@ -202,7 +202,7 @@ export function ProfileEditor({ back }: EditorProps) {
 function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
   const router = useRouter();
   const { user } = useAuth();
-  const { founder, isSelf } = useFounder();
+  const { founder, directory, profile, isSelf } = useFounder();
   const { role } = useBatch();
   const isStaff = role === "staff";
   const degrees = useLists().values("degrees");
@@ -234,7 +234,13 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
   const save = async () => {
     setIsSaving(true);
     try {
-      await saveMyProfile(founder, patch, canWriteIdentity, staffPatch);
+      // Le dernier champ obligatoire rempli : la date de « Complete your profile » au To do.
+      const completes = completesProfile(
+        [founder, directory, profile],
+        [{ ...founder, ...draft.founder }, directory && { ...directory, ...dir }, profile && { ...profile, ...draft.profile }],
+      );
+      const stamped = completes ? { ...patch, directory: { ...patch.directory, profileCompletedDateISOString: new Date().toISOString() } } : patch;
+      await saveMyProfile(founder, stamped, canWriteIdentity, staffPatch);
       notifications.show({ message: "Profile saved" });
       router.push(back.href);
     } catch (err) {

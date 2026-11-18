@@ -439,6 +439,13 @@ const call = async (key, name, args) => {
   t = await call(key, "pioneers_list", { object: "tasks", batchId: "fall-2026" });
   check(t.data?.items?.[0]?.id === taskId, "move_task puts it first", t.data?.items?.map((x) => x.title));
   a = await run("update_task", { taskId, title: "Book an office hour" });
+  const opens = "2030-01-02T09:00:00.000Z";
+  a = await run("update_task", { taskId, opensDateISOString: opens, deadlineDateISOString: "2030-01-01T09:00:00.000Z" });
+  check(!a.applied, "update_task refuses a deadline before the opening", a);
+  a = await run("update_task", { taskId, opensDateISOString: opens, deadlineDateISOString: "2030-01-03T09:00:00.000Z", check: "shortlist" });
+  t = await call(key, "pioneers_list", { object: "tasks", batchId: "fall-2026" });
+  const listed = t.data?.items?.find((x) => x.id === taskId);
+  check(listed?.opensDateISOString === opens && listed.check === "shortlist", "update_task sets the dates and the check", listed);
   a = await run("archive_task", { taskId, archived: true });
   check((await db.doc(`batchTasks/${taskId}`).get()).get("archivedDateISOString"), "archive_task archives", a);
 

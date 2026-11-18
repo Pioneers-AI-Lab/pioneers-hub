@@ -1,69 +1,37 @@
 "use client";
 
-import dayjs from "dayjs";
-import { useEvents } from "@/context/EventsContext";
+import { COMING_UP_DAYS } from "@shared/tasks";
 import { useTodoItems } from "@/hooks/useTodoItems";
-import { EventRow } from "@/components/event/EventRow";
-import { ChecklistRow, FormRow } from "@/components/todo/TodoRows";
+import { ComingUpRow, TodoRow } from "@/components/todo/TodoRows";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { RowList } from "@/components/ui/Rows";
 import { Empty, Section } from "@/components/ui/Section";
 
-// « A faire » (SPECS §3.1) : la checklist (mon profil, puis les taches du
-// batch que je coche moi-meme), les formulaires qu'il me reste a remplir et
-// leur echeance, dont la Submission et le Peer rating des hackathons (`useTodoItems`,
-// aussi resume en haut de « Me »), ce qui arrive cette semaine.
+// « To do » (SPECS §3.1, decision du 18/11) : des TACHES seulement, jamais un
+// evenement (le Calendar les montre). Ce qui est ouvert, par echeance (profil,
+// taches du batch, formulaires : `useTodoItems`, aussi resume en haut de « Me »),
+// puis ce qui ouvre dans les 7 jours.
 export default function TodoPage() {
-  const { events } = useEvents();
-  const { forms, debriefs, checklist, isLoading } = useTodoItems();
+  const { toDo, comingUp, isLoading } = useTodoItems();
 
   if (isLoading) return <PageLoader />;
 
-  const now = dayjs();
-  const thisWeek = events.filter((e) => {
-    const start = dayjs(e.startDateISOString);
-    return start.isAfter(now.subtract(2, "hour")) && start.isBefore(now.add(7, "day"));
-  });
-  const nothing =
-    checklist.every((c) => c.done) && forms.length === 0 && thisWeek.length === 0 && debriefs.every((d) => d.done);
-
   return (
     <>
-      {nothing && <Empty>You are all set. New forms and events show up here.</Empty>}
-
-      <Section title="Checklist" help="Tick a task once you have done it.">
+      <Section title="To do" help="Open now, the nearest deadline first. Tick a task once you have done it; the app checks the others itself.">
+        {toDo.every((i) => i.done) && <Empty>You are all set.</Empty>}
         <RowList>
-          {checklist.map((c) => (
-            <ChecklistRow key={c.id} item={c} />
+          {toDo.map((i) => (
+            <TodoRow key={i.id} item={i} />
           ))}
         </RowList>
       </Section>
 
-      {forms.length > 0 && (
-        <Section title="Forms">
+      {comingUp.length > 0 && (
+        <Section title="Coming up" help={`What opens in the next ${COMING_UP_DAYS} days.`}>
           <RowList>
-            {forms.map((f) => (
-              <FormRow key={f.form.id} item={f} />
-            ))}
-          </RowList>
-        </Section>
-      )}
-
-      {debriefs.length > 0 && (
-        <Section title="Hackathons" help="Your team's submission before the deadline, then a word on each teammate at the debrief.">
-          <RowList>
-            {debriefs.map((d) => (
-              <FormRow key={d.form.id} item={d} />
-            ))}
-          </RowList>
-        </Section>
-      )}
-
-      {thisWeek.length > 0 && (
-        <Section title="This week">
-          <RowList>
-            {thisWeek.map((e) => (
-              <EventRow key={e.id} event={e} />
+            {comingUp.map((i) => (
+              <ComingUpRow key={i.id} item={i} />
             ))}
           </RowList>
         </Section>

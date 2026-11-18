@@ -588,8 +588,9 @@ batch.set(db.doc("founders/ada-example/private/connections"), {
 
 // ---- Taches du To do (fictives) ---------------------------------------------
 // Checklist commune du batch (Admin > Tasks) ; Ada a coche la premiere. Une
-// tache archivee (retiree par le staff) n'apparait plus nulle part.
-const task = (id, order, title, description, linkUrl, archived = false) =>
+// tache archivee (retiree par le staff) n'apparait plus nulle part. La shortlist est
+// verifiee par l'app (`check`) ; LinkedIn ouvre dans 3 jours (« Coming up »).
+const task = (id, order, title, description, linkUrl, archived = false, extra = {}) =>
   batch.set(db.doc(`batchTasks/${id}`), {
     ...stamps,
     ...scoped,
@@ -598,9 +599,19 @@ const task = (id, order, title, description, linkUrl, archived = false) =>
     description,
     linkUrl,
     order,
+    opensDateISOString: null,
+    deadlineDateISOString: null,
+    check: null,
+    ...extra,
   });
 task("demo-task-intro", 1, "Introduce yourself on Slack", "A short intro in the batch Slack.", "https://slack.com/");
-task("demo-task-shortlist", 2, "Finish your co-founder shortlist", "From the Founders directory.", `/programs/${PROGRAM_ID}/batches/${BATCH_ID}/founders`);
+task("demo-task-shortlist", 2, "Finish your co-founder shortlist", "From the Founders directory.", `/programs/${PROGRAM_ID}/batches/${BATCH_ID}/founders`, false, {
+  check: "shortlist",
+});
+task("demo-task-linkedin", 4, "Update your LinkedIn", null, "https://www.linkedin.com/in/me/", false, {
+  opensDateISOString: new Date(Date.now() + 3 * 86400000).toISOString(),
+  deadlineDateISOString: new Date(Date.now() + 5 * 86400000).toISOString(),
+});
 task("demo-task-archived", 3, "Old task (archived)", null, null, true);
 batch.set(db.doc("taskCompletions/demo-task-intro_ada-example"), {
   ...scoped,

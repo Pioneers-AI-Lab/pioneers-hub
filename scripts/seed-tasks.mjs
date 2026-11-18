@@ -11,7 +11,8 @@
 //     pas regle (Admin > Batch settings, puis la tache dans Admin > Tasks) ;
 //   - « Update your LinkedIn: Founder in Residence at Pioneers » : son profil LinkedIn ;
 //   - « Finish your co-founder shortlist » : l'annuaire Founders de l'app (meme
-//     chemin que lib/paths.ts#founders).
+//     chemin que lib/paths.ts#founders), verifiee par l'app (`check: "shortlist"`,
+//     18/11 : faite avec 3 fondateurs shortlistes, sans coche).
 // Ids `{batchId}_{cle}` (docIds.starterTask) : rejouable, une tache deja en base
 // n'est JAMAIS ecrasee (le staff a pu la modifier ou l'archiver). Les nouvelles se
 // rangent apres les taches existantes.
@@ -67,6 +68,7 @@ const STARTER_TASKS = [
     title: "Finish your co-founder shortlist",
     description: "Shortlist the founders you would like to build with, from the Founders directory.",
     linkUrl: `/programs/${programId}/batches/${batchId}/founders`,
+    check: "shortlist",
   },
 ];
 
@@ -88,6 +90,9 @@ STARTER_TASKS.forEach((t, i) => {
     title: t.title,
     description: t.description,
     linkUrl: t.linkUrl,
+    opensDateISOString: null,
+    deadlineDateISOString: null,
+    check: t.check ?? null,
     order: ++order,
     createdDateISOString: now,
     updatedDateISOString: now,

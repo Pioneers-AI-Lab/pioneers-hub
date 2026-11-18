@@ -186,6 +186,10 @@ export const canReadStartupProfile = (
 // WhatsApp, LinkedIn et le telephone vivent dans `people` et sont COPIES dans
 // `private/directory` : le fondateur ecrit les deux dans le meme lot, et la
 // regle verifie que la copie egale l'original.
+//
+// Aussi permises par les regles, hors de cette liste (aucune API ne les ecrit) : les dates
+// du To do que le fondateur pose lui-meme, `private/directory.profileCompletedDateISOString`
+// et `private/connections.shortlistDoneDateISOString` (decision du 18/11).
 
 export const FOUNDER_SELF_EDITABLE = {
   founder: ["hardSkills", "industries", "rolesICouldTake"],

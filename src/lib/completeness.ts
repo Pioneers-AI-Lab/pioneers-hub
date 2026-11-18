@@ -56,3 +56,14 @@ export const missingRequiredFields = (founder: Founder, directory: FounderDirect
  * par le registre ET modifiable par le fondateur (la regle du To do).
  */
 export const isRequiredProfileField = (key: DbFieldKey) => EDITABLE.has(key) && getFieldDef(key).expected?.priority === "required";
+
+type ProfileDocs = Parameters<typeof missingRequiredFields>;
+const isProfileComplete = (docs: ProfileDocs) => missingRequiredFields(...docs).length === 0;
+
+/**
+ * Cette ecriture complete le profil (plus aucun champ obligatoire ne manque apres,
+ * il en manquait avant) : elle pose `profileCompletedDateISOString`, la date de
+ * « Complete your profile » dans le To do (decision du 18/11). Seuls « Mon profil » et
+ * sa photo la posent : complete par l'API ou un import, le profil quitte le To do aussitot.
+ */
+export const completesProfile = (before: ProfileDocs, after: ProfileDocs) => !isProfileComplete(before) && isProfileComplete(after);

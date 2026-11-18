@@ -34,6 +34,7 @@ import {
   isStaffViewer,
 } from "../shared/access";
 import { isPublishedEvent } from "../shared/events";
+import { taskDraftOf } from "../shared/admin/batch";
 import type { Caller } from "../api/caller";
 import { badRequest, forbidden, notFound } from "../api/errors";
 import { founderIdIn, roleOf } from "../api/viewer";
@@ -338,7 +339,7 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
       .map((d) => withId<BatchTask>(d))
       .filter((t) => input.includeArchived || !t.archivedDateISOString)
       .sort((a, b) => a.order - b.order);
-    return { object, items: tasks.map((t) => ({ id: t.id, title: t.title, description: t.description, linkUrl: t.linkUrl, order: t.order, archived: t.archivedDateISOString !== null })) };
+    return { object, items: tasks.map((t) => ({ id: t.id, ...taskDraftOf(t), order: t.order, archived: t.archivedDateISOString !== null })) };
   }
 
   if (object === "forms") {

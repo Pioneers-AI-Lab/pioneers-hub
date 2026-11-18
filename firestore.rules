@@ -363,7 +363,10 @@ service cloud.firestore {
             'edge', 'education', 'degree', 'fieldOfStudy', 'yearsOfXP', 'notableCompanies', 'trackRecord',
             'interestedInWorkingOn', 'hasExistingProject', 'projectExplanation', 'hasExistingCoFounders',
             'openToJoinAnotherProject', 'mainStartup2025', 'repeatFounder', 'lookingForCoFounder', 'coFounderTypeWanted',
-            'coFounderSkillsWanted', 'industriesToExplore', 'anythingElse'])
+            'coFounderSkillsWanted', 'industriesToExplore', 'anythingElse',
+            // Date du To do (« Complete your profile » faite), posee par l'ecriture qui complete le profil.
+            'profileCompletedDateISOString'])
+          && (!changed('profileCompletedDateISOString') || request.resource.data.profileCompletedDateISOString is string)
           && copyMatches(founderData(founderId).personId, 'whatsapp')
           && copyMatches(founderData(founderId).personId, 'linkedinUrl')
           && copyMatches(founderData(founderId).personId, 'phone');
@@ -373,8 +376,9 @@ service cloud.firestore {
         // Shortlist et rencontres (shared/types/connections.ts) : le fondateur lui-meme, ses deux listes.
         allow create, update: if docId == 'connections'
           && isViewerFounder(founderData(founderId).batchId, founderId)
-          && request.resource.data.keys().hasOnly(['shortlistedFounderIds', 'metFounderIds', 'updatedDateISOString'])
+          && request.resource.data.keys().hasOnly(['shortlistedFounderIds', 'metFounderIds', 'updatedDateISOString', 'shortlistDoneDateISOString'])
           && request.resource.data.updatedDateISOString is string
+          && request.resource.data.get('shortlistDoneDateISOString', '') is string
           && connectionListOk(founderId, 'shortlistedFounderIds')
           && connectionListOk(founderId, 'metFounderIds');
       }

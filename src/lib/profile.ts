@@ -21,7 +21,8 @@ type Pick<T, K extends readonly (keyof T)[]> = { [P in K[number]]?: T[P] };
 
 export type MyProfilePatch = {
   founder: Pick<Founder, typeof FOUNDER_SELF_EDITABLE.founder>;
-  directory: Pick<FounderDirectory, typeof FOUNDER_SELF_EDITABLE.founderDirectory>;
+  /** Avec la date du To do quand cet enregistrement complete le profil (`completesProfile`). */
+  directory: Pick<FounderDirectory, [...typeof FOUNDER_SELF_EDITABLE.founderDirectory, "profileCompletedDateISOString"]>;
   profile: Pick<FounderProfile, typeof FOUNDER_SELF_EDITABLE.founderProfile>;
 };
 
@@ -87,11 +88,14 @@ function photoError(err: unknown): Error {
  * La fiche ne change pas de `updatedDateISOString` : le formulaire ouvert
  * (cle sur cette date) garde ce qui est en cours de saisie.
  */
-async function commitPhoto(founder: WithId<Founder>, thumbnail: string | null, coverPhotoUrl: string | null) {
+async function commitPhoto(founder: WithId<Founder>, thumbnail: string | null, coverPhotoUrl: string | null, completes = false) {
   const previous = uploadedPhotoPath(founder.coverPhotoUrl, founder.id);
+  const now = new Date().toISOString();
   const batch = writeBatch(db);
-  batch.set(refs.person(founder.personId), { photoUrl: thumbnail, updatedDateISOString: new Date().toISOString() }, { merge: true });
+  batch.set(refs.person(founder.personId), { photoUrl: thumbnail, updatedDateISOString: now }, { merge: true });
   batch.set(refs.founder(founder.id), { photoUrl: thumbnail, coverPhotoUrl }, { merge: true });
+  // La photo, dernier champ obligatoire : la date de « Complete your profile » au To do.
+  if (completes) batch.set(refs.founderDirectory(founder.id), { profileCompletedDateISOString: now }, { merge: true });
   await batch.commit();
   if (previous) void deleteObject(storageRef(storage, previous)).catch(() => undefined);
 }
@@ -99,13 +103,13 @@ async function commitPhoto(founder: WithId<Founder>, thumbnail: string | null, c
 /**
  * Nouvelle photo (« Mon profil », fondateur ou staff) : la grande photo dans
  * Storage (`founders/{id}/photo-<horodatage>.jpg`, une URL par version), puis
- * `commitPhoto`.
+ * `commitPhoto` ; `completes` : la photo etait le dernier champ obligatoire (date du To do).
  */
-export async function saveProfilePhoto(founder: WithId<Founder>, photo: PreparedPhoto) {
+export async function saveProfilePhoto(founder: WithId<Founder>, photo: PreparedPhoto, completes = false) {
   try {
     const file = storageRef(storage, `founders/${founder.id}/photo-${Date.now().toString(36)}.jpg`);
     await uploadBytes(file, photo.cover, { contentType: "image/jpeg", cacheControl: "public, max-age=31536000" });
-    await commitPhoto(founder, photo.thumbnail, await getDownloadURL(file));
+    await commitPhoto(founder, photo.thumbnail, await getDownloadURL(file), completes);
   } catch (err) {
     throw photoError(err);
   }

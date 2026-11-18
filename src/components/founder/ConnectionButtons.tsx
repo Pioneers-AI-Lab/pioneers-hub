@@ -3,7 +3,9 @@
 import { Divider, Group } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconCheck, IconStar, IconStarFilled } from "@tabler/icons-react";
+import { reachesShortlistDone } from "@shared/tasks";
 import { useBatch } from "@/context/BatchContext";
+import { useFounders } from "@/context/FoundersContext";
 import { useMyConnections } from "@/context/MyConnectionsContext";
 import { setFounderConnection } from "@/lib/firestore/write";
 import { ToggleButton, ToggleIcon } from "@/components/ui/ToggleButton";
@@ -24,6 +26,7 @@ const TOGGLES = [
 function useConnectionToggles(founderId: string) {
   const { role, canViewAs } = useBatch();
   const { founderId: myFounderId, shortlisted, met, isLoading } = useMyConnections();
+  const { foundersById } = useFounders();
   if (role !== "founder" || !myFounderId || myFounderId === founderId || isLoading) return null;
   const lists = { shortlistedFounderIds: shortlisted, metFounderIds: met };
   return TOGGLES.map((t) => ({
@@ -31,7 +34,11 @@ function useConnectionToggles(founderId: string) {
     on: lists[t.list].has(founderId),
     write: canViewAs
       ? async () => void notifications.show({ message: "Preview: only the founder can change their shortlist." })
-      : (next: boolean) => setFounderConnection(myFounderId, t.list, founderId, next),
+      : (next: boolean) => {
+          // L'ajout qui amene la shortlist au minimum date la tache shortlist du To do.
+          const reachesDone = t.list === "shortlistedFounderIds" && next && reachesShortlistDone(myFounderId, [...shortlisted], founderId, foundersById);
+          return setFounderConnection(myFounderId, t.list, founderId, next, reachesDone);
+        },
   }));
 }
 

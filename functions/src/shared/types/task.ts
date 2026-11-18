@@ -10,6 +10,11 @@ import type { Archivable, BatchScoped, DateISOString, Timestamps } from "./commo
 // fondateur la coche lui-meme, sans verification du staff, sans score, sans
 // donnee liee. Le staff l'ajoute, la modifie, la retire (archive) depuis
 // Admin > Tasks, et y suit les retardataires comme pour un formulaire.
+//
+// Dates et verification (18/11) : une tache a, comme un formulaire, une ouverture
+// (le To do la montre dans « Coming up » 7 jours avant) et une echeance. Une tache
+// VERIFIEE par l'app (`check`) n'a pas de coche : elle est faite quand la donnee
+// le dit (shared/tasks.ts#isTaskDone), au To do comme dans Admin > Tasks.
 
 export type BatchTask = BatchScoped &
   Timestamps &
@@ -20,7 +25,17 @@ export type BatchTask = BatchScoped &
     linkUrl: string | null;
     /** Rang dans la liste (croissant). */
     order: number;
+    /** Ouverture ; absente ou `null` : ouverte des sa creation. */
+    opensDateISOString?: DateISOString | null;
+    /** Echeance ; absente ou `null` : sans echeance. */
+    deadlineDateISOString?: DateISOString | null;
+    /** Ce que l'app verifie a la place de la coche ; absent ou `null` : le fondateur la coche. */
+    check?: TaskCheck | null;
   };
+
+/** `shortlist` : au moins `SHORTLIST_DONE_MIN` fondateurs dans sa shortlist (la milestone Shortlist done). */
+export const TASK_CHECKS = ["shortlist"] as const;
+export type TaskCheck = (typeof TASK_CHECKS)[number];
 
 /** Ecrit par le fondateur lui-meme ; decocher = `done: false` (rien ne se supprime). */
 export type TaskCompletion = BatchScoped & {

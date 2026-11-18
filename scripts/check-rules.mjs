@@ -186,6 +186,12 @@ console.log("founder (ada, member of lumen)");
   await expectOk("set her own repeat founder answer", () =>
     setDoc(doc(db, "founders/ada-example/private/directory"), { repeatFounder: true }, { merge: true }),
   );
+  await expectOk("date her profile completion (To do)", () =>
+    setDoc(doc(db, "founders/ada-example/private/directory"), { profileCompletedDateISOString: new Date().toISOString() }, { merge: true }),
+  );
+  await expectDenied("date her profile completion with a non-string", () =>
+    setDoc(doc(db, "founders/ada-example/private/directory"), { profileCompletedDateISOString: 1 }, { merge: true }),
+  );
   await expectDenied("edit her own directory email (account key)", () =>
     setDoc(doc(db, "founders/ada-example/private/directory"), { email: "x@y.z" }, { merge: true }),
   );
@@ -1005,6 +1011,12 @@ console.log("shortlist and met (founders/*/private/connections)");
   await expectOk("founder reads her own shortlist", () => read(doc(ada.db, own)));
   await expectOk("founder shortlists a founder of her batch", () =>
     updateDoc(doc(ada.db, own), { shortlistedFounderIds: arrayUnion("dan-placeholder"), updatedDateISOString: stamp() }),
+  );
+  await expectOk("founder dates the shortlist reaching its minimum (To do)", () =>
+    updateDoc(doc(ada.db, own), { shortlistDoneDateISOString: stamp(), updatedDateISOString: stamp() }),
+  );
+  await expectDenied("founder dates it with a non-string", () =>
+    updateDoc(doc(ada.db, own), { shortlistDoneDateISOString: 1, updatedDateISOString: stamp() }),
   );
   await expectOk("founder removes a founder from her shortlist", () =>
     updateDoc(doc(ada.db, own), { shortlistedFounderIds: arrayRemove("dan-placeholder"), updatedDateISOString: stamp() }),

@@ -190,6 +190,13 @@ export type FounderDirectory = {
    * formulaire. Facultatif. Absent des documents plus anciens.
    */
   anythingElse?: string | null;
+  /**
+   * Quand le dernier champ obligatoire a ete rempli depuis « Mon profil » (profil ou photo) :
+   * « Complete your profile » est faite ce jour-la dans le To do. Pose par le client (regle
+   * `directory`), hors FOUNDER_SELF_EDITABLE ; absent des plus anciennes et d'un profil
+   * complete par l'API ou un import (il quitte alors le To do aussitot).
+   */
+  profileCompletedDateISOString?: DateISOString;
 };
 
 /**
