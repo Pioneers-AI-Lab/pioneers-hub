@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Box, Group, Stack, Text, UnstyledButton } from "@mantine/core";
+import { canSeeScoreDetails } from "@shared/access";
 import { isWorkTeamEvent } from "@shared/events";
 import {
   COMMITMENT_STATUS_LABELS,
@@ -59,6 +60,8 @@ const PILLAR_SHORT: Record<FounderPillarKey, string> = {
  */
 export function FounderPerformance() {
   const { founder, signals } = useFounder();
+  const { role } = useBatch();
+  const detailed = canSeeScoreDetails(role);
   const { founderScores, founderPerformance } = useCohort();
   const score = founderScores.get(founder.id);
   if (!score) return null;
@@ -75,22 +78,23 @@ export function FounderPerformance() {
           label="Overall"
           value={founderPerformance(founder.id)}
           scale={scale}
-          hint={performanceHint}
+          hint={detailed ? performanceHint : undefined}
         />
         {/* Au-dessus de l'echelle (Outstanding) : au bord du radar. */}
         <ScoreRadar axes={pillars.map((p) => ({ label: PILLAR_SHORT[p], value: Math.min(scale, valueOf(p) ?? 0) }))} max={scale} h={210} />
         <ScoreBreakdown
+          detailed={detailed}
           scale={scale}
           rows={pillars.map((p) => {
             const list = signals?.signals[p] ?? [];
             return {
               key: p,
               short: PILLAR_SHORT[p],
-              // Un pilier a 0 % (suivi) : calcule et montre, jamais compte.
-              label: pillarWeightOf(rules, p) === 0 ? `${pillarName(p)} (not counted)` : pillarName(p),
+              // Un pilier a 0 % (suivi) : calcule et montre, jamais compte (« not counted » : ScoreBreakdown).
+              label: pillarName(p),
               weight: pillarWeightOf(rules, p) / totalWeight,
               value: valueOf(p),
-              details: list.length > 0 && <ScoreSignalList signals={list} scale={scale} />,
+              details: list.length > 0 && <ScoreSignalList signals={list} scale={scale} detailed={detailed} />,
             };
           })}
         />

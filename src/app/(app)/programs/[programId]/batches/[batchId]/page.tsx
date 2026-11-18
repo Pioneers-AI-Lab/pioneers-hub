@@ -11,7 +11,7 @@ import { useFounders } from "@/context/FoundersContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
 import { PROFILE_CATEGORY_LABEL, formatDay, formatScore, percent, todayDayString } from "@/lib/format";
-import { canSeeStartupsTab } from "@shared/access";
+import { canSeeScoreDetails, canSeeStartupsTab } from "@shared/access";
 import { SHOW_MILESTONES } from "@/lib/features";
 import { paths } from "@/lib/paths";
 import { LinkRow, Row, RowList } from "@/components/ui/Rows";
@@ -160,7 +160,14 @@ export default function BatchHomePage() {
       )}
 
       {topStartups.length > 0 && (
-        <Section title="Top startups" help={`${startupWeightingHint({ scale: startupScaleOf(topStartups[0].s.id) })}.`}>
+        <Section
+          title="Top startups"
+          help={
+            canSeeScoreDetails(role)
+              ? `${startupWeightingHint({ scale: startupScaleOf(topStartups[0].s.id) })}.`
+              : `Startup score, out of ${startupScaleOf(topStartups[0].s.id)}.`
+          }
+        >
           <RowList>
             {topStartups.map(({ s, score }) => (
               <LinkRow

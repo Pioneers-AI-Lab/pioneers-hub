@@ -25,7 +25,8 @@ export type BreakdownRow = {
   details?: ReactNode;
 };
 
-export function ScoreBreakdown({ rows, scale }: { rows: BreakdownRow[]; scale: ScoreScale }) {
+/** `detailed` (staff et investors, `shared/access.ts#canSeeScoreDetails`) : la colonne des poids et « (not counted) » sur une ligne a 0 %. */
+export function ScoreBreakdown({ rows, scale, detailed }: { rows: BreakdownRow[]; scale: ScoreScale; detailed: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
   // Colonne du chevron reservee sur toutes les lignes des qu'une en a un : les valeurs restent alignees.
   const anyDetails = rows.some((r) => r.details);
@@ -49,10 +50,13 @@ export function ScoreBreakdown({ rows, scale }: { rows: BreakdownRow[]; scale: S
                 </Text>
                 <Text size="sm" truncate style={{ flex: 1, minWidth: 0 }}>
                   {r.label}
+                  {detailed && r.weight === 0 && " (not counted)"}
                 </Text>
-                <Text size="xs" c="dimmed" className="num" visibleFrom="xs">
-                  {Math.round(r.weight * 100)}%
-                </Text>
+                {detailed && (
+                  <Text size="xs" c="dimmed" className="num" visibleFrom="xs">
+                    {Math.round(r.weight * 100)}%
+                  </Text>
+                )}
                 <Text size="sm" fw={700} c={r.value === null ? "dimmed" : "pioneers"} className="num" w={34} ta="right">
                   {formatScore(r.value, scale)}
                 </Text>

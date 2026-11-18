@@ -71,6 +71,7 @@ export default function ChartsGalleryPage() {
               ]}
             />
             <ScoreBreakdown
+              detailed
               scale={100}
               rows={[
                 {

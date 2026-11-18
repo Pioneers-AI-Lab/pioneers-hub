@@ -112,6 +112,12 @@ export const canSeeScores = (role: BatchRole, settings: Pick<BatchSettings, "sco
   canSeeAudience(role, batchAudiencesOf(settings).scores);
 
 /**
+ * Le detail d'un score (decision du 18/11) : poids des sous-scores, donnee brute des signaux, mention
+ * « not counted ». Staff et investors ; un fondateur voit les notes et des signaux simplifies.
+ */
+export const canSeeScoreDetails = (role: BatchRole): boolean => isStaffOrInvestor(role);
+
+/**
  * Un evenement a audience restreinte (`audience: "guests"` : office hours, visio
  * de mentorat) ne se montre qu'a ses invites et aux membres des startups
  * concernees (meme regle qu'`invitedFounderIds`, types/event.ts) ; le staff et

@@ -13,6 +13,7 @@ import {
   type MetricKey,
   type StartupSubScore,
 } from "@shared/types";
+import { canSeeScoreDetails } from "@shared/access";
 import { criterionLabel } from "@shared/presets/eventTemplates";
 import {
   isPitchGrid,
@@ -62,6 +63,8 @@ const SUBSCORE_LABEL: Record<StartupSubScore, string> = {
 /** Le score (sur 100, ou sur 10 pour Spring 2026) et ses quatre sous-scores, chacun avec sa source. */
 export function StartupScoreSection() {
   const { startup, signals } = useStartup();
+  const { role } = useBatch();
+  const detailed = canSeeScoreDetails(role);
   const { startupScores, startupScoreOf } = useCohort();
   const score = startupScores.get(startup.id);
   if (!score) return null;
@@ -69,7 +72,7 @@ export function StartupScoreSection() {
 
   return (
     <Section title="Score" hint={`Data completeness ${percent(score.dataCompleteness)}.`}>
-      <ScoreHeadline label="Overall" value={startupScoreOf(startup.id)} scale={scale} hint={startupWeightingHint(score)} />
+      <ScoreHeadline label="Overall" value={startupScoreOf(startup.id)} scale={scale} hint={detailed ? startupWeightingHint(score) : undefined} />
       <Stack gap="md" mt="xs">
         {STARTUP_SUBSCORES.map((key) => {
           const list = signals?.signals[key] ?? [];
@@ -79,7 +82,7 @@ export function StartupScoreSection() {
               label={SUBSCORE_LABEL[key]}
               value={score.subScores[key]}
               scale={scale}
-              detail={list.length > 0 && <ScoreSignalList signals={list} scale={scale} />}
+              detail={list.length > 0 && <ScoreSignalList signals={list} scale={scale} detailed={detailed} />}
             />
           );
         })}
