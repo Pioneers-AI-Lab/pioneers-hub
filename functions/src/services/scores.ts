@@ -132,16 +132,19 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
     .sort((a, b) => a.startDateISOString.localeCompare(b.startDateISOString));
   const boardEventIds = new Set(executionBoards.map((b) => b.eventId));
   // Un evenement sans presence (Weekly update) n'a rien a lire.
-  const attendanceEvents = pastEvents.filter((e) => tracksAttendance(e) && (!isAttendanceOptional(e) || boardEventIds.has(e.id)));
+  // Les equipes de travail aussi, presence optionnelle comprise : leurs absents ne notent ni ne sont notes (Peer rating).
+  const attendanceEvents = pastEvents.filter((e) => tracksAttendance(e) && (!isAttendanceOptional(e) || boardEventIds.has(e.id) || isWorkTeamEvent(e)));
 
-  const [attendanceByEvent, peerRatings, directories, internals, connections, pitchReads] = await Promise.all([
+  const [attendanceByEvent, peerRatingsByEvent, directories, internals, connections, pitchReads] = await Promise.all([
     Promise.all(attendanceEvents.map(async (e) => [e.id, await docs<Attendance>(db().collection(eventCollectionPaths.attendance(e.id)))] as const)).then(
       (entries) => new Map(entries),
     ),
     // Les avis entre pairs : agreges ici, jamais lus ailleurs par le serveur (SPECS §4.8).
     Promise.all(
-      pastEvents.filter(isWorkTeamEvent).map((e) => docs<PeerRating>(db().collection(`${COL.events}/${e.id}/${SUB.peerRatings}`))),
-    ).then((lists) => lists.flat()),
+      pastEvents
+        .filter(isWorkTeamEvent)
+        .map(async (e) => ({ eventId: e.id, ratings: await docs<PeerRating>(db().collection(`${COL.events}/${e.id}/${SUB.peerRatings}`)) })),
+    ),
     byIds<FounderDirectory>(founders.map((f) => docPaths.founderDirectory(f.id))),
     byIds<FounderInternal>(founders.map((f) => docPaths.founderInternal(f.id))),
     // Shortlist et « Met » : lus ici pour Likability et les milestones, jamais affiches aux autres.
@@ -159,13 +162,17 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
   // ---- Formulaires a temps : echeance passee, non anonymes, ni jury, ni d'un evenement optionnel ;
   // repondu avant l'echeance. Un absent n'est pas destinataire (`formAudience`).
   // Les membres des equipes publiees, par evenement ; et les equipes de travail (challenge), par evenement et equipe.
+  // Les absents de chaque evenement suivi, une fois.
+  const absentByEvent = new Map([...attendanceByEvent].map(([id, marks]) => [id, absentFounderIds(marks)]));
+  const isAbsentAt = (eventId: string, founderId: string) => absentByEvent.get(eventId)?.has(founderId) ?? false;
   const teamMembersOf = new Map<string, string[]>();
   const workTeams = new Map<string, string[]>();
   for (const m of memberships) {
     if (m.kind !== "event_team" || !m.eventId) continue;
     pushTo(teamMembersOf, m.eventId, m.founderId);
     const event = eventById.get(m.eventId);
-    if (event && isWorkTeamEvent(event)) pushTo(workTeams, `${m.eventId}/${m.teamId}`, m.founderId);
+    // Un absent n'a pas travaille avec l'equipe (18/11) : ni coequipier compte, ni note.
+    if (event && isWorkTeamEvent(event) && !isAbsentAt(m.eventId, m.founderId)) pushTo(workTeams, `${m.eventId}/${m.teamId}`, m.founderId);
   }
   // La premiere reponse compte pour « a temps » ; la derniere n'est que l'information.
   const completedAt = new Map(completions.map((c) => [docIds.formCompletion(c.formId, c.founderId), c.firstCompletedDateISOString ?? c.completedDateISOString]));
@@ -199,7 +206,7 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
       .flatMap((board) => {
         const event = eventById.get(board.eventId);
         return event && event.archivedDateISOString === null
-          ? [{ rows: board.rows, event, absentIds: absentFounderIds(attendanceByEvent.get(event.id) ?? []) }]
+          ? [{ rows: board.rows, event, absentIds: absentByEvent.get(event.id) ?? new Set<string>() }]
           : [];
       })
       .sort((a, b) => a.event.startDateISOString.localeCompare(b.event.startDateISOString)),
@@ -238,7 +245,12 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
   }
   const teammates = countMap();
   for (const members of workTeams.values()) for (const a of members) for (const b of members) if (a !== b) addTo(teammates, a, b);
-  // Peer rating : la fiabilite compte dans Execution, le ressenti (moyenne) dans Likability.
+  // Peer rating : la fiabilite compte dans Execution, le ressenti (moyenne) dans Likability. Une note
+  // donnee a (ou par) un absent de l'evenement ne compte pas (18/11) : le formulaire ne le propose pas,
+  // et une absence marquee apres coup retire les notes deja donnees.
+  const peerRatings = peerRatingsByEvent.flatMap(({ eventId, ratings }) =>
+    ratings.filter((r) => !isAbsentAt(eventId, r.rateeFounderId) && !isAbsentAt(eventId, r.raterFounderId)),
+  );
   const reliability = new Map<string, number[]>();
   const likability = new Map<string, number[]>();
   for (const r of peerRatings) {

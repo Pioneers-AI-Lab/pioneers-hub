@@ -532,6 +532,18 @@ console.log("hackathon submission and peer rating (forms)");
     if (form.targets.each_teammate.map((t) => t.value).join() !== "chloe-demo") throw new Error(JSON.stringify(form.targets));
     if (!("photoUrl" in form.targets.each_teammate[0])) throw new Error("no teammate photo");
   });
+  // Un coequipier absent a l'evenement n'est ni propose ni notable (18/11), et revient une fois present.
+  const chloeMark = adb.doc(`events/${EVENT}/attendance/chloe-demo`);
+  const chloeBefore = (await chloeMark.get()).data();
+  await chloeMark.set({ founderId: "chloe-demo", status: "absent", markedByUid: "check", markedDateISOString: new Date().toISOString() });
+  await expectOk("an absent teammate is not offered in the peer rating", async () => {
+    const form = await publicForm(ada.functions, PEER);
+    if (form.targets.each_teammate.length !== 0) throw new Error(JSON.stringify(form.targets));
+  });
+  await expectCallableError("an absent teammate cannot be rated", "invalid-argument", () =>
+    submitForm(ada.functions, PEER, { "peerLikability@chloe-demo": 4, "peerReliability@chloe-demo": 4 }),
+  );
+  await (chloeBefore ? chloeMark.set(chloeBefore) : chloeMark.delete());
   await expectOk("founder sends the team results after the deadline (late)", async () => {
     await submitForm(ada.functions, FORM, results);
     const sub = (await adb.doc(`events/${EVENT}/submissions/team-a`).get()).data();
