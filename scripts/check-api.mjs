@@ -566,6 +566,64 @@ const call = async (key, name, args) => {
   t = await call(key, "pioneers_run", { action: "set_outstanding", args: { eventId: "demo-hackathon-1", teamId: "team-a", outstanding: true } });
   check(t.isError && /not_eligible/.test(t.data), "the Outstanding mention needs the grid's maximum", t.data);
 
+  // Le leaderboard suit ses cibles, quel que soit l'ecrivain (MCP, REST, ecran Admin = ecriture directe) :
+  // equipes publiees (onTeamWritten), startups (onStartupUpdated), cibles de l'evenement (onEventUpdated).
+  // La ligne d'une cible une fois que `test` l'accepte (5 s au plus), sinon la derniere lue.
+  const rowWhen = async (eventId, targetId, test) => {
+    let row;
+    for (let i = 0; i < 20; i++) {
+      row = (await db.doc(`leaderboards/${eventId}`).get()).get("rows")?.find((x) => x.targetId === targetId);
+      if (test(row)) return { ok: true, row };
+      await new Promise((ok) => setTimeout(ok, 250));
+    }
+    return { ok: false, row };
+  };
+  const judgeScore = (eventId, targetType, targetId, scores) =>
+    db.doc(`events/${eventId}/evaluations/check-${targetId}`).set({ evaluatorKind: "judge", evaluatorId: "check", evaluatorName: "Check", isExternal: true, targetType, targetId, scores, updatedDateISOString: new Date().toISOString() });
+  const hackTeams = (await db.collection(`events/${drawEventId}/teams`).get()).docs.map((d) => ({ id: d.id, memberIds: d.get("memberIds") }));
+  const teamA = hackTeams.find((x) => x.memberIds.length >= 2);
+  const [kept, removed] = teamA.memberIds;
+  const removedName = (await db.doc(`founders/${removed}`).get()).get("name");
+  const membersAre = (ids) => (row) => JSON.stringify([...(row?.memberIds ?? [])].sort()) === JSON.stringify([...ids].sort());
+  const teamRowIs = (ids) => rowWhen(drawEventId, teamA.id, membersAre(ids));
+  const withA = (memberIds) => ({ eventId: drawEventId, teams: hackTeams.map((x) => (x.id === teamA.id ? { id: x.id, memberIds } : x)) });
+  await judgeScore(drawEventId, "team", teamA.id, { outputQuality: 4 });
+  let w = await teamRowIs(teamA.memberIds);
+  check(w.ok, "a scored team enters the leaderboard", w.row);
+  a = await run("edit_teams", withA([kept]));
+  const beforeA = a.preview.data?.preview?.before?.find((g) => g.id === teamA.id)?.members ?? [];
+  check(!beforeA.includes(removed) && beforeA.some((n) => n && removedName.startsWith(n.split(" ")[0])), "edit_teams preview names a removed member", beforeA);
+  w = await teamRowIs([kept]);
+  check(w.ok, "MCP edit_teams: the leaderboard row follows", w.row);
+  r = await fetch(`${HOSTING}/v1/actions/edit_teams`, { method: "POST", headers: { authorization: `Bearer ${key}`, "content-type": "application/json" }, body: JSON.stringify(withA(teamA.memberIds)) });
+  rb = await r.json();
+  w = await teamRowIs(teamA.memberIds);
+  check(rb.applied === true && w.ok, "REST edit_teams: the leaderboard row follows", { status: r.status, row: w.row });
+  await db.doc(`events/${drawEventId}/teams/${teamA.id}`).update({ memberIds: [kept] });
+  w = await teamRowIs([kept]);
+  check(w.ok, "a direct write (Admin screen): the leaderboard row follows", w.row);
+  await db.doc(`events/${drawEventId}/teams/${teamA.id}`).update({ memberIds: teamA.memberIds });
+
+  t = await call(key, "pioneers_create_event", { batchId: "fall-2026", templateKey: "pitch_day", name: "Pitch check", startDateISOString: "2026-12-02T09:30:00+01:00" });
+  t = await call(key, "pioneers_create_event", { planId: t.data?.planId });
+  const pitchId = t.data?.result?.eventId;
+  a = await run("update_event", { eventId: pitchId, startupIds: ["lumen"] });
+  const lumenName = (await db.doc("startups/lumen").get()).get("name");
+  const lumenRow = (test) => rowWhen(pitchId, "lumen", test);
+  await judgeScore(pitchId, "startup", "lumen", { teamStrength: 4 });
+  w = await lumenRow((row) => row?.name === lumenName);
+  check(w.ok, "a pitch ranks its startup once scored", w.row);
+  await db.doc("startups/lumen").update({ name: "Lumen Renamed" });
+  w = await lumenRow((row) => row?.name === "Lumen Renamed");
+  check(w.ok, "a renamed startup: the pitch leaderboard follows", w.row);
+  await db.doc("startups/lumen").update({ name: lumenName });
+  a = await run("update_event", { eventId: pitchId, startupIds: [] });
+  w = await lumenRow((row) => !row);
+  check(w.ok, "update_event removes a startup: its row leaves the leaderboard", w.row);
+  await db.doc(`events/${pitchId}`).update({ startupIds: ["lumen"] });
+  w = await lumenRow((row) => row?.name === lumenName);
+  check(w.ok, "a direct write (Admin screen) adds it back: the leaderboard follows", w.row);
+
   // Jury et classement
   t = await call(key, "pioneers_run", { action: "delete_jury_score", args: { eventId: "demo-hackathon-2", evaluationId: "nope" } });
   check(t.isError && /evaluation_not_found/.test(t.data), "delete_jury_score refuses an unknown score", t.data);

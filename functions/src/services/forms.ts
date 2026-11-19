@@ -75,6 +75,7 @@ import { plain } from "./operations";
 import { parisMonday } from "../shared/dates";
 import { absentFromEventMessage, formState } from "../shared/forms";
 import { absentFounderIds, formHasAbsentees } from "../shared/attendance";
+import { savedShortNames } from "../shared/admin/teams";
 import { previousGoalOf } from "./weeklyForms";
 
 // ----------------------------
@@ -191,7 +192,7 @@ async function teamOf(tx: Transaction | null, eventId: string, founderId: string
  * (`memberNames`), sinon tires des fiches (equipe publiee avant les noms courts).
  */
 async function memberShortNames(tx: Transaction | null, teams: Pick<EventTeam, "memberIds" | "memberNames">[]): Promise<Map<string, string>> {
-  const names = new Map(teams.flatMap((t) => t.memberIds.map((id, i) => [id, t.memberNames?.[i] ?? ""] as const)));
+  const names = savedShortNames(teams);
   const missing = [...names].flatMap(([id, name]) => (name ? [] : [id]));
   if (missing.length) {
     const refs = missing.map((id) => db().doc(docPaths.founder(id)));

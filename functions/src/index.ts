@@ -13,7 +13,7 @@ import { FUNCTIONS_REGION, type CallableName, type CallableRequest, type Callabl
 import { API_KEY_NAME_MAX } from "./shared/api";
 import { COL, PRIVATE_DOC, SUB } from "./shared/collections";
 import { isStaffViewer } from "./shared/access";
-import type { ApiKey, Evaluation, Form, FounderConnections, Submission } from "./shared/types";
+import type { ApiKey, Evaluation, EventTeam, Form, FounderConnections, PioneersEvent, Startup, Submission } from "./shared/types";
 import { mintApiKey } from "./api/caller";
 import { loadViewer } from "./api/viewer";
 import { decideRequest, describeRequest } from "./oauth/consent";
@@ -272,8 +272,21 @@ export const onCheckinWritten = onDocumentWritten(
 
 export const onStartupUpdated = onDocumentUpdated(
   { document: `${COL.startups}/{startupId}`, region: FIRESTORE_TRIGGER_REGION },
-  (event) => kpis.onStartupUpdated(event.params.startupId, event.data?.before.data(), event.data?.after.data()),
+  async (event) => {
+    const before = event.data?.before.data() as Startup | undefined;
+    const after = event.data?.after.data() as Startup | undefined;
+    if (!before || !after) return;
+    // Ses agregats (kpiSeries) et les leaderboards qui la classent copient son equipe.
+    await Promise.all([kpis.onStartupUpdated(event.params.startupId, before, after), teamResults.onStartupChange(event.params.startupId, before, after)]);
+  },
 );
+
+// Les cibles d'un evenement (ses startups, son matching) -> son leaderboard.
+export const onEventUpdated = onDocumentUpdated({ document: `${COL.events}/{eventId}`, region: FIRESTORE_TRIGGER_REGION }, (event) => {
+  const before = event.data?.before.data() as PioneersEvent | undefined;
+  const after = event.data?.after.data() as PioneersEvent | undefined;
+  return before && after ? teamResults.onEventChange(event.params.eventId, before, after) : undefined;
+});
 
 // Resultats d'equipe et notes du jury, quel que soit l'ecrivain (formulaire, staff,
 // API) : releves de metriques, puis leaderboard (services/teamResults.ts).
@@ -295,6 +308,17 @@ export const onEvaluationWritten = onDocumentWritten(
       event.params.eventId,
       (event.data?.before.data() as Evaluation | undefined) ?? null,
       (event.data?.after.data() as Evaluation | undefined) ?? null,
+    ),
+);
+
+// Groupes d'un tirage publie, quel que soit l'ecrivain (ecran Admin, `edit_teams`) -> leaderboard.
+export const onTeamWritten = onDocumentWritten(
+  { document: `${COL.events}/{eventId}/${SUB.teams}/{teamId}`, region: FIRESTORE_TRIGGER_REGION },
+  (event) =>
+    teamResults.onTeamChange(
+      event.params.eventId,
+      (event.data?.before.data() as EventTeam | undefined) ?? null,
+      (event.data?.after.data() as EventTeam | undefined) ?? null,
     ),
 );
 

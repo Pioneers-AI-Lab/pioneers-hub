@@ -197,6 +197,10 @@ export const publicNamesWrites = (eventId: string, teams: readonly WithId<EventT
 
 // Une equipe publiee est enregistree verrouillee (le generateur n'y touche plus) ;
 // a la retouche, plus de tirage : rien n'y est verrouille.
+/** Les noms courts enregistres sur les groupes (`memberNames`), par membre ; vide si le groupe n'en a pas. */
+export const savedShortNames = (teams: readonly Pick<EventTeam, "memberIds" | "memberNames">[]): Map<string, string> =>
+  new Map(teams.flatMap((t) => t.memberIds.map((id, i) => [id, t.memberNames?.[i] ?? ""] as const)));
+
 export const toDrafts = (teams: readonly WithId<EventTeam>[]): DraftTeam[] =>
   teams.map((t) => ({ id: t.id, name: t.name, memberIds: [...t.memberIds], leaderId: leaderIdOf(t), locked: t.locked && t.publishedDateISOString === null }));
 

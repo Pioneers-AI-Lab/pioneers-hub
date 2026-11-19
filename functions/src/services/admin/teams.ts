@@ -9,6 +9,7 @@ import {
   publishTeamsWrites,
   replaceMatchingWrites,
   savedPairs,
+  savedShortNames,
   seededRandom,
   teamIdFor,
   teamIdsWithResults,
@@ -271,7 +272,9 @@ export const editTeams: Operation<typeof EditTeamsInput> = {
     const all = given.flatMap((t) => t.memberIds);
     const savedById = new Map(ctx.teams.map((t) => [t.id, t]));
     const [byId, history] = await Promise.all([foundersOf(tx, ctx.event.batchId, all), historyOf(tx, ctx.event.batchId)]);
-    const nameOf = (id: string) => byId.get(id)?.name ?? id;
+    // Un membre retire n'est plus dans `all` : son nom court enregistre sur le groupe (apercu « avant »).
+    const savedNames = savedShortNames(ctx.teams);
+    const nameOf = (id: string) => byId.get(id)?.name ?? (savedNames.get(id) || id);
     const twice = all.filter((id, i) => all.indexOf(id) !== i);
     if (twice.length) throw badRequest("duplicate_member", `In two groups: ${[...new Set(twice)].map(nameOf).join(", ")}.`, "teams");
     const badId = given.find((t) => t.id && !savedById.has(t.id));

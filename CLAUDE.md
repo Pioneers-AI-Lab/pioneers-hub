@@ -235,6 +235,13 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   `metricSnapshots`, source `recordedSource` de la soumission, puis leaderboard, `services/teamResults.ts`) et
   `onEvaluationWritten` (leaderboard), en europe-west9. `onFormWritten` (`forms/{id}`) recalcule le leaderboard quand
   la grille du jury ou les metriques d'un formulaire changent (pas pour une date, un statut, un titre).
+  `onTeamWritten` (`events/{id}/teams/{teamId}`, 19/11) : une equipe d'un tirage PUBLIE dont les membres ou le nom
+  changent (absent retire, retardataire, echange : ecran Admin ou `edit_teams`) recalcule le leaderboard, qui copie
+  ses `memberIds` ; un brouillon, rien. Une absence marquee ne retouche jamais un tirage publie.
+  Classement de startups (pitchs, sans matching) : `onStartupUpdated` recalcule aussi les leaderboards des evenements
+  non archives qui la classent quand son nom ou son equipe change ; `onEventUpdated` (`events/{id}`) recalcule quand
+  ses `startupIds` ou son matching changent (bareme et metrique : deja par leurs callables). Verifie par `check:api`
+  (MCP, REST et ecriture directe comme l'ecran Admin).
 - **Jamais lus par l'API** : `peerRatings`, `picks`, `judges`, `apiKeys`, `writePlans`, `founders/*/private/connections`, `shortlistHistory`
   (SPECS §4.8 ; `draw_teams` lit les connections pour tirer, sans les rendre). **Staff seulement par l'API** : `teamLocks`, `founderReviews`,
   `startupReviews`, les notes du jury une par une, `formResponses` (jamais ceux d'un formulaire d'avis ou de picks, ni leurs valeurs ailleurs).

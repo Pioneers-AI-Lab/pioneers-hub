@@ -1,7 +1,8 @@
 import { getFirestore } from "firebase-admin/firestore";
-import { docPaths } from "../shared/collections";
+import { COL, docPaths } from "../shared/collections";
+import { juryTargetOf } from "../shared/events";
 import { eventMetrics, juryCriteria } from "../shared/forms";
-import type { Evaluation, EventTeam, Form, MetricSnapshot, PioneersEvent, Submission } from "../shared/types";
+import type { Evaluation, EventTeam, Form, MetricSnapshot, PioneersEvent, Startup, Submission } from "../shared/types";
 import { sameIds } from "../shared/kpis";
 import { recomputeLeaderboard } from "./leaderboards";
 import { parisDay } from "./schemas";
@@ -75,6 +76,48 @@ export async function onSubmissionChange(eventId: string, teamId: string, before
 /** Une note du jury : le leaderboard ne suit que des notes changees (pas un commentaire). */
 export async function onEvaluationChange(eventId: string, before: Pick<Evaluation, "scores"> | null, after: Pick<Evaluation, "scores"> | null): Promise<void> {
   if (before && after && JSON.stringify(before.scores) === JSON.stringify(after.scores)) return;
+  await recomputeLeaderboard(eventId);
+}
+
+type RankedTeam = Pick<EventTeam, "name" | "memberIds" | "publishedDateISOString">;
+
+/**
+ * Une equipe d'un tirage publie retouchee (absent retire, retard ajoute, echange, renommee) :
+ * le leaderboard copie ses membres et son nom, il suit. Un brouillon ne classe rien : ignore.
+ */
+export async function onTeamChange(eventId: string, before: RankedTeam | null, after: RankedTeam | null): Promise<void> {
+  if (!before?.publishedDateISOString && !after?.publishedDateISOString) return;
+  if (before && after && before.name === after.name && sameIds(before.memberIds, after.memberIds)) return;
+  await recomputeLeaderboard(eventId);
+}
+
+type RankedStartup = Pick<Startup, "name" | "memberIds">;
+
+/**
+ * Une startup renommee ou dont l'equipe change : les leaderboards qui la classent (evenements
+ * sans matching, ses `startupIds` : pitchs) copient son nom et ses membres, ils suivent.
+ */
+export async function onStartupChange(startupId: string, before: RankedStartup, after: RankedStartup): Promise<void> {
+  if (before.name === after.name && sameIds(before.memberIds, after.memberIds)) return;
+  const events = await db()
+    .collection(COL.events)
+    .where("startupIds", "array-contains", startupId)
+    .select("kind", "matching", "teamSize", "archivedDateISOString")
+    .get();
+  const ranking = events.docs.filter((d) => !d.get("archivedDateISOString") && juryTargetOf(d.data() as PioneersEvent) === "startup");
+  await Promise.all(ranking.map((d) => recomputeLeaderboard(d.id)));
+}
+
+type RankedEvent = Pick<PioneersEvent, "kind" | "matching" | "teamSize" | "startupIds">;
+
+/**
+ * Un evenement dont les cibles changent (startups ajoutees ou retirees, matching pose ou retire),
+ * quel que soit l'ecrivain (ecran Admin, `update_event`, `set_matching`) : son leaderboard suit.
+ * Bareme et metrique de classement recalculent deja eux-memes (services/leaderboards.ts).
+ */
+export async function onEventChange(eventId: string, before: RankedEvent, after: RankedEvent): Promise<void> {
+  const target = juryTargetOf(after);
+  if (target === juryTargetOf(before) && (target === "team" || sameIds(before.startupIds, after.startupIds))) return;
   await recomputeLeaderboard(eventId);
 }
 
