@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeSlackId } from "../shared/slackLinks";
 import { normalizeHttpUrl } from "../shared/text";
 
 // ----------------------------
@@ -42,3 +43,12 @@ export { parisDay, parisToday } from "../shared/dates";
 
 /** Une adresse web ; sans protocole, `https://` est ajoute (`shared/text.ts#normalizeHttpUrl`). */
 export const httpUrl = z.preprocess((v) => (typeof v === "string" ? (normalizeHttpUrl(v) ?? v) : v), z.url({ protocol: /^https?$/ }));
+
+/** Un id Slack (Admin > Batch settings, « Staff only » du profil) : en majuscules, verifie comme a l'ecran ; `null` l'efface. */
+export const slackId = (isValid: (value: string) => boolean, message: string) =>
+  z
+    .string()
+    .transform(normalizeSlackId)
+    .refine((value) => value === null || isValid(value), message)
+    .nullable()
+    .optional();

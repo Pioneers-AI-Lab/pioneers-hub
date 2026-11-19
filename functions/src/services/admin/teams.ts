@@ -6,6 +6,7 @@ import {
   drawGroups,
   nextTeamNumber,
   publishedTeamsWrites,
+  publicNamesWrites,
   publishTeamsWrites,
   replaceMatchingWrites,
   savedPairs,
@@ -18,6 +19,7 @@ import {
   withStartupTeams,
   type DraftTeam,
 } from "../../shared/admin/teams";
+import { publicShortName } from "../../shared/access";
 import { absentFounderIds } from "../../shared/attendance";
 import { COL, docPaths, eventCollectionPaths } from "../../shared/collections";
 import { matchingOf } from "../../shared/events";
@@ -322,6 +324,29 @@ export const editTeams: Operation<typeof EditTeamsInput> = {
       writes,
       { eventId, groups: withLeaders.length },
       JSON.stringify(before) !== JSON.stringify(after),
+    );
+  },
+};
+
+export const RefreshTeamNamesInput = z.object({ eventId: z.string().min(1) }).strict();
+
+/** Admin > matching publie : les noms courts de la page publique des groupes, refaits depuis les fiches (manquants, ou un nom change). */
+export const refreshTeamNames: Operation<typeof RefreshTeamNamesInput> = {
+  name: "refresh_team_names",
+  input: RefreshTeamNamesInput,
+  allowed: staffOnly,
+  async plan(tx, _caller, { eventId }) {
+    const ctx = await eventTeams(tx, eventId);
+    if (!isDrawPublished(ctx.teams)) throw badRequest("not_published", "These groups are not published: their public page does not show them yet.", "eventId");
+    const byId = await foundersOf(tx, ctx.event.batchId, ctx.teams.flatMap((t) => t.memberIds));
+    const nameOf = (id: string) => byId.get(id)?.name ?? id;
+    const stale = ctx.teams
+      .map((team) => ({ team, to: team.memberIds.map((id) => publicShortName(nameOf(id))) }))
+      .filter(({ team, to }) => JSON.stringify(team.memberNames ?? null) !== JSON.stringify(to));
+    return writePlan(
+      { event: ctx.event.name, groups: stale.map(({ team, to }) => ({ name: team.name, from: team.memberNames ?? null, to })) },
+      publicNamesWrites(eventId, stale.map((s) => s.team), nameOf),
+      { eventId, groups: stale.length },
     );
   },
 };

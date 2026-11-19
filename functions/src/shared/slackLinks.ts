@@ -18,6 +18,10 @@ export const isSlackTeamId = (value: string) => /^T[A-Z0-9]{6,}$/.test(value);
 export const isSlackUserId = (value: string) => /^[UW][A-Z0-9]{6,}$/.test(value);
 /** Canal public (`C…`) ou prive (`G…`). */
 export const isSlackChannelId = (value: string) => /^[CG][A-Z0-9]{6,}$/.test(value);
+/** Les messages d'un id fautif : l'ecran et l'API disent la meme chose. */
+export const SLACK_TEAM_ID_HINT = "A workspace ID starts with T, like T0123ABCD.";
+export const SLACK_CHANNEL_ID_HINT = "A channel ID starts with C (or G), like C0123ABCD.";
+export const SLACK_USER_ID_HINT = "A Slack member ID starts with U (or W) and looks like U0123ABCD. In Slack: profile, then Copy member ID.";
 
 /**
  * Message prive par le web : `app_redirect` avec l'id du MEMBRE. Slack ne le

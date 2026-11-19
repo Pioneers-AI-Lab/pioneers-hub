@@ -3,7 +3,7 @@ import { z } from "zod";
 import { COL, docPaths } from "../../shared/collections";
 import type { Batch, User } from "../../shared/types";
 import { badRequest, forbidden, notFound } from "../../api/errors";
-import { inviteAccount as invite, parseAccess, setAccountAccess as setAccess, setAccountDisabled as setDisabled } from "../accounts";
+import { createSetPasswordLink, inviteAccount as invite, parseAccess, setAccountAccess as setAccess, setAccountDisabled as setDisabled } from "../accounts";
 import { syncBatchCalendar } from "../calendarSync";
 import type { Operation } from "../operations";
 import { recomputeBatchScores } from "../scores";
@@ -95,6 +95,24 @@ export const setAccountDisabled: Operation<typeof SetAccountDisabledInput> = {
     assertNotStaff(await readDoc<User>(tx, docPaths.user(auth.uid)));
     const { disabled } = input;
     return effectPlan({ account: auth.email ?? auth.uid, disabled }, [docPaths.user(auth.uid)], () => setDisabled(caller, auth.uid, disabled).then(() => ({ uid: auth.uid, disabled })), auth.disabled !== disabled);
+  },
+};
+
+export const CreateSetPasswordLinkInput = z.object(AccountTarget).strict();
+
+/** Admin > Access : le lien a envoyer a un compte invite qui ne s'est jamais connecte (il choisit son mot de passe). */
+export const createSetPasswordLinkAction: Operation<typeof CreateSetPasswordLinkInput> = {
+  name: "create_set_password_link",
+  input: CreateSetPasswordLinkInput,
+  allowed: staffOnly,
+  async plan(tx, caller, input) {
+    const auth = await accountOf(input);
+    assertNotStaff(await readDoc<User>(tx, docPaths.user(auth.uid)));
+    return effectPlan(
+      { account: auth.email ?? auth.uid, does: "creates a one-time link where they choose their password (only for an account that never signed in); send it to them yourself" },
+      [docPaths.user(auth.uid)],
+      () => createSetPasswordLink(caller.uid, auth.uid).then((link) => ({ uid: auth.uid, link })),
+    );
   },
 };
 

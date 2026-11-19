@@ -276,10 +276,14 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   d'`OperationPlan`, execute apres la transaction de verification (plan `applying`), service des callables reutilise
   (ses `HttpsError` deviennent des erreurs HTTP, `api/errors.ts`). Jamais par l'API : donner / retirer le role staff,
   bloquer un compte staff (injection de consignes via un texte de fondateur), ecrire un score (on corrige l'entree
-  puis `recompute_scores`). Tirage : `draw_teams` est REJOUABLE (`seed`, aleatoire `shared/admin/teams.ts#seededRandom`) : l'apercu montre ce que la confirmation ecrit ; il lit les `private/connections` comme TeamGenerator et n'en rend que des comptes. Plans et cles d'idempotence stockent entree, apercu et resultat en JSON (Firestore refuse un tableau de tableaux) ; l'audit aussi (`storable`). `list actions` : noms et descriptions ; arguments d'une action avec `search`.
+  puis `recompute_scores`). Parite avec l'Admin (19/11) : `create_founders` (Import founders, regle
+  `shared/admin/founders.ts#newFounderWrites`), `set_founder_staff_fields` (one-liner, id Slack : `slackUserIdWrites`, aussi
+  utilise par l'ecran), `set_founder_photo` (URL d'image -> 800 px dans Storage + vignette 128 px, `services/photos.ts`, `sharp`
+  dans functions), `create_set_password_link`, `refresh_team_names`, Slack du batch dans `update_batch` ; `search` filtre tous
+  les types de `list` (`read.ts#matcher`). Tirage : `draw_teams` est REJOUABLE (`seed`, aleatoire `shared/admin/teams.ts#seededRandom`) : l'apercu montre ce que la confirmation ecrit ; il lit les `private/connections` comme TeamGenerator et n'en rend que des comptes. Plans et cles d'idempotence stockent entree, apercu et resultat en JSON (Firestore refuse un tableau de tableaux) ; l'audit aussi (`storable`). `list actions` : noms et descriptions ; arguments d'une action avec `search`.
 - **Guide de l'agent** : outil `pioneers_guide` (`mcp/guide.ts`, staff) : modele, evenements, formulaires, scores,
   vie privee, recettes de correction. En anglais, aucun chiffre ; a tenir a jour avec les actions.
-- Catalogue MCP : 9 outils pour le staff (~3 600 jetons ; 41 actions derriere `pioneers_run`), 4 pour un fondateur, 3 pour un investor. Une capacite de
+- Catalogue MCP : 9 outils pour le staff (~3 600 jetons ; 48 actions derriere `pioneers_run`), 4 pour un fondateur, 3 pour un investor. Une capacite de
   plus = un type d'objet dans `list` / `get` ou une action de `pioneers_run`, jamais un nouvel outil. Pas de valeur
   chiffree dans `mcp/instructions.ts`.
 - `MCP-Protocol-Version` inconnu : retire avant le transport (panne totale vecue chez Trippple).

@@ -1,7 +1,8 @@
 import type { Caller } from "../api/caller";
 import type { Operation } from "./operations";
 import { toInputJsonSchema } from "./schemas";
-import { inviteAccount, recomputeScores, setAccountAccess, setAccountDisabled, syncCalendar } from "./admin/accounts";
+import { createSetPasswordLinkAction, inviteAccount, recomputeScores, setAccountAccess, setAccountDisabled, syncCalendar } from "./admin/accounts";
+import { createFounders, setFounderPhotoAction, setFounderStaffFields } from "./admin/founders";
 import {
   addListValues,
   archiveFounder,
@@ -29,7 +30,7 @@ import {
   setTeamResults,
 } from "./admin/results";
 import { createStartups, rateBackground, rateEdge, reviewFounder, reviewStartup, setAttendanceOptional } from "./admin/reviews";
-import { drawTeams, editTeams, publishTeams, setMatching } from "./admin/teams";
+import { drawTeams, editTeams, publishTeams, refreshTeamNames, setMatching } from "./admin/teams";
 import { scoreJury } from "./admin/jury";
 
 // ----------------------------
@@ -61,6 +62,7 @@ const ACTION_LIST: Described[] = [
   { op: drawTeams, description: "Draw an event's groups as a draft (same seed = same draw): history, shortlists, absences, pairs to keep apart or together." },
   { op: publishTeams, description: "Publish the drafted groups: founders see their group, team histories are recorded." },
   { op: editTeams, description: "Change groups (draft or published): swap, move, late arrival, leader, new group. Published group ids stay." },
+  { op: refreshTeamNames, description: "Redo the short names shown on the public page of published groups (missing names, or a founder renamed)." },
   { op: setTeamResults, description: "Correct a team's results (metrics, product link, proofs, notes), as a staff correction." },
   { op: setOutstanding, description: "Give (or remove) the Outstanding mention to a team with the grid's maximum." },
   { op: scoreJury, description: "Score every team or startup of a jury form at once, as YOUR staff score, with a justification per criterion (read `pioneers_get` `jury_sheet` first)." },
@@ -77,14 +79,18 @@ const ACTION_LIST: Described[] = [
   { op: createStartups, description: "Create the confirmed startups of a batch (from Lock my team): startups, members, team history." },
   { op: createProgram, description: "Create a program." },
   { op: createBatch, description: "Create a batch in a program (upcoming, with its milestones)." },
-  { op: updateBatch, description: "Change a batch: name, dates, status, milestone dates, leaderboard visibility, Google Calendar." },
+  { op: updateBatch, description: "Change a batch: name, dates, status, milestone dates, visibility settings, Google Calendar, Slack workspace and channel." },
   { op: addListValues, description: "Add values to a closed list (skills, industries, position fit)." },
+  { op: createFounders, description: "Create founder profiles in a batch (Admin > Import founders): name, email, category; fill the rest with `pioneers_set_fields`." },
+  { op: setFounderStaffFields, description: "Set a founder's staff-only fields: the track record one-liner, the Slack member ID." },
+  { op: setFounderPhotoAction, description: "Set a founder's photo from a direct image link (large photo and thumbnail, as from their profile), or remove it." },
   { op: linkFounder, description: "Link a founder profile to an account (staff link, as in Admin > Founder profiles)." },
   { op: unlinkFounder, description: "Unlink a founder profile from its account: the account loses the batch, the profile becomes claimable." },
   { op: archiveFounder, description: "Archive a founder profile (duplicate, mistake) or restore it." },
   { op: inviteAccount, description: "Create (or update) an account by email with its access: investor, mentor, or plain. Never staff." },
   { op: setAccountAccess, description: "Change a non-staff account's access (investor IC or portfolio, mentor)." },
   { op: setAccountDisabled, description: "Block or allow a non-staff account's sign-in." },
+  { op: createSetPasswordLinkAction, description: "Create the link where an invited non-staff account that never signed in chooses its password (to send them)." },
   { op: syncCalendar, description: "Sync a batch's events from its Google Calendar now (otherwise automatic)." },
   { op: recomputeScores, description: "Recompute a batch's scores from its current data, after a correction (otherwise every night)." },
 ];

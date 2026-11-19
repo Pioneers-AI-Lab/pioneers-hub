@@ -1,17 +1,16 @@
 // ----------------------------
 // Photo d'un fondateur, preparee dans le navigateur
 // ----------------------------
-// Une image choisie devient (memes tailles que scripts/import-fa26.mjs) :
+// Une image choisie devient (tailles de shared/photos.ts, comme l'API et les scripts) :
 //   - la grande photo : 800 px au plus sur son grand cote, JPEG (Storage) ;
 //   - la vignette des avatars : 128 x 128, recadree au centre (un peu vers le
 //     haut, ou est le visage), JPEG en data URL (`photoUrl`).
 // L'orientation EXIF est appliquee. Une image trop petite est refusee : la
 // couverture de la carte doit rester nette (« HD photo », profil complet).
 
-const COVER_MAX = 800;
-const THUMB_SIZE = 128;
-/** Plus petit cote minimal d'une photo HD. */
-export const PHOTO_MIN_SIDE = 400;
+import { PHOTO_COVER_MAX as COVER_MAX, PHOTO_MIN_SIDE, PHOTO_THUMB_SIZE as THUMB_SIZE } from "@shared/photos";
+
+export { PHOTO_MIN_SIDE };
 
 export type PreparedPhoto = { cover: Blob; thumbnail: string };
 

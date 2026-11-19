@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Box, Button, Group, Input, SegmentedControl, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { batchAudiencesOf, canonicalSubScores, fullSubScores, withSubScoreAudience } from "@shared/access";
-import { isSlackChannelId, isSlackTeamId, normalizeSlackId } from "@shared/slackLinks";
+import { isSlackChannelId, isSlackTeamId, normalizeSlackId, SLACK_CHANNEL_ID_HINT, SLACK_TEAM_ID_HINT } from "@shared/slackLinks";
 import { FOUNDER_PILLARS, pillarName, STARTUP_SUBSCORES, startupSubScoreName } from "@shared/types";
 import type { Batch, BatchAudience, BatchStatus, LeaderboardVisibility, SubScoreKeys, SubScoreVisibility, WithId } from "@shared/types";
 import { calendarIdOf } from "@shared/calendarSync";
@@ -122,8 +122,8 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
   const calendarId = calendarInput.trim() || null;
   const teamId = normalizeSlackId(slackTeamId);
   const channelId = normalizeSlackId(slackChannelId);
-  const teamError = teamId && !isSlackTeamId(teamId) ? "A workspace ID starts with T, like T0123ABCD." : null;
-  const channelError = channelId && !isSlackChannelId(channelId) ? "A channel ID starts with C (or G), like C0123ABCD." : null;
+  const teamError = teamId && !isSlackTeamId(teamId) ? SLACK_TEAM_ID_HINT : null;
+  const channelError = channelId && !isSlackChannelId(channelId) ? SLACK_CHANNEL_ID_HINT : null;
   const [isSaving, setIsSaving] = useState(false);
 
   const dirty =

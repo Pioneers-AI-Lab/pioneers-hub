@@ -1,5 +1,6 @@
 import { writeBatch } from "firebase/firestore";
 import { FOUNDER_SELF_EDITABLE } from "@shared/access";
+import { newPhotoPath, uploadedPhotoPath } from "@shared/photos";
 import { normalizeHttpUrl } from "@shared/text";
 import type { Founder, FounderDirectory, FounderProfile, WithId } from "@shared/types";
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
@@ -62,13 +63,6 @@ export async function saveMyProfile(founder: WithId<Founder>, patch: MyProfilePa
   await batch.commit();
 }
 
-/** Le chemin Storage d'une photo deposee depuis « Mon profil » (`founders/{id}/photo-*.jpg`), d'apres son URL. */
-function uploadedPhotoPath(url: string | null | undefined, founderId: string): string | null {
-  const encoded = url?.match(/\/o\/([^?]+)/)?.[1];
-  const path = encoded ? decodeURIComponent(encoded) : null;
-  return path && new RegExp(`^founders/${founderId}/photo-[A-Za-z0-9_-]+\\.jpg$`).test(path) ? path : null;
-}
-
 /** Les erreurs Storage et Firestore d'une photo, en clair (affichees par `useAction`). */
 function photoError(err: unknown): Error {
   const code = (err as { code?: string }).code;
@@ -107,7 +101,7 @@ async function commitPhoto(founder: WithId<Founder>, thumbnail: string | null, c
  */
 export async function saveProfilePhoto(founder: WithId<Founder>, photo: PreparedPhoto, completes = false) {
   try {
-    const file = storageRef(storage, `founders/${founder.id}/photo-${Date.now().toString(36)}.jpg`);
+    const file = storageRef(storage, newPhotoPath(founder.id));
     await uploadBytes(file, photo.cover, { contentType: "image/jpeg", cacheControl: "public, max-age=31536000" });
     await commitPhoto(founder, photo.thumbnail, await getDownloadURL(file), completes);
   } catch (err) {

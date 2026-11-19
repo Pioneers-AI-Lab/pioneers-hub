@@ -27,6 +27,7 @@ import { useFounder } from "@/context/FounderContext";
 import { useLists } from "@/context/ListsContext";
 import { completesProfile, isRequiredProfileField } from "@/lib/completeness";
 import { saveMyProfile, type MyProfilePatch, type StaffPatch } from "@/lib/profile";
+import { ONE_LINER_MAX } from "@shared/admin/founders";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PhotoUpload } from "./PhotoUpload";
 import { PageLoader } from "@/components/ui/PageLoader";
@@ -80,8 +81,6 @@ function changed<T extends Record<string, unknown>>(initial: T, current: T): Par
 }
 
 const T_SHIRTS = ["XS", "S", "M", "L", "XL", "XXL"];
-/** Une phrase : la grille l'affiche en entier, la liste sur une ligne. */
-const ONE_LINER_MAX = 140;
 
 /** L'asterisque des champs obligatoires, tiree du registre (src/lib/completeness.ts). */
 const req = (key: DbFieldKey) => ({ withAsterisk: isRequiredProfileField(key) });

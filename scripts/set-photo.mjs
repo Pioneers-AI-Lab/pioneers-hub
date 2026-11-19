@@ -19,7 +19,10 @@ import { getStorage } from "firebase-admin/storage";
 import sharp from "sharp";
 
 // Code partage compile (`npm --prefix functions run build`).
-const { docPaths } = createRequire(import.meta.url)("../functions/lib/shared/collections.js");
+const requireShared = createRequire(import.meta.url);
+const { docPaths } = requireShared("../functions/lib/shared/collections.js");
+// Les tailles et le fichier de l'app et de l'API (`set_founder_photo`, qui fait la meme chose depuis une URL).
+const { newPhotoPath, PHOTO_COVER_MAX, PHOTO_MIN_SIDE, PHOTO_THUMB_SIZE } = requireShared("../functions/lib/shared/photos.js");
 
 const [founderId, imagePath] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const write = process.argv.includes("--prod");
@@ -40,16 +43,16 @@ const personId = founder.get("personId");
 
 const original = readFileSync(imagePath);
 const { width, height } = await sharp(original).metadata();
-if (Math.min(width, height) < 400) throw new Error(`photo trop petite (${width} x ${height}), 400 px minimum`);
-const thumb = await sharp(original).rotate().resize(128, 128, { fit: "cover", position: "attention" }).jpeg({ quality: 80 }).toBuffer();
+if (Math.min(width, height) < PHOTO_MIN_SIDE) throw new Error(`photo trop petite (${width} x ${height}), ${PHOTO_MIN_SIDE} px minimum`);
+const thumb = await sharp(original).rotate().resize(PHOTO_THUMB_SIZE, PHOTO_THUMB_SIZE, { fit: "cover", position: "attention" }).jpeg({ quality: 80 }).toBuffer();
 const photoUrl = `data:image/jpeg;base64,${thumb.toString("base64")}`;
-const cover = await sharp(original).rotate().resize(800, 800, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 82, mozjpeg: true }).toBuffer();
+const cover = await sharp(original).rotate().resize(PHOTO_COVER_MAX, PHOTO_COVER_MAX, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 82, mozjpeg: true }).toBuffer();
 
 console.log(`${PROJECT_ID} · ${founder.get("name")} · ${write ? "ECRITURE" : "a blanc"}`);
 console.log(`vignette ${photoUrl.length} car. · grande photo ${cover.length} o · actuelle : ${founder.get("coverPhotoUrl") ?? "aucune"}`);
 if (!write) process.exit(0);
 
-const path = `founders/${founderId}/photo-${Date.now().toString(36)}.jpg`;
+const path = newPhotoPath(founderId);
 const token = randomUUID();
 await getStorage().bucket(BUCKET).file(path).save(cover, {
   contentType: "image/jpeg",

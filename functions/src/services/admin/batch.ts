@@ -21,6 +21,7 @@ import {
 import { canonicalSubScores, fullSubScores, withSubScoreAudience } from "../../shared/access";
 import { eventRoster } from "../../shared/attendance";
 import { COMING_UP_DAYS, TASK_CHECK_RULES } from "../../shared/tasks";
+import { isSlackChannelId, isSlackTeamId, SLACK_CHANNEL_ID_HINT, SLACK_TEAM_ID_HINT } from "../../shared/slackLinks";
 import { COL, docPaths, eventCollectionPaths } from "../../shared/collections";
 import { archiveWrite, createWrite, isArchivedAs, mergeWrite } from "../../shared/docWrites";
 import {
@@ -45,7 +46,7 @@ import {
 } from "../../shared/types";
 import { badRequest, conflict, notFound } from "../../api/errors";
 import type { Operation } from "../operations";
-import { dayString, isoDateTime } from "../schemas";
+import { dayString, isoDateTime, slackId } from "../schemas";
 import { changesOf, mustRead, newDocId, readDoc, readWhere, stamped, staffOnly, writePlan } from "./writes";
 
 // ----------------------------
@@ -299,6 +300,8 @@ export const UpdateBatchInput = z
         `Who sees each sub-score inside the scores (founder: ${FOUNDER_PILLARS.join(", ")}; startup: ${STARTUP_SUBSCORES.join(", ")}): none, staff or founders, never wider than the scores; null: back to the scores setting. Others stay.`,
       ),
     googleCalendarId: z.string().trim().min(1).nullable().optional().describe("Link the batch to a Google Calendar (its events then come from it); null unlinks."),
+    slackTeamId: slackId(isSlackTeamId, SLACK_TEAM_ID_HINT).describe("The batch's Slack workspace ID (founders' Slack links); null removes it."),
+    slackChannelId: slackId(isSlackChannelId, SLACK_CHANNEL_ID_HINT).describe("The batch's Slack channel ID; null removes it."),
   })
   .strict();
 
@@ -306,7 +309,7 @@ export const updateBatch: Operation<typeof UpdateBatchInput> = {
   name: "update_batch",
   input: UpdateBatchInput,
   allowed: staffOnly,
-  async plan(tx, _caller, { batchId, milestones, leaderboardVisibility, startupsVisibility, scoresVisibility, subScoreVisibility, googleCalendarId, ...given }) {
+  async plan(tx, _caller, { batchId, milestones, leaderboardVisibility, startupsVisibility, scoresVisibility, subScoreVisibility, googleCalendarId, slackTeamId, slackChannelId, ...given }) {
     const batch = await mustRead<Batch>(tx, docPaths.batch(batchId), "batch", "batchId");
     const patch: Partial<Batch> = { ...given };
     if (milestones) {
@@ -314,7 +317,7 @@ export const updateBatch: Operation<typeof UpdateBatchInput> = {
       patch.milestones = batch.milestones.map((m) => (dayOf.has(m.key) ? { ...m, dayString: dayOf.get(m.key)! } : m));
     }
     const settings: Partial<BatchSettings> = Object.fromEntries(
-      Object.entries({ leaderboardVisibility, startupsVisibility, scoresVisibility, googleCalendarId }).filter(([, v]) => v !== undefined),
+      Object.entries({ leaderboardVisibility, startupsVisibility, scoresVisibility, googleCalendarId, slackTeamId, slackChannelId }).filter(([, v]) => v !== undefined),
     );
     if (subScoreVisibility) {
       let next = canonicalSubScores(batch.settings.subScoreVisibility);

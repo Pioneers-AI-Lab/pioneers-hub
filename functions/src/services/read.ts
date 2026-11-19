@@ -190,7 +190,7 @@ export const ListInput = z
     pendingOnly: z.boolean().optional().describe("responses: only those with a value waiting for staff approval."),
     founderId: z.string().min(1).optional().describe("notes: notes about this founder (or their startup)."),
     startupId: z.string().min(1).optional().describe("notes: notes about this startup."),
-    search: z.string().trim().min(1).optional().describe("Keep objects whose name contains this (accents and case ignored)."),
+    search: z.string().trim().min(1).optional().describe("Keep objects whose name contains this (accents and case ignored): name, title, a field's address or label, a response's respondent, a note's text."),
     includeArchived: z.boolean().optional(),
   })
   .strict();
@@ -224,11 +224,18 @@ export async function whoami(caller: Caller) {
   };
 }
 
+/** `search` : garde ce dont les textes contiennent la recherche (accents et casse ignores) ; sans recherche, tout. */
+function matcher(search: string | undefined) {
+  const key = search ? searchKey(search) : null;
+  return (...texts: (string | null | undefined)[]) => !key || searchKey(texts.filter(Boolean).join(" ")).includes(key);
+}
+
 export async function listObjects(caller: Caller, input: ListInput): Promise<{ object: string; items: unknown[] }> {
   const db = getFirestore();
   const { object } = input;
+  const hit = matcher(input.search);
 
-  if (object === "fields") return { object, items: describeFields() };
+  if (object === "fields") return { object, items: describeFields().filter((f) => hit(f.dbField, f.label)) };
 
   if (object === "lists") {
     const snaps = await db.getAll(...LIST_KEYS.map((k) => db.doc(docPaths.list(k))));
@@ -239,7 +246,8 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
         .map((s) => {
           const d = s.data() as ClosedList;
           return { key: s.id, label: d.label, values: d.items.filter((i) => !i.archived).map((i) => i.value) };
-        }),
+        })
+        .filter((l) => hit(l.key, l.label)),
     };
   }
 
@@ -252,7 +260,7 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
     const q = input.startupId
       ? db.collection(COL.notes).where("startupId", "==", input.startupId)
       : db.collection(COL.notes).where("founderIds", "array-contains", input.founderId);
-    const notes = (await q.get()).docs.map((d) => withId<Note>(d)).filter((n) => input.includeArchived || !n.archivedDateISOString);
+    const notes = (await q.get()).docs.map((d) => withId<Note>(d)).filter((n) => (input.includeArchived || !n.archivedDateISOString) && hit(n.body));
     return {
       object,
       items: notes
@@ -272,8 +280,7 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
 
   if (object === "accounts") {
     if (!isStaffViewer(caller.viewer)) throw forbidden("not_visible", "Accounts are visible to staff only.");
-    const search = input.search ? searchKey(input.search) : null;
-    const rows = (await listAccounts()).filter((a) => !search || searchKey(`${a.displayName ?? ""} ${a.email ?? ""}`).includes(search));
+    const rows = (await listAccounts()).filter((a) => hit(a.displayName, a.email));
     return { object, items: rows };
   }
 
@@ -283,10 +290,9 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
       .map((d) => withId<Mentor>(d))
       .filter((m) => input.includeArchived || !m.archivedDateISOString);
     const people = mentors.length ? await db.getAll(...mentors.map((m) => db.doc(docPaths.person(m.personId)))) : [];
-    const search = input.search ? searchKey(input.search) : null;
     const items = mentors
       .map((m, i) => ({ id: m.id, name: (people[i]?.get("displayName") as string | undefined) ?? null, company: m.company, title: m.title, status: m.status, programIds: m.programIds }))
-      .filter((m) => !search || searchKey(`${m.name ?? ""} ${m.company ?? ""}`).includes(search))
+      .filter((m) => hit(m.name, m.company))
       .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
     return { object, items };
   }
@@ -304,6 +310,7 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
     if (input.pendingOnly) responses = responses.where("status", "==", "pending_approval");
     const rows = (await responses.get()).docs
       .map((d) => withId<FormResponse>(d))
+      .filter((r) => hit(r.respondentName))
       .sort((a, b) => b.submittedDateISOString.localeCompare(a.submittedDateISOString));
     return {
       object,
@@ -337,7 +344,7 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
     if (roleOf(caller, batchId) === "public") throw forbidden("not_visible", "A batch's tasks are visible to its founders, staff and investors.");
     const tasks = (await db.collection(COL.batchTasks).where("batchId", "==", batchId).get()).docs
       .map((d) => withId<BatchTask>(d))
-      .filter((t) => input.includeArchived || !t.archivedDateISOString)
+      .filter((t) => (input.includeArchived || !t.archivedDateISOString) && hit(t.title))
       .sort((a, b) => a.order - b.order);
     return { object, items: tasks.map((t) => ({ id: t.id, ...taskDraftOf(t), order: t.order, archived: t.archivedDateISOString !== null })) };
   }
@@ -347,11 +354,10 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
     const role = roleOf(caller, batchId);
     let q: FirebaseFirestore.Query = db.collection(COL.forms).where("batchId", "==", batchId);
     if (input.eventId) q = q.where("eventId", "==", input.eventId);
-    const search = input.search ? searchKey(input.search) : null;
     const forms = (await q.get()).docs
       .map((d) => withId<Form>(d))
       .filter((f) => (input.includeArchived || !f.archivedDateISOString) && canSeeForm(role, f))
-      .filter((f) => !search || searchKey(f.title).includes(search))
+      .filter((f) => hit(f.title))
       .sort((a, b) => String(a.opensDateISOString ?? "~").localeCompare(String(b.opensDateISOString ?? "~")));
     return { object, items: forms.map(shortForm) };
   }
@@ -363,11 +369,10 @@ export async function listObjects(caller: Caller, input: ListInput): Promise<{ o
     if (!value) throw badRequest("missing_argument", `\`${spec.by}\` is required to list \`${object}\`.`, spec.by);
     query = query.where(spec.by, "==", value);
   }
-  const search = input.search ? searchKey(input.search) : null;
   const docs = (await query.get()).docs
     .map((d) => withId<{ name?: string; archivedDateISOString?: string | null } & Record<string, unknown>>(d))
     .filter((d) => input.includeArchived || !d.archivedDateISOString)
-    .filter((d) => !search || searchKey(String(d.name ?? "")).includes(search));
+    .filter((d) => hit(String(d.name ?? "")));
   // La carte d'un fondateur est publique (regle `founders`) : seuls les evenements se filtrent.
   const canSee = object === "events" ? await eventFilterFor(caller, input.batchId!) : null;
   const visible = canSee ? docs.filter((d) => canSee(d as unknown as PioneersEvent)) : docs;

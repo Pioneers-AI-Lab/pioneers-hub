@@ -203,6 +203,7 @@ Each document has its audience (see \`model\`). Do not copy a value from a restr
 2. Before publication: \`draw_teams\` (constraints: \`keepApart\`, \`keepTogether\`, \`excludeFounderIds\`). The preview shows the groups and what the draw had to relax; another \`seed\` gives another draw. It is saved as a draft.
 3. \`publish_teams\` when the user agrees: founders see their group.
 4. After publication: no new draw, only \`edit_teams\` with the full list of groups (published group ids stay, a group with results cannot be emptied).
+5. Names missing or out of date on the public page of the groups: \`refresh_team_names\`.
 
 ## Score a jury with Claude (hackathon, pitch)
 1. \`pioneers_get\` \`jury_sheet\` with the event's id: the grid (criteria, scale, points), every team or startup with its Submission, links and form answers, and your earlier scores. Each target has a \`status\`: \`to_score\` (submitted, every form filled: team forms and each present member's peer rating), \`incomplete\` (\`owes\`: each form still due, and who; \`due: team\`: one answer is enough), \`waiting\` (a form it owes is not open yet: \`formsNotOpenYet\`; scoring it now is the user's call), \`no_submission\`, \`scored\` (by you). If \`juryForm.locked\`, stop: the scores are locked (reopening is the user's call).
@@ -234,6 +235,16 @@ Each document has its audience (see \`model\`). Do not copy a value from a restr
 3. Wrong field or type: archive the question and add a corrected one. Never re-target a question that feeds an indicator.
 4. Values already written to a wrong field stay there: write the right field with \`pioneers_set_fields\`; clearing the wrong value is done in the app.
 5. A new required question reopens the form for those who already answered: warn the user first.
+
+## Add founders to a batch (Admin > Import founders)
+1. From a CSV or a list: \`pioneers_list\` founders of the batch first, to spot who already has a profile (same name or email): complete those with \`pioneers_set_fields\`, never create them twice.
+2. \`pioneers_run\` \`create_founders\` with the new ones (first name, last name, onboarding email, category).
+3. Fill each profile with \`pioneers_set_fields\` (one call per founder, several fields at once). New skills, industries or roles: \`add_list_values\` first.
+4. Staff-only fields (track record one-liner, Slack member ID): \`set_founder_staff_fields\`. A photo: \`set_founder_photo\` with a direct, public image link, or null to remove it.
+
+## Invite an account that will set a password
+1. \`invite_account\` with the email and access (never staff).
+2. \`create_set_password_link\` for that account (only if it never signed in) and give the link to the user to send: anyone holding it can choose the password, so never post it anywhere else.
 
 ## A founder linked the wrong profile
 1. Find the account (\`pioneers_list\` accounts) and both profiles (\`pioneers_list\` founders, then \`pioneers_get\`).

@@ -5,6 +5,7 @@
 //
 // Passe par la reecriture Hosting, comme en production : https://pioneers-hub-api.web.app.
 // Code de sortie 1 au premier ecart.
+import { createServer } from "node:http";
 import { createRequire } from "node:module";
 const require = createRequire(new URL("../functions/package.json", import.meta.url));
 
@@ -501,6 +502,10 @@ const call = async (key, name, args) => {
   a = await run("set_account_access", { uid: "lp-1", roles: ["investor"], investorAccess: "portfolio" });
   a = await run("invite_account", { email: "new.investor@pioneers.test", roles: ["investor"], investorAccess: "portfolio" });
   check(a.applied?.data?.result?.created === true, "invite_account creates the account", a.applied?.data);
+  a = await run("create_set_password_link", { email: "new.investor@pioneers.test" });
+  check(/^https?:\/\//.test(a.applied?.data?.result?.link ?? ""), "create_set_password_link gives the link of an invited account", a.applied?.data);
+  t = await call(key, "pioneers_run", { action: "create_set_password_link", args: { uid: "staff-1" } });
+  check(t.isError && /staff_account/.test(t.data), "create_set_password_link refuses a staff account", t.data);
   a = await run("set_account_disabled", { uid: "stranger-1", disabled: true });
   check((await getAuth().getUser("stranger-1")).disabled === true, "set_account_disabled blocks sign-in", a.applied?.data);
   t = await call(key, "pioneers_run", { planId: a.preview.data.planId });
@@ -624,6 +629,67 @@ const call = async (key, name, args) => {
   w = await lumenRow((row) => row?.name === lumenName);
   check(w.ok, "a direct write (Admin screen) adds it back: the leaderboard follows", w.row);
 
+  // Parite avec l'Admin (19/11) : bareme, metrique, noms publics, Slack du batch, champs staff, import, photo, recherche
+  // Un refus attendu : a l'apercu, ou a la confirmation pour une action hors transaction (`apply`).
+  const refuses = async (action, args, code, label, apply = false) => {
+    let r = await call(key, "pioneers_run", { action, args });
+    if (apply && !r.isError) r = await call(key, "pioneers_run", { planId: r.data?.planId });
+    check(r.isError && code.test(r.data), label, r.data);
+  };
+  const scoringItems = (await db.doc(`events/${drawEventId}`).get()).get("scoring")?.items ?? [];
+  a = await run("set_event_scoring", { eventId: drawEventId, items: scoringItems });
+  check(a.applied && !a.applied.isError && JSON.stringify((await db.doc(`events/${drawEventId}`).get()).get("scoring")?.items) === JSON.stringify(scoringItems), "set_event_scoring sets the grid", a.applied?.data ?? a.preview.data);
+  a = await run("set_ranking_metric", { eventId: "demo-hackathon-1", metricKey: "callsMade" });
+  w = await rowWhen("demo-hackathon-1", "team-a", (row) => row?.score === 12);
+  check(a.applied && !a.applied.isError && w.ok, "set_ranking_metric ranks the event by a metric", w.row ?? a.preview.data);
+  await run("set_ranking_metric", { eventId: "demo-hackathon-1", metricKey: null });
+  await db.doc(`events/${drawEventId}/teams/${teamA.id}`).update({ memberNames: null });
+  a = await run("refresh_team_names", { eventId: drawEventId });
+  check((await db.doc(`events/${drawEventId}/teams/${teamA.id}`).get()).get("memberNames")?.length === teamA.memberIds.length, "refresh_team_names restores the public names", a.preview.data);
+  a = await run("update_batch", { batchId: "fall-2026", slackTeamId: "t0123abcd", slackChannelId: "C0123ABCD" });
+  rb = (await db.doc("batches/fall-2026").get()).get("settings");
+  check(rb.slackTeamId === "T0123ABCD" && rb.slackChannelId === "C0123ABCD", "update_batch sets the batch's Slack workspace and channel", a.applied?.data ?? a.preview.data);
+  await refuses("update_batch", { batchId: "fall-2026", slackChannelId: "X12" }, /channel ID/, "update_batch refuses a wrong Slack channel ID");
+  const ada = (await db.doc("founders/ada-example").get()).data();
+  const adaSlackBefore = (await db.doc(`people/${ada.personId}`).get()).get("slackUserId") ?? null;
+  a = await run("set_founder_staff_fields", { founderId: "ada-example", trackRecordOneLiner: "Built two dev tools", slackUserId: "u0123abcd" });
+  const adaDir = (await db.doc("founders/ada-example/private/directory").get()).data();
+  const adaPerson = (await db.doc(`people/${ada.personId}`).get()).data();
+  check((await db.doc("founders/ada-example").get()).get("trackRecordOneLiner") === "Built two dev tools" && adaDir.slackUserId === "U0123ABCD" && adaPerson.slackUserId === "U0123ABCD", "set_founder_staff_fields writes the one-liner and the Slack ID (and its copy)", a.applied?.data ?? a.preview.data);
+  await refuses("set_founder_staff_fields", { founderId: "ada-example", slackUserId: "nope" }, /member ID/, "set_founder_staff_fields refuses a wrong Slack ID");
+  await run("set_founder_staff_fields", { founderId: "ada-example", trackRecordOneLiner: ada.trackRecordOneLiner ?? null, slackUserId: adaSlackBefore });
+  a = await run("create_founders", { batchId: "fall-2026", founders: [{ firstName: "Nora", lastName: "Newcomer", email: "nora.newcomer@pioneers.test", profileCategory: "technical" }, { firstName: "Omar", lastName: "Noemail" }] });
+  const newIds = a.applied?.data?.result?.founderIds ?? [];
+  const nora = newIds[0] ? (await db.doc(`founders/${newIds[0]}`).get()).data() : null;
+  const noraDocs = newIds[0] ? await Promise.all(["directory", "profile", "internal"].map((d) => db.doc(`founders/${newIds[0]}/private/${d}`).get())) : [];
+  check(newIds.length === 2 && nora?.name === "Nora Newcomer" && nora.batchId === "fall-2026" && noraDocs.every((d) => d.exists) && noraDocs[0].get("email") === "nora.newcomer@pioneers.test", "create_founders creates the profiles and their private documents", a.applied?.data ?? a.preview.data);
+  check((await db.doc(`people/${nora?.personId}`).get()).get("founderIds")?.includes(newIds[0]), "create_founders creates the person", nora);
+  await refuses("create_founders", { batchId: "fall-2026", founders: [{ firstName: "Ada", lastName: "Example" }] }, /already_in_batch/, "create_founders refuses a founder already in the batch");
+  a = await run("archive_founder", { founderId: newIds[1], archived: true });
+  // Une image servie en local : la fonction la telecharge, la reduit, la depose dans Storage.
+  const sharp = require("sharp");
+  const png = await sharp({ create: { width: 600, height: 500, channels: 3, background: "#0db0f5" } }).png().toBuffer();
+  const small = await sharp({ create: { width: 120, height: 120, channels: 3, background: "#0db0f5" } }).png().toBuffer();
+  const server = createServer((req, res) => {
+    res.writeHead(200, { "content-type": req.url === "/page" ? "text/html" : "image/png" });
+    res.end(req.url === "/small.png" ? small : req.url === "/page" ? "<html></html>" : png);
+  });
+  await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
+  const imageBase = `http://127.0.0.1:${server.address().port}`;
+  a = await run("set_founder_photo", { founderId: newIds[0], imageUrl: `${imageBase}/photo.png` });
+  let noraNow = (await db.doc(`founders/${newIds[0]}`).get()).data();
+  check(a.applied && !a.applied.isError && noraNow.photoUrl?.startsWith("data:image/jpeg;base64,") && /photo-.+\.jpg/.test(decodeURIComponent(noraNow.coverPhotoUrl ?? "")), "set_founder_photo stores the large photo and the thumbnail", a.applied?.data ?? a.preview.data);
+  await refuses("set_founder_photo", { founderId: newIds[0], imageUrl: `${imageBase}/small.png` }, /image_too_small/, "set_founder_photo refuses an image under 400 px", true);
+  await refuses("set_founder_photo", { founderId: newIds[0], imageUrl: `${imageBase}/page` }, /not_an_image/, "set_founder_photo refuses a web page", true);
+  a = await run("set_founder_photo", { founderId: newIds[0], imageUrl: null });
+  noraNow = (await db.doc(`founders/${newIds[0]}`).get()).data();
+  check(noraNow.photoUrl === null && noraNow.coverPhotoUrl === null, "set_founder_photo removes the photo", noraNow);
+  server.close();
+  t = await call(key, "pioneers_list", { object: "fields", search: "linkedin" });
+  check(t.data?.items?.length === 1 && t.data.items[0].dbField === "person.linkedinUrl", "list fields filters by `search`", t.data?.items?.map((f) => f.dbField));
+  t = await call(key, "pioneers_list", { object: "fields", search: "whatsapp" });
+  check(t.data?.items?.length >= 1 && t.data.items.every((f) => /whatsapp/i.test(`${f.dbField} ${f.label}`)), "list fields: search by label or address", t.data?.items?.map((f) => f.dbField));
+
   // Jury et classement
   t = await call(key, "pioneers_run", { action: "delete_jury_score", args: { eventId: "demo-hackathon-2", evaluationId: "nope" } });
   check(t.isError && /evaluation_not_found/.test(t.data), "delete_jury_score refuses an unknown score", t.data);
@@ -643,6 +709,8 @@ const call = async (key, name, args) => {
   });
   t = await call(key, "pioneers_list", { object: "responses", formId: "demo-weekly-form", pendingOnly: true });
   check(t.data?.items?.length === 1 && t.data.items[0].writes[0].writeIndex === 0, "list responses: those waiting for approval", t.data);
+  t = await call(key, "pioneers_list", { object: "responses", formId: "demo-weekly-form", search: "nobody by this name" });
+  check(Array.isArray(t.data?.items) && t.data.items.length === 0, "list responses filters by `search` (respondent)", t.data);
   t = await call(key, "pioneers_list", { object: "responses", formId: "demo-peer-1" });
   check(t.isError && /private_answers/.test(t.data), "peer-rating responses are never listed", t.data);
   a = await run("decide_form_write", { responseId: "check-pending", writeIndex: 0, approve: false });
