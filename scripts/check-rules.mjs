@@ -1184,6 +1184,7 @@ console.log("tasks (To do checklist)");
 
   const pub = await clientAs(null);
   await expectDenied("public lists the tasks of the batch", () => count(tasksOf(pub.db)));
+  await expectDenied("public reads the resources of the batch", () => read(doc(pub.db, "batchResources/fall-2026")));
   await deleteApp(pub.app);
 
   // Un compte neuf : « stranger-1 » a reclame un profil de fall-2026 plus haut.
@@ -1196,6 +1197,9 @@ console.log("tasks (To do checklist)");
   await expectDenied("founder reads a task of another batch", () => read(doc(ada.db, "batchTasks/check-task-other")));
   await expectDenied("founder creates a task", () => setDoc(doc(ada.db, "batchTasks/check-by-ada"), newTask));
   await expectDenied("founder edits a task", () => setDoc(doc(ada.db, "batchTasks/demo-task-intro"), { title: "x" }, { merge: true }));
+  await expectOk("founder reads the resources of her batch", () => read(doc(ada.db, "batchResources/fall-2026")));
+  await expectDenied("founder reads the resources of another batch", () => read(doc(ada.db, "batchResources/spring-2026")));
+  await expectDenied("founder writes the resources of her batch", () => setDoc(doc(ada.db, "batchResources/fall-2026"), { items: [] }));
   await expectOk("founder lists her own ticks", () =>
     count(query(collection(ada.db, "taskCompletions"), where("batchId", "==", "fall-2026"), where("founderId", "==", "ada-example"))),
   );
@@ -1225,6 +1229,7 @@ console.log("tasks (To do checklist)");
   await deleteApp(lp.app);
 
   const staff = await clientAs("staff-1");
+  await expectOk("staff writes the resources of the batch", () => setDoc(doc(staff.db, "batchResources/fall-2026"), { programId: "accelerator", batchId: "fall-2026", items: [], updatedDateISOString: stamp }));
   await expectOk("staff creates a task", () => setDoc(doc(staff.db, "batchTasks/check-by-staff"), { ...newTask, createdDateISOString: stamp, updatedDateISOString: stamp }));
   await expectOk("staff archives a task", () =>
     setDoc(doc(staff.db, "batchTasks/check-by-staff"), { archivedDateISOString: stamp, updatedDateISOString: stamp }, { merge: true }),

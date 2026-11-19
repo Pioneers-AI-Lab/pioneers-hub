@@ -40,7 +40,7 @@ staff > investor IC > investor portfolio > founder > public. Mentors have no acc
 - Staff: everything, plus the admin tools.
 - Investor IC: reads what staff reads, except individual peer ratings, raw form responses, Lock my team answers (\`teamLocks\`), the weekly update reviews (\`founderReviews\`, \`startupReviews\`), the shortlist history (\`shortlistHistory\`), founders' task ticks, the old picks, API keys, the audit log and the jury link; enters evaluations; no admin tools.
 - Investor portfolio: directory, startups, KPIs and scores; no notes, appraisals or personal data.
-- Founder: their batch's directory, their own private documents, their startup's private data when a member, their forms and tasks.
+- Founder: their batch's directory and resources (the useful links of the batch home, \`resources\` of the batch, set with \`update_batch\`), their own private documents, their startup's private data when a member, their forms and tasks.
 - Public (no account): founder and startup cards, events, forms, batch stats, and leaderboards when the batch allows it (\`settings.leaderboardVisibility\`).
 
 ## Why a field lives where it does

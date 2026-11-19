@@ -5,9 +5,10 @@ import Link from "next/link";
 import { Anchor, Button, Divider, SegmentedControl, Stack, Text } from "@mantine/core";
 import { IconBrandSlack } from "@tabler/icons-react";
 import { slackWorkspaceUrl } from "@shared/slackLinks";
-import type { BatchStats } from "@shared/types";
+import type { BatchResource, BatchStats } from "@shared/types";
 import { startupWeightingHint } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
+import { useBatchResources } from "@/context/BatchResourcesContext";
 import { useCohort } from "@/context/CohortContext";
 import { useFounders } from "@/context/FoundersContext";
 import { useProgram } from "@/context/ProgramContext";
@@ -16,7 +17,8 @@ import { PROFILE_CATEGORY_LABEL, formatDay, formatScore, percent, todayDayString
 import { canSeeScoreDetails, canSeeStartupsTab } from "@shared/access";
 import { SHOW_MILESTONES } from "@/lib/features";
 import { paths } from "@/lib/paths";
-import { LinkRow, Row, RowList } from "@/components/ui/Rows";
+import { useHelpToggle } from "@/components/ui/Help";
+import { ActionRow, LinkRow, Row, RowList } from "@/components/ui/Rows";
 import { Section } from "@/components/ui/Section";
 import { StatGrid, StatTile } from "@/components/ui/StatTile";
 import { ChartCard } from "@/components/charts/ChartCard";
@@ -32,7 +34,8 @@ import { NextSession } from "@/components/event/NextSession";
 // quel qu'il soit, « See all » vers l'onglet Calendar), la vue d'ensemble du
 // batch (« Batch overview », pour tous : `batchStats` est public ; effectif,
 // experience, profils, competences, nationalites), les meilleurs fondateurs et
-// startups (qui voit les scores, `settings.scoresVisibility`), les resultats. Les prochains
+// startups (qui voit les scores, `settings.scoresVisibility`), les resultats, puis les liens
+// utiles (« Resources », `batchResources` : membres du batch, staff, investors). Les prochains
 // evenements et « Add to calendar » vivent sur la page Calendar ; la tuile Startups suit
 // `settings.startupsVisibility` (Admin > Batch settings), les jalons sont masques (lib/features.ts).
 export default function BatchHomePage() {
@@ -41,6 +44,7 @@ export default function BatchHomePage() {
   const { founders } = useFounders();
   const { startups } = useStartups();
   const { stats, canSeeScores, founderPerformance, startupScoreOf, founderScaleOf, startupScaleOf } = useCohort();
+  const { resources } = useBatchResources();
 
   const today = todayDayString();
   // Espace Slack du batch, pas un canal (le canal configure peut etre reserve au
@@ -207,7 +211,33 @@ export default function BatchHomePage() {
           </RowList>
         </Section>
       )}
+
+      {resources.length > 0 && (
+        <Section title="Resources">
+          <RowList>
+            {resources.map((r, i) => (
+              <ResourceRow key={i} resource={r} />
+            ))}
+          </RowList>
+        </Section>
+      )}
     </Stack>
+  );
+}
+
+/** Un lien utile : la ligne ouvre la ressource, le (?) a droite deplie sa description. */
+function ResourceRow({ resource }: { resource: BatchResource }) {
+  const { label, description, url } = resource;
+  const { isOpen, toggle } = useHelpToggle(label);
+  return (
+    <>
+      <ActionRow href={url} title={label} action={description ? toggle : null} />
+      {description && isOpen && (
+        <Text size="sm" c="dimmed" pb="sm" style={{ whiteSpace: "pre-line" }}>
+          {description}
+        </Text>
+      )}
+    </>
   );
 }
 

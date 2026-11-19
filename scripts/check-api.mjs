@@ -650,6 +650,15 @@ const call = async (key, name, args) => {
   rb = (await db.doc("batches/fall-2026").get()).get("settings");
   check(rb.slackTeamId === "T0123ABCD" && rb.slackChannelId === "C0123ABCD", "update_batch sets the batch's Slack workspace and channel", a.applied?.data ?? a.preview.data);
   await refuses("update_batch", { batchId: "fall-2026", slackChannelId: "X12" }, /channel ID/, "update_batch refuses a wrong Slack channel ID");
+  a = await run("update_batch", { batchId: "fall-2026", resources: [{ label: " Handbook ", url: "notion.so/handbook", description: " " }, { label: "Calendar", url: "/programs/accelerator/batches/fall-2026/calendar" }] });
+  const rr = (await db.doc("batchResources/fall-2026").get()).get("items");
+  check(
+    JSON.stringify(rr) === JSON.stringify([{ label: "Handbook", description: null, url: "https://notion.so/handbook" }, { label: "Calendar", description: null, url: "/programs/accelerator/batches/fall-2026/calendar" }]),
+    "update_batch sets the batch's resources, cleaned, in order",
+    a.applied?.data ?? a.preview.data,
+  );
+  await refuses("update_batch", { batchId: "fall-2026", resources: [{ label: "", url: "https://x.org" }] }, /label/, "update_batch refuses a resource without a label");
+  await run("update_batch", { batchId: "fall-2026", resources: [] });
   const ada = (await db.doc("founders/ada-example").get()).data();
   const adaSlackBefore = (await db.doc(`people/${ada.personId}`).get()).get("slackUserId") ?? null;
   a = await run("set_founder_staff_fields", { founderId: "ada-example", trackRecordOneLiner: "Built two dev tools", slackUserId: "u0123abcd" });

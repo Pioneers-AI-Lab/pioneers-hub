@@ -1,4 +1,5 @@
 import { BatchProvider } from "@/context/BatchContext";
+import { BatchResourcesProvider } from "@/context/BatchResourcesContext";
 import { CohortProvider } from "@/context/CohortContext";
 import { EventsProvider } from "@/context/EventsContext";
 import { FoundersProvider } from "@/context/FoundersContext";
@@ -15,7 +16,8 @@ import { BatchShell } from "./_chrome/BatchShell";
 // /startups, chaque passage de l'un a l'autre desabonnerait puis relirait tout
 // (lecon Trippple : garder l'abonnement EST le cache). Ce qui est au VISITEUR
 // fondateur (ma shortlist / mes rencontres, les taches et mes coches) aussi :
-// cible `null` s'il n'est pas fondateur du batch.
+// cible `null` s'il n'est pas fondateur du batch. Les liens utiles de l'accueil aussi (cible
+// `null` pour un visiteur public).
 export default function BatchLayout({ children }: LayoutProps<"/programs/[programId]/batches/[batchId]">) {
   return (
     <BatchProvider>
@@ -27,7 +29,9 @@ export default function BatchLayout({ children }: LayoutProps<"/programs/[progra
                 <LeaderboardsProvider>
                   <MyConnectionsProvider>
                     <TasksProvider>
-                      <BatchShell>{children}</BatchShell>
+                      <BatchResourcesProvider>
+                        <BatchShell>{children}</BatchShell>
+                      </BatchResourcesProvider>
                     </TasksProvider>
                   </MyConnectionsProvider>
                 </LeaderboardsProvider>

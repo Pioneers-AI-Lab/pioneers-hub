@@ -1,19 +1,21 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Box, Button, Group, Input, SegmentedControl, Stack, Text, TextInput } from "@mantine/core";
+import { Box, Button, Group, Input, SegmentedControl, Stack, Text, Textarea, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { batchAudiencesOf, canonicalSubScores, fullSubScores, withSubScoreAudience } from "@shared/access";
+import { BATCH_RESOURCE_LIMITS, moveInList, parseBatchResource } from "@shared/admin/batch";
 import { isSlackChannelId, isSlackTeamId, normalizeSlackId, SLACK_CHANNEL_ID_HINT, SLACK_TEAM_ID_HINT } from "@shared/slackLinks";
 import { FOUNDER_PILLARS, pillarName, STARTUP_SUBSCORES, startupSubScoreName } from "@shared/types";
-import type { Batch, BatchAudience, BatchStatus, LeaderboardVisibility, SubScoreKeys, SubScoreVisibility, WithId } from "@shared/types";
+import type { Batch, BatchAudience, BatchResource, BatchStatus, LeaderboardVisibility, SubScoreKeys, SubScoreVisibility, WithId } from "@shared/types";
 import { calendarIdOf } from "@shared/calendarSync";
 import type { CalendarSyncResult } from "@shared/types";
 import { joinList } from "@/lib/format";
 import { CalendarSyncStatus } from "@/components/admin/CalendarSyncStatus";
 import { useAdmin } from "@/context/AdminContext";
+import { useBatchResources } from "@/context/BatchResourcesContext";
 import { useAction } from "@/hooks/useAction";
-import { updateBatch } from "@/lib/batchAdmin";
+import { saveBatchSettings } from "@/lib/batchAdmin";
 import { call } from "@/lib/firebase";
 import { paths } from "@/lib/paths";
 import { BatchPicker } from "@/components/admin/BatchPicker";
@@ -25,15 +27,16 @@ import { Section } from "@/components/ui/Section";
 // visibilite du leaderboard (masque pendant les mutual picks, SPECS §12 q.1), qui voit
 // l'onglet Startups et les scores (18/11, shared/access.ts#canSeeStartupsTab / canSeeScores),
 // Slack, l'agenda Google (SPECS §2, 16/11 : ses evenements deviennent ceux du
-// batch). Et la creation d'un programme ou d'un batch.
+// batch), les liens utiles de l'accueil (`batchResources`, 19/11). Et la creation d'un programme ou d'un batch.
 export default function BatchSettingsPage() {
   const { batch, batches, programs, selectBatch } = useAdmin();
+  const { resources, updatedDateISOString: resourcesUpdated } = useBatchResources();
   return (
     <>
       <PageHeader back={{ href: paths.admin(), label: "Admin" }} title="Batch settings" />
       <BatchPicker />
       {/* Remonte a chaque modification distante ou changement de batch : le brouillon repart de la base. */}
-      <SettingsForm key={`${batch.id}:${batch.updatedDateISOString}`} batch={batch}>
+      <SettingsForm key={`${batch.id}:${batch.updatedDateISOString}:${resourcesUpdated}`} batch={batch} resources={resources}>
         <ScoresSection batch={batch} />
         <Section title="Programs and batches" help={`${programs.length} programs, ${batches.length} batches. A new batch becomes the one you work on.`}>
           <Group>
@@ -107,7 +110,7 @@ function SubScoresControl({ scores, value, onChange }: { scores: BatchAudience; 
 }
 
 /** `children` : ce qui s'affiche sous les reglages, avant la barre d'enregistrement. */
-function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: ReactNode }) {
+function SettingsForm({ batch, resources, children }: { batch: WithId<Batch>; resources: BatchResource[]; children: ReactNode }) {
   const [status, setStatus] = useState<BatchStatus>(batch.status);
   const [visibility, setVisibility] = useState<LeaderboardVisibility>(batch.settings.leaderboardVisibility);
   const audiences = batchAudiencesOf(batch.settings);
@@ -124,9 +127,16 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
   const channelId = normalizeSlackId(slackChannelId);
   const teamError = teamId && !isSlackTeamId(teamId) ? SLACK_TEAM_ID_HINT : null;
   const channelError = channelId && !isSlackChannelId(channelId) ? SLACK_CHANNEL_ID_HINT : null;
+  const [resourceDrafts, setResourceDrafts] = useState(resources);
+  // Une ressource laissee vide ne s'enregistre pas ; une a moitie remplie bloque l'enregistrement.
+  // Une fois par ligne : `null` pour une ressource laissee vide (ni enregistree, ni signalee).
+  const parsedResources = resourceDrafts.map((r) => (r.label.trim() || r.url.trim() || r.description?.trim() ? parseBatchResource(r) : null));
+  const resourcesInvalid = parsedResources.some((p) => p && "problem" in p);
+  const keptResources = parsedResources.flatMap((p) => (p && "resource" in p ? [p.resource] : []));
+  const resourcesDirty = resourcesInvalid || JSON.stringify(keptResources) !== JSON.stringify(resources);
   const [isSaving, setIsSaving] = useState(false);
 
-  const dirty =
+  const settingsDirty =
     status !== batch.status ||
     visibility !== batch.settings.leaderboardVisibility ||
     startupsVisibility !== audiences.startups ||
@@ -137,16 +147,23 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
     teamId !== (batch.settings.slackTeamId ?? null) ||
     channelId !== batch.settings.slackChannelId ||
     calendarId !== calendarIdOf(batch);
+  const dirty = settingsDirty || resourcesDirty;
 
   const save = async () => {
     setIsSaving(true);
     try {
-      await updateBatch(batch.id, {
-        status,
-        endDayString: endDay || null,
-        milestones,
-        settings: { ...batch.settings, leaderboardVisibility: visibility, startupsVisibility, scoresVisibility, subScoreVisibility: fullSubScores(subScoreVisibility), slackTeamId: teamId, slackChannelId: channelId, googleCalendarId: calendarId },
-      });
+      await saveBatchSettings(
+        batch,
+        settingsDirty
+          ? {
+              status,
+              endDayString: endDay || null,
+              milestones,
+              settings: { ...batch.settings, leaderboardVisibility: visibility, startupsVisibility, scoresVisibility, subScoreVisibility: fullSubScores(subScoreVisibility), slackTeamId: teamId, slackChannelId: channelId, googleCalendarId: calendarId },
+            }
+          : null,
+        resourcesDirty ? keptResources : null,
+      );
       notifications.show({ message: "Settings saved" });
     } catch (err) {
       notifications.show({ color: "red", message: (err as Error).message });
@@ -231,10 +248,12 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
         </Stack>
       </Section>
 
+      <ResourcesSection value={resourceDrafts} parsed={parsedResources} onChange={setResourceDrafts} />
+
       {children}
 
       <Box className="savebar">
-        <Button size="md" fullWidth disabled={!dirty || teamError !== null || channelError !== null} loading={isSaving} onClick={save}>
+        <Button size="md" fullWidth disabled={!dirty || teamError !== null || channelError !== null || resourcesInvalid} loading={isSaving} onClick={save}>
           {dirty ? "Save settings" : "No changes"}
         </Button>
         {!dirty && (
@@ -244,6 +263,71 @@ function SettingsForm({ batch, children }: { batch: WithId<Batch>; children: Rea
         )}
       </Box>
     </>
+  );
+}
+
+const BLANK_RESOURCE: BatchResource = { label: "", description: null, url: "" };
+
+/**
+ * Les liens utiles de l'accueil du batch, dans leur ordre (membres du batch, staff,
+ * investors ; jamais un visiteur public). Une carte par lien : libelle, lien, description
+ * (depliee au (?) de la ligne), et de quoi la deplacer ou la retirer.
+ */
+function ResourcesSection({
+  value,
+  parsed,
+  onChange,
+}: {
+  value: BatchResource[];
+  /** `parseBatchResource` de chaque ligne, `null` si elle est vide. */
+  parsed: (ReturnType<typeof parseBatchResource> | null)[];
+  onChange: (v: BatchResource[]) => void;
+}) {
+  const set = (i: number, patch: Partial<BatchResource>) => onChange(value.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  return (
+    <Section
+      title="Resources"
+      help="Useful links at the bottom of the batch home, in this order, for the batch's founders, staff and investors (never a public visitor). The description opens from the (?) of its row."
+    >
+      {value.map((r, i) => {
+        const p = parsed[i];
+        const errorOf = (field: "label" | "url") => (p && "problem" in p && p.field === field ? p.problem : null);
+        return (
+          <Stack key={i} gap="sm" className="card card-pad">
+            <TextInput label="Label" maxLength={BATCH_RESOURCE_LIMITS.label} value={r.label} error={errorOf("label")} onChange={(e) => set(i, { label: e.currentTarget.value })} />
+            <TextInput label="Link" placeholder="https://…" value={r.url} error={errorOf("url")} onChange={(e) => set(i, { url: e.currentTarget.value })} />
+            <Textarea
+              label="Description"
+              autosize
+              minRows={2}
+              maxLength={BATCH_RESOURCE_LIMITS.description}
+              value={r.description ?? ""}
+              onChange={(e) => set(i, { description: e.currentTarget.value })}
+            />
+            <Group justify="space-between">
+              <Group gap="xs">
+                <Button variant="default" disabled={i === 0} onClick={() => onChange(moveInList(value, i, i - 1))}>
+                  Move up
+                </Button>
+                <Button variant="default" disabled={i === value.length - 1} onClick={() => onChange(moveInList(value, i, i + 1))}>
+                  Move down
+                </Button>
+              </Group>
+              <Button variant="subtle" color="red" onClick={() => onChange(value.filter((_, j) => j !== i))}>
+                Remove
+              </Button>
+            </Group>
+          </Stack>
+        );
+      })}
+      {value.length < BATCH_RESOURCE_LIMITS.items && (
+        <Group>
+          <Button variant="default" onClick={() => onChange([...value, BLANK_RESOURCE])}>
+            Add resource
+          </Button>
+        </Group>
+      )}
+    </Section>
   );
 }
 

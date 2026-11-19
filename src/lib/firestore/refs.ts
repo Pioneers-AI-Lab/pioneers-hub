@@ -20,6 +20,7 @@ import type {
   ApiKey,
   Attendance,
   Batch,
+  BatchResources,
   BatchTask,
   BatchMembership,
   BatchStats,
@@ -196,6 +197,8 @@ export const refs = {
   /** Taches du batch : fondateurs du batch, staff, investors (regle `batchTasks`) ; ecrites par le staff. */
   batchTasks: () => colRef<BatchTask>(COL.batchTasks),
   batchTask: (taskId: string) => docRef<BatchTask>(COL.batchTasks, taskId),
+  /** Liens utiles du batch : la meme audience (regle `batchResources`) ; ecrits par le staff. */
+  batchResources: (batchId: string) => docRef<BatchResources>(docPaths.batchResources(batchId)),
   /** Coches : le fondateur lui-meme et le staff (regle `taskCompletions`). */
   taskCompletions: () => colRef<TaskCompletion>(COL.taskCompletions),
   taskCompletion: (taskId: string, founderId: string) => docRef<TaskCompletion>(docPaths.taskCompletion(taskId, founderId)),

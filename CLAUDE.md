@@ -330,6 +330,7 @@ document ENTIER, jamais un champ) :
 | `founders/{id}/private/profile` | le fondateur lui-meme + staff + investors IC (age, date de naissance) |
 | `founders/{id}/private/connections` | le fondateur lui-meme + staff + investors IC (shortlist, met ; ecrit par lui seul, jamais par le staff ni l'API) |
 | `batchTasks/{id}` | fondateurs du batch + staff + investors (taches du To do, ecrites par le staff, archivees) |
+| `batchResources/{batchId}` | fondateurs du batch + staff + investors (liens utiles en bas de l'accueil, 19/11 : `items` = libelle, description depliee au (?), lien ; ecrits par le staff dans Admin > Batch settings ou `update_batch` `resources`, regle `shared/admin/batch.ts#parseBatchResource`) |
 | `taskCompletions/{taskId}_{founderId}` | le fondateur lui-meme + staff (sa coche, ecrite par lui seul ; decocher = `done: false`) |
 | `formCompletions/{formId}_{founderId}`, `picks` | le fondateur lui-meme + staff (« J'ai repondu » et picks, ecrits par `submitFormResponse` ; jamais pour un formulaire anonyme) |
 | `founders/{id}/private/internal`, `founderStats`, `notes`, `assessments`, `eloMatches` (archive) | staff + investors IC |

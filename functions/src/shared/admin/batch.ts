@@ -1,7 +1,7 @@
 import { docPaths } from "../collections";
 import { deleteWrite, mergeWrite, RuleError, setWrite, type DocWrite } from "../docWrites";
 import { isAppPath, normalizeHttpUrl, slugify } from "../text";
-import { BATCH_MILESTONE_KEYS, type AttendanceStatus, type Batch, type BatchTask, type ClosedList, type Founder, type Person, type Program, type TaskCheck } from "../types";
+import { BATCH_MILESTONE_KEYS, type AttendanceStatus, type Batch, type BatchResource, type BatchResources, type BatchTask, type ClosedList, type Founder, type Person, type Program, type TaskCheck } from "../types";
 
 // ----------------------------
 // Admin : programmes, batchs, listes fermees, taches du To do, presence, rattachements
@@ -66,6 +66,36 @@ export function listValuesWrite(key: ExtensibleList, current: ClosedList | undef
     updatedDateISOString: now,
   });
   return { added: fresh, write };
+}
+
+// ---- Liens utiles (Admin > Batch settings, accueil du batch) -----------------------
+
+export const BATCH_RESOURCE_LIMITS = { items: 50, label: 80, description: 500 } as const;
+
+/**
+ * La ressource saisie, nettoyee (lien complete comme celui d'une tache, description
+ * vide = `null`), ou ce qui ne va pas : l'ecran l'affiche sous le champ, l'API le refuse.
+ */
+export function parseBatchResource(r: BatchResource): { resource: BatchResource } | { problem: string; field: "label" | "url" } {
+  const label = r.label.trim();
+  if (!label) return { problem: "A label is required.", field: "label" };
+  const url = parseTaskLink(r.url);
+  if (!url) return { problem: "A web address, or a path of the app starting with /.", field: "url" };
+  return { resource: { label, description: r.description?.trim() || null, url } };
+}
+
+/** La liste nettoyee ; leve sur la premiere ressource fautive (API ; l'ecran montre l'erreur sous le champ). */
+export const cleanBatchResources = (items: readonly BatchResource[]): BatchResource[] =>
+  items.map((r, i) => {
+    const parsed = parseBatchResource(r);
+    if ("problem" in parsed) throw new RuleError("invalid_resource", `Resource ${i + 1}: ${parsed.problem}`, `resources.${i}.${parsed.field}`);
+    return parsed.resource;
+  });
+
+/** La liste entiere, deja nettoyee (`parseBatchResource`), remplacee : l'ordre est celui de l'accueil. */
+export function batchResourcesWrite(batch: { id: string; programId: string }, items: BatchResource[], now: string): DocWrite {
+  const doc: BatchResources = { programId: batch.programId, batchId: batch.id, items, updatedDateISOString: now };
+  return setWrite(docPaths.batchResources(batch.id), doc);
 }
 
 // ---- Taches du To do (Admin > Tasks) ---------------------------------------------

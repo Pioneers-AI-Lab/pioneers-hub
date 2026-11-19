@@ -20,8 +20,10 @@ import {
   type PioneersEvent,
   type Program,
   type Startup,
+  type BatchResources,
 } from "../shared/types";
 import {
+  canReadBatchResources,
   canReadFounderDirectory,
   canReadFounderProfile,
   canReadPerson,
@@ -412,8 +414,17 @@ export async function getObject(caller: Caller, input: GetInput): Promise<Record
 
   switch (object) {
     case "program":
-    case "batch":
       return { object, ...withId(required(await db.doc(`${SIMPLE_GETS[object]}/${id}`).get(), object, id)) };
+
+    case "batch": {
+      // Les liens utiles (regle `batchResources`) : membres du batch, staff, investors ; vide s'il n'y en a pas.
+      const [batchSnap, resources] = await Promise.all([
+        db.doc(docPaths.batch(id)).get(),
+        readIf(canReadBatchResources(roleOf(caller, id)), docPaths.batchResources(id)),
+      ]);
+      const batch = withId(required(batchSnap, object, id));
+      return { object, ...batch, ...(resources !== undefined && { resources: (resources as BatchResources | null)?.items ?? [] }) };
+    }
 
     case "note": {
       if (!isInsiderViewer(caller.viewer)) throw hidden();

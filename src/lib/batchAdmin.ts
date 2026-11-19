@@ -1,11 +1,11 @@
 import { getDoc } from "firebase/firestore";
-import { listValuesWrite, newBatch, newProgram, type ExtensibleList, type NewBatchInput } from "@shared/admin/batch";
+import { batchResourcesWrite, listValuesWrite, newBatch, newProgram, type ExtensibleList, type NewBatchInput } from "@shared/admin/batch";
 import { slugify } from "@shared/text";
 import { docPaths } from "@shared/collections";
-import { createWrite, RuleError } from "@shared/docWrites";
-import type { Batch, BatchSettings, BatchStatus } from "@shared/types";
+import { createWrite, mergeWrite, RuleError } from "@shared/docWrites";
+import type { Batch, BatchResource, BatchSettings, BatchStatus } from "@shared/types";
 import { refs } from "@/lib/firestore/refs";
-import { commitWrites, patchDoc } from "@/lib/firestore/write";
+import { commitWrites } from "@/lib/firestore/write";
 
 // ----------------------------
 // Programmes et batchs (staff)
@@ -30,15 +30,25 @@ export async function createBatch(input: NewBatchInput & { id: string }) {
   await commitWrites([createWrite(docPaths.batch(input.id), { ...newBatch(input), createdDateISOString: now, updatedDateISOString: now })]).catch(taken("batch", input.id));
 }
 
-export async function updateBatch(
-  batchId: string,
-  patch: { status?: BatchStatus; settings?: BatchSettings; milestones?: Batch["milestones"]; endDayString?: string | null },
+/**
+ * Admin > Batch settings, en un lot : les reglages du batch (`patch`) et ses liens utiles
+ * (`resources`, deja nettoyes, document a part), chacun seulement s'il change (`null` sinon).
+ */
+export async function saveBatchSettings(
+  batch: { id: string; programId: string },
+  patch: { status: BatchStatus; settings: BatchSettings; milestones: Batch["milestones"]; endDayString: string | null } | null,
+  resources: BatchResource[] | null,
 ) {
-  await patchDoc<Batch>(refs.batch(batchId), patch);
+  const now = new Date().toISOString();
+  await commitWrites([
+    ...(patch ? [mergeWrite(docPaths.batch(batch.id), { ...patch, updatedDateISOString: now })] : []),
+    ...(resources ? [batchResourcesWrite(batch, resources, now)] : []),
+  ]);
 }
 
 /** Ajoute a une liste fermee les valeurs qu'elle n'a pas encore (import) ; rend le nombre ajoute. */
 export async function addListValues(key: ExtensibleList, values: string[]) {
+  if (values.length === 0) return 0;
   const { added, write } = listValuesWrite(key, (await getDoc(refs.list(key))).data(), values, new Date().toISOString());
   if (write) await commitWrites([write]);
   return added.length;

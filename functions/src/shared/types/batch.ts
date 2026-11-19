@@ -1,5 +1,5 @@
 import { PITCH_STAGES } from "./event";
-import type { Archivable, DateISOString, DayString, Timestamps } from "./common";
+import type { Archivable, BatchScoped, DateISOString, DayString, Timestamps } from "./common";
 import type { FounderPillarKey, StartupSubScore } from "./score";
 
 // ----------------------------
@@ -113,6 +113,27 @@ export type Batch = Timestamps &
     milestones: BatchMilestone[];
     settings: BatchSettings;
   };
+
+// ----------------------------
+// batchResources/{batchId}  (fondateurs du batch + staff + investors ; ecrit par le staff)
+// ----------------------------
+// Les liens utiles du batch (19/11) : section « Resources » en bas de l'accueil,
+// reglee dans Admin > Batch settings (ou `update_batch`). A part du batch, qui est
+// public : un visiteur ne les lit pas. Regle pure : shared/admin/batch.ts#batchResourcesWrite.
+
+export type BatchResource = {
+  label: string;
+  /** Depliee au (?) de la ligne ; `null` : pas de (?). */
+  description: string | null;
+  /** Adresse web (`https://…`, nouvel onglet) ou page de l'app (chemin commencant par `/`). */
+  url: string;
+};
+
+export type BatchResources = BatchScoped & {
+  /** Dans l'ordre de l'accueil. */
+  items: BatchResource[];
+  updatedDateISOString: DateISOString;
+};
 
 // ----------------------------
 // batchStats/{batchId}  (agregat, recalcule par Cloud Functions, public)

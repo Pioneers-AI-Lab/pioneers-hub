@@ -611,6 +611,13 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
+    // Liens utiles du batch (accueil, Admin > Batch settings) : la meme audience,
+    // id = le batch (lisible meme absent : l'accueil l'ecoute avant qu'il existe).
+    match /batchResources/{batchId} {
+      allow read: if isBatchMember(batchId) || isStaffOrInvestor();
+      allow write: if isStaff();
+    }
+
     // `taskId` est une tache non archivee de ce batch (et de ce programme).
     function isActiveTaskOf(taskId, programId, batchId) {
       let task = get(/databases/$(database)/documents/batchTasks/$(taskId)).data;

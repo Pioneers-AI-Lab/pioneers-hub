@@ -3,6 +3,9 @@ import { getFirestore } from "firebase-admin/firestore";
 import { z } from "zod";
 import {
   attendanceWrites,
+  BATCH_RESOURCE_LIMITS,
+  batchResourcesWrite,
+  cleanBatchResources,
   EXTENSIBLE_LISTS,
   linkFounderWrites,
   listValuesWrite,
@@ -33,6 +36,7 @@ import {
   TASK_CHECKS,
   type Attendance,
   type Batch,
+  type BatchResources,
   type BatchSettings,
   type BatchTask,
   type ClosedList,
@@ -302,6 +306,21 @@ export const UpdateBatchInput = z
     googleCalendarId: z.string().trim().min(1).nullable().optional().describe("Link the batch to a Google Calendar (its events then come from it); null unlinks."),
     slackTeamId: slackId(isSlackTeamId, SLACK_TEAM_ID_HINT).describe("The batch's Slack workspace ID (founders' Slack links); null removes it."),
     slackChannelId: slackId(isSlackChannelId, SLACK_CHANNEL_ID_HINT).describe("The batch's Slack channel ID; null removes it."),
+    resources: z
+      .array(
+        z
+          .object({
+            label: z.string().max(BATCH_RESOURCE_LIMITS.label),
+            url: z.string().trim().max(2000),
+            description: z.string().max(BATCH_RESOURCE_LIMITS.description).nullable().default(null),
+          })
+          .strict(),
+      )
+      .max(BATCH_RESOURCE_LIMITS.items)
+      .optional()
+      .describe(
+        "The useful links at the bottom of the batch home (founders of the batch, staff and investors see them), in order. Replaces the whole list: send them all; [] removes them. url: a web address or a path of the app starting with /.",
+      ),
   })
   .strict();
 
@@ -309,8 +328,11 @@ export const updateBatch: Operation<typeof UpdateBatchInput> = {
   name: "update_batch",
   input: UpdateBatchInput,
   allowed: staffOnly,
-  async plan(tx, _caller, { batchId, milestones, leaderboardVisibility, startupsVisibility, scoresVisibility, subScoreVisibility, googleCalendarId, slackTeamId, slackChannelId, ...given }) {
-    const batch = await mustRead<Batch>(tx, docPaths.batch(batchId), "batch", "batchId");
+  async plan(tx, _caller, { batchId, milestones, leaderboardVisibility, startupsVisibility, scoresVisibility, subScoreVisibility, googleCalendarId, slackTeamId, slackChannelId, resources, ...given }) {
+    const [batch, savedResources] = await Promise.all([
+      mustRead<Batch>(tx, docPaths.batch(batchId), "batch", "batchId"),
+      resources ? readDoc<BatchResources>(tx, docPaths.batchResources(batchId)) : undefined,
+    ]);
     const patch: Partial<Batch> = { ...given };
     if (milestones) {
       const dayOf = new Map(milestones.map((m) => [m.key, m.dayString]));
@@ -329,13 +351,17 @@ export const updateBatch: Operation<typeof UpdateBatchInput> = {
     const start = patch.startDayString ?? batch.startDayString;
     const end = patch.endDayString !== undefined ? patch.endDayString : batch.endDayString;
     if (end && end < start) throw badRequest("invalid_dates", "The batch must end after it starts.", "endDayString");
+    const now = new Date().toISOString();
     const changes = changesOf(batch, patch);
-    return writePlan(
-      { batch: batch.name, changes, note: googleCalendarId ? "Run `sync_calendar` to bring its events in." : undefined },
-      [mergeWrite(docPaths.batch(batchId), { ...patch, updatedDateISOString: new Date().toISOString() })],
-      { batchId },
-      Object.keys(changes).length > 0,
-    );
+    const writes = Object.keys(changes).length ? [mergeWrite(docPaths.batch(batchId), { ...patch, updatedDateISOString: now })] : [];
+    // Les liens utiles : un document a part (regle `batchResources`), remplace en entier.
+    if (resources) {
+      const cleaned = cleanBatchResources(resources);
+      const resourceChanges = changesOf({ resources: savedResources?.items ?? [] }, { resources: cleaned });
+      Object.assign(changes, resourceChanges);
+      if (resourceChanges.resources) writes.push(batchResourcesWrite({ id: batchId, programId: batch.programId }, cleaned, now));
+    }
+    return writePlan({ batch: batch.name, changes, note: googleCalendarId ? "Run `sync_calendar` to bring its events in." : undefined }, writes, { batchId });
   },
 };
 

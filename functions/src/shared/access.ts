@@ -63,7 +63,8 @@ export function roleInBatch(viewer: Viewer | null, viewerFounderId: string | nul
  * memes (isInsider, isStaffOrInvestor, isMemberOf...).
  *
  *   batch                   fondateurs du batch, staff, investors
- *                           -> liste des fondateurs, private/directory, memberships, batchTasks
+ *                           -> liste des fondateurs, private/directory, memberships, batchTasks,
+ *                              batchResources
  *   self ou insider         le fondateur lui-meme, staff, investors IC
  *                           -> private/profile, private/connections, founderWeeks, sessionRatings, people
  *   self ou staff           le fondateur lui-meme, staff -> picks, formCompletions, taskCompletions,
@@ -192,6 +193,9 @@ export function isStartupMember(viewerFounderId: string | null, startup: Pick<St
 
 /** Audience « batch » : liste complete des fondateurs, `private/directory` (Profile Book), `memberships`. */
 export const canReadFounderDirectory = (role: BatchRole): boolean => role !== "public";
+
+/** Les liens utiles du batch (`batchResources`) : la meme audience « batch ». */
+export const canReadBatchResources = canReadFounderDirectory;
 
 /**
  * Audience « self ou insider » : `private/profile`, `private/connections` (shortlist et rencontres ; ecrites par

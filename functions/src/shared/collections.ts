@@ -78,6 +78,8 @@ export const COL = {
   // ---- Taches du To do (checklist du batch) ----
   /** Taches communes du batch : fondateurs du batch + staff + investors ; ecrites par le staff. */
   batchTasks: "batchTasks",
+  /** Liens utiles du batch (`{batchId}`) : fondateurs du batch + staff + investors ; ecrits par le staff. */
+  batchResources: "batchResources",
   /** Coche d'un fondateur (`{taskId}_{founderId}`) : lui-meme + staff ; ecrite par lui-meme. */
   taskCompletions: "taskCompletions",
 } as const;
@@ -159,6 +161,8 @@ export const docPaths = {
   user: (uid: string) => `${COL.users}/${uid}`,
   /** Une tache du To do d'un batch (ecrite par le staff). */
   batchTask: (taskId: string) => `${COL.batchTasks}/${taskId}`,
+  /** Les liens utiles du batch (Admin > Batch settings). */
+  batchResources: (batchId: string) => `${COL.batchResources}/${batchId}`,
   calendarSync: (batchId: string) => `${COL.calendarSyncs}/${batchId}`,
   /** Rattachement d'un compte a un profil fondateur du batch. */
   membership: (batchId: string, uid: string) => `${COL.batchMemberships}/${docIds.membership(batchId, uid)}`,
