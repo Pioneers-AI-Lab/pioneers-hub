@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { Anchor, Button, Divider, Stack, Text } from "@mantine/core";
+import { Anchor, Button, Divider, SegmentedControl, Stack, Text } from "@mantine/core";
 import { IconBrandSlack } from "@tabler/icons-react";
 import { slackWorkspaceUrl } from "@shared/slackLinks";
+import type { BatchStats } from "@shared/types";
 import { startupWeightingHint } from "@shared/types";
 import { useBatch } from "@/context/BatchContext";
 import { useCohort } from "@/context/CohortContext";
@@ -130,10 +132,7 @@ export default function BatchHomePage() {
                 }))}
               />
               <Divider color="dark.4" />
-              <RankedBars
-                bars={Object.entries(stats.skillsDistribution).map(([k, v]) => ({ key: k, label: k, value: v }))}
-                limit={6}
-              />
+              <TagDistribution stats={stats} />
             </ChartCard>
             <ChartCard title="Nationalities">
               <NationalityMap counts={stats.nationalities} />
@@ -209,5 +208,36 @@ export default function BatchHomePage() {
         </Section>
       )}
     </Stack>
+  );
+}
+
+// Barres de la card « Profile distribution » : un champ a la fois (19/11), Industries par defaut,
+// toutes les valeurs (listes resserrees : 9 secteurs, 10 competences, 12 roles). Le donut au-dessus ne change pas.
+const TAG_DISTRIBUTIONS = {
+  industries: (s: BatchStats) => s.industriesDistribution,
+  skills: (s: BatchStats) => s.skillsDistribution,
+  roles: (s: BatchStats) => s.rolesDistribution,
+};
+type TagDistributionKey = keyof typeof TAG_DISTRIBUTIONS;
+const TAG_DISTRIBUTION_OPTIONS: { value: TagDistributionKey; label: string }[] = [
+  { value: "industries", label: "Industries" },
+  { value: "skills", label: "Skills" },
+  { value: "roles", label: "Roles" },
+];
+
+function TagDistribution({ stats }: { stats: BatchStats }) {
+  const [kind, setKind] = useState<TagDistributionKey>("industries");
+  const bars = Object.entries(TAG_DISTRIBUTIONS[kind](stats) ?? {}).map(([k, v]) => ({ key: k, label: k, value: v }));
+  return (
+    <>
+      <SegmentedControl fullWidth value={kind} onChange={(v) => setKind(v as TagDistributionKey)} data={TAG_DISTRIBUTION_OPTIONS} />
+      {bars.length > 0 ? (
+        <RankedBars bars={bars} limit={Infinity} />
+      ) : (
+        <Text size="sm" c="dimmed">
+          No data yet.
+        </Text>
+      )}
+    </>
   );
 }

@@ -32,8 +32,10 @@ export function RankedBars({
     <Stack gap="xs">
       {rows.map((r) => (
         // Le libelle contre sa barre (proximite) : libelle cale a droite, barre, valeur.
+        // Deux lignes plutot que coupe : en 390 px, « Partnerships & External Relations »
+        // ne tient pas sur une, et aucune infobulle ne le rendrait au toucher.
         <Group key={r.key} gap="sm" wrap="nowrap">
-          <Text size="sm" c="dimmed" w="40%" style={{ flexShrink: 0 }} truncate ta="right">
+          <Text size="sm" c="dimmed" w="40%" style={{ flexShrink: 0 }} lineClamp={2} ta="right" lh={1.25}>
             {r.label}
           </Text>
           <Box h={5} bg={CHART_COLORS.track} style={{ flex: 1, minWidth: 0, borderRadius: 99, overflow: "hidden" }}>

@@ -126,7 +126,14 @@ export type BatchStats = {
   /** Part des fondateurs ayant deja fonde une entreprise (0-1). */
   repeatFounders: number | null;
   profileDistribution: Record<string, number>;
+  /** Fondateurs par valeur de `founder.hardSkills` (card « Profile distribution » de l'accueil). */
   skillsDistribution: Record<string, number>;
+  /**
+   * Idem pour `founder.industries` et `founder.rolesICouldTake` (19/11). Absents
+   * des documents plus anciens (l'accueil les lit `?? {}`).
+   */
+  industriesDistribution?: Record<string, number>;
+  rolesDistribution?: Record<string, number>;
   nationalities: Record<string, number>;
   /** Part des fondateurs dans une startup (0-1). */
   teamFormationRate: number | null;

@@ -21,8 +21,8 @@ export type ApiKey = {
 // ----------------------------
 // lists/{listKey}  (public en lecture, staff en ecriture)
 // ----------------------------
-// Listes fermees (SPECS §6.1) : 13 categories de competences (avec leur cote
-// tech / business), 66 secteurs, 9 Position Fit, diplomes, 12 types de
+// Listes fermees (SPECS §6.1) : 10 categories de competences, 9 familles de
+// secteurs et 12 roles (19/11, scripts/migrate-tag-families.mjs), diplomes, 12 types de
 // session, semaines du programme, statuts d'engagement, statuts de startup.
 
 export const LIST_KEYS = [

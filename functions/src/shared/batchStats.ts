@@ -8,7 +8,7 @@ import { mean, roundTo, type BatchStats, type Founder, type FounderDirectory } f
 // import (scripts/import-sp26.mjs, memes regles de comptage).
 
 export type BatchStatsFounder = {
-  founder: Pick<Founder, "profileCategory" | "hardSkills" | "startupId">;
+  founder: Pick<Founder, "profileCategory" | "hardSkills" | "industries" | "rolesICouldTake" | "startupId">;
   directory: Pick<FounderDirectory, "yearsOfXP" | "nationality" | "repeatFounder"> | null;
 };
 
@@ -31,6 +31,8 @@ export function computeBatchStats(programId: string, founders: readonly BatchSta
     repeatFounders: repeat === null ? null : roundTo(repeat, 3),
     profileDistribution: countBy(founders.map((f) => f.founder.profileCategory)),
     skillsDistribution: countBy(founders.flatMap((f) => f.founder.hardSkills)),
+    industriesDistribution: countBy(founders.flatMap((f) => f.founder.industries)),
+    rolesDistribution: countBy(founders.flatMap((f) => f.founder.rolesICouldTake)),
     // Une double nationalite est stockee « A, B » (comme a l'import du Spring 2026).
     nationalities: countBy(founders.flatMap((f) => (f.directory?.nationality ?? "").split(",").map((n) => n.trim()))),
     teamFormationRate: founders.length ? founders.filter((f) => f.founder.startupId).length / founders.length : null,
