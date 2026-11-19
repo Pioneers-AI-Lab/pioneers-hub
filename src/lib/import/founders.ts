@@ -1,10 +1,12 @@
-import { arrayUnion, doc, documentId, getDoc, getDocs, query, where, writeBatch } from "firebase/firestore";
+import { doc, documentId, getDoc, getDocs, query, where, writeBatch } from "firebase/firestore";
+import { newFounderWrites, type NewFounderValues } from "@shared/admin/founders";
 import { parseDbField } from "@shared/fieldRegistry";
-import type { Batch, Founder, FounderDirectory, FounderInternal, FounderProfile, Person, WithId } from "@shared/types";
+import { nameKey } from "@shared/text";
+import type { Batch, Founder, Person, WithId } from "@shared/types";
 import { db } from "@/lib/firebase";
 import { refs } from "@/lib/firestore/refs";
+import { addWrites } from "@/lib/firestore/write";
 import { addListValues } from "@/lib/batchAdmin";
-import { searchKey } from "@/lib/format";
 import { targetSpec, type ImportFieldKey, type ImportTarget } from "./targets";
 import { convertCell } from "./values";
 
@@ -23,7 +25,8 @@ import { convertCell } from "./values";
 //                      par une autre ligne, ou plusieurs profils du meme nom
 // 3. `applyImport` : ecrit par lots. Sans Cloud Functions pour l'instant,
 //    l'import ecrit aussi les COPIES (nom et photo sur `founders`, email,
-//    WhatsApp, LinkedIn sur `private/directory`).
+//    WhatsApp, LinkedIn sur `private/directory`). Un nouveau fondateur se
+//    construit par LA regle de l'API (`shared/admin/founders.ts#newFounderWrites`).
 
 export type ColumnMapping = Record<string, ImportTarget | null>;
 
@@ -45,6 +48,8 @@ export type PlannedRow = ParsedRow & {
   matchReason: string | null;
   existingPersonId: string | null;
   existingFounderId: string | null;
+  /** `add_to_batch` : la personne deja en base (son identite fait foi), lue par le plan. */
+  existingPerson: Person | null;
 };
 
 const isEmpty = (v: unknown) => v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
@@ -93,9 +98,6 @@ async function peopleWhere(field: "email" | ReturnType<typeof documentId>, value
   return found;
 }
 
-/** Cle d'un nom : sans accents, casse ni espaces en trop (« Grégoire  Cazier » = « gregoire cazier »). */
-const nameKey = (name: string) => searchKey(name).replace(/\s+/g, " ");
-
 export async function planImport(rows: ParsedRow[], foundersOfBatch: WithId<Founder>[]): Promise<PlannedRow[]> {
   const emails = [...new Set(rows.map((r) => r.email).filter((e): e is string => !!e))];
   const people = new Map((await peopleWhere("email", emails)).map((p) => [p.email, p]));
@@ -114,7 +116,7 @@ export async function planImport(rows: ParsedRow[], foundersOfBatch: WithId<Foun
   const matchedFounders = new Set<string>();
 
   return rows.map((row): PlannedRow => {
-    const base = { ...row, existingPersonId: null, existingFounderId: null, skipReason: null, matchReason: null };
+    const base = { ...row, existingPersonId: null, existingFounderId: null, existingPerson: null, skipReason: null, matchReason: null };
     if (!row.email) return { ...base, action: "skip", skipReason: "No email" };
     if (seen.has(row.email)) return { ...base, action: "skip", skipReason: "Email already in this file" };
     seen.add(row.email);
@@ -134,7 +136,7 @@ export async function planImport(rows: ParsedRow[], foundersOfBatch: WithId<Foun
     }
     const founder = foundersOfBatch.find((f) => f.personId === person.id);
     if (founder) return existing(founder, "Matched by email.");
-    return { ...base, action: "add_to_batch", existingPersonId: person.id };
+    return { ...base, action: "add_to_batch", existingPersonId: person.id, existingPerson: person };
   });
 }
 
@@ -154,42 +156,6 @@ function byDoc(values: ParsedRow["values"]) {
   }
   return docs;
 }
-
-const emptyDirectory = (email: string): FounderDirectory => ({
-  email,
-  whatsapp: null,
-  linkedinUrl: null,
-  gender: null,
-  nationality: null,
-  country: null,
-  introduceYourself: null,
-  edge: null,
-  education: [],
-  degree: null,
-  fieldOfStudy: null,
-  yearsOfXP: null,
-  notableCompanies: [],
-  trackRecord: null,
-  trackRecord3Liners: [],
-  interestedInWorkingOn: null,
-  hasExistingProject: null,
-  projectExplanation: null,
-  hasExistingCoFounders: null,
-  openToJoinAnotherProject: null,
-  mainStartup2025: null,
-  lookingForCoFounder: null,
-  coFounderTypeWanted: null,
-  coFounderSkillsWanted: [],
-  industriesToExplore: [],
-});
-
-const emptyProfile = (): FounderProfile => ({
-  age: null,
-  birthDayString: null,
-  housingSupport: null,
-  tShirtSize: null,
-  enrolmentConfirmed: null,
-});
 
 /** Ne garde que les valeurs qui remplissent un champ vide ; les listes sont fusionnees sans doublon. */
 function fillEmpty(current: Record<string, unknown> | undefined, incoming: Record<string, unknown>) {
@@ -224,9 +190,6 @@ export async function applyImport(
     for (const row of todo.slice(i, i + 60)) {
       const now = new Date().toISOString();
       const docs = byDoc(row.values);
-      const firstName = row.firstName ?? "";
-      const lastName = row.lastName ?? "";
-      const displayName = [firstName, lastName].filter(Boolean).join(" ");
       const email = row.email!;
 
       if (row.action === "fill_existing") {
@@ -260,86 +223,13 @@ export async function applyImport(
         continue;
       }
 
-      const founderId = doc(refs.founders()).id;
-      let personId = row.existingPersonId;
-      let photoUrl = (docs.person.photoUrl as string | undefined) ?? null;
-      let whatsapp = (docs.person.whatsapp as string | undefined) ?? null;
-      let linkedinUrl = (docs.person.linkedinUrl as string | undefined) ?? null;
-      let phone = (docs.person.phone as string | undefined) ?? null;
-      let slackUserId: string | null = null;
-      let name = displayName;
-
-      if (row.action === "create") {
-        personId = doc(refs.people()).id;
-        const person: Person = {
-          createdDateISOString: now,
-          updatedDateISOString: now,
-          archivedDateISOString: null,
-          firstName,
-          lastName,
-          displayName,
-          email,
-          altEmails: [],
-          phone,
-          whatsapp,
-          linkedinUrl,
-          photoUrl,
-          slackUserId: null,
-          uid: null,
-          founderIds: [founderId],
-          mentorId: null,
-          investorId: null,
-        };
-        writes.set(refs.person(personId), { ...person, id: personId });
-        result.created++;
-      } else {
-        // La personne existe : son identite fait foi, on ne la reecrit pas.
-        const person = (await getDoc(refs.person(personId!))).data();
-        photoUrl = person?.photoUrl ?? photoUrl;
-        whatsapp = person?.whatsapp ?? whatsapp;
-        linkedinUrl = person?.linkedinUrl ?? linkedinUrl;
-        phone = person?.phone ?? phone;
-        slackUserId = person?.slackUserId ?? null;
-        name = person?.displayName || name;
-        writes.set(refs.person(personId!), { founderIds: arrayUnion(founderId), updatedDateISOString: now }, { merge: true });
-        result.addedToBatch++;
-      }
-
-      const founder: Founder = {
-        ...scoped,
-        createdDateISOString: now,
-        updatedDateISOString: now,
-        archivedDateISOString: null,
-        personId: personId!,
-        uid: null,
-        claimedDateISOString: null,
-        name,
-        photoUrl,
-        profileCategory: (docs.founder.profileCategory as Founder["profileCategory"] | undefined) ?? null,
-        hardSkills: (docs.founder.hardSkills as string[] | undefined) ?? [],
-        industries: (docs.founder.industries as string[] | undefined) ?? [],
-        rolesICouldTake: (docs.founder.rolesICouldTake as string[] | undefined) ?? [],
-        trackRecordOneLiner: null,
-        startupId: null,
-        status: "enrolled",
-        leftProgramReason: null,
-        isExternalFounder: false,
-        stats: null,
-      };
-      const internal: FounderInternal = { background: null };
-      writes.set(refs.founder(founderId), { ...founder, id: founderId });
-      writes.set(refs.founderDirectory(founderId), {
-        ...emptyDirectory(email),
-        ...docs.founderDirectory,
-        whatsapp,
-        linkedinUrl,
-        // Copies de `people` (PERSON_COPIES) : coordonnees visibles du batch.
-        phone,
-        slackUserId,
-        id: "directory",
-      } as WithId<FounderDirectory>);
-      writes.set(refs.founderProfile(founderId), { ...emptyProfile(), ...docs.founderProfile, id: "profile" } as WithId<FounderProfile>);
-      writes.set(refs.founderInternal(founderId), { ...internal, id: "internal" });
+      // Nouveau fondateur : LA construction partagee avec l'API (`create_founders`), colonnes du CSV comprises.
+      const { existingPerson } = row;
+      const ids = { founderId: doc(refs.founders()).id, personId: row.existingPersonId ?? doc(refs.people()).id };
+      const input = { firstName: row.firstName ?? "", lastName: row.lastName ?? "", email, profileCategory: null };
+      addWrites(writes, newFounderWrites(scoped, input, ids, existingPerson, now, docs as NewFounderValues));
+      if (existingPerson) result.addedToBatch++;
+      else result.created++;
     }
     await writes.commit();
     onProgress?.(Math.min(i + 60, todo.length), todo.length);

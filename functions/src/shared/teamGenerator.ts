@@ -264,14 +264,15 @@ const bump = (map: Map<string, number>, key: string) => map.set(key, (map.get(ke
  * cours de tirage ne compte pas contre lui-meme.
  */
 export function buildPairHistory(
-  memberships: readonly Pick<Membership, "kind" | "teamId" | "eventId" | "founderId">[],
+  memberships: readonly Pick<Membership, "kind" | "teamId" | "eventId" | "founderId" | "masked">[],
   /** Le mode du matching de l'evenement d'une appartenance (`matchingOf(event)?.mode`). */
   modeOfEvent: (eventId: string) => GeneratorMode | null,
   excludeEventId: string | null,
 ): PairHistory {
   const teams = new Map<string, { mode: GeneratorMode; members: Set<string> }>();
   for (const m of memberships) {
-    const mode = modeOfMembership(m, modeOfEvent, excludeEventId);
+    // Absent a l'evenement (masque) : il n'a pas travaille avec eux.
+    const mode = m.masked ? null : modeOfMembership(m, modeOfEvent, excludeEventId);
     if (!mode) continue;
     const key = `${m.eventId}/${m.teamId}`;
     const team = teams.get(key) ?? { mode, members: new Set<string>() };
@@ -327,16 +328,58 @@ export const LEADER_ROLE = "leader" satisfies TeamRole;
 export const leaderIdOf = (team: Pick<EventTeam, "memberIds" | "roles">): string | null =>
   team.memberIds.find((id) => team.roles[id]?.includes(LEADER_ROLE)) ?? null;
 
+// ---- Membres masques (19/11) ------------------------------------------------------
+// Un membre marque absent apres la publication reste dans `memberIds` (le tirage) mais est
+// MASQUE partout (`absentMemberIds`, ecrit par le serveur depuis la presence) : pages, classement,
+// jury, formulaires, API, historique. Remis present, il revient tel quel. Un groupe sans membre
+// present est masque et hors classement. Le leader absent est remplace, sans rien ecrire, par le
+// premier membre present.
+
+type MaskableTeam = Pick<EventTeam, "memberIds" | "roles" | "absentMemberIds">;
+
+/** Les membres qui comptent : les tires, moins les absents masques. */
+export const activeMemberIds = (team: Pick<EventTeam, "memberIds" | "absentMemberIds">): string[] => {
+  const masked = new Set(team.absentMemberIds ?? []);
+  return team.memberIds.filter((id) => !masked.has(id));
+};
+
+/** Le leader qui mene : le leader tire s'il est la, sinon le premier membre present. */
+export const actingLeaderId = (team: MaskableTeam): string | null => {
+  const active = activeMemberIds(team);
+  const leader = leaderIdOf(team);
+  return leader && active.includes(leader) ? leader : (active[0] ?? null);
+};
+
+/** Tous les membres sont absents : le groupe est masque (pages, classement). */
+export const isMaskedTeam = (team: Pick<EventTeam, "memberIds" | "absentMemberIds">) => activeMemberIds(team).length === 0;
+
+/**
+ * Le groupe tel que tout le monde le lit : membres presents (noms courts alignes), leader qui mene,
+ * sans la liste des masques. A appliquer a toute lecture d'un groupe, sauf pour le retoucher.
+ */
+export function visibleTeam<T extends MaskableTeam & Pick<EventTeam, "memberNames">>(team: T): Omit<T, "absentMemberIds"> {
+  const { absentMemberIds, ...rest } = team;
+  if (!absentMemberIds?.length) return rest;
+  const masked = new Set(absentMemberIds);
+  const kept = team.memberIds.map((id, i) => ({ id, name: team.memberNames?.[i] })).filter(({ id }) => !masked.has(id));
+  const memberIds = kept.map((m) => m.id);
+  return { ...rest, memberIds, memberNames: team.memberNames ? kept.map((m) => m.name ?? "") : team.memberNames, roles: rolesWithLeader(team.roles, memberIds, actingLeaderId(team)) };
+}
+
+/** Les groupes tels qu'on les lit : chacun sans ses absents, et sans les groupes publies tout absents. */
+export const visibleTeams = <T extends MaskableTeam & Pick<EventTeam, "memberNames" | "publishedDateISOString">>(teams: readonly T[]) =>
+  teams.filter((t) => !(t.publishedDateISOString && isMaskedTeam(t))).map(visibleTeam);
+
 /** Nombre de fois ou chacun a deja mene un groupe de cette mecanique dans le batch. */
 export function buildLeaderCounts(
-  memberships: readonly Pick<Membership, "kind" | "eventId" | "founderId" | "role">[],
+  memberships: readonly Pick<Membership, "kind" | "eventId" | "founderId" | "role" | "masked">[],
   modeOfEvent: (eventId: string) => GeneratorMode | null,
   mode: GeneratorMode,
   excludeEventId: string | null,
 ): Map<string, number> {
   const counts = new Map<string, number>();
   for (const m of memberships) {
-    if (m.role === LEADER_ROLE && modeOfMembership(m, modeOfEvent, excludeEventId) === mode) bump(counts, m.founderId);
+    if (m.role === LEADER_ROLE && !m.masked && modeOfMembership(m, modeOfEvent, excludeEventId) === mode) bump(counts, m.founderId);
   }
   return counts;
 }

@@ -3,6 +3,7 @@
 import { useMemo, type ReactNode } from "react";
 import { formConcernsFounder, formRatesTeammates, isFormStillDone, questionsAddedSince } from "@shared/formRules";
 import { formState } from "@shared/forms";
+import { activeMemberIds } from "@shared/teamGenerator";
 import { isProvenIdentity, type Form, type WithId } from "@shared/types";
 import { queries, refs } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
@@ -79,7 +80,8 @@ export function FormsToFillProvider({ children }: { children: ReactNode }) {
       const event = f.eventId ? (allEventsById.get(f.eventId) ?? null) : null;
       // Hors Peer rating, l'appartenance suffit (`memberships`).
       const isMember = f.eventId !== null && teamEventIds.has(f.eventId);
-      const team = f.eventId ? (teams.data.get(f.eventId)?.memberIds ?? (isMember ? [founder.id] : null)) : null;
+      const saved = f.eventId ? teams.data.get(f.eventId) : undefined;
+      const team = f.eventId ? (saved ? activeMemberIds(saved) : isMember ? [founder.id] : null) : null;
       const teammates = (team ?? []).flatMap((id) => (id === founder.id ? [] : (foundersById.get(id) ?? [])));
       if (!formConcernsFounder(f, founder, event, team, f.eventId ? attendanceByEventId.get(f.eventId) : undefined, teammates)) return [];
       const doneDateISOString = isDone ? (completion?.completedDateISOString ?? null) : null;

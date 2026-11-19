@@ -2,6 +2,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, type Transaction } from "firebase-admin/firestore";
 import { docPaths, eventCollectionPaths } from "../shared/collections";
 import { juryTargetOf } from "../shared/events";
+import { visibleTeams } from "../shared/teamGenerator";
 import type { EventTeam, PioneersEvent, Startup } from "../shared/types";
 
 // ----------------------------
@@ -41,8 +42,7 @@ export async function scoredTargets(tx: Transaction | null, eventId: string, eve
   }
   const query = db().collection(eventCollectionPaths.teams(eventId));
   const teams = tx ? await tx.get(query) : await query.get();
-  return teams.docs.flatMap((d) => {
-    const t = d.data() as EventTeam;
-    return t.publishedDateISOString !== null ? [{ id: d.id, name: t.name, memberIds: t.memberIds, memberNames: t.memberNames ?? null }] : [];
-  });
+  // Les groupes publies, membres presents ; un groupe tout absent est masque, hors classement (19/11).
+  const published = teams.docs.map((d) => ({ ...(d.data() as EventTeam), id: d.id })).filter((t) => t.publishedDateISOString !== null);
+  return visibleTeams(published).map((t) => ({ id: t.id, name: t.name, memberIds: t.memberIds, memberNames: t.memberNames ?? null }));
 }

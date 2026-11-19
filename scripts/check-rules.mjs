@@ -1782,5 +1782,38 @@ console.log("pitch deck and pitch grid (lot 5)");
 }
 // ==== LOT 5 (fin) =================================================================
 
+// ---- Copies de `people` sur chaque fiche de la personne (19/11, lib/profile.ts#copyHolders) ----
+// Le fondateur ecrit la vignette sur SES fiches (rattachees a son compte) ; une fiche non reclamee
+// de la meme personne lui est refusee : l'ecran ne la vise pas (le staff, oui).
+console.log("identity copies on every profile of the person");
+{
+  const adb = getAdminFirestore();
+  const now = new Date().toISOString();
+  const card = (batchId, uid) => ({ programId: "accelerator", batchId, personId: "person-ada-example", uid, name: "Ada Example", photoUrl: null, archivedDateISOString: null, status: "enrolled" });
+  await adb.doc("founders/ada-second").set(card("check-copies", "ada-1"));
+  await adb.doc("founders/ada-unclaimed").set(card("check-copies-2", null));
+  await adb.doc("batchMemberships/check-copies_ada-1").set({ programId: "accelerator", batchId: "check-copies", uid: "ada-1", founderId: "ada-second", createdDateISOString: now });
+  const thumb = "data:image/jpeg;base64,AAAA";
+  const { app, db } = await clientAs("ada-1");
+  const photoOn = (ids) => {
+    const b = writeBatch(db);
+    b.set(doc(db, "people/person-ada-example"), { photoUrl: thumb, updatedDateISOString: now }, { merge: true });
+    for (const id of ids) b.set(doc(db, `founders/${id}`), { photoUrl: thumb }, { merge: true });
+    return b.commit();
+  };
+  await expectOk("a founder writes her thumbnail on both of her profiles", () => photoOn(["ada-example", "ada-second"]));
+  await expectDenied("not on an unclaimed profile of the same person", () => photoOn(["ada-example", "ada-unclaimed"]));
+  await deleteApp(app);
+  const staff = await clientAs("staff-1");
+  await expectOk("the staff writes it on every profile of the person", async () => {
+    const b = writeBatch(staff.db);
+    b.set(doc(staff.db, "people/person-ada-example"), { photoUrl: null, updatedDateISOString: now }, { merge: true });
+    for (const id of ["ada-example", "ada-second", "ada-unclaimed"]) b.set(doc(staff.db, `founders/${id}`), { photoUrl: null }, { merge: true });
+    await b.commit();
+  });
+  await deleteApp(staff.app);
+  await Promise.all(["founders/ada-second", "founders/ada-unclaimed", "batchMemberships/check-copies_ada-1"].map((path) => adb.doc(path).delete()));
+}
+
 console.log(failures === 0 ? "\nall rules checks passed" : `\n${failures} rules check(s) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

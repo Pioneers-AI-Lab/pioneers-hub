@@ -41,6 +41,7 @@ import {
   type RespondentInput,
 } from "../shared/callables";
 import { juryTargetOf } from "../shared/events";
+import { visibleTeam, visibleTeams } from "../shared/teamGenerator";
 import { activeQuestions, answerKey, isJuryForm, isPerTarget, isProvenIdentity, needsAccount, parseAnswerKey, scopeOf, submissionLateDeadline } from "../shared/types";
 import type {
   Attendance,
@@ -183,7 +184,8 @@ async function teamOf(tx: Transaction | null, eventId: string, founderId: string
   const snap = tx ? await tx.get(query) : await query.get();
   const published = snap.docs.find((d) => (d.data() as EventTeam).publishedDateISOString !== null);
   if (!published) return null;
-  const t = published.data() as EventTeam;
+  // Ses coequipiers presents (les absents sont masques : ni a noter, ni « a repondu » pour l'equipe).
+  const t = visibleTeam(published.data() as EventTeam);
   return { id: published.id, name: t.name, memberIds: t.memberIds, memberNames: t.memberNames ?? null };
 }
 
@@ -389,13 +391,10 @@ const OTHER_PICKERS: Partial<Record<PickerEntity, (form: Form) => Promise<Public
     const snap = await db()
       .collection(eventCollectionPaths.teams(form.eventId))
       .where("publishedDateISOString", "!=", null)
-      .select("name", "memberNames")
+      .select("name", "memberIds", "memberNames", "roles", "absentMemberIds")
       .get();
-    return snap.docs
-      .map((d) => {
-        const t = d.data() as Pick<EventTeam, "name" | "memberNames">;
-        return { value: d.id, label: t.name, hint: t.memberNames?.join(", ") || null };
-      })
+    return visibleTeams(snap.docs.map((d) => ({ ...(d.data() as EventTeam), id: d.id })))
+      .map((t) => ({ value: t.id, label: t.name, hint: t.memberNames?.join(", ") || null }))
       .sort(byLabel);
   },
   mentor: async () => {

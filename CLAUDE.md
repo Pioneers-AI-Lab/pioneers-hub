@@ -238,7 +238,16 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   la grille du jury ou les metriques d'un formulaire changent (pas pour une date, un statut, un titre).
   `onTeamWritten` (`events/{id}/teams/{teamId}`, 19/11) : une equipe d'un tirage PUBLIE dont les membres ou le nom
   changent (absent retire, retardataire, echange : ecran Admin ou `edit_teams`) recalcule le leaderboard, qui copie
-  ses `memberIds` ; un brouillon, rien. Une absence marquee ne retouche jamais un tirage publie.
+  ses `memberIds` ACTIFS ; un brouillon, rien.
+  Presence -> groupes (19/11) : la presence est LA source. `onAttendanceWritten` (services/teamAbsences.ts, plan pur
+  `shared/admin/teams.ts#absenceWrites`) ecrit sur chaque groupe PUBLIE `absentMemberIds` (absents a l'evenement) et
+  `masked` sur leurs appartenances ; `memberIds` reste le tirage (retour en arriere d'un geste). Toute lecture passe par
+  `activeMemberIds` / `visibleTeam` / `visibleTeams` (shared/teamGenerator.ts) : pages, classement (`scoredTargets`),
+  jury, formulaires, API/MCP (`get event`), historique des paires et rotation des leaders (masques ignores). Leader
+  absent : `actingLeaderId` (premier present, rien d'ecrit) ; groupe tout absent : masque et hors classement. Une
+  retouche (`edit_teams`, TeamGenerator via `AdminEventContext.savedTeams`) garde les masques (`keepMaskedMembers`).
+  Notes entre pairs d'un absent : deja exclues des scores (services/scores.ts). Rattrapage :
+  `node scripts/sync-team-absences.mjs <batchId> [--prod]`.
   Classement de startups (pitchs, sans matching) : `onStartupUpdated` recalcule aussi les leaderboards des evenements
   non archives qui la classent quand son nom ou son equipe change ; `onEventUpdated` (`events/{id}`) recalcule quand
   ses `startupIds` ou son matching changent (bareme et metrique : deja par leurs callables). Verifie par `check:api`

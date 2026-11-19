@@ -4,6 +4,7 @@ import { juryTargetOf } from "../shared/events";
 import { eventMetrics, juryCriteria } from "../shared/forms";
 import type { Evaluation, EventTeam, Form, MetricSnapshot, PioneersEvent, Startup, Submission } from "../shared/types";
 import { sameIds } from "../shared/kpis";
+import { activeMemberIds } from "../shared/teamGenerator";
 import { recomputeLeaderboard } from "./leaderboards";
 import { parisDay } from "./schemas";
 
@@ -40,11 +41,11 @@ export async function onSubmissionChange(eventId: string, teamId: string, before
 
   if (after && changed.length > 0) {
     const [eventSnap, teamSnap] = await db().getAll(db().doc(docPaths.event(eventId)), db().doc(docPaths.team(eventId, teamId)), {
-      fieldMask: ["programId", "batchId", "startDateISOString", "memberIds"],
+      fieldMask: ["programId", "batchId", "startDateISOString", "memberIds", "absentMemberIds"],
     });
     const event = eventSnap.data() as Pick<PioneersEvent, "programId" | "batchId" | "startDateISOString"> | undefined;
     if (event) {
-      const team = teamSnap.data() as Pick<EventTeam, "memberIds"> | undefined;
+      const team = teamSnap.data() as Pick<EventTeam, "memberIds" | "absentMemberIds"> | undefined;
       const day = parisDay(event.startDateISOString);
       const batch = db().batch();
       for (const [metric, value] of changed) {
@@ -53,7 +54,7 @@ export async function onSubmissionChange(eventId: string, teamId: string, before
           batchId: event.batchId,
           subjectType: "event_team",
           subjectId: teamId,
-          founderIds: team?.memberIds ?? [],
+          founderIds: team ? activeMemberIds(team) : [],
           eventId,
           metric,
           value,
@@ -79,15 +80,15 @@ export async function onEvaluationChange(eventId: string, before: Pick<Evaluatio
   await recomputeLeaderboard(eventId);
 }
 
-type RankedTeam = Pick<EventTeam, "name" | "memberIds" | "publishedDateISOString">;
+type RankedTeam = Pick<EventTeam, "name" | "memberIds" | "publishedDateISOString" | "absentMemberIds">;
 
 /**
- * Une equipe d'un tirage publie retouchee (absent retire, retard ajoute, echange, renommee) :
- * le leaderboard copie ses membres et son nom, il suit. Un brouillon ne classe rien : ignore.
+ * Une equipe d'un tirage publie retouchee (absent masque, retard ajoute, echange, renommee) :
+ * le leaderboard copie ses membres PRESENTS et son nom, il suit. Un brouillon ne classe rien : ignore.
  */
 export async function onTeamChange(eventId: string, before: RankedTeam | null, after: RankedTeam | null): Promise<void> {
   if (!before?.publishedDateISOString && !after?.publishedDateISOString) return;
-  if (before && after && before.name === after.name && sameIds(before.memberIds, after.memberIds)) return;
+  if (before && after && before.name === after.name && sameIds(activeMemberIds(before), activeMemberIds(after))) return;
   await recomputeLeaderboard(eventId);
 }
 

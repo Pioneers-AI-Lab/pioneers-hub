@@ -101,7 +101,7 @@ export function TeamGenerator() {
 function PublishedSection({ mode }: { mode: TeamToolMode }) {
   const tool = TEAM_TOOLS[mode];
   const { foundersById } = useAdmin();
-  const { event, teams } = useAdminEvent();
+  const { event, teams, savedTeams } = useAdminEvent();
   const nameOf = (id: string) => foundersById.get(id)?.name ?? id;
   const publishedOn = publishedDateOf(teams);
   // Un lien public (sans compte) a partager dans le channel du batch.
@@ -114,7 +114,7 @@ function PublishedSection({ mode }: { mode: TeamToolMode }) {
   const fixNames = async () => {
     setIsFixing(true);
     try {
-      await refreshPublicNames(event, teams, nameOf);
+      await refreshPublicNames(event, savedTeams, nameOf);
       notifications.show({ message: "Names added to the public page" });
     } catch (err) {
       notifications.show({ color: "red", message: (err as Error).message });
@@ -169,7 +169,7 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
   const tool = TEAM_TOOLS[mode];
   const preset = GENERATOR_PRESETS[mode];
   const { founders, foundersById, teamMemberships, eventsById, startups } = useAdmin();
-  const { event, teams, absentIds, matching, isDrawPublished: isPublished, submissionsByTeamId, evaluations } = useAdminEvent();
+  const { event, teams, savedTeams, absentIds, matching, isDrawPublished: isPublished, submissionsByTeamId, evaluations } = useAdminEvent();
 
   // Les partis gardent leur historique mais ne sont plus proposes (SPECS §4.1).
   const eligible = useMemo(() => founders.filter((f) => isPickable(f, event.batchId)), [founders, event.batchId]);
@@ -333,9 +333,9 @@ function GeneratorWorkspace({ mode }: { mode: TeamToolMode }) {
     try {
       // Brouillon et publication : numerotation continue, l'id d'equipe suit la position.
       const drafts = groups.map((g) => ({ ...g, memberIds: [...g.memberIds] }));
-      if (isPublished) await updatePublishedTeams(event, drafts, teams, teamMemberships, nameOf, resultTeamIds);
-      else if (publish) await publishTeams(event, drafts, teams, nameOf, drawnSize);
-      else await saveDraftTeams(event, drafts, teams, drawnSize, constraintsOf(keepApart, keepTogether));
+      if (isPublished) await updatePublishedTeams(event, drafts, savedTeams, teamMemberships, nameOf, resultTeamIds, absentIds);
+      else if (publish) await publishTeams(event, drafts, savedTeams, nameOf, drawnSize);
+      else await saveDraftTeams(event, drafts, savedTeams, drawnSize, constraintsOf(keepApart, keepTogether));
       setIsDirty(false);
       setIsConfirming(false);
       notifications.show({ message: isPublished ? `${tool.groupLabel}s updated` : publish ? `${tool.groupLabel}s published` : "Draft saved" });

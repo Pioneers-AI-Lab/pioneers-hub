@@ -3,7 +3,7 @@
 import { useMemo, type ReactNode } from "react";
 import { canReadFounderDirectory, roleInBatch } from "@shared/access";
 import { matchingOf } from "@shared/events";
-import { byGroupOrder, type GeneratorMode } from "@shared/teamGenerator";
+import { byGroupOrder, visibleTeams, type GeneratorMode } from "@shared/teamGenerator";
 import type { EventTeam, Founder, PioneersEvent, Startup, WithId } from "@shared/types";
 import { queries, refs } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
@@ -62,7 +62,8 @@ export function PublicTeamsProvider({ children }: { children: ReactNode }) {
     return {
       event: e,
       mode,
-      groups: [...groups.data].sort(byGroupOrder),
+      // Sans les membres marques absents (masques, 19/11).
+      groups: visibleTeams([...groups.data].sort(byGroupOrder)),
       viewerFounderId,
       foundersById: new Map(founders.data.map((f) => [f.id, f])),
       startupsById: new Map(startups.data.map((s) => [s.id, s])),

@@ -13,7 +13,7 @@ import { FUNCTIONS_REGION, type CallableName, type CallableRequest, type Callabl
 import { API_KEY_NAME_MAX } from "./shared/api";
 import { COL, PRIVATE_DOC, SUB } from "./shared/collections";
 import { isStaffViewer } from "./shared/access";
-import type { ApiKey, Evaluation, EventTeam, Form, FounderConnections, PioneersEvent, Startup, Submission } from "./shared/types";
+import type { ApiKey, Attendance, Evaluation, EventTeam, Form, FounderConnections, PioneersEvent, Startup, Submission } from "./shared/types";
 import { mintApiKey } from "./api/caller";
 import { loadViewer } from "./api/viewer";
 import { decideRequest, describeRequest } from "./oauth/consent";
@@ -23,6 +23,7 @@ import * as judges from "./services/judges";
 import * as forms from "./services/forms";
 import * as kpis from "./services/kpis";
 import * as teamResults from "./services/teamResults";
+import * as teamAbsences from "./services/teamAbsences";
 import * as scores from "./services/scores";
 import * as calendarSync from "./services/calendarSync";
 import * as shortlistHistory from "./services/shortlistHistory";
@@ -311,7 +312,19 @@ export const onEvaluationWritten = onDocumentWritten(
     ),
 );
 
-// Groupes d'un tirage publie, quel que soit l'ecrivain (ecran Admin, `edit_teams`) -> leaderboard.
+// Presence, quel que soit l'ecrivain (ecran Admin, `mark_attendance`, `set_fields`) : un absent est
+// masque de son groupe publie et de l'historique, remis present il revient (services/teamAbsences.ts).
+export const onAttendanceWritten = onDocumentWritten(
+  { document: `${COL.events}/{eventId}/${SUB.attendance}/{founderId}`, region: FIRESTORE_TRIGGER_REGION },
+  (event) =>
+    teamAbsences.onAttendanceChange(
+      event.params.eventId,
+      (event.data?.before.data() as Attendance | undefined) ?? null,
+      (event.data?.after.data() as Attendance | undefined) ?? null,
+    ),
+);
+
+// Groupes d'un tirage publie, quel que soit l'ecrivain (ecran Admin, `edit_teams`, masque d'absence) -> leaderboard.
 export const onTeamWritten = onDocumentWritten(
   { document: `${COL.events}/{eventId}/${SUB.teams}/{teamId}`, region: FIRESTORE_TRIGGER_REGION },
   (event) =>

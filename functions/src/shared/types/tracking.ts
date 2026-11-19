@@ -88,6 +88,11 @@ export type Membership = BatchScoped & {
   startDayString: DayString;
   /** `null` tant que le fondateur est dans l'equipe. */
   endDayString: DayString | null;
+  /**
+   * Absent a l'evenement de cette equipe (19/11, ecrit par le serveur avec `EventTeam.absentMemberIds`) :
+   * l'appartenance reste, mais ne compte ni dans l'historique des paires ni dans la rotation des leaders.
+   */
+  masked?: boolean;
   /** Raison du depart (equipe qui se separe, fondateur qui quitte le programme). */
   endReason: string | null;
 };

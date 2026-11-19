@@ -11,6 +11,7 @@ import {
   type Batch,
   type BatchTask,
   type ClosedList,
+  type EventTeam,
   type Form,
   type FormResponse,
   type TeamLock,
@@ -21,7 +22,9 @@ import {
   type Program,
   type Startup,
   type BatchResources,
+  type WithId,
 } from "../shared/types";
+import { visibleTeams } from "../shared/teamGenerator";
 import {
   canReadBatchResources,
   canReadFounderDirectory,
@@ -521,7 +524,8 @@ export async function getObject(caller: Caller, input: GetInput): Promise<Record
         object,
         ...withId(event),
         forms: forms.map(shortForm),
-        teams: teams.docs.map((d) => withId<{ publishedDateISOString: string | null }>(d)).filter((t) => canReadTeam(role, t)),
+        // Groupes tels qu'on les lit (19/11) : sans leurs membres absents, masques comme a l'ecran ; un groupe tout absent, masque.
+        teams: visibleTeams(teams.docs.map((d) => withId<WithId<EventTeam>>(d)).filter((t) => canReadTeam(role, t))),
         attendance: attendance?.docs.map((d) => ({ founderId: d.id, status: d.get("status") })),
         submissions: submissions.docs.map((d) => withId(d)),
         evaluations: evaluations?.docs.map((d) => withId(d)),

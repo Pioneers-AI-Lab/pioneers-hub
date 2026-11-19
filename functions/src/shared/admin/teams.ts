@@ -1,8 +1,9 @@
 import { publicShortName } from "../access";
 import { docIds, docPaths } from "../collections";
 import { deleteWrite, mergeWrite, RuleError, setWrite, type DocWrite } from "../docWrites";
+import { sameIds } from "../kpis";
 import { matchingOf } from "../events";
-import { generateGroups, groupNumber, isDrawPublished, LEADER_ROLE, leaderIdOf, pairKey, publishedDateOf, rolesWithLeader, teamSizeFor, type GeneratorInput } from "../teamGenerator";
+import { actingLeaderId, generateGroups, groupNumber, isDrawPublished, LEADER_ROLE, leaderIdOf, pairKey, publishedDateOf, rolesWithLeader, teamSizeFor, type GeneratorInput } from "../teamGenerator";
 import type { DrawConstraints, EventMatching, EventTeam, Membership, PioneersEvent, WithId } from "../types";
 
 // ----------------------------
@@ -58,11 +59,13 @@ type TeamWrite = {
   /** Noms publics : seulement une fois publie (un brouillon n'est lu que du staff). */
   fullNameOf: FullNameOf | null;
   drawConstraints: DrawConstraints | null;
+  /** Absents a l'evenement : masques dans un groupe publie (`absentMemberIds`). */
+  absentIds: ReadonlySet<string>;
 };
 
 /** Les equipes ; les equipes enregistrees absentes de `teams` sont effacees. */
 function teamWrites(eventId: string, teams: SavedTeam[], existing: readonly WithId<EventTeam>[], write: TeamWrite): DocWrite[] {
-  const { publishedDateISOString, fullNameOf, drawConstraints } = write;
+  const { publishedDateISOString, fullNameOf, drawConstraints, absentIds } = write;
   const writes = teams.map((team) => {
     const previous = existing.find((t) => t.id === team.id);
     return setWrite(docPaths.team(eventId, team.id), {
@@ -74,6 +77,7 @@ function teamWrites(eventId: string, teams: SavedTeam[], existing: readonly With
       publishedDateISOString,
       startupId: previous?.startupId ?? null,
       drawConstraints,
+      absentMemberIds: publishedDateISOString ? team.memberIds.filter((id) => absentIds.has(id)) : [],
     } satisfies EventTeam);
   });
   const keep = new Set(teams.map((t) => t.id));
@@ -89,7 +93,7 @@ const withPositionalIds = (eventId: string, drafts: DraftTeam[]): SavedTeam[] =>
  * plus dans l'equipe (une correction, voir en tete). `current` : celles deja
  * en base, retrouvees par leur vrai id (l'evenement a pu etre deplace depuis).
  */
-function membershipWrites(event: TeamEvent, teams: SavedTeam[], current: readonly WithId<Membership>[]): DocWrite[] {
+function membershipWrites(event: TeamEvent, teams: SavedTeam[], current: readonly WithId<Membership>[], absentIds: ReadonlySet<string>): DocWrite[] {
   const startDayString = event.startDateISOString.slice(0, 10);
   const endDayString = (event.endDateISOString ?? event.startDateISOString).slice(0, 10);
   const key = (teamId: string, founderId: string) => `${teamId}|${founderId}`;
@@ -98,11 +102,15 @@ function membershipWrites(event: TeamEvent, teams: SavedTeam[], current: readonl
   for (const { id: teamId, memberIds, leaderId } of teams) {
     for (const founderId of memberIds) {
       const isLeader = founderId === leaderId;
+      const masked = absentIds.has(founderId);
       const previous = left.get(key(teamId, founderId));
       left.delete(key(teamId, founderId));
       if (previous) {
-        // Seul le role de leader change (les roles SP26 restent).
-        if ((previous.role === LEADER_ROLE) !== isLeader) writes.push(mergeWrite(docPaths.teamMembership(previous.id), { role: isLeader ? LEADER_ROLE : null }));
+        // Seuls le role de leader (les roles SP26 restent) et le masque d'absence changent.
+        const patch: Partial<Membership> = {};
+        if ((previous.role === LEADER_ROLE) !== isLeader) patch.role = isLeader ? LEADER_ROLE : null;
+        if (Boolean(previous.masked) !== masked) patch.masked = masked;
+        if (Object.keys(patch).length) writes.push(mergeWrite(docPaths.teamMembership(previous.id), patch));
         continue;
       }
       writes.push(
@@ -117,6 +125,7 @@ function membershipWrites(event: TeamEvent, teams: SavedTeam[], current: readonl
           startDayString,
           endDayString,
           endReason: null,
+          masked,
         } satisfies Membership),
       );
     }
@@ -145,7 +154,7 @@ export function replaceMatchingWrites(eventId: string, matching: EventMatching |
 export function draftTeamsWrites(event: TeamEvent, drafts: DraftTeam[], existing: readonly WithId<EventTeam>[], groupSize: number, constraints: DrawConstraints, now: string): DocWrite[] {
   assertNotPublished(existing);
   return [
-    ...teamWrites(event.id, withPositionalIds(event.id, drafts), existing, { publishedDateISOString: null, fullNameOf: null, drawConstraints: constraints }),
+    ...teamWrites(event.id, withPositionalIds(event.id, drafts), existing, { publishedDateISOString: null, fullNameOf: null, drawConstraints: constraints, absentIds: new Set() }),
     ...teamSizeWrites(event, groupSize, now),
   ];
 }
@@ -156,10 +165,11 @@ export function publishTeamsWrites(event: TeamEvent, drafts: DraftTeam[], existi
   if (drafts.length === 0) throw new RuleError("nothing_to_publish", "There is nothing to publish.", "eventId");
   const teams = withPositionalIds(event.id, drafts);
   return [
-    ...teamWrites(event.id, teams, existing, { publishedDateISOString: now, fullNameOf, drawConstraints: null }),
+    // Un absent ne se publie pas (refuse avant) : rien a masquer.
+    ...teamWrites(event.id, teams, existing, { publishedDateISOString: now, fullNameOf, drawConstraints: null, absentIds: new Set() }),
     ...teamSizeWrites(event, groupSize, now),
     // Aucune appartenance avant la publication.
-    ...membershipWrites(event, teams, []),
+    ...membershipWrites(event, teams, [], new Set()),
   ];
 }
 
@@ -171,14 +181,16 @@ export function publishTeamsWrites(event: TeamEvent, drafts: DraftTeam[], existi
  */
 export function publishedTeamsWrites(
   event: TeamEvent,
-  drafts: DraftTeam[],
+  given: DraftTeam[],
   existing: readonly WithId<EventTeam>[],
   memberships: readonly WithId<Membership>[],
   fullNameOf: FullNameOf,
   withResults: ReadonlySet<string>,
+  absentIds: ReadonlySet<string>,
 ): DocWrite[] {
   const publishedDateISOString = publishedDateOf(existing);
   if (!publishedDateISOString) throw new RuleError("not_published", "These teams are not published yet.", "eventId");
+  const drafts = keepMaskedMembers(given, existing);
   const teams = drafts.filter((d): d is SavedTeam => d.id !== null);
   const kept = new Set(teams.map((t) => t.id));
   if (kept.size !== drafts.length) throw new RuleError("missing_team_id", "Each team needs its own id: reload the page and try again.", "teams");
@@ -186,7 +198,48 @@ export function publishedTeamsWrites(
   if (emptied.length > 0) {
     throw new RuleError("team_has_results", `${emptied.map((t) => t.name).join(", ")} already sent results: keep at least one person in ${emptied.length === 1 ? "it" : "them"}.`, "teams");
   }
-  return [...teamWrites(event.id, teams, existing, { publishedDateISOString, fullNameOf, drawConstraints: null }), ...membershipWrites(event, teams, memberships)];
+  return [
+    ...teamWrites(event.id, teams, existing, { publishedDateISOString, fullNameOf, drawConstraints: null, absentIds }),
+    ...membershipWrites(event, teams, memberships, absentIds),
+  ];
+}
+
+/**
+ * Une retouche ne voit que les membres presents (`visibleTeam`) : un membre masque que la retouche
+ * ne place nulle part reste dans son groupe, et le reste masque (il reviendra s'il est remis present).
+ * Un leader masque reste leader si la retouche n'en nomme pas d'autre que celui de remplacement (`actingLeaderId`).
+ */
+export function keepMaskedMembers(drafts: DraftTeam[], existing: readonly WithId<EventTeam>[]): DraftTeam[] {
+  const placed = new Set(drafts.flatMap((d) => d.memberIds));
+  return drafts.map((draft) => {
+    const saved = draft.id ? existing.find((t) => t.id === draft.id) : undefined;
+    const masked = saved?.absentMemberIds?.filter((id) => !placed.has(id)) ?? [];
+    if (!saved || masked.length === 0) return draft;
+    const leader = leaderIdOf(saved);
+    const keepLeader = leader !== null && masked.includes(leader) && (draft.leaderId === null || draft.leaderId === actingLeaderId(saved));
+    return { ...draft, memberIds: [...draft.memberIds, ...masked], leaderId: keepLeader ? leader : draft.leaderId };
+  });
+}
+
+/**
+ * Le masque d'absence d'un tirage publie, d'apres la presence (services/teamAbsences.ts, a chaque
+ * absence posee ou levee) : `absentMemberIds` de chaque groupe et `masked` de chaque appartenance.
+ * Seuls les ecarts s'ecrivent ; rien sur un brouillon (le tirage ecarte deja les absents).
+ */
+export function absenceWrites(eventId: string, teams: readonly WithId<EventTeam>[], memberships: readonly WithId<Membership>[], absentIds: ReadonlySet<string>): DocWrite[] {
+  const published = teams.filter((t) => t.publishedDateISOString !== null);
+  const writes: DocWrite[] = [];
+  for (const team of published) {
+    const next = team.memberIds.filter((id) => absentIds.has(id));
+    if (!sameIds(next, team.absentMemberIds)) writes.push(mergeWrite(docPaths.team(eventId, team.id), { absentMemberIds: next }));
+  }
+  const teamIds = new Set(published.map((t) => t.id));
+  for (const m of memberships) {
+    if (m.kind !== "event_team" || m.eventId !== eventId || !teamIds.has(m.teamId)) continue;
+    const masked = absentIds.has(m.founderId);
+    if (Boolean(m.masked) !== masked) writes.push(mergeWrite(docPaths.teamMembership(m.id), { masked }));
+  }
+  return writes;
 }
 
 /** Les noms publics des equipes publiees (page publique, ou apres un changement de nom) : seul `memberNames` change. */

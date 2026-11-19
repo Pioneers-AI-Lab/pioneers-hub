@@ -3,7 +3,7 @@
 import { useMemo, type ReactNode } from "react";
 import { matchingOf } from "@shared/events";
 import { isFormStillDone } from "@shared/formRules";
-import { byGroupOrder } from "@shared/teamGenerator";
+import { byGroupOrder, visibleTeams } from "@shared/teamGenerator";
 import type { Attendance, EventMatching, EventTeam, Form, FormCompletion, PioneersEvent, WithId } from "@shared/types";
 import { queries } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
@@ -64,7 +64,8 @@ export function EventPageProvider({ children }: { children: ReactNode }) {
       event,
       matching: matchingOf(event),
       forms: live,
-      groups: [...groups.data].sort(byGroupOrder),
+      // Sans les membres marques absents (masques, 19/11).
+      groups: visibleTeams([...groups.data].sort(byGroupOrder)),
       doneFormIds: new Set(
         live
           .filter((f) => {

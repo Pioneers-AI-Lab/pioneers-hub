@@ -20,7 +20,6 @@ import {
   type DraftTeam,
 } from "../../shared/admin/teams";
 import { publicShortName } from "../../shared/access";
-import { absentFounderIds } from "../../shared/attendance";
 import { COL, docPaths, eventCollectionPaths } from "../../shared/collections";
 import { matchingOf } from "../../shared/events";
 import {
@@ -33,15 +32,17 @@ import {
   GROUP_SIZE_MIN,
   GROUP_WORDS,
   groupNumber,
+  actingLeaderId,
   isDrawPublished,
-  leaderIdOf,
   startupFixedGroups,
   teamSizeFor,
+  visibleTeam,
 } from "../../shared/teamGenerator";
-import { isPickable, MATCHING_MODES, readConnections, type Attendance, type EventTeam, type Founder, type FounderConnections, type Membership, type PioneersEvent, type Startup } from "../../shared/types";
+import { isPickable, MATCHING_MODES, readConnections, type EventTeam, type Founder, type FounderConnections, type Membership, type PioneersEvent, type Startup } from "../../shared/types";
 import { badRequest } from "../../api/errors";
 import type { Operation } from "../operations";
 import { mustRead, readWhere, staffOnly, writePlan } from "./writes";
+import { absentOf } from "../teamAbsences";
 
 // ----------------------------
 // services/admin - le matching d'un evenement : regler, tirer, publier, retoucher
@@ -71,8 +72,6 @@ async function eventTeams(tx: Tx, eventId: string) {
 
 type EventTeams = Awaited<ReturnType<typeof eventTeams>>;
 
-const absentOf = async (tx: Tx, eventId: string) =>
-  absentFounderIds((await tx.get(getFirestore().collection(eventCollectionPaths.attendance(eventId)))).docs.map((d) => d.data() as Attendance));
 
 /** Les fondateurs donnes, verifies : du batch de l'evenement, sinon refus. */
 async function foundersOf(tx: Tx, batchId: string, ids: readonly string[]) {
@@ -273,7 +272,7 @@ export const editTeams: Operation<typeof EditTeamsInput> = {
     const matching = requireMatching(ctx);
     const all = given.flatMap((t) => t.memberIds);
     const savedById = new Map(ctx.teams.map((t) => [t.id, t]));
-    const [byId, history] = await Promise.all([foundersOf(tx, ctx.event.batchId, all), historyOf(tx, ctx.event.batchId)]);
+    const [byId, history, absentIds] = await Promise.all([foundersOf(tx, ctx.event.batchId, all), historyOf(tx, ctx.event.batchId), absentOf(tx, eventId)]);
     // Un membre retire n'est plus dans `all` : son nom court enregistre sur le groupe (apercu « avant »).
     const savedNames = savedShortNames(ctx.teams);
     const nameOf = (id: string) => byId.get(id)?.name ?? (savedNames.get(id) || id);
@@ -289,7 +288,8 @@ export const editTeams: Operation<typeof EditTeamsInput> = {
     const drafts: DraftTeam[] = [];
     for (const [i, t] of given.entries()) {
       const saved = t.id ? savedById.get(t.id) : undefined;
-      const previousLeader = saved ? leaderIdOf(saved) : null;
+      // Le leader qui mene (un leader absent est remplace) ; `keepMaskedMembers` rend le sien a son retour.
+      const previousLeader = saved ? actingLeaderId(saved) : null;
       const number = published && !t.id ? nextTeamNumber(drafts, ctx.teams) : i + 1;
       drafts.push({
         id: published ? (t.id ?? teamIdFor(eventId, number - 1)) : null,
@@ -299,6 +299,7 @@ export const editTeams: Operation<typeof EditTeamsInput> = {
         locked: published ? false : (saved?.locked ?? false),
       });
     }
+    // Sur les groupes visibles, comme l'ecran ; les membres masques que la retouche ne voit pas restent (publishedTeamsWrites).
     const withLeaders = assignLeaders(drafts, buildLeaderCounts(history.memberships, history.modeOfEvent, matching.mode, eventId), seededRandom(1));
     let writes;
     if (published) {
@@ -313,11 +314,12 @@ export const editTeams: Operation<typeof EditTeamsInput> = {
         ]);
         withResults = teamIdsWithResults(submissions.filter((d) => d.exists).map((d) => d.id), evaluations.docs.map((d) => ({ targetId: d.get("targetId") as string })));
       }
-      writes = publishedTeamsWrites(ctx.event, withLeaders, ctx.teams, history.memberships, nameOf, withResults);
+      writes = publishedTeamsWrites(ctx.event, withLeaders, ctx.teams, history.memberships, nameOf, withResults, absentIds);
     } else {
       writes = draftTeamsWrites(ctx.event, withLeaders, ctx.teams, matching.size.max, ctx.teams[0]?.drawConstraints ?? constraintsOf([], []), new Date().toISOString());
     }
-    const before = groupsPreview(nameOf, toDrafts(ctx.teams));
+    // L'apercu montre les groupes tels qu'on les lit : sans les membres masques.
+    const before = groupsPreview(nameOf, toDrafts(ctx.teams.map(visibleTeam)));
     const after = groupsPreview(nameOf, withLeaders);
     return writePlan(
       { event: ctx.event.name, published, before, after, note: published ? "Founders see the change; team histories follow it." : "Draft: founders do not see it." },

@@ -314,6 +314,13 @@ export type EventTeam = {
    * ces paires restent entre le staff et les IC. Absent des anciens documents.
    */
   drawConstraints?: DrawConstraints | null;
+  /**
+   * Membres d'un groupe PUBLIE marques absents a l'evenement depuis le tirage (19/11) : ecrit par le
+   * serveur depuis la presence (services/teamAbsences.ts), jamais a la main. Ils restent dans
+   * `memberIds` (le tirage, pour revenir en arriere d'un geste) mais sont MASQUES partout : lire
+   * `activeMemberIds` / `visibleTeam` (shared/teamGenerator.ts). Absent = aucun.
+   */
+  absentMemberIds?: string[];
 };
 
 /** Paires a separer ou a reunir au tirage (`pairKey` : « idA|idB », ids tries ; Firestore refuse les tableaux de tableaux). */

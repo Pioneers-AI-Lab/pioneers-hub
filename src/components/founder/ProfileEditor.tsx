@@ -225,7 +225,9 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
   const setS = <K extends keyof Draft["staff"]>(k: K, v: Draft["staff"][K]) => setDraft((d) => ({ ...d, staff: { ...d.staff, [k]: v } }));
   // Vide hors staff : la section « Staff only » n'est montree qu'a lui.
   const staffPatch: StaffPatch = changed(initial.staff, draft.staff);
-  const slackInvalid = staffPatch.slackUserId != null && !isSlackUserId(staffPatch.slackUserId);
+  // Comme l'API (`slackUserIdWrites`) : en majuscules avant de verifier.
+  const slackId = staffPatch.slackUserId == null ? null : normalizeSlackId(staffPatch.slackUserId);
+  const slackInvalid = slackId !== null && !isSlackUserId(slackId);
   // Seulement une valeur modifiee : une ancienne valeur importee ne bloque pas le reste du profil.
   const linkedinInvalid = "linkedinUrl" in patch.directory && dir.linkedinUrl !== null && normalizeHttpUrl(dir.linkedinUrl) === null;
   const dirty = [patch.founder, patch.directory, patch.profile, staffPatch].some((p) => Object.keys(p).length > 0);
@@ -239,7 +241,7 @@ function EditForm({ initial, back }: EditorProps & { initial: Draft }) {
         [{ ...founder, ...draft.founder }, directory && { ...directory, ...dir }, profile && { ...profile, ...draft.profile }],
       );
       const stamped = completes ? { ...patch, directory: { ...patch.directory, profileCompletedDateISOString: new Date().toISOString() } } : patch;
-      await saveMyProfile(founder, stamped, canWriteIdentity, staffPatch);
+      await saveMyProfile(founder, stamped, canWriteIdentity, staffPatch, isStaff);
       notifications.show({ message: "Profile saved" });
       router.push(back.href);
     } catch (err) {

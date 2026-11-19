@@ -4,7 +4,7 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { eventMetrics, juryCriteria } from "@shared/forms";
 import { absentFounderIds } from "@shared/attendance";
 import { matchingOf } from "@shared/events";
-import { byGroupOrder, isDrawPublished } from "@shared/teamGenerator";
+import { byGroupOrder, isDrawPublished, visibleTeams } from "@shared/teamGenerator";
 import {
   isJuryForm,
   scoringOf,
@@ -45,7 +45,10 @@ type AdminEventValue = {
   event: WithId<PioneersEvent>;
   /** Son matching (`matchingOf`), `null` sans tirage. */
   matching: EventMatching | null;
+  /** Les groupes tels qu'on les lit : membres absents masques, groupes tout absents retires (`visibleTeams`). */
   teams: WithId<EventTeam>[];
+  /** Les groupes enregistres, masques compris : SEULEMENT pour les retoucher (TeamGenerator), qui les garde. */
+  savedTeams: WithId<EventTeam>[];
   /** Le tirage est publie (`isDrawPublished`) : equipes en lecture seule, matching fige. */
   isDrawPublished: boolean;
   isTeamsLoading: boolean;
@@ -97,10 +100,12 @@ export function AdminEventProvider({ backHref, children }: { backHref: string; c
 
   const value = useMemo<AdminEventValue | null>(() => {
     if (!event.data) return null;
+    const savedTeams = [...teams.data].sort(byGroupOrder);
     return {
       event: event.data,
       matching: matchingOf(event.data),
-      teams: [...teams.data].sort(byGroupOrder),
+      teams: visibleTeams(savedTeams),
+      savedTeams,
       isDrawPublished: isDrawPublished(teams.data),
       isTeamsLoading: teams.isLoading,
       submissionsByTeamId: new Map(submissions.data.map((s) => [s.id, s])),

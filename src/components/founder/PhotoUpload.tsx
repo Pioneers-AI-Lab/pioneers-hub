@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button, CloseButton, FileButton, Group, Paper, Stack, Text } from "@mantine/core";
+import { useBatch } from "@/context/BatchContext";
 import { useFounder } from "@/context/FounderContext";
 import { useAction } from "@/hooks/useAction";
 import { preparePhoto, PHOTO_MIN_SIDE } from "@/lib/photo";
@@ -19,6 +20,7 @@ import { FounderCover } from "./FounderCover";
  */
 export function PhotoUpload({ disabled }: { disabled: boolean }) {
   const { founder, directory, profile } = useFounder();
+  const asStaff = useBatch().role === "staff";
   const uploading = useAction();
   const removing = useAction();
   const [isConfirming, setConfirming] = useState(false);
@@ -29,9 +31,9 @@ export function PhotoUpload({ disabled }: { disabled: boolean }) {
     if (!file) return;
     // La photo, dernier champ obligatoire : la date de « Complete your profile » au To do.
     const completes = completesProfile([founder, directory, profile], [{ ...founder, coverPhotoUrl: "photo" }, directory, profile]);
-    void uploading.run(async () => saveProfilePhoto(founder, await preparePhoto(file), completes), "Photo updated");
+    void uploading.run(async () => saveProfilePhoto(founder, await preparePhoto(file), asStaff, completes), "Photo updated");
   };
-  const remove = () => void removing.run(() => removeProfilePhoto(founder), "Photo removed").then(() => setConfirming(false));
+  const remove = () => void removing.run(() => removeProfilePhoto(founder, asStaff), "Photo removed").then(() => setConfirming(false));
 
   return (
     <Stack gap="sm" align="flex-start">

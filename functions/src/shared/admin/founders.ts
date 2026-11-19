@@ -28,12 +28,21 @@ export function slackUserIdWrites(personId: string, founderIds: readonly string[
 /** Un fondateur a creer dans un batch ; le reste de sa fiche se remplit ensuite (formulaires, `set_fields`, /claim). */
 export type NewFounder = { firstName: string; lastName: string; email: string | null; profileCategory: ProfileCategory | null };
 
-const emptyDirectory = (email: string, person: Person | null): FounderDirectory => ({
+/** L'identite de la personne, dont la fiche porte les copies (PERSON_COPIES). */
+type Identity = Pick<Person, "phone" | "whatsapp" | "linkedinUrl" | "photoUrl" | "slackUserId">;
+
+/** Ce qu'un import apporte deja a la nouvelle fiche (colonnes du CSV), par document. */
+export type NewFounderValues = {
+  person?: Partial<Omit<Identity, "slackUserId">>;
+  founder?: Partial<Pick<Founder, "profileCategory" | "hardSkills" | "industries" | "rolesICouldTake">>;
+  founderDirectory?: Partial<FounderDirectory>;
+  founderProfile?: Partial<FounderProfile>;
+};
+
+const emptyDirectory = (email: string): FounderDirectory => ({
   email,
-  whatsapp: person?.whatsapp ?? null,
-  linkedinUrl: person?.linkedinUrl ?? null,
-  phone: person?.phone ?? null,
-  slackUserId: person?.slackUserId ?? null,
+  whatsapp: null,
+  linkedinUrl: null,
   gender: null,
   nationality: null,
   country: null,
@@ -62,9 +71,10 @@ const EMPTY_PROFILE: FounderProfile = { age: null, birthDayString: null, housing
 const EMPTY_INTERNAL: FounderInternal = { background: null };
 
 /**
- * Les documents d'un nouveau fondateur (comme l'import) : sa personne (creee, ou celle d'un autre
- * batch qui garde son identite), la fiche et ses trois documents prives. Pas de rattachement de
- * compte : il se fera par email a la connexion, ou par /claim.
+ * Les documents d'un nouveau fondateur (`create_founders`, Admin > Import founders) : sa personne
+ * (creee, ou celle d'un autre batch, dont l'identite fait foi : on ne la reecrit pas), la fiche et
+ * ses trois documents prives, avec les copies de l'identite. Pas de rattachement de compte : il se
+ * fera par email a la connexion, ou par /claim.
  */
 export function newFounderWrites(
   scope: { programId: string; batchId: string },
@@ -72,9 +82,17 @@ export function newFounderWrites(
   ids: { founderId: string; personId: string },
   existingPerson: Person | null,
   now: string,
+  values: NewFounderValues = {},
 ): DocWrite[] {
   const email = existingPerson?.email || input.email || "";
   const displayName = existingPerson?.displayName || [input.firstName, input.lastName].filter(Boolean).join(" ");
+  const identity: Identity = existingPerson ?? {
+    phone: values.person?.phone ?? null,
+    whatsapp: values.person?.whatsapp ?? null,
+    linkedinUrl: values.person?.linkedinUrl ?? null,
+    photoUrl: values.person?.photoUrl ?? null,
+    slackUserId: null,
+  };
   const personWrite = existingPerson
     ? mergeWrite(docPaths.person(ids.personId), { founderIds: [...new Set([...existingPerson.founderIds, ids.founderId])], updatedDateISOString: now })
     : createWrite(docPaths.person(ids.personId), {
@@ -86,11 +104,7 @@ export function newFounderWrites(
         displayName,
         email,
         altEmails: [],
-        phone: null,
-        whatsapp: null,
-        linkedinUrl: null,
-        photoUrl: null,
-        slackUserId: null,
+        ...identity,
         uid: null,
         founderIds: [ids.founderId],
         mentorId: null,
@@ -105,11 +119,11 @@ export function newFounderWrites(
     uid: null,
     claimedDateISOString: null,
     name: displayName,
-    photoUrl: existingPerson?.photoUrl ?? null,
-    profileCategory: input.profileCategory,
-    hardSkills: [],
-    industries: [],
-    rolesICouldTake: [],
+    photoUrl: identity.photoUrl,
+    profileCategory: values.founder?.profileCategory ?? input.profileCategory,
+    hardSkills: values.founder?.hardSkills ?? [],
+    industries: values.founder?.industries ?? [],
+    rolesICouldTake: values.founder?.rolesICouldTake ?? [],
     trackRecordOneLiner: null,
     startupId: null,
     status: "enrolled",
@@ -117,11 +131,12 @@ export function newFounderWrites(
     isExternalFounder: false,
     stats: null,
   };
+  const { phone, whatsapp, linkedinUrl, slackUserId } = identity;
   return [
     personWrite,
     createWrite(docPaths.founder(ids.founderId), founder),
-    setWrite(docPaths.founderDirectory(ids.founderId), emptyDirectory(email, existingPerson)),
-    setWrite(docPaths.founderProfile(ids.founderId), EMPTY_PROFILE),
+    setWrite(docPaths.founderDirectory(ids.founderId), { ...emptyDirectory(email), ...values.founderDirectory, email, phone, whatsapp, linkedinUrl, slackUserId }),
+    setWrite(docPaths.founderProfile(ids.founderId), { ...EMPTY_PROFILE, ...values.founderProfile }),
     setWrite(docPaths.founderInternal(ids.founderId), EMPTY_INTERNAL),
   ];
 }

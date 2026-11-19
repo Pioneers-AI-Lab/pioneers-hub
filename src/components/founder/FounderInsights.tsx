@@ -114,8 +114,9 @@ export function FounderTeams() {
   const { startupsById } = useStartups();
   const { leaderboardsByEventId } = useLeaderboards();
   if (!canSeeDirectory) return null;
-  // Les tables d'une lunch roulette ne sont pas des equipes : ni rang, ni score.
+  // Les tables d'une lunch roulette ne sont pas des equipes : ni rang, ni score ; absent (masque), il n'y etait pas.
   const teamMemberships = allMemberships.filter((m) => {
+    if (m.masked) return false;
     const event = m.eventId ? allEventsById.get(m.eventId) : undefined;
     return !event || isWorkTeamEvent(event);
   });

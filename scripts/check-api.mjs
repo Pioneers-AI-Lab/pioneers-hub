@@ -609,6 +609,51 @@ const call = async (key, name, args) => {
   check(w.ok, "a direct write (Admin screen): the leaderboard row follows", w.row);
   await db.doc(`events/${drawEventId}/teams/${teamA.id}`).update({ memberIds: teamA.memberIds });
 
+  // La presence masque un absent de son groupe publie, partout, et le rend s'il revient (onAttendanceWritten, 19/11)
+  const docWhen = async (path, test) => {
+    let data;
+    for (let i = 0; i < 20; i++) {
+      data = (await db.doc(path).get()).data();
+      if (test(data)) return { ok: true, data };
+      await new Promise((ok) => setTimeout(ok, 250));
+    }
+    return { ok: false, data };
+  };
+  const teamPath = `events/${drawEventId}/teams/${teamA.id}`;
+  const drawnA = (await db.doc(teamPath).get()).get("memberIds");
+  const absentOne = drawnA[drawnA.length - 1];
+  const presentOnes = drawnA.filter((id) => id !== absentOne);
+  const absentName = (await db.doc(`founders/${absentOne}`).get()).get("name");
+  a = await run("mark_attendance", { eventId: drawEventId, marks: [{ founderId: absentOne, status: "absent" }] });
+  let d = await docWhen(teamPath, (x) => JSON.stringify(x?.absentMemberIds) === JSON.stringify([absentOne]) && x.memberIds.includes(absentOne));
+  check(d.ok, "an absence after the draw masks the member, who stays in the draw", d.data);
+  w = await teamRowIs(presentOnes);
+  check(w.ok, "the leaderboard row drops the masked member", w.row);
+  const maskedShip = (await db.collection("memberships").where("eventId", "==", drawEventId).where("founderId", "==", absentOne).get()).docs[0]?.data();
+  check(maskedShip?.masked === true, "the masked member's team history is masked", maskedShip);
+  t = await call(key, "pioneers_get", { object: "event", id: drawEventId });
+  const seen = t.data?.teams?.find((x) => x.id === teamA.id);
+  check(seen && !seen.memberIds.includes(absentOne) && !("absentMemberIds" in seen), "MCP get event: the masked member is not shown", seen);
+  const visibleGroups = t.data?.teams?.map((x) => ({ id: x.id, memberIds: x.memberIds })) ?? [];
+  t = await call(key, "pioneers_get", { object: "jury_sheet", id: drawEventId });
+  check(!JSON.stringify(t.data?.targets?.find((x) => x.id === teamA.id)?.members ?? []).includes(absentName.split(" ")[0]), "jury sheet: the masked member is not listed", t.data?.targets?.find((x) => x.id === teamA.id));
+  // Les groupes tels que le MCP les montre, renvoyes tels quels (le leader change, pour avoir une retouche).
+  a = await run("edit_teams", { eventId: drawEventId, teams: visibleGroups.map((g) => (g.id === teamA.id ? { ...g, leaderId: presentOnes[presentOnes.length - 1] } : g)) });
+  d = await docWhen(teamPath, (x) => JSON.stringify(x?.memberIds) === JSON.stringify(drawnA) && (x.absentMemberIds ?? []).includes(absentOne));
+  check(a.applied && !a.applied.isError && d.ok, "edit_teams with the groups as read keeps the masked member in the draw", { result: a.applied?.data ?? a.preview.data, team: d.data });
+  a = await run("mark_attendance", { eventId: drawEventId, marks: [{ founderId: absentOne, status: "present" }] });
+  d = await docWhen(teamPath, (x) => (x?.absentMemberIds ?? []).length === 0);
+  w = await teamRowIs(drawnA);
+  check(d.ok && w.ok, "marked present again, the member is back in the group and its row", { team: d.data, row: w.row });
+  a = await run("mark_attendance", { eventId: drawEventId, marks: drawnA.map((founderId) => ({ founderId, status: "absent" })) });
+  w = await rowWhen(drawEventId, teamA.id, (row) => !row);
+  t = await call(key, "pioneers_get", { object: "event", id: drawEventId });
+  check(w.ok && !t.data?.teams?.some((x) => x.id === teamA.id), "a group with nobody present is hidden and out of the ranking", w.row);
+  await run("mark_attendance", { eventId: drawEventId, marks: drawnA.map((founderId) => ({ founderId, status: "present" })) });
+  w = await teamRowIs(drawnA);
+  check(w.ok, "everyone present again: the group is back in the ranking", w.row);
+  await db.doc(teamPath).update({ memberIds: teamA.memberIds });
+
   t = await call(key, "pioneers_create_event", { batchId: "fall-2026", templateKey: "pitch_day", name: "Pitch check", startDateISOString: "2026-12-02T09:30:00+01:00" });
   t = await call(key, "pioneers_create_event", { planId: t.data?.planId });
   const pitchId = t.data?.result?.eventId;

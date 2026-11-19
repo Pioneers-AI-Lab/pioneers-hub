@@ -35,7 +35,8 @@ export const updatePublishedTeams = (
   memberships: readonly WithId<Membership>[],
   fullNameOf: FullNameOf,
   withResults: ReadonlySet<string>,
-) => commitWrites(publishedTeamsWrites(event, drafts, existing, memberships, fullNameOf, withResults));
+  absentIds: ReadonlySet<string>,
+) => commitWrites(publishedTeamsWrites(event, drafts, existing, memberships, fullNameOf, withResults, absentIds));
 
 export const refreshPublicNames = (event: WithId<PioneersEvent>, teams: WithId<EventTeam>[], fullNameOf: FullNameOf) =>
   commitWrites(publicNamesWrites(event.id, teams, fullNameOf));
