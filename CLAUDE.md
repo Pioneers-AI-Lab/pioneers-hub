@@ -242,7 +242,7 @@ Une fonction `api` (Express) servie par le site Hosting **`pioneers-hub-api`** :
   (18/11) : `score_jury` (staff), toutes les notes d'un jury en une fois, apercu en table, puis envoi PAR le formulaire de jury
   (`submitFormResponse(..., { fullName })`, sans le secret du lien) sous le nom complet du staff : le meme jure que par le lien
   (`jury-{empreinte}`, une seule voix), justification par critere dans `evaluation.comment`, reponse `recordedVia: "mcp"`. Fiche de
-  notation `pioneers_get` `jury_sheet` = ce que lit un jure (`loadJuryBrief`) + la grille (shared/admin/jury.ts).
+  notation `pioneers_get` `jury_sheet` = ce que lit un jure + la grille (shared/admin/jury.ts) + le suivi du staff (`loadJuryFollowUp`, 19/11) : `status` par cible (`to_score` tout rempli, `incomplete` avec `owes` = formulaire du et NOMS, `waiting` = un formulaire a venir l'attend, `no_submission`, `scored`), `summary`, `formsNotOpenYet` ; le brief du jure reste en comptes.
 - **OAuth 2.1** (`functions/src/oauth`, connecteur claude.ai et Claude Code) : decouverte RFC 9728 / 8414, enregistrement
   dynamique, `/oauth/authorize` -> page front `/oauth/consent` (callables `oauthDescribeRequest` / `oauthDecide`),
   `/oauth/token` avec PKCE S256. Acces 1 h, rafraichissement 30 j a rotation ; un code ou un rafraichissement rejoue
