@@ -5,7 +5,7 @@ import { JUDGE_LIMITS, type JuryAnswer, type JuryBlock, type JuryBrief, type Jur
 import { publicShortName } from "../shared/access";
 import { enumOptions, getFieldDef, isEmptyValue, parseDbField, resolveDocPath, type DocKind } from "../shared/fieldRegistry";
 import { asksDriveFolder, eventMetrics, juryBlockForms, juryCriterionMetrics, type FieldQuestion } from "../shared/forms";
-import { checkedForms, formsFilledOf, isBlankAnswer, type FormsFilledForm } from "../shared/juryBrief";
+import { checkedForms, formsFilledOf, isBlankAnswer, owedFormsOf, type CheckedForm, type FormsFilledForm, type OwedForm } from "../shared/juryBrief";
 import { juryTargetOf } from "../shared/events";
 import type { AudienceInput } from "../shared/formRules";
 import { nameKey, normalizeHttpUrl } from "../shared/text";
@@ -169,36 +169,56 @@ export const EMPTY_JURY_BRIEF: JuryBrief = { source: "submission", metrics: [], 
  * Une equipe : `formsFilled[id]` (shared/juryBrief.ts).
  */
 export async function loadJuryBrief(eventId: string, event: PioneersEvent, targets: readonly Pick<ScoredTarget, "id" | "memberIds">[]): Promise<JuryBrief> {
-  if (targets.length === 0) return EMPTY_JURY_BRIEF;
+  return (await juryBriefParts(eventId, event, targets, false)).brief;
+}
+
+/** Un formulaire du par une equipe, pour la relancer : qui (noms complets), et si un seul suffit (`due: "team"`). */
+export type OwedFormNamed = { form: string; due: OwedForm["due"]; founders: string[] };
+
+/**
+ * Le suivi du staff (fiche `jury_sheet`) : le brief, ce que chaque equipe doit encore, NOMS compris,
+ * et les formulaires pas encore ouverts qui l'attendent (`waiting`). Jamais montre a un jure.
+ */
+export async function loadJuryFollowUp(eventId: string, event: PioneersEvent, targets: readonly Pick<ScoredTarget, "id" | "memberIds">[]) {
+  const { brief, owed, upcoming, names } = await juryBriefParts(eventId, event, targets, true);
+  const named = (ids: readonly string[]) => ids.map((id) => names.get(id) ?? id);
+  return {
+    brief,
+    owed: Object.fromEntries(Object.entries(owed).map(([id, forms]) => [id, forms.map((o): OwedFormNamed => ({ form: o.title, due: o.due, founders: named(o.missing) }))])),
+    /** Par equipe : les formulaires pas encore ouverts qui attendent l'un de ses membres. */
+    waiting: Object.fromEntries(targets.map((t) => [t.id, upcoming.filter((f) => t.memberIds.some((id) => f.expected.has(id))).map((f) => f.title)])),
+    notOpenYet: upcoming.map((f) => ({ title: f.title, opensDateISOString: f.opensDateISOString })),
+  };
+}
+
+/** Le brief, et ce qu'il en faut au suivi du staff (`staff` : les noms des membres et les formulaires a venir). */
+async function juryBriefParts(eventId: string, event: PioneersEvent, targets: readonly Pick<ScoredTarget, "id" | "memberIds">[], staff: boolean) {
+  const nobody = { owed: {} as Record<string, OwedForm[]>, upcoming: [] as (CheckedForm & { opensDateISOString: string | null })[], names: new Map<string, string>() };
+  if (targets.length === 0) return { brief: EMPTY_JURY_BRIEF, ...nobody };
   const target = juryTargetOf(event);
   const targetIds = targets.map((t) => t.id);
-  const formsSnap = await db()
-    .collection(COL.forms)
-    .where("eventId", "==", eventId)
-    .select("title", "questions", "archivedDateISOString", "opensDateISOString", "status", "identityCheck")
-    .get();
+  // Une equipe : qui doit quoi (`formAudience` : fiches des membres, presence), puis les « J'ai repondu ».
+  const memberIds = target === "team" ? [...new Set(targets.flatMap((t) => t.memberIds))] : [];
+  const fieldMask = ["batchId", "status", "archivedDateISOString", "isExternalFounder", "startupId", ...(staff ? ["name"] : [])];
+  const [formsSnap, founderSnaps, attendanceSnap] = await Promise.all([
+    db().collection(COL.forms).where("eventId", "==", eventId).select("title", "questions", "archivedDateISOString", "opensDateISOString", "status", "identityCheck").get(),
+    memberIds.length ? db().getAll(...memberIds.map((id) => db().doc(docPaths.founder(id))), { fieldMask }) : [],
+    memberIds.length ? db().collection(eventCollectionPaths.attendance(eventId)).select("founderId", "status").get() : null,
+  ]);
   const forms: FormsFilledForm[] = formsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<FormsFilledForm, "id">) }));
   const plan = juryBlockForms(forms, target).map((f) => ({ title: f.title, readers: f.questions.map(answerReader) }));
   // Un pitch : la startup a rempli sa fiche (Pitch deck), pas (seulement) une Submission.
   const source = plan.some((f) => f.readers.some((r) => r.doc !== "submission")) ? "pitch_deck" : "submission";
   const kinds = [...new Set<DocKind>(["submission", ...plan.flatMap((f) => f.readers.map((r) => r.doc))])];
-  // Une equipe : qui doit quoi (`formAudience` : fiches des membres, presence), puis les « J'ai repondu ».
-  const memberIds = target === "team" ? [...new Set(targets.flatMap((t) => t.memberIds))] : [];
-  const [snaps, founderSnaps, attendanceSnap] = await Promise.all([
-    db().getAll(
-      ...targetIds.flatMap((id) =>
-        kinds.map((k) => {
-          const at = resolveDocPath(k, { eventId, teamId: id, startupId: id });
-          if (!at.ok) throw new Error(`jury brief: no path for ${k}`);
-          return db().doc(at.path);
-        }),
-      ),
+  const snaps = await db().getAll(
+    ...targetIds.flatMap((id) =>
+      kinds.map((k) => {
+        const at = resolveDocPath(k, { eventId, teamId: id, startupId: id });
+        if (!at.ok) throw new Error(`jury brief: no path for ${k}`);
+        return db().doc(at.path);
+      }),
     ),
-    memberIds.length
-      ? db().getAll(...memberIds.map((id) => db().doc(docPaths.founder(id))), { fieldMask: ["batchId", "status", "archivedDateISOString", "isExternalFounder", "startupId"] })
-      : [],
-    memberIds.length ? db().collection(eventCollectionPaths.attendance(eventId)).select("founderId", "status").get() : null,
-  ]);
+  );
   const audience: Omit<AudienceInput, "form"> = {
     batchId: event.batchId,
     event,
@@ -206,7 +226,8 @@ export async function loadJuryBrief(eventId: string, event: PioneersEvent, targe
     attendance: attendanceSnap?.docs.map((d) => d.data() as Pick<Attendance, "founderId" | "status">) ?? [],
     teams: targets.map((t) => t.memberIds),
   };
-  const checked = memberIds.length ? checkedForms(forms, audience, new Date().toISOString()) : [];
+  const now = new Date().toISOString();
+  const checked = memberIds.length ? checkedForms(forms, audience, now) : [];
   // `in` : 30 formulaires par requete.
   const completionSnaps = await Promise.all(
     Array.from({ length: Math.ceil(checked.length / 30) }, (_, i) =>
@@ -214,7 +235,8 @@ export async function loadJuryBrief(eventId: string, event: PioneersEvent, targe
     ),
   );
   const completed = new Set(completionSnaps.flatMap((q) => q.docs.map((d) => d.id)));
-  const formsFilled = checked.length ? Object.fromEntries(targets.map((t) => [t.id, formsFilledOf(checked, t.memberIds, completed)])) : undefined;
+  const owed = Object.fromEntries(targets.map((t) => [t.id, owedFormsOf(checked, t.memberIds, completed)]));
+  const formsFilled = checked.length ? Object.fromEntries(targets.map((t) => [t.id, formsFilledOf(owed[t.id])])) : undefined;
   const metrics = eventMetrics(forms);
   const blocks: Record<string, JuryBlock[]> = {};
   const submissions: Record<string, JurySubmission> = {};
@@ -236,7 +258,7 @@ export async function loadJuryBrief(eventId: string, event: PioneersEvent, targe
   }
   // Une metrique que personne n'a declaree ne compare rien.
   const compared = metrics.filter((m) => Object.values(submissions).some((s) => m.key in s.metrics));
-  return {
+  const brief: JuryBrief = {
     source,
     metrics: compared,
     submissions,
@@ -244,5 +266,13 @@ export async function loadJuryBrief(eventId: string, event: PioneersEvent, targe
     criterionMetrics: juryCriterionMetrics(forms, new Set(compared.map((m) => m.key))),
     asksDriveFolder: asksDriveFolder(forms),
     formsFilled,
+  };
+  if (!staff) return { brief, ...nobody };
+  const opensOf = new Map(forms.map((f) => [f.id, f.opensDateISOString]));
+  return {
+    brief,
+    owed,
+    upcoming: memberIds.length ? checkedForms(forms, audience, now, ["not_open_yet"]).map((f) => ({ ...f, opensDateISOString: opensOf.get(f.id) ?? null })) : [],
+    names: new Map(founderSnaps.flatMap((d) => (typeof d.get("name") === "string" ? [[d.id, d.get("name") as string] as const] : []))),
   };
 }

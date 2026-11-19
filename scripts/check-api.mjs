@@ -623,7 +623,21 @@ const call = async (key, name, args) => {
   const critKeys = sheet?.grid?.criteria?.map((c) => c.key) ?? [];
   check(!t.isError && critKeys.includes("execution") && sheet.targets?.length === 2 && sheet.targets.every((x) => x.name) && sheet.juryForm?.locked === false && sheet.juror, "jury_sheet: the grid, every team, the juror's name", t.data);
   check(!/peerRating|pickedFounderIds/.test(JSON.stringify(sheet)), "jury_sheet carries no peer rating nor pick");
-  check(sheet.targets.every((x) => typeof x.formsFilled?.done === "boolean" && Array.isArray(x.formsFilled.missing) && x.formsFilled.missing.every((m) => typeof m === "string")), "jury_sheet: each team's forms filled (counts, no names)", sheet.targets?.map((x) => x.formsFilled));
+  // Le suivi du staff : un statut par equipe, ce qu'elle doit et qui (des noms : staff seulement), un total par statut.
+  const STATUSES = ["to_score", "incomplete", "waiting", "no_submission", "scored"];
+  check(
+    sheet.targets.every((x) => STATUSES.includes(x.status) && (x.status !== "incomplete" || x.owes?.length)) &&
+      STATUSES.every((s) => sheet.summary?.[s] === sheet.targets.filter((x) => x.status === s).length),
+    "jury_sheet: a status per team and a summary",
+    { summary: sheet.summary, targets: sheet.targets.map((x) => [x.id, x.status, x.owes]) },
+  );
+  const founderIds = new Set((await db.collection("founders").select().get()).docs.map((d) => d.id));
+  const owes = sheet.targets.flatMap((x) => x.owes ?? []);
+  check(
+    owes.length > 0 && owes.every((o) => o.form && ["team", "each_member"].includes(o.due) && o.founders.length && o.founders.every((n) => typeof n === "string" && !founderIds.has(n))),
+    "jury_sheet: what each team still owes, by full name",
+    owes,
+  );
   const fullScores = (n) => Object.fromEntries(sheet.grid.criteria.map((c) => [c.key, Math.min(c.max, Math.max(c.min, n))]));
   t = await call(key, "pioneers_run", { action: "score_jury", args: { eventId: "demo-hackathon-2", evaluations: [{ targetId: "team-c", scores: { ...fullScores(4), nope: 3 } }] } });
   check(t.isError && /unknown_criterion/.test(t.data), "score_jury refuses an unknown criterion", t.data);

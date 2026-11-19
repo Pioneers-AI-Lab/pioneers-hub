@@ -11,7 +11,7 @@ import { sha256 } from "../../api/crypto";
 import { badRequest, forbidden } from "../../api/errors";
 import { scoredTargets } from "../events";
 import { submitFormResponse } from "../forms";
-import { loadJuryBrief, namedJudgeId } from "../jury";
+import { loadJuryFollowUp, namedJudgeId } from "../jury";
 import { stableStringify, type Operation } from "../operations";
 import { effectPlan, mustRead, readWhere, staffOnly } from "./writes";
 
@@ -61,12 +61,19 @@ async function juryContext(tx: Transaction, eventId: string) {
 
 // ---- Lire : la fiche de notation --------------------------------------------------
 
+/**
+ * `scored` : deja note par ce staff ; `to_score` : rendu, tous ses formulaires remplis ; `incomplete` : un formulaire
+ * manque (`owes`) ; `waiting` : rendu, mais un formulaire qui l'attend n'est pas encore ouvert ; `no_submission` : rien rendu.
+ */
+const JURY_TARGET_STATUSES = ["to_score", "incomplete", "waiting", "no_submission", "scored"] as const;
+type JuryTargetStatus = (typeof JURY_TARGET_STATUSES)[number];
+
 export async function jurySheet(caller: Caller, eventId: string) {
   if (!staffOnly(caller)) throw forbidden("not_visible", "The jury sheet is for staff only.");
   const [ctx, fullName] = await Promise.all([getFirestore().runTransaction((tx) => juryContext(tx, eventId), { readOnly: true }), staffFullName(caller.uid)]);
   const target = juryTargetOf(ctx.event);
   const targetIds = ctx.targets.map((t) => t.id);
-  const brief = await loadJuryBrief(eventId, ctx.event, ctx.targets);
+  const { brief, owed, waiting, notOpenYet } = await loadJuryFollowUp(eventId, ctx.event, ctx.targets);
   // La place de chaque cible sur chaque chiffre declare (shared/juryBrief.ts), comme le lit un jure.
   const ranks = brief.metrics.map((m) => [m.key, briefMetricRanks(brief, targetIds, m.key)] as const);
   // Le staff est le jure de son nom complet, comme par le lien (`jury-{empreinte}`).
@@ -74,6 +81,12 @@ export async function jurySheet(caller: Caller, eventId: string) {
   const received = new Map<string, number>();
   for (const e of ctx.evaluations) received.set(e.targetId, (received.get(e.targetId) ?? 0) + 1);
   const mine = new Map(ctx.evaluations.filter((e) => e.evaluatorId === judgeId).map((e) => [e.targetId, e]));
+  // Ou en est chaque cible, pour la boucle du staff : noter ce qui est complet, relancer le reste, revenir plus tard.
+  const statusOf = (id: string): JuryTargetStatus =>
+    mine.has(id) ? "scored" : !brief.submissions[id] ? "no_submission" : owed[id]?.length ? "incomplete" : waiting[id]?.length ? "waiting" : "to_score";
+  const statuses = new Map(ctx.targets.map((t) => [t.id, statusOf(t.id)]));
+  const summary = Object.fromEntries(JURY_TARGET_STATUSES.map((s) => [s, 0]));
+  for (const s of statuses.values()) summary[s] += 1;
   return {
     object: "jury_sheet",
     event: { id: eventId, name: ctx.event.name, kind: ctx.event.kind, templateKey: ctx.event.templateKey, startDateISOString: ctx.event.startDateISOString, target },
@@ -88,15 +101,20 @@ export async function jurySheet(caller: Caller, eventId: string) {
     // Les chiffres declares par les cibles, pour comparer (« 5 = la meilleure equipe »).
     metrics: brief.metrics,
     source: brief.source,
+    summary,
+    // Pas encore ouverts : une equipe qu'ils attendent est `waiting`.
+    formsNotOpenYet: notOpenYet.length ? notOpenYet : undefined,
     targets: ctx.targets.map((t) => {
       const m = mine.get(t.id);
       return {
         id: t.id,
         name: t.name,
         members: t.memberNames ?? undefined,
+        status: statuses.get(t.id),
         brief: brief.submissions[t.id] ?? null,
-        // Ses formulaires d'equipe et Peer ratings remplis (`JuryFormsFilled`).
-        formsFilled: brief.formsFilled?.[t.id] ?? null,
+        // A relancer : chaque formulaire du (Submission, Peer rating...), et qui (`due: "team"` : un seul suffit).
+        owes: owed[t.id]?.length ? owed[t.id] : undefined,
+        waitingFor: waiting[t.id]?.length ? waiting[t.id] : undefined,
         // Ses reponses, un bloc par formulaire, questions sans reponse comprises (`text: null`).
         answers: brief.blocks?.[t.id] ?? [],
         // Sa place sur chaque chiffre declare : 1 = la meilleure, parmi `of` cibles qui l'ont declare (`tied` : ex aequo).
@@ -108,7 +126,7 @@ export async function jurySheet(caller: Caller, eventId: string) {
     next:
       target === "startup"
         ? "A pitch is judged LIVE: ask the user for their notes from the session before scoring. Then read every startup, and call `pioneers_run` `score_jury` once with all of them."
-        : "Read EVERY target (brief, Drive folder, proof links) before scoring any: a criterion like \"5 = the best team\" is relative. Then call `pioneers_run` `score_jury` once with all of them.",
+        : "Score the targets with `status: to_score` (every form filled), unless the user says otherwise; list the `incomplete` ones with `owes` so the user can remind them (`waiting`: a form they owe is not open yet). Read EVERY target you score (brief, Drive folder, proof links) before scoring any: a criterion like \"5 = the best team\" is relative. Then call `pioneers_run` `score_jury` once with them. Call this sheet again later: scoring again only adds or replaces the targets you send.",
   };
 }
 

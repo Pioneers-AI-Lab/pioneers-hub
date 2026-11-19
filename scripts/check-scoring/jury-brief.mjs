@@ -60,7 +60,7 @@ check("critere -> chiffre : meme cle, une question de note du jury seulement", (
 
 // ---- Formulaires remplis par l'equipe notee (18/11) : checkedForms + formsFilledOf -----------
 {
-  const { checkedForms, formsFilledOf } = require("../../functions/lib/shared/juryBrief.js");
+  const { checkedForms, formsFilledOf, owedFormsOf } = require("../../functions/lib/shared/juryBrief.js");
   const NOW = "2026-11-18T12:00:00.000Z";
   const FIELD = { team: "submission.notes", each_teammate: "peerRating.comment", self: "founderDirectory.edge", each_target: "evaluation.comment" };
   const form = (id, title, scope, extra = {}) => ({
@@ -76,7 +76,7 @@ check("critere -> chiffre : meme cle, une question de note du jury seulement", (
   const submission = form("sub", "Submission", "team");
   const peer = form("peer", "Peer rating", "each_teammate");
   const retro = form("retro", "Week retro", "self");
-  const filled = (forms, aud, ...done) => formsFilledOf(checkedForms(forms, aud, NOW), members, new Set(done));
+  const filled = (forms, aud, ...done) => formsFilledOf(owedFormsOf(checkedForms(forms, aud, NOW), members, new Set(done)));
 
   check("formulaires remplis : la Submission par un membre coche l'equipe, chaque attendu rend son Peer rating", () => {
     assert.deepEqual(filled([submission, peer, retro], audience(), "sub_a", "sub_b", "sub_c", "peer_a", "peer_b", "peer_c"), { done: true, missing: [] });
@@ -86,6 +86,20 @@ check("critere -> chiffre : meme cle, une question de note du jury seulement", (
 
   check("formulaires remplis : ce qui manque, en comptes (Submission, Peer rating 1/3)", () => {
     assert.deepEqual(filled([submission, peer], audience(), "peer_b"), { done: false, missing: ["Submission", "Peer rating (1/3)"] });
+  });
+
+  check("suivi du staff (jury_sheet) : qui doit quoi, et les formulaires pas encore ouverts", () => {
+    // Submission : tous les membres, tant qu'aucun n'a repondu ; Peer rating : les attendus sans reponse.
+    assert.deepEqual(owedFormsOf(checkedForms([submission, peer], audience(), NOW), members, new Set(["peer_b"])), [
+      { title: "Submission", due: "team", expected: 3, missing: ["a", "b", "c"] },
+      { title: "Peer rating", due: "each_member", expected: 3, missing: ["a", "c"] },
+    ]);
+    assert.deepEqual(owedFormsOf(checkedForms([submission, peer], audience(), NOW), members, new Set(["sub_c", "peer_a", "peer_b", "peer_c"])), []);
+    // A venir : la meme regle des attendus (un absent n'attend rien), seulement les formulaires pas encore ouverts.
+    const later = form("later", "Peer rating", "each_teammate", { opensDateISOString: "2026-11-18T15:00:00.000Z" });
+    const draft = form("draft", "Draft", "team", { status: "draft" });
+    const upcoming = checkedForms([submission, later, retro, draft], audience({ attendance: [{ founderId: "c", status: "absent" }] }), NOW, ["not_open_yet"]);
+    assert.deepEqual(upcoming.map((f) => [f.id, [...f.expected].sort()]), [["later", ["a", "b"]]]);
   });
 
   check("formulaires remplis : ni absent ni fondateur parti ; seul attendu, personne a noter", () => {
