@@ -66,7 +66,7 @@ Objects are archived (\`archivedDateISOString\`) and can be restored. An archive
 
 ## What is attached gives the tools
 - **A matching** (none or one): \`matching.mode\` is \`challenge\` (work teams, each with a leader) or \`matching\` (tables to meet people), with \`matching.size\`. One draw per event: a moment that needs two draws is two events.
-- **Drawn groups** live in \`events/{id}/teams\`. Publishing a draft draw makes teams visible and writes the dated \`memberships\`; until then the matching can change mode or be removed. A published draw is only retouched (swap, move, change a leader, add a latecomer, remove an absentee), with stable team ids: no redraw, no unpublishing. Drawing, publishing and retouching: Admin for now.
+- **Drawn groups** live in \`events/{id}/teams\`. Publishing a draft draw makes teams visible and writes the dated \`memberships\`; until then the matching can change mode or be removed. A published draw is only retouched (swap, move, change a leader, add a latecomer), with stable team ids: no redraw, no unpublishing. An absentee is never removed: marking them absent masks them (see Attendance). Drawing, publishing and retouching: Admin for now.
 - **Forms** attached by \`eventId\` carry every input of the event (see \`forms\`):
   - Submission / Debrief (\`debrief\`): one shared answer per team, in \`events/{id}/submissions/{teamId}\`: team metrics \`submission.metrics.<key>\`, texts, Drive folder. Sent after the deadline, it is marked \`late\`: information only, it still counts.
   - Peer rating (\`peer_feedback\`): one private answer per teammate (\`peerRating.*\`).
