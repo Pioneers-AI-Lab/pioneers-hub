@@ -146,7 +146,7 @@ export default function BatchHomePage() {
       </Section>
 
       {topFounders.length > 0 && (
-        <Section title="Top founders" help={`Program performance, out of ${founderScaleOf(topFounders[0].f.id)}.`}>
+        <Section title="Program Leaderboard" help={`Program performance, out of ${founderScaleOf(topFounders[0].f.id)}.`}>
           <RowList>
             {topFounders.map(({ f, score }) => (
               <LinkRow
@@ -186,7 +186,7 @@ export default function BatchHomePage() {
         </Section>
       )}
 
-      <Section title="Results">
+      <Section title="Hackathon Results">
         <RowList>
           <LinkRow href={paths.leaderboard(program.id, batch.id)} title="Leaderboard" subtitle="Jury scores by event" />
         </RowList>
