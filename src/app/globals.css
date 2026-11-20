@@ -9,6 +9,8 @@
   --input-asterisk-color: var(--mantine-color-pioneers-3);
   /* Fond sombre translucide : boutons poses sur une photo, cadre de connexion. */
   --overlay-bg: rgba(10, 10, 12, 0.78);
+  /* Barres fixes (en-tete, onglets du bas, enregistrement) : lisibles sur le fond anime. */
+  --bar-bg: rgba(10, 10, 12, 0.92);
 }
 
 /* Pas de rebond elastique en bout de page (iOS, macOS) : il emportait l'en-tete
@@ -245,7 +247,7 @@ button.row {
   display: flex;
   height: var(--tabbar-height);
   padding-bottom: env(safe-area-inset-bottom);
-  background: rgba(10, 10, 12, 0.92);
+  background: var(--bar-bg);
   backdrop-filter: blur(12px);
   border-top: 1px solid var(--mantine-color-dark-4);
 }
@@ -347,7 +349,7 @@ button.row {
   z-index: 50;
   padding: 12px 0;
   margin-top: 24px;
-  background: linear-gradient(to top, var(--mantine-color-body) 70%, transparent);
+  background: linear-gradient(to top, var(--bar-bg) 70%, transparent);
 }
 @media (min-width: 48em) {
   .savebar {
@@ -369,7 +371,7 @@ button.row {
   overscroll-behavior: contain;
 }
 
-/* Fond anime des pages de connexion (AnimatedBackdrop). */
+/* Fond anime (AnimatedBackdrop) : connexion, formulaire public et toute l'application. */
 .auth-backdrop {
   position: fixed;
   inset: 0;
@@ -388,10 +390,15 @@ button.row {
 .auth-backdrop-canvas[data-loaded="true"] {
   opacity: 1;
 }
-.auth-backdrop-fade {
+.auth-backdrop-fade,
+.auth-backdrop-veil {
   position: absolute;
   inset: 0;
   background: linear-gradient(0deg, #000 1%, rgba(0, 0, 0, 0) 35%);
+}
+/* Voile noir uniforme (formulaire public, application) : la trame ne fait que bouger derriere le contenu. */
+.auth-backdrop-veil {
+  background: rgba(0, 0, 0, 0.62);
 }
 .auth-page {
   position: relative;
@@ -423,16 +430,9 @@ button.row {
   justify-content: center;
   padding: 32px 0;
 }
-/* Formulaire public (/forms/[formId]) : le meme fond, assombri. Les questions
-   s'y lisent sans carte, la trame ne fait que bouger derriere. */
-.form-veil {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  background: rgba(0, 0, 0, 0.62);
-  pointer-events: none;
-}
-.form-content {
+/* Contenu pose sur le fond anime (formulaire public, application) : au-dessus du
+   fond et de son voile (`AnimatedBackdrop` `veil`). */
+.backdrop-content {
   position: relative;
   z-index: 1;
 }

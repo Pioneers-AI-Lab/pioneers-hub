@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { AnimatedBackdrop } from "@/components/auth/AnimatedBackdrop";
 import { AppChrome } from "@/components/chrome/AppChrome";
 import { PageLoader } from "@/components/ui/PageLoader";
 
@@ -21,10 +22,18 @@ export const instant = false;
 // route dynamique suspend pendant le pre-rendu ; sans frontiere au-dessus, le
 // build echoue. Toutes les donnees sont lues cote client (Firestore temps
 // reel) : la coque pre-rendue est ce chargement, puis le client prend la main.
+//
+// Le fond anime des pages de connexion, sous le voile du formulaire public, derriere
+// toute l'application : monte ici, il survit aux navigations.
 export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
-    <AppChrome>
-      <Suspense fallback={<PageLoader />}>{children}</Suspense>
-    </AppChrome>
+    <>
+      <AnimatedBackdrop veil />
+      <div className="backdrop-content">
+        <AppChrome>
+          <Suspense fallback={<PageLoader />}>{children}</Suspense>
+        </AppChrome>
+      </div>
+    </>
   );
 }

@@ -24,10 +24,12 @@ import type {
 } from "@shared/types";
 import { queries, refs, type WithParent } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
-import { useDocListener, useQueryListener } from "@/hooks/useFirestoreListener";
+import { useDocListener, useQueryListener, withSeed } from "@/hooks/useFirestoreListener";
 import { useParamsTS } from "@/hooks/useParamsTS";
 import { LevelGate } from "@/components/ui/LevelGate";
 import { useBatch } from "@/context/BatchContext";
+import { useFounderDirectories } from "@/context/FounderDirectoriesContext";
+import { useFounders } from "@/context/FoundersContext";
 import { useProgram } from "@/context/ProgramContext";
 import { paths } from "@/lib/paths";
 
@@ -43,6 +45,11 @@ import { paths } from "@/lib/paths";
 //                  sur SA fiche, celles de MyConnectionsContext, deja ouvert au batch)
 //   staff, IC      private/internal, founderStats, presences
 //   selon reglage  scoreSignals (`settings.scoresVisibility`, comme le score : CohortContext, deja lu pour les listes)
+//
+// Amorce (`withSeed`) : la fiche racine est deja dans la liste du batch (FoundersContext),
+// l'annuaire dans celui de la grille (FounderDirectoriesContext, des sa premiere visite) : la
+// fiche s'affiche aussitot, ses propres ecouteurs prennent le relais. Le reste
+// (profile, internal, equipes...) arrive ensuite, en bas de page.
 
 type FounderValue = {
   founder: WithId<Founder>;
@@ -66,6 +73,8 @@ type FounderValue = {
    */
   connections: ConnectionLists | null;
   canSeeDirectory: boolean;
+  /** L'annuaire seul (sections About, Looking for, Background) ; `isDetailsLoading` attend aussi profile et internal. */
+  isDirectoryLoading: boolean;
   /** Le visiteur est ce fondateur : il peut modifier son profil. */
   isSelf: boolean;
   /** Le visiteur peut modifier ce profil (lui-meme ou le staff). */
@@ -78,8 +87,17 @@ export { useFounder };
 
 /**
  * `founderId` explicite pour « Me » (le fondateur connecte) ; sinon celui de l'URL.
+ * `loader` : le squelette de la page qui monte la fiche (sinon le chargement commun).
  */
-export function FounderProvider({ children, founderId: explicitId }: { children: ReactNode; founderId?: string }) {
+export function FounderProvider({
+  children,
+  founderId: explicitId,
+  loader,
+}: {
+  children: ReactNode;
+  founderId?: string;
+  loader?: ReactNode;
+}) {
   const params = useParamsTS<{ founderId?: string }>();
   const founderId = explicitId ?? params.founderId ?? "";
   const { program } = useProgram();
@@ -90,8 +108,13 @@ export function FounderProvider({ children, founderId: explicitId }: { children:
   const canSeeProfile = canReadFounderProfile(role, viewerFounderId, founderId);
   const canSeeInternal = isInsider(role);
 
-  const founder = useDocListener(refs.founder(founderId));
-  const directory = useDocListener(canSeeDirectory ? refs.founderDirectory(founderId) : null);
+  const { foundersById } = useFounders();
+  const { directoriesById } = useFounderDirectories();
+  const founder = withSeed(useDocListener(refs.founder(founderId)), foundersById.get(founderId));
+  const directory = withSeed(
+    useDocListener(canSeeDirectory ? refs.founderDirectory(founderId) : null),
+    directoriesById.get(founderId),
+  );
   const profile = useDocListener(canSeeProfile ? refs.founderProfile(founderId) : null);
   const internal = useDocListener(canSeeInternal ? refs.founderInternal(founderId) : null);
   const teamMemberships = useQueryListener(canSeeDirectory ? queries.teamMembershipsOfFounder(batch.id, founderId) : null);
@@ -125,6 +148,7 @@ export function FounderProvider({ children, founderId: explicitId }: { children:
             attendance: attendance.data,
             connections: canSeeConnections && !connections.isLoading ? readConnections(connections.data) : null,
             canSeeDirectory,
+            isDirectoryLoading: directory.isLoading,
             isSelf,
             canEdit: canEditFounderProfile(role, viewerFounderId, founderId),
             isDetailsLoading: directory.isLoading || profile.isLoading || internal.isLoading,
@@ -161,6 +185,7 @@ export function FounderProvider({ children, founderId: explicitId }: { children:
       found={value !== null}
       error={founder.error}
       backHref={paths.founders(program.id, batch.id)}
+      loader={loader}
     >
       {value && <FounderContextProvider value={value}>{children}</FounderContextProvider>}
     </LevelGate>

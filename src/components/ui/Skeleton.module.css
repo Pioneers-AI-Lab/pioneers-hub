@@ -1,0 +1,69 @@
+/* ----------------------------
+   Squelettes de chargement : un reflet de verre commun
+   ----------------------------
+   Chaque bloc est une plaque translucide (lisible sur le fond anime de l'app).
+   Le reflet est un degrade fixe sur l'ECRAN (`background-attachment: fixed`) :
+   tous les blocs montrent la meme bande au meme instant, comme une vitre qu'un
+   seul reflet traverse. Safari iOS ignore `fixed` (repli : chaque bloc a sa
+   bande, au meme rythme).
+   Apparition apres 120 ms : un cache qui repond vite ne fait jamais clignoter
+   de squelette. Mouvement reduit : plaques fixes, sans reflet. */
+
+.block {
+  --sk-base: rgba(255, 255, 255, 0.05);
+  --sk-glow: rgba(255, 255, 255, 0.045);
+  --sk-edge: rgba(255, 255, 255, 0.08);
+  display: block;
+  flex-shrink: 0;
+  max-width: 100%;
+  border-radius: var(--mantine-radius-sm);
+  background-color: var(--sk-base);
+  /* Une bande large et douce, un filet plus vif au centre : le reflet d'une vitre. */
+  background-image: linear-gradient(
+    105deg,
+    transparent 40%,
+    var(--sk-glow) 46%,
+    var(--sk-edge) 50%,
+    var(--sk-glow) 54%,
+    transparent 60%
+  );
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  animation:
+    sk-appear 240ms ease-out 120ms both,
+    sk-sweep 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* La couverture 4:3 d'une carte : le bloc la remplit (`.card-cover` est en position relative). */
+.fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 0;
+}
+
+@keyframes sk-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* De gauche a droite : l'image fait 3 fois la zone, sa bande passe de -50 % a 150 %. */
+@keyframes sk-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .block {
+    background-image: none;
+    animation: sk-appear 240ms ease-out 120ms both;
+  }
+}

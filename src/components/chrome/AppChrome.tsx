@@ -22,7 +22,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
       <AppShell.Header
         withBorder
         style={{
-          background: "rgba(10, 10, 12, 0.92)",
+          background: "var(--bar-bg)",
           backdropFilter: "blur(12px)",
           paddingLeft: "env(safe-area-inset-left)",
           paddingRight: "env(safe-area-inset-right)",

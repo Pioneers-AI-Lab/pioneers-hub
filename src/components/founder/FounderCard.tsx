@@ -13,8 +13,8 @@ import { missingRequiredFields } from "@/lib/completeness";
 import { PROFILE_CATEGORY_LABEL, formatDay } from "@/lib/format";
 import { paths } from "@/lib/paths";
 import { Field, FieldGrid } from "@/components/ui/Field";
-import { PageLoader } from "@/components/ui/PageLoader";
 import { LinkRow, RowList } from "@/components/ui/Rows";
+import { SkeletonSections } from "@/components/ui/Skeleton";
 import { Empty, Section } from "@/components/ui/Section";
 import { tagsOrNull as tags } from "@/components/ui/Tags";
 import { EdgeRating } from "@/components/admin/EdgeRating";
@@ -44,15 +44,14 @@ const yesNo = (v: boolean | null | undefined) => (v === true ? "Yes" : v === fal
  */
 export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
   const { program } = useProgram();
-  const { batch, role } = useBatch();
-  const { founder, directory, profile, internal, canSeeDirectory, isSelf, canEdit, isDetailsLoading } = useFounder();
+  const { batch } = useBatch();
+  // `dir` : l'annuaire, nul tant qu'il n'est pas lu ou si le role ne le lit pas.
+  const { founder, directory: dir, profile, isSelf, canEdit, isDetailsLoading, isDirectoryLoading } = useFounder();
   // Le fondateur lui-meme ou le staff : bouton d'edition et alerte « profil incomplet ».
   const editHref = paths.founderEdit(program.id, batch.id, founder.id);
-  // L'annuaire, une fois lisible et charge (`directory` est nul si le role ne le lit pas).
-  const dir = isDetailsLoading ? null : directory;
-  const missing = canEdit && dir ? missingRequiredFields(founder, dir, profile) : [];
-  const { startupsById } = useStartups();
-  const startup = founder.startupId ? startupsById.get(founder.startupId) : undefined;
+  // L'alerte et le bouton attendent aussi `profile` : pas de bouton qui devient alerte.
+  const canShowEdit = canEdit && !isDetailsLoading;
+  const missing = canShowEdit && dir ? missingRequiredFields(founder, dir, profile) : [];
   const category = founder.profileCategory ? PROFILE_CATEGORY_LABEL[founder.profileCategory] : null;
   const basedIn = dir
     ? [dir.country && `Based in ${dir.country}`, dir.nationality && `${dir.nationality} national`].filter(Boolean).join(" · ")
@@ -76,7 +75,7 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
           )}
         </Stack>
         {/* Profil incomplet : l'alerte porte le bouton, un seul appel a l'action. */}
-        {canEdit && missing.length === 0 && (
+        {canShowEdit && missing.length === 0 && (
           <Button component={Link} href={editHref} variant="default" size="sm" style={{ flexShrink: 0 }}>
             Edit profile
           </Button>
@@ -115,8 +114,23 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
 
       {isSelf && selfSections}
 
-      {canSeeDirectory && isDetailsLoading && <PageLoader />}
+      {/* L'annuaire en route (lien direct, hors de la grille) : des sections fantomes a la place de
+          TOUT le bas de la fiche, qui arrive d'un bloc ; rien ne saute au-dessus. */}
+      {isDirectoryLoading ? <SkeletonSections count={3} /> : <FounderSections />}
+    </Stack>
+  );
+}
 
+/** Le bas de la fiche, de l'annuaire aux listes Shortlist / Met : affiche une fois l'annuaire lu (ou sans droit de le lire). */
+function FounderSections() {
+  const { program } = useProgram();
+  const { batch, role } = useBatch();
+  const { founder, directory: dir, profile, internal, canSeeDirectory, isDetailsLoading } = useFounder();
+  const { startupsById } = useStartups();
+  const startup = founder.startupId ? startupsById.get(founder.startupId) : undefined;
+
+  return (
+    <>
       {dir && (
         <>
           <Section title="About">
@@ -164,7 +178,7 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
         </Section>
       )}
 
-      {canSeeDirectory && !isDetailsLoading && !dir && (
+      {canSeeDirectory && !dir && (
         <Section title="Profile book">
           <Empty>No onboarding data yet.</Empty>
         </Section>
@@ -198,35 +212,43 @@ export function FounderCard({ selfSections }: { selfSections?: ReactNode }) {
       <FounderNetwork />
       <FounderWeeks />
 
-      {profile && [profile.age, profile.birthDayString, profile.tShirtSize, profile.housingSupport].some((v) => v !== null && v !== undefined) && (
-        <Section title="Private" help="Visible to you, the Pioneers team and the investment committee.">
-          <FieldGrid>
-            <Field label="Age">{profile.age !== null ? <span className="num">{profile.age}</span> : null}</Field>
-            <Field label="Birth date">{profile.birthDayString ? <span className="num">{formatDay(profile.birthDayString)}</span> : null}</Field>
-            <Field label="T-shirt size">{profile.tShirtSize}</Field>
-            <Field label="Housing support">{yesNo(profile.housingSupport)}</Field>
-          </FieldGrid>
-        </Section>
-      )}
+      {/* Private et Internal (profile, internal) arrivent apres l'annuaire : une section fantome
+          jusque-la, Shortlist / Met avec elles, pour qu'aucune ne surgisse au-dessus d'une autre. */}
+      {isDetailsLoading ? (
+        <SkeletonSections count={1} />
+      ) : (
+        <>
+          {profile && [profile.age, profile.birthDayString, profile.tShirtSize, profile.housingSupport].some((v) => v !== null && v !== undefined) && (
+            <Section title="Private" help="Visible to you, the Pioneers team and the investment committee.">
+              <FieldGrid>
+                <Field label="Age">{profile.age !== null ? <span className="num">{profile.age}</span> : null}</Field>
+                <Field label="Birth date">{profile.birthDayString ? <span className="num">{formatDay(profile.birthDayString)}</span> : null}</Field>
+                <Field label="T-shirt size">{profile.tShirtSize}</Field>
+                <Field label="Housing support">{yesNo(profile.housingSupport)}</Field>
+              </FieldGrid>
+            </Section>
+          )}
 
-      {internal && (
-        <Section title="Internal" help="Pioneers team and investment committee only.">
-          <Stack gap="md">
-            <Field label="Account">{founder.uid ? `Linked ${formatDay(founder.claimedDateISOString?.slice(0, 10))}` : "Not linked"}</Field>
-            {/* Le staff note l'Edge ici (comme dans Admin > Edge) ; un investor IC lit la note. */}
-            <Field label="Edge rating">
-              {role === "staff" ? (
-                <EdgeRating founderId={founder.id} founderName={founder.name} text={dir?.edge ?? null} rating={internal.edge ?? null} />
-              ) : internal.edge ? (
-                `${internal.edge.score}/${EDGE_MAX_NOTE}`
-              ) : null}
-            </Field>
-          </Stack>
-        </Section>
-      )}
+          {internal && (
+            <Section title="Internal" help="Pioneers team and investment committee only.">
+              <Stack gap="md">
+                <Field label="Account">{founder.uid ? `Linked ${formatDay(founder.claimedDateISOString?.slice(0, 10))}` : "Not linked"}</Field>
+                {/* Le staff note l'Edge ici (comme dans Admin > Edge) ; un investor IC lit la note. */}
+                <Field label="Edge rating">
+                  {role === "staff" ? (
+                    <EdgeRating founderId={founder.id} founderName={founder.name} text={dir?.edge ?? null} rating={internal.edge ?? null} />
+                  ) : internal.edge ? (
+                    `${internal.edge.score}/${EDGE_MAX_NOTE}`
+                  ) : null}
+                </Field>
+              </Stack>
+            </Section>
+          )}
 
-      {/* Shortlist / Met tout en bas, pour tous ceux qui les lisent (demande du 16/11). */}
-      <FounderConnections />
-    </Stack>
+          {/* Shortlist / Met tout en bas, pour tous ceux qui les lisent (demande du 16/11). */}
+          <FounderConnections />
+        </>
+      )}
+    </>
   );
 }

@@ -88,7 +88,9 @@ export function convertCell(field: ImportFieldKey, spec: ValueSpec, raw: string 
     }
     case "enum": {
       if (!spec.values) return { ok: true, value };
-      const match = spec.values.find((v) => v.toLowerCase() === value.toLowerCase());
+      // La valeur ou son libelle (« Tech » comme « technical ») : ce que montre le CSV vierge.
+      const key = value.toLowerCase();
+      const match = spec.values.find((v) => v.toLowerCase() === key || spec.labels?.[v]?.toLowerCase() === key);
       return match ? { ok: true, value: match } : { ok: false, reason: `"${value}" is not one of ${spec.values.join(", ")}` };
     }
     case "boolean": {

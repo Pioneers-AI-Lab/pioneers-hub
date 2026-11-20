@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react";
 import Papa from "papaparse";
-import { Box, Button, FileButton, Group, Progress, SegmentedControl, Select, Stack, Text } from "@mantine/core";
+import { Box, Button, FileButton, Group, Progress, SegmentedControl, Select, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useAdmin } from "@/context/AdminContext";
+import { useAction } from "@/hooks/useAction";
 import {
   applyImport,
   parseRows,
@@ -14,7 +15,7 @@ import {
   type ImportResult,
   type PlannedRow,
 } from "@/lib/import/founders";
-import { guessTarget, targetOptions, type ImportTarget } from "@/lib/import/targets";
+import { guessTarget, targetOptions, templateHeaders, type ImportTarget } from "@/lib/import/targets";
 import { paths } from "@/lib/paths";
 import { BatchPicker } from "@/components/admin/BatchPicker";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -30,8 +31,19 @@ import { StatGrid, StatTile } from "@/components/ui/StatTile";
 //    (SP26, onboarding) sont reconnues d'office.
 // 3. Apercu : nouveaux, deja en base, doublons, erreurs de valeur.
 // 4. Ecriture. Un fondateur deja dans le batch n'est que COMPLETE (champs vides).
+// CSV vierge : une colonne par champ, « required » / « optional », reconnue d'office au retour.
+// « Add one founder » (tests) : une ligne saisie a la main, meme apercu et meme ecriture.
 
 type Csv = { fileName: string; headers: string[]; rows: Record<string, string>[] };
+
+function downloadTemplate() {
+  const url = URL.createObjectURL(new Blob([Papa.unparse([templateHeaders()])], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "founders-import-template.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 const ACTION_LABEL: Record<ImportAction, string> = {
   create: "New",
@@ -142,10 +154,14 @@ function ImportFounders() {
               </Button>
             )}
           </FileButton>
-          {csv && (
+          {csv ? (
             <Text size="sm" c="dimmed">
               {csv.fileName} · <span className="num">{csv.rows.length}</span> rows
             </Text>
+          ) : (
+            <Button variant="default" size="md" onClick={downloadTemplate}>
+              Download a blank CSV
+            </Button>
           )}
         </Group>
         {!csv && <Text size="sm" c="dimmed">Export the onboarding form or the Airtable table as CSV.</Text>}
@@ -264,6 +280,55 @@ function ImportFounders() {
           </Box>
         </Section>
       )}
+
+      <AddOneFounder />
     </>
+  );
+}
+
+// ---- Un fondateur a la main ------------------------------------------------------
+// Une ligne de CSV saisie dans un formulaire : meme dedoublonnage (`planImport`) et meme
+// ecriture (`applyImport`). Seuls les nouveaux sont crees : un profil deja dans le batch
+// (meme email, ou meme nom sans email) se complete par un CSV, pas ici.
+
+const MANUAL_MAPPING: ColumnMapping = { email: "email", firstName: "person.firstName", lastName: "person.lastName" };
+const EMPTY_FORM = { email: "", firstName: "", lastName: "" };
+
+function AddOneFounder() {
+  const { batch, founders } = useAdmin();
+  const [form, setForm] = useState(EMPTY_FORM);
+  const { isBusy, run } = useAction();
+  // Valeur lue pendant l'evenement : `currentTarget` est deja `null` quand React applique la mise a jour.
+  const set = (key: keyof typeof EMPTY_FORM) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.currentTarget.value;
+    setForm((f) => ({ ...f, [key]: value }));
+  };
+
+  const add = async () => {
+    const name = [form.firstName, form.lastName].map((s) => s.trim()).filter(Boolean).join(" ");
+    const added = await run(async () => {
+      const [row] = await planImport(parseRows([form], MANUAL_MAPPING), founders);
+      if (row.action === "skip") throw new Error(row.errors[0] ?? row.skipReason ?? "Skipped");
+      if (row.action === "fill_existing") throw new Error(`Already in ${batch.name}. ${row.matchReason}`);
+      await applyImport([row], batch);
+      return true;
+    }, `${name} added to ${batch.name}.`);
+    if (added) setForm(EMPTY_FORM);
+  };
+
+  return (
+    <Section
+      title="Add one founder"
+      help="For a test, without a CSV. The founder joins this batch with an email and a name; the rest is filled from their profile. Signing in with this email links the account."
+    >
+      <Stack gap="sm" maw={400}>
+        <TextInput label="Email" type="email" withAsterisk value={form.email} onChange={set("email")} />
+        <TextInput label="First name" withAsterisk value={form.firstName} onChange={set("firstName")} />
+        <TextInput label="Last name" value={form.lastName} onChange={set("lastName")} />
+        <Button size="md" fullWidth onClick={add} loading={isBusy} disabled={!form.email.trim() || !form.firstName.trim()}>
+          Add the founder
+        </Button>
+      </Stack>
+    </Section>
   );
 }

@@ -13,15 +13,18 @@ export function LevelGate({
   found,
   error,
   backHref,
+  loader = <PageLoader />,
   children,
 }: {
   isLoading: boolean;
   found: boolean;
   error: FirestoreError | null;
   backHref: string;
+  /** Pendant le chargement : un squelette de la page (`ProfileSkeleton`), a defaut le chargement commun. */
+  loader?: ReactNode;
   children: ReactNode;
 }) {
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return loader;
   if (!found) return <BlockedState reason={reasonFromError(error)} backHref={backHref} />;
   return <>{children}</>;
 }

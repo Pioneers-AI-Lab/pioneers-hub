@@ -19,6 +19,7 @@ import { ConnectionToggles } from "@/components/founder/ConnectionButtons";
 import { FounderGridCard } from "@/components/founder/FounderGridCard";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { LinkRow, RowList } from "@/components/ui/Rows";
+import { SkeletonCards, SkeletonRows } from "@/components/ui/Skeleton";
 import { searchCount } from "@/components/ui/SearchCount";
 import { Empty } from "@/components/ui/Section";
 
@@ -90,8 +91,6 @@ function FoundersDirectory() {
     return [...list].sort((a, b) => (founderPerformance(b.id) ?? -1) - (founderPerformance(a.id) ?? -1));
   }, [founders, searchTextOf, search, filter, connectionFilter, shortlisted, met, myFounderId, byScore, founderPerformance]);
 
-  if (isLoading) return <PageLoader />;
-
   /** Score (staff, investors) ou compte non rattache (staff), a droite de la ligne ou de la carte. */
   const metaOf = (founderId: string, uid: string | null) => {
     if (canSeeScores) {
@@ -136,7 +135,7 @@ function FoundersDirectory() {
             setQuery(e.currentTarget.value.trim());
           }}
           type="search"
-          {...searchCount(visible.length, founders.length)}
+          {...(isLoading ? {} : searchCount(visible.length, founders.length))}
         />
 
         {myFounderId && (
@@ -188,15 +187,14 @@ function FoundersDirectory() {
           />
         </Group>
       </Stack>
-      {visible.length === 0 ? (
+      {/* En chargement : cartes ou lignes fantomes DANS la grille ou la liste, a leur geometrie. */}
+      {!isLoading && visible.length === 0 ? (
         <Empty>{founders.length === 0 ? "No founder yet." : "No founder matches."}</Empty>
-      ) : isGrid && isGridLoading ? (
-        <PageLoader />
       ) : isGrid ? (
         // 2 colonnes des le mobile (cartes resumees, `.card-details`), 3 au-dela de 840 px ;
         // 12 px entre cartes, comme partout (docs/UI-RULES.md).
         <SimpleGrid type="container" cols={{ base: 2, "840px": 3 }} spacing="sm" verticalSpacing="sm" mt="xs">
-          {visible.map((f) => (
+          {isLoading || isGridLoading ? <SkeletonCards count={Math.min(visible.length || 6, 9)} /> : visible.map((f) => (
             <FounderGridCard
               key={f.id}
               href={paths.founder(program.id, batch.id, f.id)}
@@ -210,7 +208,7 @@ function FoundersDirectory() {
         </SimpleGrid>
       ) : (
         <RowList>
-          {visible.map((f) => {
+          {isLoading ? <SkeletonRows count={8} /> : visible.map((f) => {
             const startup = startupNameOf(f.startupId);
             const category = f.profileCategory ? PROFILE_CATEGORY_LABEL[f.profileCategory] : null;
             const context = [category, startup ?? f.rolesICouldTake.slice(0, 2).join(", ")].filter(Boolean).join(" · ");

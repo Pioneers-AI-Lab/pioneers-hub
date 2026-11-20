@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { createNoise3D } from "@/lib/simplexNoise";
 
 // ----------------------------
-// Fond noir anime des pages de connexion
+// Fond noir anime : connexion, formulaire public et toute l'application
 // ----------------------------
 // Meme effet que l'en-tete de thepioneer.vc (Salient « nectar animated
 // gradient », reglages du site : couleur #000000, vitesse 250, mode organic) :
@@ -14,12 +14,19 @@ import { createNoise3D } from "@/lib/simplexNoise";
 // trame de points en dessous (`/auth-dots.png`, l'image du site). Un voile
 // noir couvre le bas, comme sur le site.
 //
-// Sobre en calcul (12 000 points par image au plus), en pause quand l'onglet
-// est cache, fige sur une image si l'utilisateur demande moins d'animations.
+// Sobre en calcul : 12 000 points par image au plus, redessines a FPS images
+// par seconde (le bruit evolue lentement, l'ecart ne se voit pas une fois etire),
+// en pause quand l'onglet est cache, fige sur une image si l'utilisateur demande
+// moins d'animations. `veil` : voile noir uniforme par-dessus, pour poser du
+// contenu dessus (formulaire public, application).
 
+// Vitesse du site : `clock` avance d'un pas par image a 60 Hz, mesure ici en
+// temps ecoule (meme vitesse sur un ecran a 120 Hz).
 const SPEED = 250;
+const TICKS_PER_MS = 60 / 1000;
+const FPS = 20;
 
-export function AnimatedBackdrop() {
+export function AnimatedBackdrop({ veil = false }: { veil?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -46,6 +53,8 @@ export function AnimatedBackdrop() {
 
     let clock = 0;
     let frame = 0;
+    let start = 0;
+    let lastDraw = -Infinity;
     const draw = () => {
       for (let x = 0; x < resolution; x++) {
         for (let y = 0; y < resolution; y++) {
@@ -59,10 +68,14 @@ export function AnimatedBackdrop() {
         }
       }
       ctx.putImageData(image, 0, 0);
-      clock++;
     };
-    const loop = () => {
-      if (!document.hidden) draw();
+    const loop = (now: number) => {
+      start ||= now;
+      if (!document.hidden && now - lastDraw >= 1000 / FPS) {
+        lastDraw = now;
+        clock = (now - start) * TICKS_PER_MS;
+        draw();
+      }
       frame = requestAnimationFrame(loop);
     };
 
@@ -80,6 +93,7 @@ export function AnimatedBackdrop() {
     <div aria-hidden className="auth-backdrop">
       <canvas ref={canvasRef} className="auth-backdrop-canvas" />
       <div className="auth-backdrop-fade" />
+      {veil && <div className="auth-backdrop-veil" />}
     </div>
   );
 }

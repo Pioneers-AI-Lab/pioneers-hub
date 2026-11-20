@@ -9,8 +9,8 @@ import { useStartup } from "@/context/StartupContext";
 import { paths } from "@/lib/paths";
 import { ExternalLink, Field, FieldGrid } from "@/components/ui/Field";
 import { BackButton } from "@/components/ui/PageHeader";
-import { PageLoader } from "@/components/ui/PageLoader";
 import { LinkRow, Row, RowList } from "@/components/ui/Rows";
+import { SkeletonSections } from "@/components/ui/Skeleton";
 import { Empty, Section } from "@/components/ui/Section";
 import { MarketAnalysisSection, PitchEvaluations, StartupScoreSection, WeeklyUpdates } from "@/components/startup/StartupInsights";
 
@@ -20,7 +20,7 @@ const yesNo = (v: boolean | null) => (v === true ? "Yes" : v === false ? "No" : 
 export default function StartupPage() {
   const { program } = useProgram();
   const { batch } = useBatch();
-  const { startup, isMember, profile, internal, canSeeProfile, isProfileLoading } = useStartup();
+  const { startup, isMember, isProfileLoading } = useStartup();
   const { foundersById } = useFounders();
 
   return (
@@ -74,8 +74,19 @@ export default function StartupPage() {
         )}
       </Section>
 
-      {canSeeProfile && isProfileLoading && <PageLoader />}
-      {canSeeProfile && !isProfileLoading && (
+      {/* Profil et notes en route : des sections fantomes a la place de tout le bas de la fiche, qui
+          arrive d'un bloc (comme FounderCard) ; rien ne saute au-dessus. */}
+      {isProfileLoading ? <SkeletonSections count={2} /> : <StartupSections />}
+    </Stack>
+  );
+}
+
+/** Le bas de la fiche : profil, updates, pitchs, marche, notes internes. */
+function StartupSections() {
+  const { isMember, profile, internal, canSeeProfile } = useStartup();
+  return (
+    <>
+      {canSeeProfile && (
         <Section title="Profile" help={isMember ? "Visible to your team, the Pioneers team and investors." : undefined}>
           {profile ? (
             <Stack gap="md">
@@ -113,6 +124,6 @@ export default function StartupPage() {
           </FieldGrid>
         </Section>
       )}
-    </Stack>
+    </>
   );
 }

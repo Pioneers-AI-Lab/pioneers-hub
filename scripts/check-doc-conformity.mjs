@@ -1,5 +1,5 @@
 // ----------------------------
-// Conformite au document produit : docs/FONCTIONNALITES.md (17/11) et SPECS v2.8
+// Conformite au document produit : docs/FONCTIONNALITES.md (19/11) et SPECS v3.0
 // ----------------------------
 // Les tableaux du document sont ecrits ici en valeurs attendues, puis compares :
 //   A. au CODE : modules partages compiles (functions/lib/shared), data/events.json, une constante du front ;
@@ -8,7 +8,10 @@
 //   B. a la PROD, en LECTURE SEULE (get / getAll, jamais d'ecriture) : evenements et formulaires a venir de
 //      fa26, reglages du batch, scores. Les attendus restent ceux du document, jamais ce que le code produirait.
 // Une ligne par verification : `OK`, `FAIL <attendu> vs <reel>`, ou `PENDING` (pas encore la, sans etre
-// faux : formulaires hebdomadaires pas encore accroches a l'agenda, modele Pitch pas encore applique...).
+// faux : modele Pitch pas encore applique, formulaires hebdomadaires pas encore crees...).
+// Le modele du 19/11 (score startup sur les criteres de l'IC, grilles Pitch et Weekly startup, weekly sans
+// evenement, fondateurs « out ») n'est verifie qu'une fois declare par le code (`shared/scoring.ts#SCORING_MODEL`
+// >= "2026-11-19") : avant, ses lignes sont PENDING ; apres, elles sont strictes (OK ou FAIL).
 // Sortie en erreur (1) s'il y a au moins un FAIL.
 //
 // npm run check:doc                                    (compile functions, puis code + prod)
@@ -82,6 +85,7 @@ try {
     gen: lib("teamGenerator"),
     fields: lib("fieldRegistry"),
     attendance: lib("attendance"),
+    formRules: lib("formRules"),
   };
 } catch (e) {
   heading("A0 modules");
@@ -91,6 +95,15 @@ try {
 const { formOptions, parisISO: P, parisLabel } = eventsFile;
 const { endAfter } = m.events;
 const { roundTo } = m.types;
+
+// ---- Le modele du 19/11 : strict une fois code, PENDING avant -----------------------------------
+
+const MODEL_19_11 = (m.scoring.SCORING_MODEL ?? "") >= "2026-11-19";
+const NOT_CODED = "doc 19/11 not coded yet (shared/scoring.ts SCORING_MODEL < 2026-11-19)";
+/** `behaves` du modele du 19/11. */
+const behaves19 = (name, fn) => (MODEL_19_11 ? behaves(name, fn) : pending(name, NOT_CODED));
+/** `expect` du modele du 19/11 ; `actual` est une fonction (le code d'avant n'a pas forcement ce qu'elle lit). */
+const expect19 = (name, expected, actual) => behaves19(name, () => [expected, actual()]);
 
 // ---- Le document, en valeurs attendues ---------------------------------------------------------
 
@@ -222,6 +235,7 @@ const WEEKLY_FORMS = {
     Q("long_text", "checkin.achievement", "What did you achieve this week?"),
     Q("long_text", "checkin.goals", "Goals for next week"),
     ...["messagesSent", "callsMade", "conversationsDone", "meetingsBooked", "demosDone", "proposalsSent", "closedWon", "amountPaid"].map((k) => Q("number", `checkin.${k}`)),
+    Q("number", "checkin.contentPublished"),
     ...["totalAmountPaid", "mrr", "payingCustomers", "totalUsers", "activeUsers"].map((k) => Q("number", `checkin.${k}`)),
     Q("long_text", "checkin.obstacle", "Biggest obstacle"),
     Q("long_text", "checkin.learned", "What did you learn?"),
@@ -244,19 +258,27 @@ const PITCH_DECK = [
   Q("long_text", "startupProfile.solution", "Solution"),
   Q("long_text", "startupProfile.whyNow", "Why now?"),
 ];
-/** §2.11, grille Pitch : [cle, famille, points]. */
+/**
+ * §2.11, grille Pitch (19/11) : [cle, famille, points]. Deux familles du score startup (cles SP26 gardees) ;
+ * l'execution ne se note plus au pitch (grille Weekly startup). `teamStrength` = Team dynamic.
+ */
 const PITCH_GRID = [
-  ["teamStrength", "team", 20],
-  ["edgeComplementarity", "team", 10],
-  ["founderMarketFit", "team", 10],
-  ["progress", "speed", 20],
-  ["traction", "speed", 20],
-  ["clearIdea", "market", 6],
-  ["market", "market", 5],
-  ["competition", "market", 4],
-  ["highPotential", "market", 3],
-  ["businessModel", "market", 2],
+  ["founderMarketFit", "teamQuality", 30],
+  ["teamStrength", "teamQuality", 30],
+  ["painIntensity", "marketPotential", 20],
+  ["timing", "marketPotential", 20],
 ];
+/** §2.9, grille Weekly startup (19/11) : [cle, famille, points]. Concrete output = `progress`, Real signals = `traction`. */
+const WEEKLY_STARTUP_GRID = [
+  ["progress", "speedOfExecution", 25],
+  ["traction", "speedOfExecution", 25],
+  ["learning", "speedOfExecution", 25],
+  ["intensity", "teamQuality", 25],
+];
+/** §3.1 : le score startup, sur les criteres de l'IC. */
+const STARTUP_FAMILIES = { teamQuality: 40, speedOfExecution: 40, marketPotential: 20 };
+/** §2.0 : les weekly, chaque jeudi 19:00 Paris, echeance 24 h. */
+const WEEKLY_TIME = "19:00";
 const PITCH_POINTS = PITCH_GRID.map(([k, , p]) => [k, p]);
 const PITCH_SCORING_VIEW = gridScoring(PITCH_POINTS);
 /** §2.12 */
@@ -285,8 +307,8 @@ const REQUIRED_PROFILE_FIELDS = [
   "founderProfile.enrolmentConfirmed",
 ];
 const NEW_REQUIRED_PROFILE_FIELDS = ["founderDirectory.hasExistingProject", "founderDirectory.hasExistingCoFounders", "founderDirectory.yearsOfXP", "founderDirectory.repeatFounder"];
-/** §1 : les entrees « Weekly Update Form » de l'agenda (jeudis, 19:00 Paris) ; leurs formulaires s'ouvrent a leur debut, 24 h. */
-const WEEKLY_ENTRY_TIME = "19:00";
+/** §1 : les entrees « Weekly Update Form » de l'agenda (jeudis, 19:00 Paris), un rappel sans formulaire depuis le 19/11. */
+const WEEKLY_ENTRY_TIME = WEEKLY_TIME;
 /** §3.2 : les echeances des milestones de fa26 (heure de Paris). Weekly goal : 2e entree (10/12 19:00) + 24 h. */
 const MILESTONE_DUES = {
   teamedUp: P("2026-11-25", "09:30"),
@@ -327,7 +349,7 @@ function codeChecks() {
   expect("hackathon draw: teams of 2 to 3", { mode: "challenge", size: { min: 2, max: 3 } }, EVENT_TEMPLATES.hackathon.matching);
   for (const key of ["pitch_day", "friday_pitch", "demo_day", "selection_day", "pre_ic", "ic"]) {
     expect(`${key} pack: Pitch deck + jury`, ["jury", "pitch_deck"], formsOf(key));
-    expect(`${key} jury grid = the Pitch grid`, PITCH_POINTS.map(([k, p]) => [k, 0, 5, p]), (EVENT_TEMPLATES[key]?.criteria ?? []).map((c) => [c.key, c.min, c.max, c.weight]));
+    expect19(`${key} jury grid = the Pitch grid (19/11)`, PITCH_POINTS.map(([k, p]) => [k, 0, 5, p]), () => (EVENT_TEMPLATES[key]?.criteria ?? []).map((c) => [c.key, c.min, c.max, c.weight]));
   }
   expect("Pitch stages: Go / No Go at Selection Day, Pre-IC, IC", ["selection_day", "pre_ic", "ic", null], ["selection_day", "pre_ic", "ic", "pitch_day"].map((k) => EVENT_TEMPLATES[k].stage));
   expect("speed_dating pack: no form (no picks)", [], formsOf("speed_dating"));
@@ -337,13 +359,11 @@ function codeChecks() {
   const picksPacks = Object.entries(EVENT_TEMPLATES).filter(([, t]) => isOffered(t) && t.forms.some((f) => f === "picks" || f === "founder_introductions"));
   expect("no offered event pack creates Picks / Founder introductions", [], picksPacks.map(([k]) => k));
   expect("lunch roulette: tables of 3 to 4", { mode: "matching", size: { min: 3, max: 4 } }, EVENT_TEMPLATES.lunch_roulette.matching);
-  const weeklyPack = Object.entries(EVENT_TEMPLATES).find(([, t]) => t.forms.includes("weekly_update_founder"));
-  if (!weeklyPack) pending("Weekly Update Form pack (weekly founder + startup)", "no event template creates the weekly forms yet");
-  else {
-    const [key, t] = weeklyPack;
-    expect(`${key} pack: Weekly update founder + startup`, WEEKLY_KEYS, [...t.forms].sort());
-    expect(`${key}: not a meeting (no attendance, §1 optional)`, true, t.withoutAttendance === true);
-  }
+  expect19("no offered event pack creates the weekly forms (no event since 19/11, §2.0)", [], () =>
+    Object.entries(EVENT_TEMPLATES)
+      .filter(([, t]) => isOffered(t) && t.forms.some((f) => WEEKLY_KEYS.includes(f)))
+      .map(([k]) => k),
+  );
 
   // ---- A2. Les modeles de formulaires (§2) ----
   heading("A2 form templates");
@@ -358,7 +378,10 @@ function codeChecks() {
   expect("H5: only Final numbers marks the Submission late (setsSubmissionLate)", { h5_plan: false, h5_snapshot: false, h5_final: true, debrief: true }, Object.fromEntries(["h5_plan", "h5_snapshot", "h5_final", "debrief"].map((k) => [k, FORM_TEMPLATES[k].setsSubmissionLate])));
   const retro = fileEvent("fa26-week-1-retro");
   expectQuestions("week_retro questions (§2.7)", retroQuestions(retro.sessions.length), tq("week_retro", ctxOf(retro)));
-  for (const [key, specs] of Object.entries(WEEKLY_FORMS)) expectQuestions(`${key} questions (§2.8, §2.9)`, specs, tq(key));
+  expectQuestions("weekly_update_founder questions (§2.8)", WEEKLY_FORMS.weekly_update_founder, tq("weekly_update_founder"));
+  if (MODEL_19_11) expectQuestions("weekly_update_startup questions, Content published included (§2.9)", WEEKLY_FORMS.weekly_update_startup, tq("weekly_update_startup"));
+  else pending("weekly_update_startup questions, Content published included (§2.9)", NOT_CODED);
+  expect19("weekly forms: batch forms, not tied to an event (§2.0)", WEEKLY_KEYS.map((k) => [k, false]), () => WEEKLY_KEYS.map((k) => [k, FORM_TEMPLATES[k].needsEvent]));
   const options = (key, id) => tq(key, { eventKind: "team_challenge", metrics: [], criteria: [], submissionFields: ["problemSource"] }).find((q) => q.id === id)?.options ?? [];
   const { COMMITMENT_STATUS_LABELS, MATCH_RESULT_LABELS, PROBLEM_SOURCE_LABELS } = m.types;
   expect(
@@ -373,6 +396,10 @@ function codeChecks() {
   expect("Lock my team: yes / no, answerable without a team", [["Yes", "No"], true, false], [locked.options, locked.required, coFounders.required]);
   expect("Lock my team: batch form, not tied to an event (§2.10)", false, FORM_TEMPLATES.lock_my_team.needsEvent);
   expectQuestions("pitch_deck questions (§2.11)", PITCH_DECK, tq("pitch_deck"));
+  expect19("pitch_deck: help under Problem asks how often and how urgent (§2.11)", true, () => {
+    const help = tq("pitch_deck").find((q) => q.dbField === "startupProfile.problem")?.description ?? "";
+    return /how often/i.test(help) && /how urgent/i.test(help);
+  });
   expectQuestions("program_end questions (§2.12)", PROGRAM_END, tq("program_end"));
   const docForms = ["peer_rating", "debrief", "h5_plan", "h5_snapshot", "h5_final", "week_retro", ...WEEKLY_KEYS, "lock_my_team", "pitch_deck", "program_end"];
   expect("§2 founder forms: filled from one's account", docForms.map((k) => [k, "account"]), docForms.map((k) => [k, identity(k)]));
@@ -414,14 +441,22 @@ function codeChecks() {
     return [[P("2026-12-02", "09:00"), P("2026-12-03", "09:00")], span(m.forms.eventFormDates("pitch_deck", pitch))];
   });
   behaves("jury: opens at the start, no deadline (locked by closing)", () => [[ev.startDateISOString, null], span(m.forms.eventFormDates("jury", ev))]);
-  if (!weeklyPack) pending("weekly forms: open at the agenda entry, due 24 h after (§2.0)", "no weekly event pack yet");
-  else
-    behaves("weekly forms: open at the agenda entry, due 24 h after (§2.0)", () => {
-      const start = P("2026-12-03", WEEKLY_ENTRY_TIME);
-      const entry = { startDateISOString: start, endDateISOString: plusMinutes(start, 30) };
-      const expected = [entry.startDateISOString, P("2026-12-04", WEEKLY_ENTRY_TIME)];
-      return [[expected, expected], WEEKLY_KEYS.map((k) => span(m.forms.eventFormDates(k, entry)))];
-    });
+  // Contrat du rythme (19/11) : `weeklyForms.weeklyFormSlots({ firstDayString, untilDayString, skippedDayStrings })`
+  // rend une semaine par jeudi, `{ opensDateISOString, deadlineDateISOString }`.
+  behaves19("weekly forms: every Thursday 19:00 Paris -> 24 h, skipped weeks left out (§2.0)", () => {
+    const slots = m.weeklyForms.weeklyFormSlots({ firstDayString: "2026-12-03", untilDayString: "2026-12-24", skippedDayStrings: ["2026-12-17"] });
+    const week = (day, next) => [P(day, WEEKLY_TIME), P(next, WEEKLY_TIME)];
+    return [[week("2026-12-03", "2026-12-04"), week("2026-12-10", "2026-12-11"), week("2026-12-24", "2026-12-25")], slots.map(span)];
+  });
+  behaves19("weekly audience: founder form to founders without a startup, startup form to founders of one (§2.0)", () => {
+    const founders = [
+      { id: "solo", startupId: null },
+      { id: "member", startupId: "s1" },
+    ].map((f) => ({ ...f, batchId: BATCH_ID, status: "active", archivedDateISOString: null, isExternalFounder: false }));
+    const of = (key) =>
+      m.formRules.formAudience({ form: { identityCheck: "account", kind: FORM_TEMPLATES[key].kind, questions: tq(key) }, batchId: BATCH_ID, founders, event: null, attendance: [], teams: [] }).founderIds;
+    return [[["solo"], ["member"]], [of("weekly_update_founder"), of("weekly_update_startup")]];
+  });
 
   // ---- A4. Les dates des formulaires de fa26 dans data/events.json (§2.0) ----
   heading("A4 events.json form dates");
@@ -472,12 +507,14 @@ function codeChecks() {
 
   // ---- A6. La grille Pitch (§2.11) ----
   heading("A6 pitch grid");
-  expect("10 criteria: key, family, points", PITCH_GRID, m.pitch.PITCH_CRITERIA.map((c) => [c.key, c.family, c.points]));
-  expect("families Team 40 / Speed of execution 40 / Market 20", { team: 40, speed: 40, market: 20 }, Object.fromEntries(Object.entries(m.pitch.PITCH_FAMILY_INFO).map(([k, f]) => [k, f.points])));
-  expect("Pitch scoring points", PITCH_SCORING_VIEW, scoringView(m.pitch.PITCH_SCORING));
-  behaves("Pitch: Outstanding at 100 -> 120, on the grid and each family", () => {
+  expect19("4 criteria of the IC: key, family, points", PITCH_GRID, () => m.pitch.PITCH_CRITERIA.map((c) => [c.key, c.family, c.points]));
+  expect19("grid points: Team Quality 60 / Market Potential 40 (no execution at the pitch)", { teamQuality: 60, marketPotential: 40 }, () =>
+    m.pitch.PITCH_CRITERIA.reduce((acc, c) => ({ ...acc, [c.family]: (acc[c.family] ?? 0) + c.points }), {}),
+  );
+  expect19("Pitch scoring points", PITCH_SCORING_VIEW, () => scoringView(m.pitch.PITCH_SCORING));
+  behaves19("Pitch: Outstanding at 100 -> 120, on the grid and each family", () => {
     const g = m.pitch.pitchGrid(notes(PITCH_GRID, 5), true);
-    return [[120, 120], [g.total, g.families.team]];
+    return [[120, 120, 120], [g.total, g.families.teamQuality, g.families.marketPotential]];
   });
 
   // ---- A7. Background, Weekly grids (§2.8, §2.9, §2.13) ----
@@ -487,8 +524,13 @@ function codeChecks() {
     const five = { execution: 5, founderSignal: 5, pedigree: 5, geography: 5 };
     return [[120, 92], [m.bg.backgroundScore(five, true), m.bg.backgroundScore({ ...five, execution: 4 }, true)]];
   });
-  expect("Weekly startup grid: Traction 60, Progress 40", [["traction", 60], ["progress", 40]], m.weekly.STARTUP_REVIEW_CRITERIA.map((c) => [c.key, c.points]));
-  behaves("Weekly startup: Outstanding at 100 -> 120", () => [[120, 92], [m.weekly.startupReviewNote({ scores: { traction: 5, progress: 5 }, outstanding: true }), m.weekly.startupReviewNote({ scores: { traction: 5, progress: 4 }, outstanding: true })]]);
+  expect19("Weekly startup grid: Concrete output, Real signals, Learning velocity, Intensity, 25 each, two families", WEEKLY_STARTUP_GRID, () =>
+    m.weekly.STARTUP_REVIEW_CRITERIA.map((c) => [c.key, c.family, c.points]),
+  );
+  behaves19("Weekly startup: Outstanding at 100 -> 120", () => {
+    const five = notes(WEEKLY_STARTUP_GRID, 5);
+    return [[120, 95], [m.weekly.startupReviewNote({ scores: five, outstanding: true }), m.weekly.startupReviewNote({ scores: { ...five, intensity: 4 }, outstanding: true })]];
+  });
   expect("Weekly founder grid: 3 yes / no, no Outstanding", ["goalAmbitious", "goalReached", "problemValidated"], m.weekly.FOUNDER_REVIEW_QUESTIONS.map((q) => q.key));
   const twoWeeks = (ambitious) => [
     { weekStartDayString: "2026-11-30", goalAmbitious: ambitious, goalReached: null },
@@ -564,14 +606,27 @@ function codeChecks() {
   behaves("Hackathons: H5 counts 4 times", () => [64, founder({ hackathons: [{ name: "H1", score: 80, weight: 1 }, { name: "H5", score: 60, weight: 4 }] }).subScores.execution]);
   behaves("no data, no weight: Execution null without data", () => [null, founder({}).subScores.execution]);
   behaves("Commitment without Clear idea (removed 18/11)", () => [[null, false], [founder({}).subScores.commitment, "clearIdea" in m.pitch.pitchMeans([])]]);
-  expect("startup score: Team 40 / Execution 20 / Traction 20 / Market 20", { team: 40, execution: 20, traction: 20, market: 20 }, Object.fromEntries(m.score.STARTUP_WEIGHTING_100.map((c) => [c.parts.join("+"), c.weight])));
-  const grid = m.pitch.pitchGrid(notes(PITCH_GRID, 4), false);
-  const startup = S.computeStartupScore({ founderBackgrounds: [80], founderExecutions: [60], weeklyTraction: 70, pitches: [{ name: "P1", grid }] });
-  expect(
-    "startup signals: Team 100 (+ Background tracked at 0), Execution 100, Traction 50/50, Market 100",
-    { team: [100, 0], execution: [100], traction: [50, 50], market: [100] },
-    Object.fromEntries(["team", "execution", "traction", "market"].map((k) => [k, shares(startup.signals[k])])),
+  expect19("startup score: Team Quality 40 / Speed of Execution 40 / Market Potential 20 (§3.1)", STARTUP_FAMILIES, () =>
+    Object.fromEntries(m.score.STARTUP_WEIGHTING_100.map((c) => [c.parts.join("+"), c.weight])),
   );
+  // Contrat des entrees (19/11) : PP de chaque fondateur, weekly notees (semaine, notes, Outstanding), pitchs dates.
+  const weekly = (weekStartDayString, note) => ({ weekStartDayString, scores: notes(WEEKLY_STARTUP_GRID, note), outstanding: false });
+  const pitch = (name, dateISOString, note) => ({ name, dateISOString, grid: m.pitch.pitchGrid(notes(PITCH_GRID, note), false) });
+  const startupOf = (extra) => S.computeStartupScore({ founderBackgrounds: [], founderPerformances: [], weeklyReviews: [], pitches: [], ...extra });
+  const FAMILIES = Object.keys(STARTUP_FAMILIES);
+  behaves19("startup signals: Team Quality 25 x 4 (+ Background at 0), Speed of Execution 1/3 x 3, Market Potential 50/50", () => {
+    const s = startupOf({ founderBackgrounds: [80], founderPerformances: [60], weeklyReviews: [weekly("2026-12-07", 4)], pitches: [pitch("P1", "2026-12-04T09:00:00.000Z", 4)] });
+    return [{ teamQuality: [25, 25, 25, 25, 0], speedOfExecution: [33.3, 33.3, 33.3], marketPotential: [50, 50] }, Object.fromEntries(FAMILIES.map((k) => [k, shares(s.signals[k])]))];
+  });
+  behaves19("startup: the last pitch only, not the mean of the pitches", () => {
+    const s = startupOf({ pitches: [pitch("P2", "2026-12-17T09:00:00.000Z", 4), pitch("P1", "2026-12-04T09:00:00.000Z", 2)] });
+    return [[80, 80], [s.subScores.teamQuality, s.subScores.marketPotential]];
+  });
+  behaves19("startup: Speed of Execution = mean of its 4 last graded weeklies", () => {
+    const weeks = [["2026-11-30", 1], ["2026-12-07", 5], ["2026-12-14", 5], ["2026-12-28", 5], ["2027-01-04", 5]];
+    return [100, startupOf({ weeklyReviews: weeks.map(([d, n]) => weekly(d, n)) }).subScores.speedOfExecution];
+  });
+  behaves19("startup: Program Performance of its founders, their mean, in Team Quality", () => [70, startupOf({ founderPerformances: [60, 80] }).subScores.teamQuality]);
   behaves("forms on time: never optional events, drafts, future deadlines (§4.1)", () => {
     const f = { archivedDateISOString: null, status: "open", deadlineDateISOString: "2026-11-19T18:00:00.000Z" };
     const now = "2026-11-20T12:00:00.000Z";
@@ -642,6 +697,13 @@ function codeChecks() {
   const mt = ["matchingRepeatWeight", "reciprocalMetWeight", "challengeRepeatWeight"];
   expect("lunch draw order: repeat table pair > reciprocal Met > hackathon teammates", true, strictlyOrdered(mt.map((k) => matching.rules[k])));
   expect("lunch draw: no other rule", [0, 0, 0, 0], ["noTechPenalty", "noBusinessPenalty", "mutualShortlistBonus", "oneWayShortlistBonus"].map((k) => matching.rules[k]));
+  const leftFounder = { batchId: BATCH_ID, status: "left", archivedDateISOString: null, isExternalFounder: false };
+  behaves("out founder (Left the program): no draw, no form (§4.9)", () => [[false, false], [m.types.isPickable(leftFounder, BATCH_ID), m.types.isBatchParticipant(leftFounder, BATCH_ID)]]);
+  // Sources lues telles quelles : un type et une constante du front, qu'aucun module ne rend a l'execution.
+  const founderTypes = readFileSync(new URL("../functions/src/shared/types/founder.ts", import.meta.url), "utf8");
+  expect19("out reason No team (§4.9)", true, () => /LeftProgramReason\s*=[^;]*"no_team"/.test(founderTypes));
+  const card = readFileSync(new URL("../src/components/founder/FounderCard.tsx", import.meta.url), "utf8");
+  expect19("out founder card: « Community » (§4.9)", "Community", () => card.match(/\bleft: "([^"]+)"/)?.[1] ?? null);
   behaves("H5: locked startups kept as they are, the others drawn", () => {
     const r = m.gen.startupFixedGroups([{ id: "s1", name: "S1", memberIds: ["a", "b"] }, { id: "s2", name: "S2", memberIds: ["c"] }], new Set(["a", "b", "c", "d"]));
     return [[["a", "b"]], r.groups.map((g) => g.memberIds)];
@@ -757,28 +819,31 @@ async function prodChecks() {
     expectQuestions("Lock my team questions", LOCK_MY_TEAM, questionsOf(lock));
   }
 
-  // ---- B3. Formulaires hebdomadaires sur l'agenda (§1, §2.0, §4.7) ----
+  // ---- B3. Formulaires hebdomadaires, sans evenement (§1, §2.0, 19/11) ----
   heading("B3 weekly forms");
   const weeklyEntries = future.filter(isWeeklyEntry);
-  expect("Weekly Update Form entries: Thursdays 03/12 and 10/12 (§1)", ["2026-12-03", "2026-12-10"], weeklyEntries.map((e) => parisDayOf(e.startDateISOString)).slice(0, 2));
-  for (const e of weeklyEntries) {
-    const day = parisDayOf(e.startDateISOString);
-    expect(`Weekly Update Form ${day}: at ${WEEKLY_ENTRY_TIME} Paris (§1)`, `${day} ${WEEKLY_ENTRY_TIME}`, at(e.startDateISOString));
-    if (!formsOfEvent(e).some((f) => WEEKLY_KEYS.includes(templateOf(f)))) {
-      pending(`Weekly Update Form ${day}: weekly founder + startup forms`, "not attached to the agenda entry yet");
-      pending(`Weekly Update Form ${day}: not a meeting (no attendance)`, "pack not applied yet");
-      continue;
-    }
-    expect(`Weekly Update Form ${day}: not a meeting (pack or optional attendance)`, true, !m.attendance.tracksAttendance(e) || m.attendance.isAttendanceOptional(e));
-    for (const [key, questions] of Object.entries(WEEKLY_FORMS)) {
-      checkForm(`Weekly ${day}`, e, key, { identity: "account", opens: e.startDateISOString, deadline: plusHours(e.startDateISOString, 24), questions });
-    }
-  }
+  expect("Weekly Update Form entries: Thursdays 03/12 and 10/12 (§1, a reminder)", ["2026-12-03", "2026-12-10"], weeklyEntries.map((e) => parisDayOf(e.startDateISOString)).slice(0, 2));
   const isWeeklyForm = (f) => WEEKLY_KEYS.includes(templateOf(f)) || f.id.includes("-weekly-");
   const weeklyForms = activeForms.filter(isWeeklyForm);
-  expect("no Weekly update on 26/11 (§4.7)", [], weeklyForms.filter((f) => parisDayOf(f.opensDateISOString) === "2026-11-26").map((f) => f.id));
-  expect("no weekly form outside an agenda entry", [], weeklyForms.filter((f) => !f.eventId).map((f) => f.id));
-  if (batch.settings?.weeklyForms?.enabled !== true) pending("batch settings: weekly forms enabled", "off until the forms are attached (attach-weekly-forms.mjs --enable)");
+  expect("no Weekly update on 26/11 (§2.0)", [], weeklyForms.filter((f) => parisDayOf(f.opensDateISOString) === "2026-11-26").map((f) => f.id));
+  if (!MODEL_19_11) pending("weekly forms: the batch rhythm, no event (§2.0)", `${NOT_CODED}; prod: ${weeklyForms.filter((f) => f.eventId).length} weekly forms on agenda entries`);
+  else {
+    expect("weekly forms: none on an agenda entry", [], weeklyForms.filter((f) => f.eventId).map((f) => f.id));
+    /** Le modele d'un formulaire hebdomadaire, lu dans ses questions. */
+    const weeklyKeyOf = (f) => (questionsOf(f).some((q) => q.dbField === "founderWeek.achieved") ? "weekly_update_founder" : "weekly_update_startup");
+    const days = [...new Set(weeklyForms.map((f) => parisDayOf(f.opensDateISOString)))].sort();
+    expect("weekly forms: first weeks 03/12 and 10/12", ["2026-12-03", "2026-12-10"], days.slice(0, 2));
+    expect("weekly forms: both forms every week", days.map((d) => [d, WEEKLY_KEYS]), days.map((d) => [d, weeklyForms.filter((f) => parisDayOf(f.opensDateISOString) === d).map(weeklyKeyOf).sort()]));
+    for (const f of weeklyForms.filter((x) => !x.deadlineDateISOString || x.deadlineDateISOString >= NOW)) {
+      const day = parisDayOf(f.opensDateISOString);
+      const key = weeklyKeyOf(f);
+      expect(`${f.id}: published, from one's account`, ["open", "account"], [f.status, f.identityCheck]);
+      expect(`${f.id}: Thursday ${WEEKLY_TIME} -> 24 h (Paris)`, [`${day} ${WEEKLY_TIME}`, at(plusHours(f.opensDateISOString, 24))], dates(f));
+      expect(`${f.id}: opens on a Thursday`, 4, new Date(`${day}T12:00:00Z`).getUTCDay());
+      expectQuestions(`${f.id}: ${key} questions`, WEEKLY_FORMS[key], questionsOf(f));
+    }
+  }
+  if (batch.settings?.weeklyForms?.enabled !== true) pending("batch settings: weekly forms enabled", "off until the weekly forms are created");
   else report("OK", "batch settings: weekly forms enabled");
 
   // ---- B4. Pitchs (§2.11, §4.7) ----
@@ -804,10 +869,10 @@ async function prodChecks() {
     if (!jury) report("FAIL", `${label}: jury form`, "present vs absent");
     else {
       const qs = questionsOf(jury);
-      expect(`${label}: jury = Pitch grid points`, PITCH_POINTS.map(([k, p]) => [`evaluation.scores.${k}`, p]), qs.filter((q) => q.id.startsWith("criterion_")).map((q) => [q.dbField, q.weight]));
+      expect19(`${label}: jury = Pitch grid points (19/11)`, PITCH_POINTS.map(([k, p]) => [`evaluation.scores.${k}`, p]), () => qs.filter((q) => q.id.startsWith("criterion_")).map((q) => [q.dbField, q.weight]));
       expect(`${label}: Decision question ${stage ? "present" : "absent"}`, Boolean(stage), qs.some((q) => q.id === "decision"));
     }
-    expect(`${label}: Pitch scoring`, PITCH_SCORING_VIEW, scoringView(m.types.scoringOf(e)));
+    expect19(`${label}: Pitch scoring (19/11)`, PITCH_SCORING_VIEW, () => scoringView(m.types.scoringOf(e)));
   }
 
   // ---- B5. Retraits, identites (§4.6, §2.0) ----

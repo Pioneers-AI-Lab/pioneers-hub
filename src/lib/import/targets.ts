@@ -1,4 +1,4 @@
-import { DB_FIELDS, getFieldDef, parseDbField, type DbFieldKey, type ValueSpec } from "@shared/fieldRegistry";
+import { DB_FIELDS, enumOptions, getFieldDef, parseDbField, type DbFieldKey, type ValueSpec } from "@shared/fieldRegistry";
 
 // ----------------------------
 // Import CSV : vers quels champs une colonne peut aller
@@ -114,12 +114,57 @@ const ALIASES: Record<string, ImportTarget> = {
   tshirtsize: "founderProfile.tShirtSize",
 };
 
+/** Mention du CSV vierge apres le libelle : « Hard skills (optional, list separated by ;) ». */
+const TEMPLATE_NOTE = /\s*\((?:required|optional)\b[^)]*\)\s*$/i;
+
 export function guessTarget(header: string): ImportTarget | null {
-  const key = norm(header);
+  const key = norm(header.replace(TEMPLATE_NOTE, ""));
   if (!key) return null;
   if (ALIASES[key]) return ALIASES[key];
   if (key.startsWith("doyouconfirmyourenrol") || key.startsWith("iconfirmmyenrol")) return "founderProfile.enrolmentConfirmed";
   // Libelle exact d'un champ du registre (« Hard skills », « Years of experience »...).
   const byLabel = IMPORT_FIELD_KEYS.find((k) => norm(getFieldDef(k).label) === key);
   return byLabel ?? null;
+}
+
+// ---- CSV vierge -------------------------------------------------------------------
+// Une colonne par champ importable, au libelle du registre suivi de « required » ou
+// « optional » et du format attendu ; `guessTarget` retire la mention, chaque
+// colonne est donc reconnue d'office au retour du fichier.
+
+function formatHint(spec: ValueSpec): string | null {
+  switch (spec.kind) {
+    case "boolean":
+      return "yes / no";
+    case "day":
+      return "YYYY-MM-DD";
+    case "number":
+      return "number";
+    case "url":
+      return "URL";
+    case "textList":
+    case "enumMulti":
+      return "list separated by ;";
+    case "enum": {
+      // Valeurs fixes seulement : une liste fermee accepte toute valeur a l'import (elle s'y ajoute).
+      const options = enumOptions(spec, new Map());
+      return options?.length ? options.map((o) => o.label).join(" / ") : null;
+    }
+    default:
+      return null;
+  }
+}
+
+const templateHeader = (label: string, required: boolean, hint: string | null) =>
+  `${label} (${[required ? "required" : "optional", hint].filter(Boolean).join(", ")})`;
+
+/** En-tetes du CSV vierge : email et prenom obligatoires (l'apercu prend aussi un nom complet), le reste facultatif. */
+export function templateHeaders(): string[] {
+  const headers = [templateHeader("Email", true, null)];
+  for (const key of IMPORT_FIELD_KEYS) {
+    const def = getFieldDef(key);
+    const header = templateHeader(def.label, key === "person.firstName", formatHint(def.value));
+    if (guessTarget(header) === key) headers.push(header);
+  }
+  return headers;
 }

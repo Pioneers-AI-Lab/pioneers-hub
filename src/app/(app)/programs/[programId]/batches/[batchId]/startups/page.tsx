@@ -9,9 +9,9 @@ import { useFounders } from "@/context/FoundersContext";
 import { useProgram } from "@/context/ProgramContext";
 import { useStartups } from "@/context/StartupsContext";
 import { paths } from "@/lib/paths";
-import { PageLoader } from "@/components/ui/PageLoader";
 import { LinkRow, RowList } from "@/components/ui/Rows";
 import { searchCount } from "@/components/ui/SearchCount";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 import { Empty } from "@/components/ui/Section";
 
 export default function StartupsPage() {
@@ -33,14 +33,13 @@ export default function StartupsPage() {
     return [...list].sort((a, b) => score(b.id) - score(a.id));
   }, [startups, search, canSeeScores, startupScoreOf]);
 
-  if (isLoading) return <PageLoader />;
-
   return (
     <>
       {startups.length > 6 && (
         <TextInput placeholder="Search a startup" value={search} onChange={(e) => setSearch(e.currentTarget.value)} type="search" mb="xs" {...searchCount(visible.length, startups.length)} />
       )}
-      {visible.length === 0 ? (
+      {/* En chargement : lignes fantomes dans la liste, a leur geometrie (comme Founders). */}
+      {!isLoading && visible.length === 0 ? (
         <Empty>
           {startups.length === 0
             ? "No startup yet. Teams form after the mutual picks; each startup appears here once declared."
@@ -48,7 +47,7 @@ export default function StartupsPage() {
         </Empty>
       ) : (
         <RowList>
-          {visible.map((s) => {
+          {isLoading ? <SkeletonRows count={6} /> : visible.map((s) => {
             const members = s.memberIds.map((id) => foundersById.get(id)?.name).filter(Boolean);
             return (
               <LinkRow

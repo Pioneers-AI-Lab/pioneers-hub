@@ -56,6 +56,16 @@ export function useDocListener<T>(ref: DocumentReference<T> | null | undefined):
 }
 
 /**
+ * Un document deja en memoire ailleurs (la liste du batch, l'annuaire) sert de
+ * valeur tant que SON ecouteur n'a pas repondu : la page s'affiche sans attendre,
+ * puis la reponse prend le relais (document change, archive, refuse). Sans
+ * amorce, l'ecouteur tel quel.
+ */
+export function withSeed<T>(listened: Listened<T | null>, seed: T | null | undefined): Listened<T | null> {
+  return listened.isLoading && seed ? { data: seed, isLoading: false, error: null } : listened;
+}
+
+/**
  * Ecoute une requete nommee (`queries.*` de lib/firestore/refs.ts). La `key`
  * identifie la requete : un Query Firestore n'a pas de chemin comparable.
  */

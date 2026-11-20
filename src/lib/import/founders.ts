@@ -237,9 +237,11 @@ export async function applyImport(
 
   // Les valeurs nouvelles de competences, secteurs et roles rejoignent les listes fermees.
   const collect = (key: ImportFieldKey) => todo.flatMap((r) => (r.values[key] as string[] | undefined) ?? []);
-  result.listValuesAdded =
-    (await addListValues("hardSkills", collect("founder.hardSkills"))) +
-    (await addListValues("industries", collect("founder.industries"))) +
-    (await addListValues("positionFit", collect("founder.rolesICouldTake")));
+  const added = await Promise.all([
+    addListValues("hardSkills", collect("founder.hardSkills")),
+    addListValues("industries", collect("founder.industries")),
+    addListValues("positionFit", collect("founder.rolesICouldTake")),
+  ]);
+  result.listValuesAdded = added.reduce((sum, n) => sum + n, 0);
   return result;
 }

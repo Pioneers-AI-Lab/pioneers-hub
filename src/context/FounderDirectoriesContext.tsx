@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState, type ReactNode } from "react";
-import type { FounderDirectory } from "@shared/types";
+import type { FounderDirectory, WithId } from "@shared/types";
 import { canReadFounderDirectory } from "@shared/access";
 import { refs } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
@@ -12,7 +12,9 @@ import { useFounders } from "@/context/FoundersContext";
 // ----------------------------
 // Annuaire du batch en grille (Profile Book)
 // ----------------------------
-// Monte par .../founders/layout.tsx. La carte d'un fondateur reprend le
+// Monte par .../batches/[batchId]/layout.tsx (sous FoundersProvider) : la fiche
+// d'un fondateur, « Me » compris, s'en amorce (FounderContext), et l'aller-retour
+// par Startups ou Calendar ne relit pas l'annuaire. La carte d'un fondateur reprend le
 // Profile Book (formation, entreprises, nationalite ; le one-liner vient de la
 // fiche racine) : des champs de `private/directory`, un document par fondateur, lus si le role
 // y a droit. La grille est la vue par defaut (demande du 15/11), la liste reste
@@ -29,8 +31,8 @@ type FounderDirectoriesValue = {
   rememberQuery: (query: string) => void;
   /** Ouvre les ecouteurs (page Founders, a son affichage) ; ils restent ouverts ensuite. */
   ensureOpen: () => void;
-  /** Par id de fondateur ; vide pour un visiteur public. */
-  directoriesById: Map<string, FounderDirectory>;
+  /** Par id de fondateur ; vide pour un visiteur public. Amorce aussi la fiche (FounderContext). */
+  directoriesById: Map<string, WithId<FounderDirectory>>;
   /** Vrai aussi tant que les ecouteurs ne sont pas ouverts. */
   isLoading: boolean;
 };

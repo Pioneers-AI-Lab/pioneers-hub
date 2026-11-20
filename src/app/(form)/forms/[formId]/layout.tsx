@@ -22,8 +22,8 @@ export const metadata: Metadata = {
 export default function PublicFormLayout({ children }: LayoutProps<"/forms/[formId]">) {
   return (
     <div className="auth-page">
-      <AnimatedBackdrop />
-      <div aria-hidden className="form-veil" />
+      {/* Les questions s'y lisent sans carte : voile sombre sur la trame. */}
+      <AnimatedBackdrop veil />
       {/* « local db » sur les emulateurs, au coin : le formulaire n'a pas l'en-tete de l'application. */}
       {IS_LOCAL_DB && (
         <div style={{ position: "fixed", top: 8, right: 12, zIndex: 2, display: "flex" }}>
@@ -31,7 +31,7 @@ export default function PublicFormLayout({ children }: LayoutProps<"/forms/[form
         </div>
       )}
       {/* Au-dessus du voile : chargement et refus compris, pas seulement le formulaire. */}
-      <div className="form-content">
+      <div className="backdrop-content">
         <Suspense fallback={<PageLoader />}>
           <PublicFormProvider>{children}</PublicFormProvider>
         </Suspense>

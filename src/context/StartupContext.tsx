@@ -5,10 +5,12 @@ import { isInsider, isStaffOrInvestor, canReadStartupProfile, canSeeScores, isSt
 import type { Checkin, Evaluation, KpiSeries, ScoreSignals, Startup, StartupInternal, StartupProfile, WithId } from "@shared/types";
 import { queries, refs, type WithParent } from "@/lib/firestore/refs";
 import { createStrictContext } from "@/lib/createStrictContext";
-import { useDocListener, useQueryListener } from "@/hooks/useFirestoreListener";
+import { useDocListener, useQueryListener, withSeed } from "@/hooks/useFirestoreListener";
 import { useParamsTS } from "@/hooks/useParamsTS";
 import { LevelGate } from "@/components/ui/LevelGate";
+import { ProfileSkeleton } from "@/components/ui/Skeleton";
 import { useBatch } from "@/context/BatchContext";
+import { useStartups } from "@/context/StartupsContext";
 import { useProgram } from "@/context/ProgramContext";
 import { paths } from "@/lib/paths";
 
@@ -21,6 +23,8 @@ import { paths } from "@/lib/paths";
 //   membres, staff, investors  private/profile, updates du jeudi (checkins), kpiSeries
 //   staff, IC                  private/internal, notes des pitchs (evaluations)
 //   selon reglage              detail du score (scoreSignals, `settings.scoresVisibility` : canSeeScores)
+// Amorce (`withSeed`) : la startup est deja dans la liste du batch (StartupsContext) ; la
+// fiche s'affiche aussitot et son profil se lit sans attendre son propre ecouteur.
 
 type StartupValue = {
   startup: WithId<Startup>;
@@ -47,7 +51,8 @@ export function StartupProvider({ children }: { children: ReactNode }) {
   const { batch, role, viewerFounderId } = useBatch();
   const showScores = canSeeScores(role, batch.settings);
 
-  const startup = useDocListener(refs.startup(startupId));
+  const { startupsById } = useStartups();
+  const startup = withSeed(useDocListener(refs.startup(startupId)), startupsById.get(startupId));
   const found = startup.data !== null && startup.data.batchId === batch.id;
 
   // On attend la startup (ses membres) avant de savoir si l'on peut lire son profil.
@@ -103,6 +108,7 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       found={value !== null}
       error={startup.error}
       backHref={paths.startups(program.id, batch.id)}
+      loader={<ProfileSkeleton avatar="square" />}
     >
       {value && <StartupContextProvider value={value}>{children}</StartupContextProvider>}
     </LevelGate>
