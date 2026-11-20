@@ -21,6 +21,7 @@ const {
   peerRatingOn100,
   shortlistersOf,
   shortlistersOn100,
+  withoutMissedHackathons,
 } = require("../../functions/lib/shared/scoring.js");
 const { mandatoryAttendance } = require("../../functions/lib/shared/attendance.js");
 const { edgeProblems, edgeRatingWrite, edgeStatus } = require("../../functions/lib/shared/edge.js");
@@ -117,21 +118,37 @@ check("poids d'un hackathon : `hackathonWeight` de l'evenement, 1 par defaut", (
   assert.equal(hackathonWeightOf({ hackathonWeight: 0 }), 1);
 });
 
-check("absence : un hackathon manque n'est ni classe ni compte dans Execution", () => {
-  const board = (name, normalized, absent = [], hackathonWeight) => ({
-    rows: [{ memberIds: ["a", "b"], normalized }],
-    event: { name, ...(hackathonWeight ? { hackathonWeight } : {}) },
+check("absence : un hackathon manque compte 0 dans Execution, avec son poids (20/11)", () => {
+  const board = (name, normalized, absent = [], extra = {}) => ({
+    rows: [{ memberIds: ["a", "b"].filter((id) => !absent.includes(id)), normalized }],
+    event: { name, ...extra },
     absentIds: new Set(absent),
   });
-  const byFounder = hackathonsByFounder([board("Hackathon 1: Pain Hunters", 80), board("Hackathon 2: Phone Agents", 20, ["a"]), board("Hackathon 5: Zero to first customer", 60, [], 4)]);
+  const byFounder = hackathonsByFounder([
+    board("Hackathon 1: Pain Hunters", 80),
+    board("Hackathon 2: Phone Agents", 20, ["a"]),
+    board("Hackathon 5: Zero to first customer", 60, [], { hackathonWeight: 4 }),
+  ]);
   assert.deepEqual(byFounder.get("a"), [
     { name: "H1", score: 80, weight: 1 },
+    { name: "H2", score: 0, weight: 1, absent: true },
     { name: "H5", score: 60, weight: 4 },
   ]);
-  assert.equal(byFounder.get("b").length, 3);
-  // Le meme fondateur, absent au H2 : sa note ne baisse pas.
-  assert.equal(sub({ hackathons: byFounder.get("a") }).execution, 64);
+  assert.equal(sub({ hackathons: byFounder.get("a") }).execution, 53.3); // (80 + 0 + 240) / 6
   assert.equal(sub({ hackathons: byFounder.get("b") }).execution, 56.7); // (80 + 20 + 240) / 6
+  assert.equal(signalsOf({ hackathons: byFounder.get("a") }, "execution")[0].raw, "H1 80 · H2 0 (absent) · H5 60 (x4)");
+  // Presence optionnelle : l'absence ne compte pas.
+  const optional = hackathonsByFounder([board("Hackathon 1", 80), board("Hackathon 2", 20, ["a"], { attendanceOptional: true })]);
+  assert.deepEqual(optional.get("a"), [{ name: "H1", score: 80, weight: 1 }]);
+});
+
+check("score startup : le fondateur sans ses hackathons manques (20/11)", () => {
+  const hackathons = [
+    { name: "H1", score: 80, weight: 1 },
+    { name: "H2", score: 0, weight: 1, absent: true },
+  ];
+  assert.equal(sub({ hackathons }).execution, 40);
+  assert.equal(sub(withoutMissedHackathons({ hackathons })).execution, 80);
 });
 
 check("une ligne de classement sans note n'est pas comptee", () => {

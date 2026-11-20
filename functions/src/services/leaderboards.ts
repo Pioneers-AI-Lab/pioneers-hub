@@ -4,6 +4,7 @@ import { COL, docPaths, eventCollectionPaths } from "../shared/collections";
 import { eventMetrics, juryCriteria } from "../shared/forms";
 import {
   mean,
+  pushTo,
   scoringOf,
   weightedMean,
   type Criterion,
@@ -97,20 +98,18 @@ export async function recomputeLeaderboard(eventId: string): Promise<void> {
     const evaluationsOf = new Map<string, Evaluation[]>();
     for (const d of evaluations?.docs ?? []) {
       const e = d.data() as Evaluation;
-      const list = evaluationsOf.get(e.targetId) ?? [];
-      list.push(e);
-      evaluationsOf.set(e.targetId, list);
+      pushTo(evaluationsOf, e.targetId, e);
     }
     const heaviest = [...criteria].sort((a, b) => b.weight - a.weight)[0] ?? null;
     const submittedAt = (id: string) => submissionOf.get(id)?.submittedDateISOString ?? "9";
 
     if (scoring) {
-      // Une equipe entre au classement des qu'elle a soumis ou qu'un jure l'a notee.
-      const entered = targets.filter((t) => submissionOf.has(t.id) || evaluationsOf.has(t.id));
+      // Toutes les equipes y sont (20/11) : sans Submission ni note, 0, qui compte dans l'Execution une
+      // fois publie ; le staff verifie donc le classement que les fondateurs verront.
       const keys = criteria.map((c) => c.key);
-      const teams = entered.map((t) => scoredTeamOf(t.id, submissionOf.get(t.id), evaluationsOf.get(t.id) ?? [], keys));
+      const teams = targets.map((t) => scoredTeamOf(t.id, submissionOf.get(t.id), evaluationsOf.get(t.id) ?? [], keys));
       // `scoreTeams` garde l'ordre de ses entrees : chaque resultat retrouve son equipe par position.
-      const scored = scoreTeams(scoring, criteria, teams).map((p, i) => ({ p, team: teams[i], target: entered[i] }));
+      const scored = scoreTeams(scoring, criteria, teams).map((p, i) => ({ p, team: teams[i], target: targets[i] }));
       const rows: LeaderboardRow[] = scored
         .sort((a, b) => compareTeamPoints(scoring, a.p, b.p) || submittedAt(a.p.id).localeCompare(submittedAt(b.p.id)))
         .map(({ p, team, target }, i) => ({

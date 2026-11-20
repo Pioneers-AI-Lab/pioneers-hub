@@ -17,6 +17,7 @@ import {
   hackathonsByFounder,
   reciprocalMetCount,
   shortlistersOf,
+  withoutMissedHackathons,
   type FounderScoreInputs,
 } from "../shared/scoring";
 import { countsInExecution } from "../shared/scoringRules";
@@ -26,6 +27,7 @@ import {
   HUB_SCORE_SCALE,
   isBatchParticipant,
   mean,
+  pushTo,
   readConnections,
   type Attendance,
   type Batch,
@@ -80,11 +82,6 @@ const addTo = (map: Map<string, Set<string>>, key: string, value: string) => {
   const set = map.get(key) ?? new Set<string>();
   set.add(value);
   map.set(key, set);
-};
-const pushTo = <V>(map: Map<string, V[]>, key: string, value: V) => {
-  const list = map.get(key);
-  if (list) list.push(value);
-  else map.set(key, [value]);
 };
 
 export type BatchScoresResult = { batchId: string; founders: number; startups: number; computedDateISOString: string };
@@ -200,8 +197,8 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
     }
   }
 
-  // ---- Execution : la note sur 100 de son equipe a chaque hackathon publie ou il etait present
-  // (un absent n'est ni classe ni compte), avec le poids de l'evenement, dans l'ordre des hackathons.
+  // ---- Execution : la note sur 100 de son equipe a chaque hackathon publie, 0 s'il etait absent
+  // (20/11), avec le poids de l'evenement, dans l'ordre des hackathons.
   const hackathons = hackathonsByFounder(
     executionBoards
       .flatMap((board) => {
@@ -286,7 +283,8 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
     db().doc(`${COL.batchStats}/${batchId}`),
     computeBatchStats(batch.programId, founders.map((f) => ({ founder: f, directory: directoryOf.get(f.id) ?? null })), now),
   );
-  const executionOf = new Map<string, number | null>();
+  // Chaque fondateur vu par le score de sa startup : ses sous-scores sans ses hackathons manques (20/11).
+  const startupViewOf = new Map<string, FounderScore["subScores"]>();
 
   for (const f of founders) {
     const directory = directoryOf.get(f.id) ?? null;
@@ -328,7 +326,7 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
       background: internalOf.get(f.id)?.background ?? null,
     };
     const computed = computeFounderScore(inputs);
-    executionOf.set(f.id, computed.subScores.execution);
+    startupViewOf.set(f.id, computeFounderScore(withoutMissedHackathons(inputs)).subScores);
     const scoreId = docIds.score("founder", f.id);
     const score: FounderScore = {
       ...scoped,
@@ -371,7 +369,7 @@ export async function recomputeBatchScores(batchId: string): Promise<BatchScores
     const members = startup.memberIds.filter((id) => founderIds.has(id));
     const computed = computeStartupScore({
       founderBackgrounds: members.flatMap((id) => ratedBackgroundScore(internalOf.get(id)?.background) ?? []),
-      founderExecutions: members.flatMap((id) => executionOf.get(id) ?? []),
+      founderExecutions: members.flatMap((id) => startupViewOf.get(id)?.execution ?? []),
       weeklyTraction: weeklyTractionOf(reviewsOfStartup.get(startup.id) ?? []),
       // La grille Pitch : familles Team, Speed of execution, Market.
       pitches: pitchesOf.get(startup.id) ?? [],

@@ -5,6 +5,7 @@ import { pitchMeans, PITCH_FAMILY_INFO, type PitchFamily, type PitchInput } from
 import {
   EXISTING_CO_FOUNDERS_LABELS,
   mean,
+  pushTo,
   roundTo,
   weightedMean,
   type DateISOString,
@@ -33,7 +34,7 @@ import {
 // Program Performance (fondateur, `programPerformance` : poids FOUNDER_PILLAR_WEIGHTS, 18/11) :
 //   Engagement 10 %   presence aux evenements OBLIGATOIRES passes 50 %, formulaires remplis a temps 30 %,
 //                     completude du profil 20 %
-//   Execution 50 %    hackathons ou il etait present (moyenne des notes de son equipe, poids de
+//   Execution 50 %    hackathons publies (moyenne des notes de son equipe, 0 s'il etait absent, poids de
 //                     l'evenement : H5 x4), fiabilite recue au peer rating ((note - 1) x 25), milestones
 //                     dues : 1/3 chacun
 //   Likability 30 %   fondateurs distincts qui l'ont shortliste (historique) rapportes a la moitie du
@@ -44,7 +45,7 @@ import {
 // Score startup (`startupScore` : Team 40, Execution 20, Traction 20, Market 20) :
 //   Team         famille Team de ses pitchs (Team 20, Edge complementarity 10, Market edges 10) ;
 //                Background moyen de ses fondateurs a 0 % (suivi)
-//   Execution    moyenne de l'Execution de ses fondateurs
+//   Execution    moyenne de l'Execution de ses fondateurs, sans leurs hackathons manques (`withoutMissedHackathons`)
 //   Traction     grille Weekly startup 50 % (lot 4), famille Speed of execution de ses pitchs 50 %
 //   Market       famille Market de ses pitchs
 // Une famille de ses pitchs (lot 5, shared/pitchGrid.ts) : sur 100 d'apres les points de ses criteres
@@ -85,16 +86,21 @@ export const hackathonWeightOf = (event: Pick<PioneersEvent, "hackathonWeight">)
 
 // ---- Les entrees, a partir des documents du batch (services/scores.ts) -------------------
 
-/** Un hackathon dans le signal Hackathons d'un fondateur. */
-export type HackathonInput = { name: string; score: number; weight: number };
+/** Un hackathon dans le signal Hackathons d'un fondateur ; `absent` : manque, compte 0. */
+export type HackathonInput = { name: string; score: number; weight: number; absent?: true };
 
 /**
  * Le signal Hackathons de chaque fondateur : la note sur 100 (`normalized`) de son equipe
- * a chaque classement, avec le poids de l'evenement, dans l'ordre donne. Un absent n'est
- * ni classe ni compte (l'absence ne penalise qu'Engagement) ; une ligne sans note, rien.
+ * a chaque classement, avec le poids de l'evenement, dans l'ordre donne. Un absent compte 0
+ * avec le meme poids (20/11, en plus de sa presence dans Engagement), sauf a un evenement a
+ * presence optionnelle ; une ligne sans `normalized`, rien.
  */
 export function hackathonsByFounder(
-  boards: readonly { rows: readonly Pick<LeaderboardRow, "memberIds" | "normalized">[]; event: Pick<PioneersEvent, "name" | "hackathonWeight">; absentIds: ReadonlySet<string> }[],
+  boards: readonly {
+    rows: readonly Pick<LeaderboardRow, "memberIds" | "normalized">[];
+    event: Pick<PioneersEvent, "name" | "hackathonWeight" | "attendanceOptional">;
+    absentIds: ReadonlySet<string>;
+  }[],
 ): Map<string, HackathonInput[]> {
   const out = new Map<string, HackathonInput[]>();
   for (const { rows, event, absentIds } of boards) {
@@ -103,13 +109,9 @@ export function hackathonsByFounder(
     const name = event.name.split(":")[0].trim().replace(/^Hackathon\s+/i, "H");
     for (const row of rows) {
       if (typeof row.normalized !== "number") continue;
-      for (const id of row.memberIds) {
-        if (absentIds.has(id)) continue;
-        const list = out.get(id) ?? [];
-        list.push({ name, score: row.normalized, weight });
-        out.set(id, list);
-      }
+      for (const id of row.memberIds) if (!absentIds.has(id)) pushTo(out, id, { name, score: row.normalized, weight });
     }
+    if (!isAttendanceOptional(event)) for (const id of absentIds) pushTo(out, id, { name, score: 0, weight, absent: true });
   }
   return out;
 }
@@ -242,7 +244,7 @@ export type FounderScoreInputs = {
   formsOnTime: { onTime: number; expected: number };
   /** Part des champs obligatoires du profil remplis (0-1). */
   profileCompleteness: number;
-  /** La note sur 100 (120 avec l'Outstanding mention) de son equipe a chaque hackathon publie ou il etait present. */
+  /** La note sur 100 (120 avec l'Outstanding mention) de son equipe a chaque hackathon publie, 0 s'il etait absent. */
   hackathons: HackathonInput[];
   /** La fiabilite recue des coequipiers (peer rating `reliability`, 1-5). */
   peerReliability: number[];
@@ -273,6 +275,12 @@ const finish = <K extends string>(signals: Record<K, ScoreSignal[]>): ComputedSc
   return { subScores, signals, dataCompleteness: keys.length ? available / keys.length : 0 };
 };
 
+/**
+ * Le fondateur vu par le score de sa startup (20/11) : sans ses hackathons manques. Leur 0
+ * ne compte que dans son propre score, jamais dans celui de sa startup.
+ */
+export const withoutMissedHackathons = (i: FounderScoreInputs): FounderScoreInputs => ({ ...i, hackathons: i.hackathons.filter((h) => !h.absent) });
+
 export function computeFounderScore(i: FounderScoreInputs): ComputedScore<FounderPillar> {
   const engagement: ScoreSignal[] = [];
   if (i.attendance.total > 0) {
@@ -289,7 +297,7 @@ export function computeFounderScore(i: FounderScoreInputs): ComputedScore<Founde
   const execution: ScoreSignal[] = [];
   const hackathonMean = weightedMean(i.hackathons.map((h) => [h.score, h.weight] as const));
   if (hackathonMean !== null) {
-    const raw = i.hackathons.map((h) => `${h.name} ${num(h.score)}${h.weight !== 1 ? ` (x${h.weight})` : ""}`).join(" · ");
+    const raw = i.hackathons.map((h) => `${h.name} ${num(h.score)}${h.absent ? " (absent)" : ""}${h.weight !== 1 ? ` (x${h.weight})` : ""}`).join(" · ");
     execution.push(sig(`Hackathons (${i.hackathons.length})`, raw, hackathonMean, 1));
   }
   const peerAverage = mean(i.peerReliability);
@@ -343,7 +351,7 @@ export function computeFounderScore(i: FounderScoreInputs): ComputedScore<Founde
 export type StartupScoreInputs = {
   /** Note Background de chacun de ses fondateurs notes. */
   founderBackgrounds: number[];
-  /** Execution (sous-score) de chacun de ses fondateurs qui en a une. */
+  /** Execution (sous-score) de chacun de ses fondateurs qui en a une, sans ses hackathons manques. */
   founderExecutions: number[];
   /** La moyenne des notes de ses Weekly updates, sur 100 (120 avec l'Outstanding) : `weeklyReviews.ts#weeklyTractionOf`. */
   weeklyTraction: number | null;
@@ -370,7 +378,7 @@ export function computeStartupScore(i: StartupScoreInputs): ComputedScore<Startu
 
   const execution: ScoreSignal[] = [];
   const exec = mean(i.founderExecutions);
-  if (exec !== null) execution.push(sig(`Founders' Execution (${i.founderExecutions.length})`, i.founderExecutions.map(num).join(" · "), exec, 100));
+  if (exec !== null) execution.push(sig(`Founders' Execution (${i.founderExecutions.length}, excl. missed hackathons)`, i.founderExecutions.map(num).join(" · "), exec, 100));
 
   const traction: ScoreSignal[] = [];
   if (i.weeklyTraction !== null) traction.push(sig("Weekly updates", num(i.weeklyTraction), i.weeklyTraction, 50));

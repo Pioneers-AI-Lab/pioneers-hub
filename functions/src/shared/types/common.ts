@@ -76,6 +76,13 @@ export function weightedMean(entries: readonly (readonly [value: number | null, 
 /** Moyenne simple, `null` sans valeur. */
 export const mean = (values: readonly number[]): number | null => weightedMean(values.map((v) => [v, 1] as const));
 
+/** Ajoute `value` a la liste de `key` (creee au premier ajout). */
+export const pushTo = <V>(map: Map<string, V[]>, key: string, value: V): void => {
+  const list = map.get(key);
+  if (list) list.push(value);
+  else map.set(key, [value]);
+};
+
 /** Arrondi a `digits` decimales. */
 export const roundTo = (value: number, digits: number): number => Math.round(value * 10 ** digits) / 10 ** digits;
 

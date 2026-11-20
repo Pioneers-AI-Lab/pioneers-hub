@@ -73,6 +73,8 @@ piliers `FOUNDER_PILLARS`, Outstanding jusqu'a 120) ; un score sans `scale` est 
 TOUJOURS lire `scoreScaleOf` / `scaleRulesOf` (types/score.ts) et afficher par `formatScore` (lib/format.ts).
 Evenement : `attendanceOptional` (presence relevee, mais ni elle ni ses formulaires ne comptent dans Engagement ;
 Admin > Events > Attendance ou data/events.json) et `hackathonWeight` (poids dans Hackathons d'Execution, absent = 1 ; le H5 = 4).
+Hackathon manque (20/11) : un fondateur absent a un hackathon publie y prend 0 dans son Execution (sauf presence optionnelle),
+sa startup le lit sans (`shared/scoring.ts#withoutMissedHackathons`) ; un classement a bareme liste toutes les equipes (sans Submission ni note : 0).
 Poids de la Program Performance (18/11, `FOUNDER_PILLAR_WEIGHTS`, lire `scaleRulesOf(score).pillarWeights`) : Engagement 10,
 Execution 50, Likability 30, Edge 10 ; Commitment (projet 50 / cofondateurs 50) et Background a 0 % : calcules, montres au staff
 « not counted », jamais comptes (un signal a 0 % de meme : Background du Team d'une startup). Edge : texte du fondateur
