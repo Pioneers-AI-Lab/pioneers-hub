@@ -13,10 +13,10 @@ import { paths } from "@/lib/paths";
 // verifiee et construite par shared/weeklyReviews.ts ; le dernier enregistrement fait foi.
 
 export const saveFounderReview = (input: FounderReviewInput, reviewedByUid: string) =>
-  commitWrites([founderReviewWrite(input, reviewedByUid, new Date().toISOString())]);
+  commitWrites("review_founder_update", [founderReviewWrite(input, reviewedByUid, new Date().toISOString())]);
 
 export const saveStartupReview = (input: StartupReviewInput, reviewedByUid: string) =>
-  commitWrites([startupReviewWrite(input, reviewedByUid, new Date().toISOString())]);
+  commitWrites("review_startup_update", [startupReviewWrite(input, reviewedByUid, new Date().toISOString())]);
 
 /** « Week of 23 Nov ». */
 export const weekLabel = (week: string) => `Week of ${formatDay(week, true)}`;

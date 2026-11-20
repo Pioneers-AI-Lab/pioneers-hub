@@ -7,7 +7,7 @@ import { FORM_TEMPLATES, isOfferedTemplate, type FormTemplate, type FormTemplate
 import { isWorkTeamEvent } from "@shared/events";
 import { formState } from "@shared/forms";
 import { criterionRule } from "@shared/scoringRules";
-import { EVALUATION_DECISION_LABELS, isPickable, scoringOf, type Evaluation, type Form, type WithId } from "@shared/types";
+import { EVALUATION_DECISION_LABELS, isPickable, scoringOf, type DeletedEvaluation, type Evaluation, type Form, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminEvent } from "@/context/AdminEventContext";
 import { useAction } from "@/hooks/useAction";
@@ -21,8 +21,8 @@ import { mutualPairs } from "@/lib/picks";
 import { FORM_KIND_LABELS, FORM_STATE_LABELS } from "@/components/admin/formLabels";
 import { LeaderboardSection } from "@/components/admin/ScoringEditor";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
-import { ButtonRow, LinkRow, Row, RowList } from "@/components/ui/Rows";
-import { Empty, Section } from "@/components/ui/Section";
+import { ActionRow, ButtonRow, LinkRow, Row, RowList } from "@/components/ui/Rows";
+import { Empty, Section, SubsectionTitle } from "@/components/ui/Section";
 import { HelpBlock } from "@/components/ui/Help";
 
 // ----------------------------
@@ -171,6 +171,8 @@ function JurySection({ juryForm }: { juryForm: WithId<Form> }) {
   const { isBusy, run } = useAction();
   const [isResetting, setResetting] = useState(false);
   const [selected, setSelected] = useState<WithId<Evaluation> | null>(null);
+  // La corbeille : une note supprimee y reste, restaurable (functions/src/services/judges.ts).
+  const deleted = useQueryListener(queries.deletedEvaluationsOfEvent(event.id)).data;
 
   const isPublished = juryForm.version > 0;
   const juryState = formState(juryForm, new Date().toISOString());
@@ -188,6 +190,7 @@ function JurySection({ juryForm }: { juryForm: WithId<Form> }) {
   const remove = async (e: WithId<Evaluation>) => {
     if (await run(() => call("deleteJuryScore")({ eventId: event.id, evaluationId: e.id }), "Score deleted")) setSelected(null);
   };
+  const restore = (d: WithId<DeletedEvaluation>) => void run(() => call("restoreJuryScore")({ eventId: event.id, deletedId: d.id }), "Score restored");
 
   return (
     <Section
@@ -257,6 +260,29 @@ function JurySection({ juryForm }: { juryForm: WithId<Form> }) {
             />
           ))}
         </RowList>
+      )}
+
+      {deleted.length > 0 && (
+        <Stack gap="xs">
+          <SubsectionTitle>Deleted scores</SubsectionTitle>
+          <RowList>
+            {[...deleted]
+              .sort((a, b) => b.deletedDateISOString.localeCompare(a.deletedDateISOString))
+              .map((d) => (
+                <ActionRow
+                  key={d.id}
+                  href={null}
+                  title={d.evaluation.evaluatorName}
+                  subtitle={[targetLabel(d.evaluation.targetId), `deleted ${formatDateTime(d.deletedDateISOString)}`].join(" · ")}
+                  action={
+                    <Button variant="default" size="xs" disabled={isBusy} onClick={() => restore(d)}>
+                      Restore
+                    </Button>
+                  }
+                />
+              ))}
+          </RowList>
+        </Stack>
       )}
 
       <ResponsiveDialog opened={isResetting} onClose={() => setResetting(false)} title="New jury link">

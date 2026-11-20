@@ -1,5 +1,4 @@
 import {
-  addDoc,
   arrayRemove,
   arrayUnion,
   doc,
@@ -9,7 +8,6 @@ import {
   type Transaction,
   type WriteBatch,
   type CollectionReference,
-  type DocumentReference,
   type PartialWithFieldValue,
 } from "firebase/firestore";
 import type {
@@ -22,8 +20,9 @@ import type {
   UserPreferences,
   WithId,
 } from "@shared/types";
-import { RuleError, type DocWrite } from "@shared/docWrites";
-import { db } from "@/lib/firebase";
+import { auditLineOfWrites } from "@shared/audit";
+import { createWrite, RuleError, setWrite, type DocWrite } from "@shared/docWrites";
+import { auth, db } from "@/lib/firebase";
 import { refs } from "@/lib/firestore/refs";
 
 // ----------------------------
@@ -36,17 +35,38 @@ import { refs } from "@/lib/firestore/refs";
 const nowISO = () => new Date().toISOString();
 
 /**
- * Execute les ecritures d'un geste de l'Admin (shared/admin/*.ts) : les memes
- * que l'API ecrit dans sa transaction. Un `create` refuse un document qui
- * existe deja (`RuleError` `already_exists`) : le lot passe alors par une
- * transaction qui le verifie.
+ * La ligne d'audit d'un geste de l'Admin (shared/audit.ts : qui, quelle action,
+ * quels documents, quels champs ; jamais la donnee), au nom du compte connecte.
+ * Ecrite DANS le lot du geste : le geste et sa trace passent ou echouent ensemble
+ * (firestore.rules#auditLineOk en verifie la forme). `import` : un import CSV.
  */
-export async function commitWrites(writes: readonly DocWrite[]) {
+function auditWrite(action: string, writes: readonly DocWrite[], via: "ui" | "import"): DocWrite {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new RuleError("signed_out", "You are signed out: sign in again, then retry.");
+  return createWrite(doc(refs.auditLogs()).path, auditLineOfWrites({ uid, via, apiKeyId: null }, action, writes));
+}
+
+/**
+ * Ajoute a un lot (ou une transaction) deja ouvert les ecritures d'un geste de l'Admin ET sa
+ * ligne d'audit, tiree de ces memes ecritures : la ligne decrit toujours ce qui est ecrit.
+ */
+export function addAuditedWrites(target: WriteBatch | Transaction, action: string, writes: readonly DocWrite[], via: "ui" | "import" = "ui") {
+  if (writes.length === 0) return;
+  addWrites(target, [...writes, auditWrite(action, writes, via)]);
+}
+
+/**
+ * Execute les ecritures d'un geste de l'Admin (shared/admin/*.ts) : les memes
+ * que l'API ecrit dans sa transaction, sous le meme nom d'action (`action`), avec
+ * leur ligne d'audit. Un `create` refuse un document qui existe deja
+ * (`RuleError` `already_exists`) : le lot passe alors par une transaction qui le verifie.
+ */
+export async function commitWrites(action: string, writes: readonly DocWrite[]) {
   if (writes.length === 0) return;
   const creates = writes.filter((w) => w.op === "create");
   if (creates.length === 0) {
     const batch = writeBatch(db);
-    addWrites(batch, writes);
+    addAuditedWrites(batch, action, writes);
     await batch.commit();
     return;
   }
@@ -54,11 +74,11 @@ export async function commitWrites(writes: readonly DocWrite[]) {
     const existing = await Promise.all(creates.map((w) => tx.get(doc(db, w.path))));
     const taken = existing.find((snap) => snap.exists());
     if (taken) throw new RuleError("already_exists", `\`${taken.ref.path}\` already exists.`, taken.ref.path);
-    addWrites(tx, writes);
+    addAuditedWrites(tx, action, writes);
   });
 }
 
-/** Ajoute des ecritures a un lot (ou une transaction) deja ouvert. */
+/** Ajoute des ecritures a un lot (ou une transaction) deja ouvert, SANS audit (fondateur, compte) : un geste de l'Admin passe par `addAuditedWrites`. */
 export function addWrites(target: WriteBatch | Transaction, writes: readonly DocWrite[]) {
   // Memes methodes `set` / `delete` des deux cotes (le SDK les type separement).
   const batch = target as WriteBatch;
@@ -70,27 +90,15 @@ export function addWrites(target: WriteBatch | Transaction, writes: readonly Doc
   }
 }
 
-/** Fusionne `patch` dans le document et met a jour `updatedDateISOString`. */
-export async function patchDoc<T extends Timestamps>(ref: DocumentReference<WithId<T>>, patch: Partial<T>) {
-  await setDoc(ref, { ...patch, updatedDateISOString: nowISO() } as PartialWithFieldValue<WithId<T>>, { merge: true });
-}
-
-/** Cree un document a id choisi (slug, id deterministe) avec ses horodatages. */
-export async function createDocWithId<T extends Timestamps>(
-  ref: DocumentReference<WithId<T>>,
-  data: Omit<T, keyof Timestamps>,
-) {
-  const now = nowISO();
-  await setDoc(ref, { ...data, createdDateISOString: now, updatedDateISOString: now, id: ref.id } as WithId<T>);
-}
-
-/** Cree un document a id automatique avec ses horodatages ; rend son id. */
+/** Un geste de l'Admin qui cree un document a id automatique, avec ses horodatages et sa ligne d'audit ; rend son id. */
 export async function createDoc<T extends Timestamps>(
+  action: string,
   ref: CollectionReference<WithId<T>>,
   data: Omit<T, keyof Timestamps>,
 ): Promise<string> {
   const now = nowISO();
-  const created = await addDoc(ref, { ...data, createdDateISOString: now, updatedDateISOString: now, id: "" } as WithId<T>);
+  const created = doc(ref);
+  await commitWrites(action, [setWrite(created.path, { ...data, createdDateISOString: now, updatedDateISOString: now })]);
   return created.id;
 }
 

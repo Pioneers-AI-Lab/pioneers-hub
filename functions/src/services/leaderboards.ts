@@ -175,7 +175,7 @@ export async function publishEventRanking(actor: string | AuditActor, eventIdRaw
     const now = new Date().toISOString();
     const revealed = publish ? (event.leaderboardRevealDateISOString ?? now) : null;
     tx.update(db().doc(path), { leaderboardRevealDateISOString: revealed, updatedDateISOString: now });
-    writeUiAudit(tx, actor, publish ? "event.publishRanking" : "event.unpublishRanking", path, { before: event.leaderboardRevealDateISOString, after: revealed });
+    writeUiAudit(tx, actor, "publish_ranking", path, ["leaderboardRevealDateISOString"]);
     return event.batchId;
   });
   await recomputeLeaderboard(eventId);
@@ -232,7 +232,7 @@ export async function setEventScoring(actor: string | AuditActor, eventIdRaw: un
     // Sans bareme, le classement est toujours public : la publication repart de zero.
     const patch = scoring ? { scoring, rankingMetricKey: null } : { scoring: null, leaderboardRevealDateISOString: null };
     tx.update(db().doc(path), { ...patch, updatedDateISOString: new Date().toISOString() });
-    writeUiAudit(tx, actor, "event.setScoring", path, { before: event.scoring ?? null, after: scoring });
+    writeUiAudit(tx, actor, "set_event_scoring", path, Object.keys(patch));
     // Un classement publie compte dans les scores du batch : avant comme apres, ils suivent.
     return { batchId: event.batchId, published: event.leaderboardRevealDateISOString !== null };
   });
@@ -246,13 +246,14 @@ export async function setEventRanking(actor: string | AuditActor, eventIdRaw: un
   const eventId = cleanId(eventIdRaw, "eventId");
   const metricKey = metricKeyRaw === null || metricKeyRaw === undefined ? null : String(metricKeyRaw);
   await db().runTransaction(async (tx) => {
-    const event = await loadEvent(tx, eventId);
+    // L'evenement doit exister (404 sinon).
+    await loadEvent(tx, eventId);
     if (metricKey !== null && !eventMetrics(await formsOf(tx, eventId)).some((m) => m.key === metricKey)) {
       throw new HttpsError("invalid-argument", `\`${metricKey}\` is not a metric of this event.`);
     }
     const path = docPaths.event(eventId);
     tx.update(db().doc(path), { rankingMetricKey: metricKey, updatedDateISOString: new Date().toISOString() });
-    writeUiAudit(tx, actor, "event.setRanking", path, { before: event.rankingMetricKey ?? null, after: metricKey });
+    writeUiAudit(tx, actor, "set_ranking_metric", path, ["rankingMetricKey"]);
   });
   await recomputeLeaderboard(eventId);
 }

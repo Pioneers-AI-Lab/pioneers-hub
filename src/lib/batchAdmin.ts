@@ -22,12 +22,12 @@ const taken = (what: string, id: string) => (err: unknown) => {
 
 export async function createProgram(input: { id: string; name: string; description: string | null }) {
   const now = new Date().toISOString();
-  await commitWrites([createWrite(docPaths.program(input.id), { ...newProgram(input), createdDateISOString: now, updatedDateISOString: now })]).catch(taken("program", input.id));
+  await commitWrites("create_program", [createWrite(docPaths.program(input.id), { ...newProgram(input), createdDateISOString: now, updatedDateISOString: now })]).catch(taken("program", input.id));
 }
 
 export async function createBatch(input: NewBatchInput & { id: string }) {
   const now = new Date().toISOString();
-  await commitWrites([createWrite(docPaths.batch(input.id), { ...newBatch(input), createdDateISOString: now, updatedDateISOString: now })]).catch(taken("batch", input.id));
+  await commitWrites("create_batch", [createWrite(docPaths.batch(input.id), { ...newBatch(input), createdDateISOString: now, updatedDateISOString: now })]).catch(taken("batch", input.id));
 }
 
 /**
@@ -40,7 +40,7 @@ export async function saveBatchSettings(
   resources: BatchResource[] | null,
 ) {
   const now = new Date().toISOString();
-  await commitWrites([
+  await commitWrites("update_batch", [
     ...(patch ? [mergeWrite(docPaths.batch(batch.id), { ...patch, updatedDateISOString: now })] : []),
     ...(resources ? [batchResourcesWrite(batch, resources, now)] : []),
   ]);
@@ -50,6 +50,6 @@ export async function saveBatchSettings(
 export async function addListValues(key: ExtensibleList, values: string[]) {
   if (values.length === 0) return 0;
   const { added, write } = listValuesWrite(key, (await getDoc(refs.list(key))).data(), values, new Date().toISOString());
-  if (write) await commitWrites([write]);
+  if (write) await commitWrites("add_list_values", [write]);
   return added.length;
 }

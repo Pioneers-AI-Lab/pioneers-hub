@@ -5,7 +5,7 @@ import { normalizeDraft, startupCreationWrites, type StartupDraft } from "@share
 import type { Batch, Startup, WithId } from "@shared/types";
 import { db } from "@/lib/firebase";
 import { refs } from "@/lib/firestore/refs";
-import { addWrites } from "@/lib/firestore/write";
+import { addAuditedWrites } from "@/lib/firestore/write";
 
 // ----------------------------
 // Admin > Startups : creer les startups confirmees (staff)
@@ -32,7 +32,7 @@ export async function createStartups(batch: WithId<Batch>, drafts: readonly Star
     });
     const taken = (await Promise.all(startupIds.map((id) => tx.get(refs.startup(id))))).find((snap) => snap.exists());
     if (taken) throw new RuleError("already_exists", `A startup was just created as \`${taken.id}\`: reload the page and confirm again.`, "name");
-    addWrites(tx, writes);
+    addAuditedWrites(tx, "create_startups", writes);
     return startupIds;
   });
 }

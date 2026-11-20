@@ -2,10 +2,10 @@ import { z } from "zod";
 import { outstandingWrite, teamResultsWrite } from "../../shared/admin/results";
 import { COL, docPaths, eventCollectionPaths } from "../../shared/collections";
 import { FAMILY_KEY } from "../../shared/fieldRegistry";
-import type { Evaluation, EventTeam, FormResponse, Leaderboard, PioneersEvent, Submission } from "../../shared/types";
+import type { DeletedEvaluation, Evaluation, EventTeam, FormResponse, Leaderboard, PioneersEvent, Submission } from "../../shared/types";
 import { badRequest, notFound } from "../../api/errors";
 import { decideFormWrite as decide } from "../forms";
-import { deleteJuryScore as deleteScore, resetJuryLink as resetLink } from "../judges";
+import { deleteJuryScore as deleteScore, resetJuryLink as resetLink, restoreJuryScore as restoreScore } from "../judges";
 import { publishEventRanking, ScoringItemSchema, setEventRanking, setEventScoring } from "../leaderboards";
 import type { Operation } from "../operations";
 import { httpUrl } from "../schemas";
@@ -105,9 +105,33 @@ export const deleteJuryScore: Operation<typeof DeleteJuryScoreInput> = {
     ]);
     if (!evaluation) throw notFound("evaluation_not_found", "No such jury score (already removed?).", "evaluationId");
     return effectPlan(
-      { event: event.name, removes: { judge: evaluation.evaluatorName, target: evaluation.targetId, scores: evaluation.scores }, note: "Deleted for good (kept whole in the audit log); the leaderboard follows." },
+      { event: event.name, removes: { judge: evaluation.evaluatorName, target: evaluation.targetId, scores: evaluation.scores }, note: "Moved to the event's deleted scores (restorable with `restore_jury_score`); the leaderboard follows." },
       [`${eventCollectionPaths.evaluations(eventId)}/${evaluationId}`],
-      () => deleteScore(caller, eventId, evaluationId).then(() => ({ eventId, evaluationId })),
+      () => deleteScore(caller, eventId, evaluationId).then((deletedId) => ({ eventId, evaluationId, deletedId })),
+    );
+  },
+};
+
+export const RestoreJuryScoreInput = z
+  .object({ eventId: z.string().min(1), deletedId: z.string().min(1).describe("From `get event` (deletedEvaluations).") })
+  .strict();
+
+export const restoreJuryScore: Operation<typeof RestoreJuryScoreInput> = {
+  name: "restore_jury_score",
+  input: RestoreJuryScoreInput,
+  allowed: staffOnly,
+  async plan(tx, caller, { eventId, deletedId }) {
+    const [event, deleted] = await Promise.all([
+      mustRead<PioneersEvent>(tx, docPaths.event(eventId), "event", "eventId"),
+      readDoc<DeletedEvaluation>(tx, `${eventCollectionPaths.deletedEvaluations(eventId)}/${deletedId}`),
+    ]);
+    if (!deleted) throw notFound("deleted_score_not_found", "No such deleted jury score (already restored?).", "deletedId");
+    const livePath = `${eventCollectionPaths.evaluations(eventId)}/${deleted.evaluationId}`;
+    if (await readDoc<Evaluation>(tx, livePath)) throw badRequest("score_exists", "This judge has scored this team again since: the new score stands.", "deletedId");
+    return effectPlan(
+      { event: event.name, restores: { judge: deleted.evaluation.evaluatorName, target: deleted.evaluation.targetId, scores: deleted.evaluation.scores }, note: "Back in the jury scores; the leaderboard follows." },
+      [livePath, `${eventCollectionPaths.deletedEvaluations(eventId)}/${deletedId}`],
+      () => restoreScore(caller, eventId, deletedId).then((evaluationId) => ({ eventId, evaluationId })),
     );
   },
 };

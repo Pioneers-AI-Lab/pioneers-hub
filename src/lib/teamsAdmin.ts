@@ -20,13 +20,13 @@ import { commitWrites } from "@/lib/firestore/write";
 const now = () => new Date().toISOString();
 
 export const replaceMatching = (event: WithId<PioneersEvent>, matching: EventMatching | null, existing: WithId<EventTeam>[]) =>
-  commitWrites(replaceMatchingWrites(event.id, matching, existing, now()));
+  commitWrites("set_matching", replaceMatchingWrites(event.id, matching, existing, now()));
 
 export const saveDraftTeams = (event: WithId<PioneersEvent>, drafts: DraftTeam[], existing: WithId<EventTeam>[], groupSize: number, constraints: DrawConstraints) =>
-  commitWrites(draftTeamsWrites(event, drafts, existing, groupSize, constraints, now()));
+  commitWrites("draw_teams", draftTeamsWrites(event, drafts, existing, groupSize, constraints, now()));
 
 export const publishTeams = (event: WithId<PioneersEvent>, drafts: DraftTeam[], existing: WithId<EventTeam>[], fullNameOf: FullNameOf, groupSize: number) =>
-  commitWrites(publishTeamsWrites(event, drafts, existing, fullNameOf, groupSize, now()));
+  commitWrites("publish_teams", publishTeamsWrites(event, drafts, existing, fullNameOf, groupSize, now()));
 
 export const updatePublishedTeams = (
   event: WithId<PioneersEvent>,
@@ -36,7 +36,7 @@ export const updatePublishedTeams = (
   fullNameOf: FullNameOf,
   withResults: ReadonlySet<string>,
   absentIds: ReadonlySet<string>,
-) => commitWrites(publishedTeamsWrites(event, drafts, existing, memberships, fullNameOf, withResults, absentIds));
+) => commitWrites("edit_teams", publishedTeamsWrites(event, drafts, existing, memberships, fullNameOf, withResults, absentIds));
 
 export const refreshPublicNames = (event: WithId<PioneersEvent>, teams: WithId<EventTeam>[], fullNameOf: FullNameOf) =>
-  commitWrites(publicNamesWrites(event.id, teams, fullNameOf));
+  commitWrites("refresh_team_names", publicNamesWrites(event.id, teams, fullNameOf));

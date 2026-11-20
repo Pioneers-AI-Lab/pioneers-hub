@@ -1,11 +1,12 @@
 import { doc, documentId, getDoc, getDocs, query, where, writeBatch } from "firebase/firestore";
 import { newFounderWrites, type NewFounderValues } from "@shared/admin/founders";
+import { mergeWrite, type DocWrite } from "@shared/docWrites";
 import { parseDbField } from "@shared/fieldRegistry";
 import { nameKey } from "@shared/text";
 import type { Batch, Founder, Person, WithId } from "@shared/types";
 import { db } from "@/lib/firebase";
 import { refs } from "@/lib/firestore/refs";
-import { addWrites } from "@/lib/firestore/write";
+import { addAuditedWrites } from "@/lib/firestore/write";
 import { addListValues } from "@/lib/batchAdmin";
 import { targetSpec, type ImportFieldKey, type ImportTarget } from "./targets";
 import { convertCell } from "./values";
@@ -186,7 +187,8 @@ export async function applyImport(
 
   // ~6 ecritures par ligne : 60 lignes par lot restent sous la limite de 500.
   for (let i = 0; i < todo.length; i += 60) {
-    const writes = writeBatch(db);
+    // Le lot, ecrit avec sa ligne d'audit (`import` : documents et noms de champs, jamais les valeurs).
+    const writes: DocWrite[] = [];
     for (const row of todo.slice(i, i + 60)) {
       const now = new Date().toISOString();
       const docs = byDoc(row.values);
@@ -215,10 +217,10 @@ export async function applyImport(
           ...(personPatch.phone ? { phone: personPatch.phone } : {}),
         });
         const profilePatch = fillEmpty(profile as Record<string, unknown> | undefined, docs.founderProfile);
-        if (Object.keys(personPatch).length) writes.set(refs.person(personId), { ...personPatch, updatedDateISOString: now }, { merge: true });
-        if (Object.keys(founderPatch).length) writes.set(refs.founder(founderId), { ...founderPatch, updatedDateISOString: now }, { merge: true });
-        if (Object.keys(directoryPatch).length) writes.set(refs.founderDirectory(founderId), directoryPatch, { merge: true });
-        if (Object.keys(profilePatch).length) writes.set(refs.founderProfile(founderId), profilePatch, { merge: true });
+        if (Object.keys(personPatch).length) writes.push(mergeWrite(refs.person(personId).path, { ...personPatch, updatedDateISOString: now }));
+        if (Object.keys(founderPatch).length) writes.push(mergeWrite(refs.founder(founderId).path, { ...founderPatch, updatedDateISOString: now }));
+        if (Object.keys(directoryPatch).length) writes.push(mergeWrite(refs.founderDirectory(founderId).path, directoryPatch));
+        if (Object.keys(profilePatch).length) writes.push(mergeWrite(refs.founderProfile(founderId).path, profilePatch));
         result.filled++;
         continue;
       }
@@ -227,11 +229,13 @@ export async function applyImport(
       const { existingPerson } = row;
       const ids = { founderId: doc(refs.founders()).id, personId: row.existingPersonId ?? doc(refs.people()).id };
       const input = { firstName: row.firstName ?? "", lastName: row.lastName ?? "", email, profileCategory: null };
-      addWrites(writes, newFounderWrites(scoped, input, ids, existingPerson, now, docs as NewFounderValues));
+      writes.push(...newFounderWrites(scoped, input, ids, existingPerson, now, docs as NewFounderValues));
       if (existingPerson) result.addedToBatch++;
       else result.created++;
     }
-    await writes.commit();
+    const batch = writeBatch(db);
+    addAuditedWrites(batch, "import_founders", writes, "import");
+    await batch.commit();
     onProgress?.(Math.min(i + 60, todo.length), todo.length);
   }
 

@@ -18,6 +18,8 @@ import { TEAM_LOCKS_COLLECTION, teamLockPath } from "@shared/teamLocks";
 import { FOUNDER_REVIEWS_COLLECTION, STARTUP_REVIEWS_COLLECTION } from "@shared/weeklyReviews";
 import type {
   ApiKey,
+  AuditLog,
+  DeletedEvaluation,
   Attendance,
   Batch,
   BatchResources,
@@ -113,6 +115,8 @@ export const whereField = <T>(field: Extract<keyof T, string>, op: WhereFilterOp
 export const refs = {
   users: () => colRef<User>(COL.users),
   apiKeys: () => colRef<ApiKey>(COL.apiKeys),
+  /** Journal d'audit : staff en lecture ; un geste de l'Admin y ajoute sa ligne dans son lot (lib/firestore/write.ts). */
+  auditLogs: () => colRef<AuditLog>(COL.auditLogs),
   user: (uid: string) => docRef<User>(COL.users, uid),
   people: () => colRef<Person>(COL.people),
   person: (personId: string) => docRef<Person>(docPaths.person(personId)),
@@ -192,6 +196,8 @@ export const refs = {
   submission: (eventId: string, teamId: string) => docRef<Submission>(docPaths.submission(eventId, teamId)),
   /** Notes d'un evenement : staff et investors IC (regle `evaluations`). */
   eventEvaluations: (eventId: string) => colRef<Evaluation>(COL.events, eventId, SUB.evaluations),
+  /** Notes du jury supprimees, restaurables : staff seulement (regle `deletedEvaluations`). */
+  eventDeletedEvaluations: (eventId: string) => colRef<DeletedEvaluation>(COL.events, eventId, SUB.deletedEvaluations),
   teamMembership: (membershipId: string) => docRef<Membership>(COL.memberships, membershipId),
   // ---- Taches du To do ----
   /** Taches du batch : fondateurs du batch, staff, investors (regle `batchTasks`) ; ecrites par le staff. */
@@ -357,6 +363,12 @@ export const queries = {
   evaluationsOfEvent: (eventId: string) => ({
     key: `evaluations:event=${eventId}`,
     query: query(refs.eventEvaluations(eventId)),
+  }),
+
+  /** Notes du jury supprimees d'un evenement (corbeille) : staff seulement. */
+  deletedEvaluationsOfEvent: (eventId: string) => ({
+    key: `deletedEvaluations:event=${eventId}`,
+    query: query(refs.eventDeletedEvaluations(eventId)),
   }),
 
   /** Equipes d'un evenement, publiees ou non : staff et investors IC seulement (regle `teams`). */

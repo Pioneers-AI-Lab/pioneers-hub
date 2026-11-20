@@ -1,7 +1,6 @@
 import { getFirestore, type Transaction, type WriteBatch } from "firebase-admin/firestore";
 import { COL } from "../shared/collections";
-import type { AuditLog, AuditSource } from "../shared/types";
-import type { Caller } from "../api/caller";
+import { auditLine, type AuditActor, type AuditEntry } from "../shared/audit";
 
 // ----------------------------
 // services - le journal d'audit
@@ -9,25 +8,16 @@ import type { Caller } from "../api/caller";
 // CHAQUE ecriture d'un service laisse une ligne `auditLogs` (SPECS §4.7 : qui,
 // quoi, quand, et la source), DANS LA MEME TRANSACTION que l'ecriture : une
 // ecriture sans trace ou une trace sans ecriture sont toutes deux impossibles.
+// Une ligne = une responsabilite, jamais la donnee (shared/audit.ts).
 
-/** Qui ecrit : un appelant de l'API, ou un acteur construit (interface, formulaire, jure). */
-export type AuditActor = Pick<Caller, "uid" | "apiKeyId"> & { via: AuditSource };
+export type { AuditActor };
 
 /** Un uid seul : une action de l'interface (callable, `via: "ui"`). */
 export const actorOf = (actor: string | AuditActor): AuditActor => (typeof actor === "string" ? { uid: actor, apiKeyId: null, via: "ui" } : actor);
-type AuditEntry = { action: string; targetPath: string; payload: Record<string, unknown> | null; idempotencyKey: string | null };
-
-const auditLog = (actor: AuditActor, entry: AuditEntry): AuditLog => ({
-  actorUid: actor.uid,
-  apiKeyId: actor.apiKeyId,
-  via: actor.via,
-  ...entry,
-  dateISOString: new Date().toISOString(),
-});
 
 /** `tx` : la transaction de l'ecriture, ou son lot (synchro de l'agenda). */
 export function writeAudit(tx: Transaction | WriteBatch, actor: AuditActor, entry: AuditEntry): void {
-  tx.create(getFirestore().collection(COL.auditLogs).doc(), auditLog(actor, entry));
+  tx.create(getFirestore().collection(COL.auditLogs).doc(), auditLine(actor, entry));
 }
 
 /**
@@ -39,12 +29,11 @@ export function writeUiAudit(
   tx: Transaction | null,
   by: string | AuditActor,
   action: string,
-  targetPath: string,
-  payload: Record<string, unknown>,
+  targetPaths: string | readonly string[],
+  fields: readonly string[] = [],
 ): Promise<unknown> {
-  const actor = actorOf(by);
-  const entry: AuditEntry = { action, targetPath, payload, idempotencyKey: null };
-  if (!tx) return getFirestore().collection(COL.auditLogs).doc().create(auditLog(actor, entry));
-  writeAudit(tx, actor, entry);
+  const entry: AuditEntry = { action, targetPaths: typeof targetPaths === "string" ? [targetPaths] : targetPaths, fields };
+  if (!tx) return getFirestore().collection(COL.auditLogs).doc().create(auditLine(actorOf(by), entry));
+  writeAudit(tx, actorOf(by), entry);
   return Promise.resolve();
 }

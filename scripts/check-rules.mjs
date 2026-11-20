@@ -478,7 +478,7 @@ console.log("accounts (Admin > Access callables)");
     asStaff("setAccountDisabled")({ uid: "staff-1", disabled: true }),
   );
   await expectOk("each change is in the audit log", async () => {
-    const logs = await getAdminFirestore().collection("auditLogs").where("targetPath", "==", "users/lp-1").get();
+    const logs = await getAdminFirestore().collection("auditLogs").where("targetPaths", "array-contains", "users/lp-1").get();
     if (logs.size < 2) throw new Error(`expected 2 audit lines, got ${logs.size}`);
     return `${logs.size} lines`;
   });
@@ -751,7 +751,7 @@ console.log("jury (form, shared link)");
     await asStaff("resetJuryLink")({ eventId: EVENT });
     key = await linkSecret();
     if (typeof key !== "string" || key.length < 20) throw new Error("no secret");
-    const logs = await adb.collection("auditLogs").where("action", "==", "jury.resetLink").get();
+    const logs = await adb.collection("auditLogs").where("action", "==", "reset_jury_link").get();
     if (logs.size === 0 || logs.docs.some((d) => JSON.stringify(d.data()).includes(key))) throw new Error("no audit line, or the secret in it");
   });
   const sheet = (respondent, k = key) => publicForm(pub.functions, FORM, { key: k, respondent });
@@ -785,7 +785,8 @@ console.log("jury (form, shared link)");
   await expectOk("a correction is logged under the judge", async () => {
     await score(JANE, { "criterion_execution@team-d": 4, "criterion_pitch@team-d": 3 });
     const logs = await adb.collection("auditLogs").where("actorUid", "==", `jury:${janeId}`).get();
-    if (logs.size !== 2 || !logs.docs.every((d) => d.data().payload?.judgeName === "Jane Juror")) throw new Error(`${logs.size} lines`);
+    // Le jure est l'auteur ; la ligne nomme les champs touches, jamais son nom ni ses notes.
+    if (logs.size !== 2 || !logs.docs.every((d) => d.data().fields.length > 0 && !JSON.stringify(d.data()).includes("Jane Juror"))) throw new Error(`${logs.size} lines`);
   });
   await expectOk("the same name, typed differently, finds the same scores; then it is in the list", async () => {
     const data = await sheet({ name: "  jane   JUROR " });
@@ -806,16 +807,41 @@ console.log("jury (form, shared link)");
   await expectOk("staff enters a paper sheet through the link, logged under the staff", async () => {
     await score({ name: "Paper Judge" }, { "criterion_execution@team-c": 3, "criterion_pitch@team-c": 3 }, staff.functions);
     const logs = await adb.collection("auditLogs").where("actorUid", "==", "staff-1").where("action", "==", "submit_form_response").get();
-    if (!logs.docs.some((d) => d.data().payload?.judgeName === "Paper Judge")) throw new Error("no staff audit line");
+    if (!logs.docs.some((d) => d.data().onBehalfOf?.startsWith("jury:jury-"))) throw new Error("no staff audit line on behalf of the judge");
   });
   await expectOk("staff deletes a mistaken score, the leaderboard follows", async () => {
     await asStaff("deleteJuryScore")({ eventId: EVENT, evaluationId: `${janeId}_team-d` });
     if ((await adb.doc(`events/${EVENT}/evaluations/${janeId}_team-d`).get()).exists) throw new Error("still there");
-    const logs = await adb.collection("auditLogs").where("action", "==", "evaluation.delete").get();
-    if (!logs.docs.some((d) => d.data().payload?.before?.evaluatorId === janeId)) throw new Error("not kept in the audit");
+    // DEPLACEE dans la corbeille, entiere ; le journal dit seulement qui l'a retiree.
+    const bin = (await adb.collection(`events/${EVENT}/deletedEvaluations`).where("evaluationId", "==", `${janeId}_team-d`).get()).docs;
+    if (bin.length !== 1 || bin[0].get("evaluation.evaluatorId") !== janeId || bin[0].get("deletedByUid") !== "staff-1") throw new Error("not in the deleted scores");
+    const logs = await adb.collection("auditLogs").where("action", "==", "delete_jury_score").get();
+    if (logs.size === 0 || logs.docs.some((d) => d.data().payload !== undefined || JSON.stringify(d.data()).includes("scores"))) throw new Error("no audit line, or the score in it");
     return waitFor(async () => {
       const rows = (await board())?.rows ?? [];
       if (rows.some((r) => r.targetId === "team-d")) throw new Error(JSON.stringify(rows));
+    });
+  });
+  await expectDenied("staff writes in the deleted scores (server only)", () =>
+    setDoc(doc(staff.db, `events/${EVENT}/deletedEvaluations/forged`), { evaluationId: "x" }),
+  );
+  await expectOk("staff reads the deleted scores", async () => {
+    const snap = await getDocs(collection(staff.db, `events/${EVENT}/deletedEvaluations`));
+    return `${snap.size} deleted`;
+  });
+  await expectOk("staff restores the deleted score, the leaderboard takes it back", async () => {
+    const [bin] = (await adb.collection(`events/${EVENT}/deletedEvaluations`).where("evaluationId", "==", `${janeId}_team-d`).get()).docs;
+    await asStaff("restoreJuryScore")({ eventId: EVENT, deletedId: bin.id });
+    const back = (await adb.doc(`events/${EVENT}/evaluations/${janeId}_team-d`).get()).data();
+    if (back?.evaluatorId !== janeId || back.evaluation !== undefined || back.deletedByUid !== undefined) throw new Error(JSON.stringify(back));
+    if ((await bin.ref.get()).exists) throw new Error("still in the deleted scores");
+    await waitFor(async () => {
+      if (!((await board())?.rows ?? []).some((r) => r.targetId === "team-d")) throw new Error("not back in the leaderboard");
+    });
+    // Puis on la retire de nouveau : la suite lit le classement sans elle.
+    await asStaff("deleteJuryScore")({ eventId: EVENT, evaluationId: `${janeId}_team-d` });
+    return waitFor(async () => {
+      if (((await board())?.rows ?? []).some((r) => r.targetId === "team-d")) throw new Error("still in the leaderboard");
     });
   });
   await expectOk("the judge reads the submissions of the teams they score, never their own team's", async () => {
@@ -1813,6 +1839,58 @@ console.log("identity copies on every profile of the person");
   });
   await deleteApp(staff.app);
   await Promise.all(["founders/ada-second", "founders/ada-unclaimed", "batchMemberships/check-copies_ada-1"].map((path) => adb.doc(path).delete()));
+}
+
+// ---- Journal d'audit : une ligne = une responsabilite, 7 jours (20/11, shared/audit.ts) ----
+// Un geste de l'Admin fait dans le navigateur ecrit sa ligne DANS SON LOT
+// (lib/firestore/write.ts#commitWrites), au nom du compte connecte ; personne ne
+// la modifie ni ne l'efface, et aucune ligne ne porte de donnee.
+console.log("audit log (Admin gestures in the browser, shape, 7 days)");
+{
+  const adb = getAdminFirestore();
+  const { auditLineOfWrites, AUDIT_RETENTION_DAYS } = createRequire(import.meta.url)("../functions/lib/shared/audit.js");
+  const staff = await clientAs("staff-1");
+  const gesture = [{ op: "merge", path: "batchTasks/check-audit-task", data: { title: "Audited", updatedDateISOString: new Date().toISOString() } }];
+  const line = (over = {}) => ({ ...auditLineOfWrites({ uid: "staff-1", via: "ui", apiKeyId: null }, "update_task", gesture), ...over });
+  const commitWithLine = async (db, data) => {
+    const b = writeBatch(db);
+    b.set(doc(db, gesture[0].path), gesture[0].data, { merge: true });
+    b.set(doc(collection(db, "auditLogs")), data);
+    await b.commit();
+  };
+  let lineId = null;
+  await expectOk("an Admin gesture writes its audit line in the same batch", async () => {
+    await commitWithLine(staff.db, line());
+    const logs = await adb.collection("auditLogs").where("targetPaths", "array-contains", "batchTasks/check-audit-task").get();
+    const d = logs.docs[0];
+    lineId = d?.id;
+    const days = (d?.get("expireAt").toMillis() - Date.parse(d?.get("dateISOString"))) / 86400000;
+    if (logs.size !== 1 || d.get("action") !== "update_task" || d.get("fields").join() !== "title" || Math.round(days) !== AUDIT_RETENTION_DAYS) throw new Error(JSON.stringify(d?.data()));
+    return `${days} days`;
+  });
+  await expectDenied("in someone else's name", () => commitWithLine(staff.db, line({ actorUid: "staff-2" })));
+  await expectDenied("as the API", () => commitWithLine(staff.db, line({ via: "api" })));
+  await expectDenied("with the data in it", () => commitWithLine(staff.db, line({ payload: { title: "Audited" } })));
+  await expectDenied("kept longer than 7 days", () => commitWithLine(staff.db, line({ expireAt: new Date(Date.now() + 30 * 86400000) })));
+  await expectDenied("staff edits a line", () => updateDoc(doc(staff.db, `auditLogs/${lineId}`), { action: "x" }));
+  await expectDenied("staff deletes a line", () => deleteDoc(doc(staff.db, `auditLogs/${lineId}`)));
+  await deleteApp(staff.app);
+  const ada = await clientAs("ada-1");
+  await expectDenied("a founder writes an audit line", () =>
+    setDoc(doc(collection(ada.db, "auditLogs")), { ...line(), actorUid: "ada-1" }),
+  );
+  await deleteApp(ada.app);
+  await expectOk("no line carries data, every line expires within 7 days", async () => {
+    const all = (await adb.collection("auditLogs").get()).docs;
+    const bad = all.filter((d) => {
+      const x = d.data();
+      const days = (x.expireAt?.toMillis() - Date.parse(x.dateISOString)) / 86400000;
+      return x.payload !== undefined || x.targetPath !== undefined || !Array.isArray(x.targetPaths) || !Array.isArray(x.fields) || !(days > 0 && days <= AUDIT_RETENTION_DAYS + 1e-6);
+    });
+    if (bad.length) throw new Error(`${bad.length} of ${all.length}: ${JSON.stringify(bad[0].data())}`);
+    return `${all.length} lines`;
+  });
+  await adb.doc("batchTasks/check-audit-task").delete();
 }
 
 console.log(failures === 0 ? "\nall rules checks passed" : `\n${failures} rules check(s) FAILED`);

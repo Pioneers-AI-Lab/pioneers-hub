@@ -203,6 +203,9 @@ const call = async (key, name, args) => {
   const audits = await getFirestore().collection("auditLogs").where("actorUid", "==", "staff-1").get();
   const vias = audits.docs.map((d) => d.get("via"));
   check(vias.includes("mcp") && vias.includes("api"), `audit logs written (${audits.size}: ${[...new Set(vias)].join(", ")})`);
+  // Une ligne = une responsabilite (shared/audit.ts) : documents et noms de champs, jamais les valeurs.
+  const withData = audits.docs.filter((d) => d.get("payload") !== undefined || !Array.isArray(d.get("targetPaths")) || !d.get("expireAt"));
+  check(withData.length === 0, "audit lines carry no data and expire", withData[0]?.data());
 
   const emptyRevoke = await callable("revokeApiKey", staff, { keyId: "" });
   check(emptyRevoke.error?.status === "INVALID_ARGUMENT", "revokeApiKey with an empty keyId is a clear refusal", emptyRevoke);

@@ -112,10 +112,7 @@ export async function setAccountAccess(actor: string | AuditActor, uid: string, 
     await assertKeepsStaff(tx, actorUid, uid, Boolean(before?.roles.includes("staff")) && !access.roles.includes("staff"));
     if (before) tx.update(ref, { ...access });
     else tx.create(ref, newUserDoc(new Date().toISOString(), access));
-    writeUiAudit(tx, actor, "account.setAccess", ref.path, {
-      before: before ? { roles: before.roles, investorAccess: before.investorAccess } : null,
-      after: access,
-    });
+    writeUiAudit(tx, actor, "set_account_access", ref.path, ["roles", "investorAccess"]);
   });
 }
 
@@ -138,7 +135,7 @@ export async function inviteAccount(actor: string | AuditActor, rawEmail: string
     await assertKeepsStaff(tx, actorUid, user.uid, Boolean(before?.roles.includes("staff")) && !access.roles.includes("staff"));
     if (before) tx.update(ref, { ...access });
     else tx.create(ref, newUserDoc(new Date().toISOString(), access));
-    writeUiAudit(tx, actor, "account.invite", ref.path, { email, created, after: access });
+    writeUiAudit(tx, actor, "invite_account", ref.path, ["roles", "investorAccess"]);
   });
   return { uid: user.uid, created };
 }
@@ -152,7 +149,7 @@ export async function setAccountDisabled(actor: string | AuditActor, uid: string
     });
   // Bloque : les sessions en cours tombent au prochain rafraichissement du jeton.
   if (disabled) await getAuth().revokeRefreshTokens(uid);
-  await writeUiAudit(null, actor, disabled ? "account.disable" : "account.enable", `${COL.users}/${uid}`, { disabled });
+  await writeUiAudit(null, actor, "set_account_disabled", `${COL.users}/${uid}`, ["disabled"]);
 }
 
 /**
@@ -169,7 +166,7 @@ export async function createSetPasswordLink(actorUid: string, uid: string): Prom
     throw new HttpsError("failed-precondition", "This account has already signed in: they can use Forgot password on the sign-in page.");
   }
   const link = await getAuth().generatePasswordResetLink(user.email, { url: `${FRONTEND_BASE_URL}/signin` });
-  await writeUiAudit(null, actorUid, "account.setPasswordLink", `${COL.users}/${uid}`, { email: user.email });
+  await writeUiAudit(null, actorUid, "create_set_password_link", `${COL.users}/${uid}`);
   return link;
 }
 

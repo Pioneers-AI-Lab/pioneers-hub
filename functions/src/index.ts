@@ -240,6 +240,12 @@ export const deleteJuryScore = onCallTyped("deleteJuryScore", async (request) =>
   return { ok: true as const };
 });
 
+export const restoreJuryScore = onCallTyped("restoreJuryScore", async (request) => {
+  const actorUid = await assertStaff(request.auth?.uid);
+  await judges.restoreJuryScore(actorUid, request.data?.eventId, request.data?.deletedId);
+  return { ok: true as const };
+});
+
 // ----------------------------
 // Formulaires publics (page /forms/[formId], sans compte)
 // ----------------------------

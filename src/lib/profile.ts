@@ -8,7 +8,19 @@ import { db, storage } from "@/lib/firebase";
 import type { PreparedPhoto } from "@/lib/photo";
 import { refs } from "@/lib/firestore/refs";
 import { slackUserIdWrites } from "@shared/admin/founders";
-import { addWrites } from "@/lib/firestore/write";
+import { mergeWrite, type DocWrite } from "@shared/docWrites";
+import { addAuditedWrites, addWrites } from "@/lib/firestore/write";
+
+/**
+ * Ecrit un lot de « Mon profil » : avec sa ligne d'audit quand le STAFF edite (un geste
+ * de l'Admin) ; le fondateur qui edite son propre profil n'en ecrit pas (les regles la lui refusent).
+ */
+function commitProfile(writes: readonly DocWrite[], asStaff: boolean, action: string) {
+  const batch = writeBatch(db);
+  if (asStaff) addAuditedWrites(batch, action, writes);
+  else addWrites(batch, writes);
+  return batch.commit();
+}
 
 // ----------------------------
 // « Mon profil » : ecriture par le fondateur lui-meme
@@ -53,11 +65,11 @@ async function copyHolders(founder: WithId<Founder>, asStaff: boolean): Promise<
  */
 export async function saveMyProfile(founder: WithId<Founder>, patch: MyProfilePatch, canWriteIdentity: boolean, staff: StaffPatch = {}, asStaff = false) {
   const now = new Date().toISOString();
-  const batch = writeBatch(db);
+  const writes: DocWrite[] = [];
   const { slackUserId, trackRecordOneLiner } = staff;
   const founderPatch = { ...patch.founder, ...(trackRecordOneLiner !== undefined ? { trackRecordOneLiner } : {}) };
   if (Object.keys(founderPatch).length > 0) {
-    batch.set(refs.founder(founder.id), { ...founderPatch, updatedDateISOString: now }, { merge: true });
+    writes.push(mergeWrite(refs.founder(founder.id).path, { ...founderPatch, updatedDateISOString: now }));
   }
   const { whatsapp, linkedinUrl, phone, ...directory } = patch.directory;
   const identity = {
@@ -68,17 +80,17 @@ export async function saveMyProfile(founder: WithId<Founder>, patch: MyProfilePa
   const hasIdentity = canWriteIdentity && Object.keys(identity).length > 0;
   const holders = hasIdentity || slackUserId !== undefined ? await copyHolders(founder, asStaff) : [];
   if (Object.keys(directory).length > 0) {
-    batch.set(refs.founderDirectory(founder.id), directory, { merge: true });
+    writes.push(mergeWrite(refs.founderDirectory(founder.id).path, directory));
   }
   if (hasIdentity) {
-    batch.set(refs.person(founder.personId), { ...identity, updatedDateISOString: now }, { merge: true });
-    for (const id of holders) batch.set(refs.founderDirectory(id), identity, { merge: true });
+    writes.push(mergeWrite(refs.person(founder.personId).path, { ...identity, updatedDateISOString: now }));
+    for (const id of holders) writes.push(mergeWrite(refs.founderDirectory(id).path, identity));
   }
   if (Object.keys(patch.profile).length > 0) {
-    batch.set(refs.founderProfile(founder.id), patch.profile, { merge: true });
+    writes.push(mergeWrite(refs.founderProfile(founder.id).path, patch.profile));
   }
-  if (slackUserId !== undefined) addWrites(batch, slackUserIdWrites(founder.personId, holders, slackUserId, now));
-  await batch.commit();
+  if (slackUserId !== undefined) writes.push(...slackUserIdWrites(founder.personId, holders, slackUserId, now));
+  await commitProfile(writes, asStaff, "update_founder_profile");
 }
 
 /** Les erreurs Storage et Firestore d'une photo, en clair (affichees par `useAction`). */
@@ -104,13 +116,14 @@ async function commitPhoto(founder: WithId<Founder>, thumbnail: string | null, c
   const previous = uploadedPhotoPath(founder.coverPhotoUrl, founder.id);
   const now = new Date().toISOString();
   const holders = await copyHolders(founder, asStaff);
-  const batch = writeBatch(db);
-  batch.set(refs.person(founder.personId), { photoUrl: thumbnail, updatedDateISOString: now }, { merge: true });
-  // La vignette est une copie de `people` (chaque fiche de la personne) ; la grande photo, celle-ci seulement.
-  for (const id of holders) batch.set(refs.founder(id), id === founder.id ? { photoUrl: thumbnail, coverPhotoUrl } : { photoUrl: thumbnail }, { merge: true });
-  // La photo, dernier champ obligatoire : la date de « Complete your profile » au To do.
-  if (completes) batch.set(refs.founderDirectory(founder.id), { profileCompletedDateISOString: now }, { merge: true });
-  await batch.commit();
+  const writes = [
+    mergeWrite(refs.person(founder.personId).path, { photoUrl: thumbnail, updatedDateISOString: now }),
+    // La vignette est une copie de `people` (chaque fiche de la personne) ; la grande photo, celle-ci seulement.
+    ...holders.map((id) => mergeWrite(refs.founder(id).path, id === founder.id ? { photoUrl: thumbnail, coverPhotoUrl } : { photoUrl: thumbnail })),
+    // La photo, dernier champ obligatoire : la date de « Complete your profile » au To do.
+    ...(completes ? [mergeWrite(refs.founderDirectory(founder.id).path, { profileCompletedDateISOString: now })] : []),
+  ];
+  await commitProfile(writes, asStaff, "set_founder_photo");
   if (previous) void deleteObject(storageRef(storage, previous)).catch(() => undefined);
 }
 

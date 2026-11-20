@@ -987,17 +987,12 @@ export async function submitFormResponse(
       };
       tx.set(completionRefs[i], completion);
     });
+    // Les champs touches (ecrits ou en attente), jamais leur valeur ; un compte qui saisit pour un jure le dit.
     writeAudit(tx, formCaller(actorUid), {
       action: "submit_form_response",
-      targetPath: responseRef.path,
-      idempotencyKey: null,
-      payload: {
-        formId,
-        formVersion: form.version,
-        ...(judge ? { judgeId: judge.id, judgeName: judge.name } : {}),
-        applied: writes.filter((w) => w.status === "applied").map((w) => w.dbField),
-        pending: writes.filter((w) => w.status === "pending_approval").map((w) => w.dbField),
-      },
+      targetPaths: [responseRef.path],
+      fields: writes.filter((w) => w.status === "applied" || w.status === "pending_approval").map((w) => w.dbField),
+      onBehalfOf: uid && judge ? `jury:${judge.id}` : null,
     });
     return { responseId: responseRef.id, status: response.status };
   });
@@ -1049,7 +1044,7 @@ export async function decideFormWrite(
     const nowISO = new Date().toISOString();
     const writes = response.writes.map((w, i) => (i === index ? { ...w, status, decidedByUid: staff.uid, decidedDateISOString: nowISO } : w));
     tx.update(ref, { writes, status: responseStatus(writes) });
-    await writeUiAudit(tx, staff, "decide_form_write", ref.path, { writeIndex: index, dbField: write.dbField, status });
+    await writeUiAudit(tx, staff, "decide_form_write", ref.path, [`writes.${index}`, write.dbField]);
     return { status };
   });
 }

@@ -123,6 +123,7 @@ export async function linkFounder(founder: WithId<Founder>, account: { uid: stri
     getDoc(refs.user(account.uid)),
   ]);
   await commitWrites(
+    "link_founder",
     linkFounderWrites({
       founder: current.data(),
       founderId: founder.id,
@@ -159,7 +160,7 @@ export async function unlinkFounder(founder: { id: string; batchId: string; pers
     userPersonId: user.data()?.personId,
     now: nowISO(),
   });
-  await commitWrites(writes);
+  await commitWrites("unlink_founder", writes);
 }
 
 /**
@@ -168,4 +169,4 @@ export async function unlinkFounder(founder: { id: string; batchId: string; pers
  * plus ouverte qu'au staff. Rien n'est supprime. Un profil rattache se delie
  * d'abord (Admin > Founder profiles) : un compte ne garde pas un profil archive.
  */
-export const setFounderArchived = (founderId: string, archived: boolean) => commitWrites([archiveWrite(docPaths.founder(founderId), archived, nowISO())]);
+export const setFounderArchived = (founderId: string, archived: boolean) => commitWrites("archive_founder", [archiveWrite(docPaths.founder(founderId), archived, nowISO())]);

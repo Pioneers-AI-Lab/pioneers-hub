@@ -10,7 +10,7 @@ import { commitWrites } from "@/lib/firestore/write";
 // La note est verifiee par `backgroundRatingWrite` (shared/background.ts).
 
 export const saveBackground = (founderId: string, scores: BackgroundScores, outstanding: boolean, ratedByUid: string) =>
-  commitWrites([backgroundRatingWrite(founderId, { scores, outstanding }, ratedByUid, new Date().toISOString())]);
+  commitWrites("rate_background", [backgroundRatingWrite(founderId, { scores, outstanding }, ratedByUid, new Date().toISOString())]);
 
 /** Le resume d'un profil sur une ligne (liste d'Admin > Background) : experience, repeat founder, nationalite. */
 export function backgroundFacts(directory: Pick<FounderDirectory, "yearsOfXP" | "repeatFounder" | "nationality"> | null): string {

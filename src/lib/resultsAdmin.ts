@@ -11,8 +11,8 @@ import { commitWrites } from "@/lib/firestore/write";
 const now = () => new Date().toISOString();
 
 export const saveTeamResults = (eventId: string, teamId: string, current: WithId<Submission> | null, patch: TeamResultsPatch, staffUid: string) =>
-  commitWrites([teamResultsWrite(eventId, teamId, current, patch, staffUid, now())]);
+  commitWrites("set_team_results", [teamResultsWrite(eventId, teamId, current, patch, staffUid, now())]);
 
 /** `eligible` : la ligne du leaderboard a le maximum de la grille (`outstandingEligible`). */
 export const setTeamOutstanding = (eventId: string, teamId: string, outstanding: boolean, team: { hasSubmission: boolean; eligible: boolean }) =>
-  commitWrites([outstandingWrite(eventId, teamId, outstanding, team)]);
+  commitWrites("set_outstanding", [outstandingWrite(eventId, teamId, outstanding, team)]);

@@ -1,9 +1,9 @@
 import { moveInList, newTask, taskOrderWrites, type TaskDraft } from "@shared/admin/batch";
 import { docPaths } from "@shared/collections";
-import { archiveWrite } from "@shared/docWrites";
+import { archiveWrite, mergeWrite } from "@shared/docWrites";
 import type { Batch, BatchTask, WithId } from "@shared/types";
 import { refs } from "@/lib/firestore/refs";
-import { commitWrites, createDoc, patchDoc } from "@/lib/firestore/write";
+import { commitWrites, createDoc } from "@/lib/firestore/write";
 
 // ----------------------------
 // Taches du To do (staff, Admin > Tasks)
@@ -16,16 +16,17 @@ export { parseTaskLink, type TaskDraft } from "@shared/admin/batch";
 
 /** Nouvelle tache, en fin de liste ; rend son id. */
 export const createTask = (batch: WithId<Batch>, draft: TaskDraft, tasks: readonly WithId<BatchTask>[]): Promise<string> =>
-  createDoc<BatchTask>(refs.batchTasks(), newTask(batch, draft, tasks));
+  createDoc<BatchTask>("create_task", refs.batchTasks(), newTask(batch, draft, tasks));
 
-export const updateTask = (task: WithId<BatchTask>, draft: TaskDraft) => patchDoc(refs.batchTask(task.id), draft);
+export const updateTask = (task: WithId<BatchTask>, draft: TaskDraft) =>
+  commitWrites("update_task", [mergeWrite(docPaths.batchTask(task.id), { ...draft, updatedDateISOString: new Date().toISOString() })]);
 
 /** Retire la tache du To do de tous les fondateurs (archive), ou la remet. */
-export const archiveTask = (task: WithId<BatchTask>, archived = true) => commitWrites([archiveWrite(docPaths.batchTask(task.id), archived, new Date().toISOString())]);
+export const archiveTask = (task: WithId<BatchTask>, archived = true) => commitWrites("archive_task", [archiveWrite(docPaths.batchTask(task.id), archived, new Date().toISOString())]);
 
 /** Monte (`-1`) ou descend (`+1`) une tache dans la liste affichee (`tasks`, dans l'ordre), puis renumerote. */
 export async function moveTask(tasks: readonly WithId<BatchTask>[], from: number, delta: -1 | 1) {
   const to = from + delta;
   if (to < 0 || to >= tasks.length) return;
-  await commitWrites(taskOrderWrites(moveInList(tasks, from, to), new Date().toISOString()));
+  await commitWrites("move_task", taskOrderWrites(moveInList(tasks, from, to), new Date().toISOString()));
 }

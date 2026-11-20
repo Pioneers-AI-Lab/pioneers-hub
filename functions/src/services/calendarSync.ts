@@ -4,6 +4,8 @@ import { getFirestore } from "firebase-admin/firestore";
 import { GoogleAuth } from "google-auth-library";
 import { calendarIdOf, isMovedBy, planCalendarSync, syncedCalendarIdOf, type CalendarSyncPlan, type GoogleCalendarEvent } from "../shared/calendarSync";
 import { FUNCTIONS_REGION } from "../shared/callables";
+import { writtenFieldsOf } from "../shared/audit";
+import { mergeWrite } from "../shared/docWrites";
 import { COL, docPaths } from "../shared/collections";
 import { eventFormDocs, formsClosedByArchive, planEventMove } from "../shared/eventForms";
 import { weeklyFormsEnabled } from "../shared/weeklyForms";
@@ -192,7 +194,7 @@ export async function syncBatchCalendar(
 
   if (!dryRun) {
     const [, subscription] = await Promise.all([
-      writePlan(plan, moves, now, batchId, calendarId, options.actorUid),
+      writePlan(plan, moves, now, batchId, options.actorUid),
       subscribe(batchId, calendarId, state?.channel ?? null),
     ]);
     const next: CalendarSync = {
@@ -300,7 +302,6 @@ async function writePlan(
   moves: ReturnType<typeof formMoves>,
   now: string,
   batchId: string,
-  calendarId: string,
   actorUid: string | AuditActor | null,
 ): Promise<void> {
   const stamp = { updatedDateISOString: now };
@@ -322,18 +323,12 @@ async function writePlan(
   if (writes.length === 0) return;
 
   const actor: AuditActor = actorUid ? actorOf(actorUid) : { uid: "system", apiKeyId: null, via: "function" };
-  const payload = {
-    calendarId,
-    created: plan.creates.map((c) => c.id),
-    updated: plan.updates.map((u) => u.event.id),
-    archived: [...archivedIds],
-    formsMoved: moves.length,
-    formsCreated: plan.formCreates.map((p) => p.id),
-  };
+  // Une ligne pour toute la synchro : les documents ecrits, jamais l'agenda ni ses valeurs.
+  const audited = writes.map((w) => mergeWrite(w.path, w.data));
   for (let i = 0; i < writes.length; i += 400) {
     const b = db().batch();
     for (const w of writes.slice(i, i + 400)) b.set(db().doc(w.path), w.data, { merge: w.merge });
-    if (i === 0) writeAudit(b, actor, { action: "sync_google_calendar", targetPath: docPaths.batch(batchId), payload, idempotencyKey: null });
+    if (i === 0) writeAudit(b, actor, { action: "sync_calendar", targetPaths: writes.map((w) => w.path), fields: writtenFieldsOf(audited) });
     await b.commit();
   }
 }

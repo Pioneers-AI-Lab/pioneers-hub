@@ -9,4 +9,4 @@ import { commitWrites } from "@/lib/firestore/write";
 // formulaires de l'evenement ne comptent dans Engagement (shared/attendance.ts#isAttendanceOptional).
 
 export const setAttendanceOptional = (eventId: string, optional: boolean) =>
-  commitWrites([attendanceOptionalWrite(eventId, optional, new Date().toISOString())]);
+  commitWrites("set_attendance_optional", [attendanceOptionalWrite(eventId, optional, new Date().toISOString())]);

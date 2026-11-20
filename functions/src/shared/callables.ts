@@ -337,9 +337,14 @@ export type Callables = {
     req: { eventId: string };
     res: { ok: true };
   };
-  /** Staff : supprime une note du jury saisie par erreur (gardee entiere dans l'audit), puis recalcul du leaderboard. */
+  /** Staff : supprime une note du jury saisie par erreur (deplacee dans `deletedEvaluations`, restaurable), puis recalcul du leaderboard. */
   deleteJuryScore: {
     req: { eventId: string; evaluationId: string };
+    res: { ok: true };
+  };
+  /** Staff : remet a sa place une note du jury supprimee (refuse si le jure a renote l'equipe depuis). */
+  restoreJuryScore: {
+    req: { eventId: string; deletedId: string };
     res: { ok: true };
   };
   /** Staff : valide (ecrit) ou refuse une valeur en attente d'une reponse de formulaire. Journalise. */

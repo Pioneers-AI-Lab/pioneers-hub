@@ -8,4 +8,4 @@ import { commitWrites } from "@/lib/firestore/write";
 // `edgeOk` refuse une note hors de 0 a 5), avec le texte note : un texte change depuis est a renoter.
 
 export const saveEdge = (founderId: string, score: number, ratedText: string | null, ratedByUid: string) =>
-  commitWrites([edgeRatingWrite(founderId, { score, ratedText }, ratedByUid, new Date().toISOString())]);
+  commitWrites("rate_edge", [edgeRatingWrite(founderId, { score, ratedText }, ratedByUid, new Date().toISOString())]);

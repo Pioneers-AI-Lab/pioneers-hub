@@ -3,7 +3,9 @@ import { addedFormDates, type EventTimes } from "@shared/eventForms";
 import { newForm, type NewFormInput } from "@shared/forms";
 import type { Form, FormQuestion, WithId } from "@shared/types";
 import { refs } from "@/lib/firestore/refs";
-import { commitWrites, createDoc, patchDoc } from "@/lib/firestore/write";
+import { docPaths } from "@shared/collections";
+import { mergeWrite } from "@shared/docWrites";
+import { commitWrites, createDoc } from "@/lib/firestore/write";
 
 // ----------------------------
 // Formulaires (staff, SPECS §4.4)
@@ -28,7 +30,7 @@ export async function createForm(
 ): Promise<string> {
   const { event, eventId, templateKey } = input;
   const dates = event && eventId ? addedFormDates(templateKey, { ...event, id: eventId }, events) : {};
-  return createDoc<Form>(refs.forms(), newForm(input, dates));
+  return createDoc<Form>("create_form", refs.forms(), newForm(input, dates));
 }
 
 /**
@@ -38,15 +40,15 @@ export async function createForm(
  */
 export async function saveForm(form: WithId<Form>, draft: FormDraft, options: { publish: boolean }): Promise<number> {
   const plan = saveFormPlan(form, draft, options, new Date().toISOString());
-  await commitWrites(plan.writes);
+  await commitWrites("update_form", plan.writes);
   return plan.version;
 }
 
 /** Copie en brouillon (shared/admin/forms.ts#duplicatedForm). */
-export const duplicateForm = (form: WithId<Form>): Promise<string> => createDoc<Form>(refs.forms(), duplicatedForm(form));
+export const duplicateForm = (form: WithId<Form>): Promise<string> => createDoc<Form>("duplicate_form", refs.forms(), duplicatedForm(form));
 
 /** Rien n'est supprime : on archive (le formulaire ferme et sort des listes). */
-export const archiveForm = (form: WithId<Form>) => commitWrites([formArchiveWrite(form, true, new Date().toISOString())]);
+export const archiveForm = (form: WithId<Form>) => commitWrites("archive_form", [formArchiveWrite(form, true, new Date().toISOString())]);
 
 /**
  * Ouvre ou ferme un formulaire PUBLIE, sans nouvelle version (le verrou du
@@ -55,5 +57,5 @@ export const archiveForm = (form: WithId<Form>) => commitWrites([formArchiveWrit
  * c'est verrouiller les notes.
  */
 export async function setFormStatus(formId: string, status: "open" | "closed"): Promise<void> {
-  await patchDoc<Form>(refs.form(formId), { status });
+  await commitWrites("set_form_status", [mergeWrite(docPaths.form(formId), { status, updatedDateISOString: new Date().toISOString() })]);
 }

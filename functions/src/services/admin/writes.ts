@@ -1,5 +1,6 @@
 import { getFirestore, type Transaction } from "firebase-admin/firestore";
 import type { DocWrite } from "../../shared/docWrites";
+import { writtenFieldsOf } from "../../shared/audit";
 import { isStaffViewer } from "../../shared/access";
 import type { Caller } from "../../api/caller";
 import { notFound } from "../../api/errors";
@@ -55,6 +56,7 @@ export async function readWhere<T>(tx: Transaction, collection: string, field: s
 export const writePlan = <R>(preview: unknown, writes: readonly DocWrite[], result: R, changed = writes.length > 0): OperationPlan<R> => ({
   preview,
   targetPaths: pathsOf(writes),
+  fields: writtenFieldsOf(writes),
   commit: changed
     ? (tx) => {
         applyWrites(tx, writes);

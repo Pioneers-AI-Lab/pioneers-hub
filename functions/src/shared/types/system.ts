@@ -63,23 +63,33 @@ export type ClosedList = {
 };
 
 // ----------------------------
-// auditLogs/{logId}  (staff seulement, ecrit par Cloud Functions)
+// auditLogs/{logId}  (staff en lecture ; ecrit par le serveur, les gestes de l'Admin et les scripts)
 // ----------------------------
-// Chaque ecriture, quelle que soit sa source (SPECS §4.7) : qui, quoi, quand.
+// Une ligne = une responsabilite (shared/audit.ts) : qui, quelle action, sur
+// quels documents, quand, par ou. JAMAIS la donnee. Gardee 7 jours (TTL).
 
-export type AuditSource = "ui" | "api" | "mcp" | "import" | "function";
+/** `script` : un script admin (scripts/*.mjs) ; `import` : un import CSV de l'Admin. */
+export type AuditSource = "ui" | "api" | "mcp" | "import" | "function" | "script";
 
 export type AuditLog = {
+  /** uid du compte, `jury:<judgeId>` (lien du jury), `form:<formId>` (formulaire public) ou `script:<nom>`. */
   actorUid: string;
   /** Cle d'API utilisee, si la source est `api`. */
   apiKeyId: string | null;
   via: AuditSource;
   action: string;
-  targetPath: string;
-  payload: Record<string, unknown> | null;
+  /** Documents vises (tries, au plus AUDIT_MAX_PATHS) ; `targetCount` en donne le nombre reel. */
+  targetPaths: string[];
+  targetCount: number;
+  /** Noms des champs ecrits, sans valeur. */
+  fields: string[];
+  /** Pour le compte de qui : `jury:<judgeId>` quand le staff saisit une feuille papier. */
+  onBehalfOf: string | null;
   /** Cle d'idempotence de la requete, pour reconnaitre un rejeu. */
   idempotencyKey: string | null;
   dateISOString: DateISOString;
+  /** Fin de conservation (Timestamp en base) : la politique TTL supprime la ligne ensuite. */
+  expireAt: Date;
 };
 
 // ----------------------------

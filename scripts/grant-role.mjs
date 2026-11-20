@@ -11,9 +11,13 @@
 // et le role est deja la. Ensuite, la page Staff > Access fait la meme chose
 // depuis l'interface (pour les comptes deja connectes).
 
+import { createRequire } from "node:module";
 import { initializeApp, applicationDefault } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
+
+// La ligne d'audit : la meme forme que le serveur (npm --prefix functions run build).
+const { auditLine } = createRequire(import.meta.url)("../functions/lib/shared/audit.js");
 
 const PROJECT_ID = "pioneers-3627c";
 const ROLES = ["staff", "investor", "mentor"];
@@ -65,15 +69,8 @@ if (role === "none") {
   });
 }
 const after = (await ref.get()).data();
-// Meme trace que Admin > Access : qui (le script), quoi, sur quel compte, quand.
-await db.collection("auditLogs").add({
-  actorUid: "script:grant-role",
-  apiKeyId: null,
-  via: "function",
-  action: "account.grant",
-  targetPath: ref.path,
-  payload: { email, role, access: access ?? null, after: { roles: after.roles, investorAccess: after.investorAccess } },
-  idempotencyKey: null,
-  dateISOString: new Date().toISOString(),
-});
+// Meme trace que Admin > Access : qui (le script), quelle action, sur quel compte, quand. Jamais l'e-mail ni le role.
+await db.collection("auditLogs").add(
+  auditLine({ uid: "script:grant-role", via: "script", apiKeyId: null }, { action: "set_account_access", targetPaths: [ref.path], fields: ["roles", "investorAccess"] }),
+);
 console.log(`grant: ${email} -> roles [${after.roles.join(", ")}], investorAccess ${after.investorAccess}`);

@@ -505,7 +505,7 @@ export async function getObject(caller: Caller, input: GetInput): Promise<Record
     case "event": {
       const insider = isInsiderViewer(caller.viewer);
       const staff = isStaffViewer(caller.viewer);
-      const [event, teams, attendance, submissions, eventForms, evaluations, leaderboard] = await Promise.all([
+      const [event, teams, attendance, submissions, eventForms, evaluations, deletedEvaluations, leaderboard] = await Promise.all([
         db.doc(docPaths.event(id)).get(),
         db.collection(eventCollectionPaths.teams(id)).get(),
         insider ? db.collection(eventCollectionPaths.attendance(id)).get() : null,
@@ -513,6 +513,8 @@ export async function getObject(caller: Caller, input: GetInput): Promise<Record
         db.collection(COL.forms).where("eventId", "==", id).get(),
         // Les notes du jury, une par une : le staff seulement (les fondateurs n'en voient que le classement).
         staff ? db.collection(eventCollectionPaths.evaluations(id)).get() : null,
+        // La corbeille des notes supprimees (restaurables) : le staff seulement.
+        staff ? db.collection(eventCollectionPaths.deletedEvaluations(id)).get() : null,
         insider ? db.doc(docPaths.leaderboard(id)).get() : null,
       ]);
       const data = required(event, object, id).data() as PioneersEvent;
@@ -529,6 +531,7 @@ export async function getObject(caller: Caller, input: GetInput): Promise<Record
         attendance: attendance?.docs.map((d) => ({ founderId: d.id, status: d.get("status") })),
         submissions: submissions.docs.map((d) => withId(d)),
         evaluations: evaluations?.docs.map((d) => withId(d)),
+        deletedEvaluations: deletedEvaluations?.docs.map((d) => withId(d)),
         leaderboard: leaderboard?.exists ? leaderboard.data() : undefined,
       };
     }

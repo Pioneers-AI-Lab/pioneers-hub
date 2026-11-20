@@ -490,6 +490,20 @@ export type Evaluation = {
   updatedDateISOString: DateISOString;
 };
 
+/**
+ * events/{eventId}/deletedEvaluations/{id} : une note du jury supprimee (saisie par
+ * erreur), DEPLACEE ici plutot qu'effacee (decision du 20/11) : le classement ne lit
+ * que `evaluations`, et la note reste restaurable. Staff seulement, ecrit par le serveur.
+ */
+export type DeletedEvaluation = {
+  /** La note telle qu'elle etait, remise telle quelle a la restauration. */
+  evaluation: Evaluation;
+  /** L'id qu'elle avait dans `evaluations` (et qu'elle reprend a la restauration). */
+  evaluationId: string;
+  deletedByUid: string;
+  deletedDateISOString: DateISOString;
+};
+
 // ---- judges/link -------------------------------------------------------------
 
 /**

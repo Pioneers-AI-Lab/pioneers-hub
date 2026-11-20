@@ -90,6 +90,8 @@ export const SUB = {
   teams: "teams",
   submissions: "submissions",
   evaluations: "evaluations",
+  /** Notes du jury supprimees (corbeille, restaurables) : staff seulement. */
+  deletedEvaluations: "deletedEvaluations",
   judges: "judges",
   attendance: "attendance",
   peerRatings: "peerRatings",
@@ -216,5 +218,6 @@ export const eventCollectionPaths = {
   attendance: (eventId: string) => `${COL.events}/${eventId}/${SUB.attendance}`,
   submissions: (eventId: string) => `${COL.events}/${eventId}/${SUB.submissions}`,
   evaluations: (eventId: string) => `${COL.events}/${eventId}/${SUB.evaluations}`,
+  deletedEvaluations: (eventId: string) => `${COL.events}/${eventId}/${SUB.deletedEvaluations}`,
 } as const;
 

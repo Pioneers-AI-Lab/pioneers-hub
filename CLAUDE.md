@@ -46,6 +46,7 @@ node scripts/migrate-tag-families.mjs [--prod]   # secteurs (64 -> 9 familles, G
 node scripts/seed-tasks.mjs <batchId> [--prod]   # taches de depart du To do (Slack, LinkedIn, shortlist), a blanc sans --prod, n'ecrase jamais
 node scripts/migrate-metric-keys.mjs <batchId> [--prod]   # cles de metriques standard (SPECS A.5), a blanc sans --prod ; puis backfill-kpis.mjs
 node scripts/migrate-tiebreak-weights.mjs <batchId> [--prod]   # retire le poids des criteres de departage des formulaires de jury (version courante et figees), a blanc sans --prod, rejouable ; fall-2026 fait le 20/11 (H3, H4)
+node scripts/migrate-audit-logs.mjs [--prod]   # journal d'audit au format « responsabilite » (20/11, shared/audit.ts) : 1) les notes du jury supprimees, dont la seule copie etait la ligne `evaluation.delete`, rejoignent `events/*/deletedEvaluations` ; 2) chaque ligne ancienne perd `payload`/`targetPath`, gagne `targetPaths`, `fields` (noms seuls) et `expireAt` (+7 jours : le TTL supprime les plus vieilles) ; a blanc sans --prod, rejouable
 node scripts/set-milestone-dates.mjs <batchId> [--prod]   # echeances des milestones du score -> `settings.scoreMilestoneDueDates` (n'ecrit que ce champ ; `weeklyGoalFrom` lu dans les evenements : echeance du DEUXIEME Weekly update, `weeklyGoalFromOf`), a blanc sans --prod, rejouable (relancer si l'agenda deplace un Weekly update)
 node scripts/create-batch-form.mjs <batchId> <templateKey> --id <formId> --opens <ISO> --deadline <ISO> [--prod]   # formulaire de batch (sans evenement) depuis un modele, publie, id fixe, n'ecrase jamais ; a blanc sans --prod. Lock my team fa26 cree le 17/11 (fall-2026-lock-my-team, 23/11 16:00 -> 25/11 9:30 Paris)
 node scripts/background-draft.mjs <batchId> [--export profils.json | --apply profils.json] [--prod]   # grille Background proposee par Claude (profils anonymes) -> `private/internal.background.proposed` seulement, jamais la note du staff ; a blanc sans --prod. Remplace elo-rank.mjs (supprime au lot 6 : l'Elo est archive, `eloScore` et `eloMatches` gardes mais ni lus, ni affiches, ni rendus par l'API)
@@ -67,6 +68,11 @@ Un tout premier deploiement de declencheurs peut echouer (agent Eventarc pas enc
 Images de conteneur purgees apres 1 jour (europe-west4 et europe-west9).
 Verifications a cote des emulateurs de dev (ports et +200 pris) : `CHECK_PORT_OFFSET=1000 node scripts/emulators-check-config.mjs`
 puis `firebase emulators:exec --config .firebase-check.json ...` ; check-rules a alors besoin de `FUNCTIONS_EMULATOR_HOST=127.0.0.1:6101`.
+Journal d'audit (SPECS §4.7, 20/11) : une ligne = une responsabilite (qui, action, documents, NOMS des champs, quand, par ou), jamais
+la donnee ; forme unique `shared/audit.ts#auditLine`, gardee 7 jours (TTL `expireAt`, `firestore.indexes.json`). Serveur : `services/audit.ts`
+dans la transaction ; geste de l'Admin dans le navigateur : `commitWrites(action, writes)` / `addAuditedWrites` (lib/firestore/write.ts)
+l'ecrivent DANS LE LOT, tiree des memes `DocWrite`, sous le nom de l'operation de l'API ; `firestore.rules#auditLineOk` en verifie la forme. Un nouveau geste de l'Admin passe par
+ces fonctions, jamais par `writeBatch` nu. Rien ne lit le journal pour fonctionner : une donnee a garder a sa collection (`deletedEvaluations`).
 Scores (SPECS §5.5) : `services/scores.ts` (formules pures `shared/scoring.ts`, bareme `shared/scoringRules.ts`) ecrit `scores`,
 `scoreSignals`, `founderStats` et `batchStats` (`shared/batchStats.ts`, accueil du batch) ; jamais pour un batch
 `settings.scoresSource: "imported"` (spring-2026). Echelle (17/11) : un score du Hub est sur 100 (`scale: 100`,

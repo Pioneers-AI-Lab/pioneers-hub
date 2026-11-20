@@ -79,7 +79,7 @@ export function roleInBatch(viewer: Viewer | null, viewerFounderId: string | nul
  *                              mentors, investors, equipes non publiees
  *   staff                   -> avis entre pairs individuels, picks des autres, shortlistHistory,
  *                              founderReviews et startupReviews (revue des Weekly updates, lot 4),
- *                              apiKeys, auditLogs, outils
+ *                              apiKeys, auditLogs, notes du jury supprimees (deletedEvaluations), outils
  */
 
 /** Staff et investors IC. */

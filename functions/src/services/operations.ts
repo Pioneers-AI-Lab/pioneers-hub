@@ -5,6 +5,7 @@ import type { IdempotencyRecord, WritePlan } from "../shared/types";
 import type { Caller } from "../api/caller";
 import { sha256 } from "../api/crypto";
 import { badRequest, conflict, forbidden, fromZod, notFound } from "../api/errors";
+import { inputFieldsOf } from "../shared/audit";
 import { writeAudit } from "./audit";
 
 // ----------------------------
@@ -39,6 +40,8 @@ export type OperationPlan<R> = {
   effectAudits?: boolean;
   /** Chemins ecrits, pour le journal d'audit. */
   targetPaths: string[];
+  /** Noms des champs ecrits (sans valeur), pour le journal ; a defaut, les cles de l'entree. */
+  fields?: string[];
 };
 
 const hasWork = (plan: OperationPlan<unknown>) => Boolean(plan.commit || plan.effect);
@@ -88,17 +91,11 @@ function parseInput<S extends z.ZodType>(op: Operation<S>, raw: unknown): z.outp
   return parsed.data;
 }
 
-/** Une valeur que Firestore accepte : un tableau dans un tableau (des paires) devient son JSON. */
-function storable(value: unknown, inArray = false): unknown {
-  if (Array.isArray(value)) return inArray ? JSON.stringify(value) : value.map((v) => storable(v, true));
-  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined).map(([k, v]) => [k, storable(v)]));
-  return value;
-}
-
+/** La responsabilite, jamais la donnee (shared/audit.ts) : l'action, les documents, les NOMS des champs. */
 const auditEntry = (action: string, input: unknown, plan: OperationPlan<unknown>, idempotencyKey: string | null) => ({
   action,
-  targetPath: plan.targetPaths.join(", ").slice(0, 1500),
-  payload: { input: storable(input) },
+  targetPaths: plan.targetPaths,
+  fields: plan.fields ?? inputFieldsOf(input),
   idempotencyKey,
 });
 

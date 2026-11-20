@@ -2,6 +2,12 @@
   "indexes": [],
   "fieldOverrides": [
     {
+      "collectionGroup": "auditLogs",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
       "collectionGroup": "attendance",
       "fieldPath": "founderId",
       "indexes": [

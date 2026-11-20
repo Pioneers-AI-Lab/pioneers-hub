@@ -11,4 +11,4 @@ import { commitWrites } from "@/lib/firestore/write";
 
 /** Donne `status` a un fondateur, et enregistre presents les attendus sans document (`eventRoster().unmarkedIds`). */
 export const markAttendance = (eventId: string, founderId: string, status: AttendanceStatus, unmarkedIds: string[], markedByUid: string) =>
-  commitWrites(attendanceWrites(eventId, [{ founderId, status }], unmarkedIds, markedByUid, new Date().toISOString()));
+  commitWrites("mark_attendance", attendanceWrites(eventId, [{ founderId, status }], unmarkedIds, markedByUid, new Date().toISOString()));

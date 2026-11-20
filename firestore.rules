@@ -26,7 +26,8 @@ rules_version = '2';
 // « Insider » = staff ou investor IC.
 //
 // v1 : toutes les ecritures metier sont reservees au staff, ou passent par
-// l'API (Cloud Functions, SDK admin) qui valide les donnees.
+// l'API (Cloud Functions, SDK admin) qui valide les donnees. Un geste de l'Admin
+// ecrit sa ligne d'audit dans le meme lot (`auditLogs`, en bas de ce fichier).
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -523,6 +524,13 @@ service cloud.firestore {
         allow write: if isStaff();
       }
 
+      // Notes du jury supprimees (corbeille, restaurables) : le serveur seul les
+      // deplace (`deleteJuryScore`, `restoreJuryScore`), le staff les relit.
+      match /deletedEvaluations/{deletedId} {
+        allow read: if isStaff();
+        allow write: if false;
+      }
+
       // Presences : le fondateur lit la sienne (son To do ne propose pas les
       // formulaires d'un evenement ou il etait absent).
       match /attendance/{founderId} {
@@ -733,9 +741,29 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Journal d'audit (shared/audit.ts) : une ligne = une responsabilite, jamais la
+    // donnee, gardee 7 jours (TTL sur `expireAt`). Le serveur l'ecrit avec ses
+    // ecritures ; un geste de l'Admin fait dans le navigateur l'ecrit DANS SON LOT
+    // (lib/firestore/write.ts#commitWrites), au nom du compte connecte.
+    // Personne ne la modifie ni ne la supprime (seul le TTL le fait).
+    function auditLineOk(d) {
+      return d.keys().toSet() == ['actorUid', 'apiKeyId', 'via', 'action', 'targetPaths', 'targetCount', 'fields', 'onBehalfOf', 'idempotencyKey', 'dateISOString', 'expireAt'].toSet()
+        && d.actorUid == request.auth.uid
+        && d.via in ['ui', 'import']
+        && d.apiKeyId == null && d.onBehalfOf == null && d.idempotencyKey == null
+        && d.action is string && d.action.size() > 0 && d.action.size() <= 80
+        && d.targetPaths is list && d.targetPaths.size() > 0 && d.targetPaths.size() <= 100
+        && d.targetCount is int && d.targetCount >= d.targetPaths.size()
+        && d.fields is list && d.fields.size() <= 100
+        && d.dateISOString is string
+        // 7 jours, plus un jour de marge pour l'horloge du poste (un refus annulerait le geste).
+        && d.expireAt is timestamp && d.expireAt > request.time && d.expireAt <= request.time + duration.value(8, 'd');
+    }
+
     match /auditLogs/{logId} {
       allow read: if isStaff();
-      allow write: if false;
+      allow create: if isStaff() && auditLineOk(request.resource.data);
+      allow update, delete: if false;
     }
   }
 }
