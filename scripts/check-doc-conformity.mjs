@@ -194,9 +194,9 @@ const GRIDS = {
 };
 /** Une note par critere d'une grille (le premier element est la cle : GRIDS comme PITCH_GRID). */
 const notes = (grid, value) => Object.fromEntries(grid.map(([k]) => [k, value]));
-/** Le formulaire de jury d'une grille : une note de 0 a 5 par critere (poids = points), puis le commentaire. */
+/** Le formulaire de jury d'une grille : une note de 0 a 5 par critere (poids = points, aucun pour un departage), puis le commentaire. */
 const juryQuestions = (grid) => [
-  ...grid.map(([key, points]) => Q("rating", `evaluation.scores.${key}`, undefined, { scale: "0-5", ...(points !== null ? { weight: points } : {}) })),
+  ...grid.map(([key, points]) => Q("rating", `evaluation.scores.${key}`, undefined, { scale: "0-5", weight: points })),
   Q("long_text", "evaluation.comment"),
 ];
 /** Le bareme d'un evenement : les points de chaque critere, les departages dans l'ordre. */

@@ -18,7 +18,7 @@ import {
 } from "@mantine/core";
 import { useClipboard } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import { FAMILY_KEY, FAMILY_QUESTION_TYPE, familyOf, getFieldDef, isFormOnly, parseDbField, type DbFieldKey, type DocKind, type FieldFamily } from "@shared/fieldRegistry";
+import { FAMILY_KEY, FAMILY_QUESTION_TYPE, criterionKeyOf, familyOf, getFieldDef, isFormOnly, parseDbField, type DbFieldKey, type DocKind, type FieldFamily } from "@shared/fieldRegistry";
 import {
   FORM_FIELD_TYPE_LABELS,
   alignQuestionWithField,
@@ -35,8 +35,9 @@ import { formState } from "@shared/forms";
 import { EVENT_TEMPLATES } from "@shared/presets/eventTemplates";
 import { isOffered, RETIRED_DB_FIELDS, RETIRED_FORM_KINDS, RETIRED_IDENTITY_CHECKS } from "@shared/presets/offered";
 import { EVENT_METRIC_RENAMES, STANDARD_METRICS, standardEventMetricKey } from "@shared/presets/standardMetrics";
+import { criterionRule } from "@shared/scoringRules";
 import { keyFromLabel } from "@shared/text";
-import { IDENTITY_RULES, activeQuestions, needsAccount, scopeOf, type Form, type FormApproval, type FormFieldType, type FormIdentityCheck, type FormKind, type FormQuestion, type PickerEntity, type QuestionScope, type WithId } from "@shared/types";
+import { IDENTITY_RULES, activeQuestions, needsAccount, scopeOf, scoringOf, type EventScoring, type Form, type FormApproval, type FormFieldType, type FormIdentityCheck, type FormKind, type FormQuestion, type PickerEntity, type QuestionScope, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminForm } from "@/context/AdminFormContext";
 import { formatDateTime, fromLocalInput, toLocalInput } from "@/lib/format";
@@ -225,6 +226,9 @@ function Editor({ form }: { form: WithId<Form> }) {
   /** La confirmation d'enregistrement ouverte : `publish` (premiere publication) ou non. */
   const [confirmSave, setConfirmSave] = useState<{ publish: boolean } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  // Le bareme de l'evenement choisi : il fixe les points des criteres du jury (le poids des questions n'est plus lu).
+  const draftEvent = events.find((e) => e.id === draft.eventId);
+  const scoring = draftEvent ? scoringOf(draftEvent) : null;
 
   // Ce que l'enregistrement ecrira : mon brouillon, fusionne avec la base si elle a change entre-temps.
   const remote = draftOf(form);
@@ -524,7 +528,7 @@ function Editor({ form }: { form: WithId<Form> }) {
                   scopeOf(q) !== "self" ? SCOPE_LABELS[scopeOf(q)].toLowerCase() : null,
                   q.required ? "required" : null,
                   q.dbField ? `writes ${fieldName(q)}` : "not linked",
-                  q.weight ? `weight ${q.weight}` : null,
+                  criterionCount(q, scoring),
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -607,6 +611,7 @@ function Editor({ form }: { form: WithId<Form> }) {
         <QuestionModal
           key={editing.original?.id ?? "new"}
           original={editing.original}
+          scoring={scoring}
           isPublished={editing.original ? isPublishedQuestion(editing.original) : false}
           isIndicatorLocked={editing.original ? isIndicatorLocked(editing.original) : false}
           onClose={() => setEditing(null)}
@@ -644,6 +649,7 @@ function Editor({ form }: { form: WithId<Form> }) {
 
 function QuestionModal({
   original,
+  scoring,
   isPublished,
   isIndicatorLocked,
   onClose,
@@ -652,6 +658,7 @@ function QuestionModal({
   onMove,
 }: {
   original: FormQuestion | null;
+  scoring: EventScoring | null;
   isPublished: boolean;
   isIndicatorLocked: boolean;
   onClose: () => void;
@@ -875,18 +882,23 @@ function QuestionModal({
           </WithHelp>
         )}
 
-        {isJuryCriterion(aligned) && (
-          <WithHelp label="Weight" help="In the jury's weighted average (the IC grid is 40 / 40 / 20).">
-            {(field) => (
-              <NumberInput
-                {...field}
-                min={0}
-                value={q.weight ?? 1}
-                onChange={(v) => set("weight", typeof v === "number" && v > 0 ? v : null)}
-              />
-            )}
-          </WithHelp>
-        )}
+        {isJuryCriterion(aligned) &&
+          (scoring ? (
+            <Text size="sm" c="dimmed">
+              In the event&apos;s scoring: {criterionCount(aligned, scoring)}. Points are set there (Admin &gt; Events), not here.
+            </Text>
+          ) : (
+            <WithHelp label="Weight" help="In the jury's weighted average (the IC grid is 40 / 40 / 20).">
+              {(field) => (
+                <NumberInput
+                  {...field}
+                  min={0}
+                  value={q.weight ?? 1}
+                  onChange={(v) => set("weight", typeof v === "number" && v > 0 ? v : null)}
+                />
+              )}
+            </WithHelp>
+          ))}
 
         {q.dbField && (
           <Select
@@ -918,6 +930,12 @@ function QuestionModal({
       </Stack>
     </ResponsiveDialog>
   );
+}
+
+/** Ce que rapporte un critere du jury (`criterionRule`), `null` pour une autre question. */
+function criterionCount(q: FormQuestion, scoring: EventScoring | null): string | null {
+  const key = isJuryCriterion(q) ? criterionKeyOf(q.dbField) : null;
+  return key ? criterionRule(scoring, key, q.weight) : null;
 }
 
 /** Le champ d'une question, tel que l'editeur le nomme : « Team metric callsMade ». */

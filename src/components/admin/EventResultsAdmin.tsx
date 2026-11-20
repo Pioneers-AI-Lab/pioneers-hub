@@ -6,7 +6,8 @@ import { Button, CopyButton, Group, Stack, Text } from "@mantine/core";
 import { FORM_TEMPLATES, isOfferedTemplate, type FormTemplate, type FormTemplateKey } from "@shared/presets/formTemplates";
 import { isWorkTeamEvent } from "@shared/events";
 import { formState } from "@shared/forms";
-import { EVALUATION_DECISION_LABELS, isPickable, type Evaluation, type Form, type WithId } from "@shared/types";
+import { criterionRule } from "@shared/scoringRules";
+import { EVALUATION_DECISION_LABELS, isPickable, scoringOf, type Evaluation, type Form, type WithId } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
 import { useAdminEvent } from "@/context/AdminEventContext";
 import { useAction } from "@/hooks/useAction";
@@ -165,6 +166,7 @@ const pitchVerdictRows = (e: Evaluation): { title: string; meta: string }[] =>
  */
 function JurySection({ juryForm }: { juryForm: WithId<Form> }) {
   const { event, teams, juryLink, evaluations, criteria } = useAdminEvent();
+  const scoring = scoringOf(event);
   const { startups } = useAdmin();
   const { isBusy, run } = useAction();
   const [isResetting, setResetting] = useState(false);
@@ -197,7 +199,7 @@ function JurySection({ juryForm }: { juryForm: WithId<Form> }) {
         <LinkRow
           href={paths.adminForm(juryForm.id)}
           title="Scoring grid"
-          subtitle={criteria.length ? criteria.map((c) => `${c.label} (${c.weight})`).join(" · ") : "No rating question yet"}
+          subtitle={criteria.length ? criteria.map((c) => `${c.label} (${criterionRule(scoring, c.key, c.weight)})`).join(" · ") : "No rating question yet"}
         />
         {!isPublished && <Text size="sm" c="dimmed">Publish the jury form to open the scores.</Text>}
         {url ? (

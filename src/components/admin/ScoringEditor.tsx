@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button, Group, NumberInput, SegmentedControl, Select, Stack, Switch, Text, TextInput } from "@mantine/core";
 import { criterionQuestion } from "@shared/presets/formTemplates";
-import { isLegacyScoringItem, labelsOf, OUTSTANDING_BONUS_POINTS, scoringMaxTotal, variableExists } from "@shared/scoringRules";
+import { isLegacyScoringItem, labelsOf, OUTSTANDING_BONUS_POINTS, scoringItemRule, scoringMaxTotal, variableExists } from "@shared/scoringRules";
 import { keyFromLabel } from "@shared/text";
 import { scoringOf, type ScoringItem, type ScoringItemInput } from "@shared/types";
 import { useAdmin } from "@/context/AdminContext";
@@ -49,16 +49,6 @@ const toInput = ({ label, mode, sourceKey, pointsPerUnit, maxPoints, tieBreakOnl
   tieBreakOnly: tieBreakOnly === true,
 });
 
-/** Le pourquoi des points d'un element, en clair (un ancien element : son ancienne regle). */
-function scoringItemRule(item: ScoringItemInput): string {
-  const rule =
-    item.mode === "per_unit"
-      ? `Former: ${item.pointsPerUnit ?? 1} pts each`
-      : item.mode === "proportional"
-        ? `Former: best team gets ${item.maxPoints ?? 0}, others in proportion`
-        : `jury${item.maxPoints ? `, out of ${item.maxPoints}` : ""}`;
-  return item.tieBreakOnly ? `Tie-break · ${rule}` : rule;
-}
 
 export function LeaderboardSection() {
   const { event, metrics, criteria } = useAdminEvent();
@@ -273,7 +263,8 @@ function CriterionItemForm({ index, items, isSaving, onSave }: ItemSheetProps) {
     if (!draft) return;
     // Un nouveau critere : sa question s'ajoute d'abord au formulaire de jury (nouvelle version s'il est publie).
     if (isNew && juryForm) {
-      const question = criterionQuestion({ key: draft.sourceKey, label, min: 0, max: newScaleMax, weight: 1 });
+      // Sans poids : avec un bareme, seul le bareme compte (une copie des points deriverait).
+      const question = criterionQuestion({ key: draft.sourceKey, label, min: 0, max: newScaleMax, weight: null });
       const added = await run(() => appendQuestion(juryForm, question), `${label} added to the jury form`);
       if (added === undefined) return;
     }

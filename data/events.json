@@ -1068,8 +1068,7 @@
           "key": "leadQuality",
           "label": "Lead quality",
           "min": 0,
-          "max": 5,
-          "weight": 1
+          "max": 5
         }
       ],
       "submissionFields": [
@@ -1505,15 +1504,13 @@
           "key": "loisSigned",
           "label": "Signed commitments",
           "min": 0,
-          "max": 5,
-          "weight": 1
+          "max": 5
         },
         {
           "key": "closedWon",
           "label": "Paying customers",
           "min": 0,
-          "max": 5,
-          "weight": 1
+          "max": 5
         }
       ],
       "submissionFields": [

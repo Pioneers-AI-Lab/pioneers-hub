@@ -192,6 +192,28 @@ export function scoringSummary(scoring: EventScoring): string {
   return scoring.tieBreaks.length ? `${points} · Tie-break: ${labelsOf(scoring, scoring.tieBreaks).join(", ")}` : points;
 }
 
+/** Le pourquoi des points d'un element, en clair (un ancien element : son ancienne regle). */
+export function scoringItemRule(item: ScoringItemInput): string {
+  const rule =
+    item.mode === "per_unit"
+      ? `Former: ${item.pointsPerUnit ?? 1} pts each`
+      : item.mode === "proportional"
+        ? `Former: best team gets ${item.maxPoints ?? 0}, others in proportion`
+        : `jury${item.maxPoints ? `, out of ${item.maxPoints}` : ""}`;
+  return item.tieBreakOnly ? `Tie-break · ${rule}` : rule;
+}
+
+/**
+ * Ce que rapporte un critere du jury : sa regle au bareme de l'evenement (« jury, out of 90 »,
+ * « Tie-break · jury »), « not counted » s'il n'y est pas ; sans bareme, le poids de sa question
+ * (avec un bareme, ce poids n'est pas lu).
+ */
+export function criterionRule(scoring: EventScoring | null, key: string, weight: number | null | undefined): string | null {
+  if (!scoring) return weight ? `weight ${weight}` : null;
+  const item = scoring.items.find((i) => i.mode === "criterion" && i.sourceKey === key);
+  return item ? scoringItemRule(item) : "not counted";
+}
+
 /**
  * Le departage d'une ligne a egalite de total avec une autre : « Tie-break · Lead quality 4 »
  * (les points de chaque departage, dans l'ordre du bareme). `null` sans egalite ni departage.

@@ -141,8 +141,8 @@ const checkinQuestion = (key: CheckinMetricKey | CheckinGoalKey): FormQuestion =
   return q(key, { type: "number", label: def.label, dbField, required: def.expected !== null });
 };
 
-/** Un critere du jury : une note pour chaque equipe, dans `evaluation.scores.<cle>`, avec son poids. */
-export const criterionQuestion = (c: Criterion): FormQuestion =>
+/** Un critere du jury : une note pour chaque equipe, dans `evaluation.scores.<cle>`, avec son poids (aucun pour un departage). */
+export const criterionQuestion = (c: Omit<Criterion, "weight"> & Pick<FormQuestion, "weight">): FormQuestion =>
   q(`criterion_${c.key}`, {
     type: "rating",
     label: c.label,
